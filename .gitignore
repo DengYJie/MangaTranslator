@@ -1,0 +1,61 @@
+# Build and generated output
+/build/
+/out/
+/dist/
+/install/
+/CMakeFiles/
+/CMakeCache.txt
+/cmake_install.cmake
+/compile_commands.json
+*.vcxproj*
+*.sln
+
+# Local IDE state
+/.vs/
+/.idea/
+/.vscode/
+*.user
+*.userprefs
+
+# Machine-specific CMake configuration
+/CMakeUserPresets.json
+
+# AI assistant and agent conversation data
+/.agents/*
+!/.agents/skills/
+!/.agents/skills/**
+/.copilot/
+/.claude/
+/.cursor/
+/.continue/
+/.gemini/
+/.aider/
+/.aider*
+/.omo/
+*.conversation
+*.conversation.json
+*.chat
+*.chat.json
+*.session
+*.session.json
+*.prompt
+*.prompts
+*.trace
+*.log
+
+# Local caches and temporary files
+/.cache/
+/.tmp/
+/.temp/
+*.tmp
+*.temp
+*.bak
+*.swp
+*.swo
+*.orig
+
+# Runtime model and user data
+/models/
+/model-cache/
+/user-data/
+/runtime-data/
