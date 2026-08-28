@@ -53,6 +53,11 @@ Follow `CODING.md` and the checked-in `.clang-format`. In brief: use UTF-8/LF, f
 identifiers and code comments, self-contained headers, explicit ownership, and the established C++/Qt naming rules.
 Format only files touched by the change; do not create unrelated formatting churn.
 
+Comments state non-obvious constraints and invariants only. Do not write narrative asides that reference the current
+task, fix, or history; persistence and similar rules belong in the owning code or docs, not in story-telling comments.
+Write comments as plain declarative sentences: no hyphens as sentence separators, no em dashes, and no decorative
+punctuation.
+
 For UI work, also follow `src/ui/AGENTS.md` and start from `docs/ui/README.md`. Read `docs/ui/foundations.md`,
 `docs/ui/control-reference.md`, and the relevant page/component specifications before implementation. UI draft images
 are illustrative references; the textual UI specifications are authoritative when they differ.
