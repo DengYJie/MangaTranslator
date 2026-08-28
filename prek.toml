@@ -1,0 +1,33 @@
+# prek configuration: https://prek.j178.dev/configuration/
+# Built-in hooks run without network access. clang-format is not built in,
+# so it comes from the mirrors-clang-format remote pinned to the version
+# matching the local clang-format (19.1.7).
+[[repos]]
+repo = "builtin"
+
+[[repos.hooks]]
+id = "check-added-large-files"
+
+[[repos.hooks]]
+id = "check-illegal-windows-names"
+
+[[repos.hooks]]
+id = "check-merge-conflict"
+
+[[repos.hooks]]
+id = "check-yaml"
+
+[[repos.hooks]]
+id = "end-of-file-fixer"
+
+[[repos.hooks]]
+id = "trailing-whitespace"
+
+[[repos]]
+repo = "https://github.com/pre-commit/mirrors-clang-format"
+rev = "v19.1.7"
+
+[[repos.hooks]]
+id = "clang-format"
+types_or = ["c++", "c"]
+args = ["-i"]
