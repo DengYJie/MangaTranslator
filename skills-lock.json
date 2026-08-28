@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "skills": {
+    "build-fluentqt-gui": {
+      "source": "calvinhxx/Fluent-Qt",
+      "ref": "main",
+      "sourceType": "github",
+      "skillPath": ".agents/skills/build-fluentqt-gui/SKILL.md",
+      "computedHash": "2b9b69882a0f90535b9ceae0a26b86150e1c7d3af27006d6eb36cfa71f233bbb"
+    }
+  }
+}
