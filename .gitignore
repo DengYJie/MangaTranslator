@@ -21,9 +21,7 @@
 /CMakeUserPresets.json
 
 # AI assistant and agent conversation data
-/.agents/*
-!/.agents/skills/
-!/.agents/skills/**
+/.agents/
 /.copilot/
 /.claude/
 /.cursor/
