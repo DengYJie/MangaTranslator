@@ -5,6 +5,7 @@
 #include <QPromise>
 
 #include <memory>
+#include <utility>
 
 namespace manga::application::test {
 
@@ -15,7 +16,9 @@ public:
     bool shouldFail{false};
     bool deferred{false};
     int callCount{0};
+    int discardCallCount{0};
     ImportImagesRequest lastRequest;
+    DiscardImportedAssetsRequest lastDiscardRequest;
 
     QFuture<Result<ImportImagesResult>> importImages(ImportImagesRequest request, OperationContext context) override {
         ++callCount;
@@ -26,6 +29,24 @@ public:
         if (!deferred) {
             complete();
         }
+        return future;
+    }
+
+    QFuture<Result<void>> discardImportedAssets(DiscardImportedAssetsRequest request,
+                                                OperationContext context) override {
+        ++discardCallCount;
+        lastDiscardRequest = std::move(request);
+        QPromise<Result<void>> promise;
+        auto future = promise.future();
+        if (context.stopToken.stop_requested()) {
+            promise.addResult(std::unexpected(
+                makeApplicationError(ErrorCategory::Cancelled, "cancelled.import_cleanup", "Cleanup was cancelled")));
+        } else if (shouldFail) {
+            promise.addResult(std::unexpected(nextError));
+        } else {
+            promise.addResult({});
+        }
+        promise.finish();
         return future;
     }
 

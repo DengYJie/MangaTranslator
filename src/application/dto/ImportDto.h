@@ -1,7 +1,7 @@
 #pragma once
 
 #include "application/error/ApplicationError.h"
-#include "domain/model/Uuid.h"
+#include "domain/model/ComicPage.h"
 
 #include <QImage>
 #include <QString>
@@ -11,13 +11,20 @@ namespace manga::application {
 
 struct ImportImagesRequest {
     domain::ProjectId projectId;
+    QString projectRoot;
     QVector<QString> filePaths;
 };
 
+struct ImportWarning {
+    QString path;
+    QString code;
+    QString safeMessage;
+};
+
 struct ImportedPage {
-    domain::PageId pageId;
-    QString assetPath;
-    int orderIndex{0};
+    domain::ComicPage page;
+    QString sourcePath;
+    QVector<ImportWarning> warnings;
 };
 
 struct ImportFailure {
@@ -30,8 +37,15 @@ struct ImportImagesResult {
     QVector<ImportFailure> failures;
 };
 
+struct DiscardImportedAssetsRequest {
+    domain::ProjectId projectId;
+    QString projectRoot;
+    QVector<QString> assetPaths;
+};
+
 struct LoadPageImageRequest {
     domain::ProjectId projectId;
+    QString projectRoot;
     domain::PageId pageId;
     QString assetPath;
 };

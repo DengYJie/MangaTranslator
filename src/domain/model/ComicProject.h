@@ -8,6 +8,7 @@
 #include "domain/model/Uuid.h"
 #include "domain/validation/ValidationResult.h"
 
+#include <cstdint>
 #include <span>
 #include <string>
 #include <vector>
@@ -53,6 +54,9 @@ public:
     [[nodiscard]] bool isDirty() const noexcept {
         return m_isDirty;
     }
+    [[nodiscard]] std::uint64_t revision() const noexcept {
+        return m_revision;
+    }
 
     [[nodiscard]] const LanguageCode& sourceLanguage() const noexcept {
         return m_sourceLanguage;
@@ -91,9 +95,17 @@ public:
 
     void markDirty() noexcept {
         m_isDirty = true;
+        ++m_revision;
     }
     void markClean() noexcept {
         m_isDirty = false;
+    }
+    [[nodiscard]] bool markCleanIfRevision(std::uint64_t savedRevision) noexcept {
+        if (m_revision != savedRevision) {
+            return false;
+        }
+        m_isDirty = false;
+        return true;
     }
 
     void setSourceLanguage(LanguageCode lang) noexcept {
@@ -179,6 +191,7 @@ private:
     int m_formatVersion{kCurrentFormatVersion};
 
     bool m_isDirty{false};
+    std::uint64_t m_revision{0};
 
     LanguageCode m_sourceLanguage{languages::Japanese};
     LanguageCode m_targetLanguage{languages::SimplifiedChinese};

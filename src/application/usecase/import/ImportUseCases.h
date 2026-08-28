@@ -4,13 +4,22 @@
 #include "application/operation/AsyncResult.h"
 #include "application/ports/IComicImporter.h"
 #include "application/ports/IPageImageLoader.h"
+#include "domain/model/ComicProject.h"
 
 #include <QDir>
 #include <QSet>
 
 #include <algorithm>
+#include <utility>
 
 namespace manga::application {
+
+struct ApplyImportResultRequest {
+    domain::ProjectId projectId;
+    ImportImagesResult result;
+    quint64 generation{0};
+    quint64 currentGeneration{0};
+};
 
 namespace detail {
 
@@ -90,18 +99,27 @@ public:
             return makeFailedFuture<ImportImagesResult>(
                 makeApplicationError(ErrorCategory::Cancelled, "cancelled.before_start", "Import was cancelled"));
         }
-        if (!request.projectId.isValid() || request.filePaths.isEmpty()) {
+        if (!request.projectId.isValid() || !QDir::isAbsolutePath(request.projectRoot.trimmed())) {
+            return makeFailedFuture<ImportImagesResult>(makeApplicationError(
+                ErrorCategory::Input, "input.invalid_import_request", "Import request is invalid"));
+        }
+        if (request.filePaths.isEmpty()) {
             return makeFailedFuture<ImportImagesResult>(makeApplicationError(
                 ErrorCategory::Input, "input.empty_import", "Select at least one image to import"));
         }
         QSet<QString> paths;
         ImportImagesRequest sortedRequest = request;
+        sortedRequest.projectRoot = sortedRequest.projectRoot.trimmed();
         for (auto& path : sortedRequest.filePaths) {
             path = path.trimmed();
             const auto comparisonKey = QDir::cleanPath(path).normalized(QString::NormalizationForm_KC).toCaseFolded();
-            if (path.isEmpty() || paths.contains(comparisonKey)) {
+            if (path.isEmpty()) {
                 return makeFailedFuture<ImportImagesResult>(makeApplicationError(
-                    ErrorCategory::Input, "input.invalid_import_path", "Import paths must be nonempty and unique"));
+                    ErrorCategory::Input, "input.invalid_import_request", "Import paths must be nonempty"));
+            }
+            if (paths.contains(comparisonKey)) {
+                return makeFailedFuture<ImportImagesResult>(makeApplicationError(
+                    ErrorCategory::Input, "input.duplicate_import_path", "Import paths must be unique"));
             }
             paths.insert(comparisonKey);
         }
@@ -135,15 +153,90 @@ public:
             return makeFailedFuture<QImage>(makeApplicationError(
                 ErrorCategory::Cancelled, "cancelled.before_start", "Image loading was cancelled"));
         }
-        if (!request.projectId.isValid() || !request.pageId.isValid() || request.assetPath.trimmed().isEmpty()) {
+        if (!request.projectId.isValid() || !QDir::isAbsolutePath(request.projectRoot.trimmed()) ||
+            !request.pageId.isValid() || request.assetPath.trimmed().isEmpty()) {
             return makeFailedFuture<QImage>(makeApplicationError(
                 ErrorCategory::Input, "input.invalid_image_request", "Page image request is invalid"));
         }
-        return m_loader->loadPageImage(request, context);
+        auto normalizedRequest = request;
+        normalizedRequest.projectRoot = normalizedRequest.projectRoot.trimmed();
+        normalizedRequest.assetPath = normalizedRequest.assetPath.trimmed();
+        return m_loader->loadPageImage(std::move(normalizedRequest), context);
     }
 
 private:
     IPageImageLoader* m_loader;
+};
+
+class ApplyImportResultUseCase {
+public:
+    explicit ApplyImportResultUseCase(domain::ComicProject* project) : m_project(project) {}
+
+    [[nodiscard]] Result<QVector<domain::PageId>> execute(const ApplyImportResultRequest& request) {
+        if (m_project == nullptr) {
+            return std::unexpected(
+                makeApplicationError(ErrorCategory::Internal, "internal.null_project", "Project is unavailable"));
+        }
+        if (m_project->id() != request.projectId) {
+            return std::unexpected(makeApplicationError(ErrorCategory::Project, "project.mismatch", "Project changed"));
+        }
+        if (request.generation != request.currentGeneration) {
+            return std::unexpected(
+                makeApplicationError(ErrorCategory::Cancelled, "cancelled.stale_generation", "Import result is stale"));
+        }
+
+        const auto snapshot = *m_project;
+        QVector<domain::PageId> pageIds;
+        pageIds.reserve(request.result.importedPages.size());
+        for (const auto& imported : request.result.importedPages) {
+            if (!imported.page.isValid() || !m_project->addPage(imported.page)) {
+                *m_project = snapshot;
+                return std::unexpected(makeApplicationError(
+                    ErrorCategory::Protocol, "protocol.invalid_import_result", "Imported page is invalid"));
+            }
+            pageIds.append(imported.page.id());
+        }
+        return pageIds;
+    }
+
+private:
+    domain::ComicProject* m_project;
+};
+
+class DiscardImportedAssetsUseCase {
+public:
+    explicit DiscardImportedAssetsUseCase(IComicImporter* importer) : m_importer(importer) {}
+
+    [[nodiscard]] QFuture<Result<void>> execute(const DiscardImportedAssetsRequest& request,
+                                                const OperationContext& context) {
+        if (m_importer == nullptr) {
+            return makeFailedFuture<void>(makeApplicationError(
+                ErrorCategory::Internal, "internal.null_importer", "Image importer is unavailable"));
+        }
+        if (!request.projectId.isValid() || !QDir::isAbsolutePath(request.projectRoot.trimmed()) ||
+            request.assetPaths.isEmpty()) {
+            return makeFailedFuture<void>(makeApplicationError(
+                ErrorCategory::Input, "input.invalid_import_cleanup", "Import cleanup request is invalid"));
+        }
+
+        auto normalizedRequest = request;
+        normalizedRequest.projectRoot = normalizedRequest.projectRoot.trimmed();
+        QSet<QString> assetPaths;
+        for (auto& path : normalizedRequest.assetPaths) {
+            path = QDir::cleanPath(QDir::fromNativeSeparators(path.trimmed()));
+            const auto comparisonKey = path.normalized(QString::NormalizationForm_KC).toCaseFolded();
+            if (path.isEmpty() || QDir::isAbsolutePath(path) || path == ".." || path.startsWith("../") ||
+                !path.startsWith("assets/original/") || assetPaths.contains(comparisonKey)) {
+                return makeFailedFuture<void>(makeApplicationError(
+                    ErrorCategory::Input, "input.invalid_import_cleanup", "Import cleanup request is invalid"));
+            }
+            assetPaths.insert(comparisonKey);
+        }
+        return m_importer->discardImportedAssets(std::move(normalizedRequest), context);
+    }
+
+private:
+    IComicImporter* m_importer;
 };
 
 } // namespace manga::application

@@ -9,4 +9,8 @@ private slots:
     void testEquivalentPathsRejected();
     void testImporterFailurePropagates();
     void testCancellation();
+    void testApplyImportResultAddsPages();
+    void testApplyImportResultRejectsStaleGeneration();
+    void testApplyImportResultRollsBackInvalidBatch();
+    void testDiscardImportedAssetsValidatesAndDispatches();
 };

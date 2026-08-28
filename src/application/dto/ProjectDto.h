@@ -3,6 +3,7 @@
 #include "domain/model/ComicProject.h"
 
 #include <QString>
+#include <QVector>
 
 namespace manga::application {
 
@@ -14,6 +15,12 @@ struct ProjectDto {
 enum class RecoverySource {
     Current,
     Backup
+};
+
+struct ProjectWarning {
+    QString code;
+    QString safeMessage;
+    QString path;
 };
 
 struct ProjectDescriptor {
@@ -29,6 +36,7 @@ struct OpenProjectRequest {
 struct OpenProjectResult {
     domain::ComicProject project;
     RecoverySource recoverySource{RecoverySource::Current};
+    QVector<ProjectWarning> warnings;
 };
 
 struct CreateProjectRequest {
@@ -41,11 +49,13 @@ struct CreateProjectRequest {
 
 struct SaveProjectRequest {
     domain::ComicProject project;
+    quint64 savedRevision{0};
 };
 
 struct SaveAsProjectRequest {
     domain::ComicProject project;
     QString newPath;
+    quint64 savedRevision{0};
 };
 
 struct CloseProjectRequest {

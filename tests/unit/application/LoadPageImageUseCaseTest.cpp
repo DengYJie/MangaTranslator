@@ -16,6 +16,7 @@ void LoadPageImageUseCaseTest::testSuccessfulLoad() {
 
     LoadPageImageRequest req;
     req.projectId = ProjectId::generate();
+    req.projectRoot = "C:/project";
     req.pageId = PageId::generate();
     req.assetPath = "page_01.png";
 
@@ -53,6 +54,7 @@ void LoadPageImageUseCaseTest::testLoaderFailurePropagates() {
     LoadPageImageUseCase useCase(&loader);
     LoadPageImageRequest request;
     request.projectId = ProjectId::generate();
+    request.projectRoot = "C:/project";
     request.pageId = PageId::generate();
     request.assetPath = "page.png";
 
@@ -68,6 +70,7 @@ void LoadPageImageUseCaseTest::testPreCancelledLoadRejected() {
     LoadPageImageUseCase useCase(&loader);
     LoadPageImageRequest request;
     request.projectId = ProjectId::generate();
+    request.projectRoot = "C:/project";
     request.pageId = PageId::generate();
     request.assetPath = "page.png";
     std::stop_source stopSource;

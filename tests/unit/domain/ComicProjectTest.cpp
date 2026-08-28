@@ -105,3 +105,16 @@ void ComicProjectTest::testEmptyBatchDoesNotMarkDirty() {
     QVERIFY(project.applyPageRegionEdits(pageId, edits).has_value());
     QVERIFY(!project.isDirty());
 }
+
+void ComicProjectTest::testMarkCleanRejectsStaleSaveRevision() {
+    ComicProject project("Test", ProjectId::generate());
+    project.markClean();
+    const auto savedRevision = project.revision();
+
+    project.setName("Edited while saving");
+
+    QVERIFY(!project.markCleanIfRevision(savedRevision));
+    QVERIFY(project.isDirty());
+    QVERIFY(project.markCleanIfRevision(project.revision()));
+    QVERIFY(!project.isDirty());
+}
