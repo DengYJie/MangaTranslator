@@ -14,7 +14,7 @@
 ### 任务执行
 
 - [ ] 建立有界 `QThreadPool + QRunnable` 执行器。
-- [ ] 实现合作式取消、进度回调、请求 generation 和结果投递线程切换：适配器通过 `QPromise` 完成 `QFuture`；GUI 侧用 `QFutureWatcher`（持有于 ViewModel）将结果与进度切回 GUI 线程；Port 接口不感知 GUI 线程。
+- [ ] 实现合作式取消、进度回调和请求 generation；适配器通过 `QPromise` 完成 `QFuture`，Port 接口不感知 GUI 线程。结果与进度的 GUI 线程投递由 P5 ViewModel 负责。
 - [ ] 输入使用不可变快照；Worker 不访问 QWidget、QPixmap 或 Scene。
 - [ ] 关闭页面、项目或应用后拒绝投递过期结果。
 
