@@ -1,10 +1,36 @@
-qt_add_executable(manga_tests_application application_init_test.cpp)
+qt_add_executable(manga_tests_application
+    application_test_main.cpp
+    RecognizeRegionUseCaseTest.cpp
+    ApplyResultUseCaseTest.cpp
+    ApplyResultUseCaseTest.h
+    TranslatePageUseCaseTest.cpp
+    TranslatePageUseCaseTest.h
+    ClearRegionUseCaseTest.cpp
+    ClearRegionUseCaseTest.h
+    LayoutRegionUseCaseTest.cpp
+    LayoutRegionUseCaseTest.h
+    ImportImagesUseCaseTest.cpp
+    ImportImagesUseCaseTest.h
+    ExportPagesUseCaseTest.cpp
+    ExportPagesUseCaseTest.h
+    ProjectUseCasesTest.cpp
+    ProjectUseCasesTest.h
+    LoadPageImageUseCaseTest.cpp
+    LoadPageImageUseCaseTest.h
+    RegionUseCasesTest.cpp
+    RegionUseCasesTest.h
+    TextUseCasesTest.cpp
+    TextUseCasesTest.h
+    ApplicationUseCasesTest.cpp
+    ApplicationUseCasesTest.h
+)
 manga_apply_project_options(manga_tests_application)
-set_target_properties(manga_tests_application PROPERTIES AUTOMOC ON)
+set_target_properties(manga_tests_application PROPERTIES AUTOMOC ON WIN32_EXECUTABLE FALSE)
 
 target_link_libraries(manga_tests_application
     PRIVATE
         manga_application
+        manga_domain
         Qt6::Test
 )
 
