@@ -1,7 +1,7 @@
 # P7：稳定性与发布验收
 
-> 状态：Planned  
-> 前置阶段：P6  
+> 状态：Planned
+> 前置阶段：P6
 > 输出：满足 V0.1 Definition of Done 的 Windows x64 发布候选
 
 ## 目标

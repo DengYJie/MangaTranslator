@@ -1,10 +1,10 @@
 # MangaTranslator 架构设计
 
-> 状态：初稿  
-> 来源：根据“漫画翻译系统实现”对话中的最终结论整理  
-> 技术基线：C++23、Qt Widgets 6.11、FluentQt、CMake  
-> V0.1 决策基线：[`docs/technical-decisions.md`](technical-decisions.md)  
-> V0.2 决策基线：[`docs/v0.2-technical-decisions.md`](v0.2-technical-decisions.md)  
+> 状态：初稿
+> 来源：根据“漫画翻译系统实现”对话中的最终结论整理
+> 技术基线：C++23、Qt Widgets 6.11、FluentQt、CMake
+> V0.1 决策基线：[`docs/technical-decisions.md`](technical-decisions.md)
+> V0.2 决策基线：[`docs/v0.2-technical-decisions.md`](v0.2-technical-decisions.md)
 > V0.3 决策基线：[`docs/v0.3-technical-decisions.md`](v0.3-technical-decisions.md)
 
 ## 1. 文档目的

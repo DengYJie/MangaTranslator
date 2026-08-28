@@ -1,9 +1,9 @@
 # MangaTranslator 产品路线图
 
-> 状态：规划中  
-> 时间策略：当前不承诺发布日期；以版本完成标准和质量门槛推进  
-> V0.1 决策基线：[`docs/technical-decisions.md`](technical-decisions.md)  
-> V0.2 决策基线：[`docs/v0.2-technical-decisions.md`](v0.2-technical-decisions.md)  
+> 状态：规划中
+> 时间策略：当前不承诺发布日期；以版本完成标准和质量门槛推进
+> V0.1 决策基线：[`docs/technical-decisions.md`](technical-decisions.md)
+> V0.2 决策基线：[`docs/v0.2-technical-decisions.md`](v0.2-technical-decisions.md)
 > V0.3 决策基线：[`docs/v0.3-technical-decisions.md`](v0.3-technical-decisions.md)
 
 

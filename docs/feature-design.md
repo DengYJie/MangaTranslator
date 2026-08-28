@@ -1,10 +1,10 @@
 # MangaTranslator 功能设计
 
-> 状态：初稿  
-> 来源：根据“漫画翻译系统实现”对话中的功能讨论整理  
-> 对应架构：[`docs/architecture-design.md`](architecture-design.md)  
-> V0.1 决策基线：[`docs/technical-decisions.md`](technical-decisions.md)  
-> V0.2 决策基线：[`docs/v0.2-technical-decisions.md`](v0.2-technical-decisions.md)  
+> 状态：初稿
+> 来源：根据“漫画翻译系统实现”对话中的功能讨论整理
+> 对应架构：[`docs/architecture-design.md`](architecture-design.md)
+> V0.1 决策基线：[`docs/technical-decisions.md`](technical-decisions.md)
+> V0.2 决策基线：[`docs/v0.2-technical-decisions.md`](v0.2-technical-decisions.md)
 > V0.3 决策基线：[`docs/v0.3-technical-decisions.md`](v0.3-technical-decisions.md)
 
 ## 1. 产品定义

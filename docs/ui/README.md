@@ -1,6 +1,6 @@
 # MangaTranslator UI 设计文字稿
 
-> 状态：设计基线草稿  
+> 状态：设计基线草稿
 > 设计语言：Windows 11 Fluent Design；以 WinUI 3 官方控件和模式作为行为参考
 
 ## 1. 文档目标

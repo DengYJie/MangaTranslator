@@ -1,7 +1,7 @@
 # MangaTranslator 技术决策
 
-> 状态：V0.1 基线已锁定  
-> 适用范围：V0.1；后续版本的决定在进入对应版本前补充  
+> 状态：V0.1 基线已锁定
+> 适用范围：V0.1；后续版本的决定在进入对应版本前补充
 > 关联文档：[架构设计](architecture-design.md)、[功能设计](feature-design.md)、[产品路线图](roadmap.md)、[V0.2 技术决策](v0.2-technical-decisions.md)、[V0.3 技术决策](v0.3-technical-decisions.md)
 
 ## 1. V0.1 交付边界

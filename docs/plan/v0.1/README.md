@@ -1,8 +1,8 @@
 # V0.1 分阶段实施计划
 
-> 状态：Planned  
-> 产品目标：不依赖自动文字检测，完成可保存、可恢复、可撤销的人工辅助翻译闭环  
-> 决策基线：[V0.1 技术决策](../../technical-decisions.md)  
+> 状态：Planned
+> 产品目标：不依赖自动文字检测，完成可保存、可恢复、可撤销的人工辅助翻译闭环
+> 决策基线：[V0.1 技术决策](../../technical-decisions.md)
 > 关联文档：[架构设计](../../architecture-design.md)、[功能设计](../../feature-design.md)、[路线图](../../roadmap.md)
 
 ## 交付主线
