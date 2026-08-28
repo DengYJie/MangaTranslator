@@ -72,6 +72,10 @@ are illustrative references; the textual UI specifications are authoritative whe
 - Mark breaking changes with `!` and a `BREAKING CHANGE:` footer.
 - Keep each commit coherent; separate unrelated cleanup and pure formatting from behavior changes.
 - Agents do not create, amend, rebase, squash, or push commits unless the user explicitly requests that Git action.
+- Commits are guarded by `prek` hooks configured in the root `prek.toml`: clang-format on C/C++ sources plus
+  whitespace and file-ending fixes. Install the hook runner with `uv tool install prek` and activate it once per
+  clone with `prek install`. Hooks run automatically on commit and may modify staged files; re-add fixed files and
+  commit again instead of bypassing the hooks. To check the whole tree, run `prek run --all-files`.
 - Before an authorized commit, format changed files and run the affected build and tests; report anything not run.
 
 Examples: `feat(manga): add text region resize handles`, `fix(application): ignore stale OCR completions`.
