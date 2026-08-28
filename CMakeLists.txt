@@ -12,7 +12,10 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 option(BUILD_TESTING "Build MangaTranslator tests" ON)
 
-find_package(Qt6 6.11 REQUIRED COMPONENTS Core Gui Widgets Network Sql Test)
+find_package(Qt6 6.11 REQUIRED COMPONENTS Core Gui Widgets Network Sql)
+if(BUILD_TESTING)
+    find_package(Qt6 6.11 REQUIRED COMPONENTS Test)
+endif()
 
 find_package(FluentQt CONFIG QUIET)
 if(NOT TARGET FluentQt::FluentQt)
@@ -25,7 +28,8 @@ if(NOT TARGET FluentQt::FluentQt)
 
     FetchContent_Declare(fluentqt
         GIT_REPOSITORY https://github.com/calvinhxx/Fluent-Qt.git
-        GIT_TAG v1.7.3
+        GIT_TAG 50ad2fa1ad263c834adfd280b2c19dfdc2278dae
+        UPDATE_DISCONNECTED TRUE
     )
     FetchContent_MakeAvailable(fluentqt)
 endif()
@@ -37,7 +41,16 @@ if(NOT TARGET FluentQt::FluentQt)
     )
 endif()
 
-qt_standard_project_setup()
+add_library(manga_project_options INTERFACE)
+target_compile_options(manga_project_options INTERFACE
+    "$<$<CXX_COMPILER_ID:MSVC>:/W4>"
+    "$<$<CXX_COMPILER_ID:MSVC>:/permissive->"
+    "$<$<CXX_COMPILER_ID:MSVC>:/utf-8>"
+)
+
+function(manga_apply_project_options target)
+    target_link_libraries(${target} PRIVATE manga_project_options)
+endfunction()
 
 find_program(MANGA_WINDEPLOYQT_EXECUTABLE
     NAMES windeployqt
@@ -46,19 +59,19 @@ find_program(MANGA_WINDEPLOYQT_EXECUTABLE
         "${CMAKE_PREFIX_PATH}/bin"
 )
 
-find_file(MANGA_QT_OFFSCREEN_PLUGIN
-    NAMES qoffscreen.dll qoffscreend.dll
+find_file(MANGA_QT_OFFSCREEN_PLUGIN_RELEASE
+    NAMES qoffscreen.dll
     HINTS
         "${Qt6_DIR}/../../../plugins/platforms"
         "${CMAKE_PREFIX_PATH}/plugins/platforms"
 )
 
-if(MANGA_QT_OFFSCREEN_PLUGIN)
-    get_filename_component(MANGA_QT_OFFSCREEN_PLUGIN_NAME
-        "${MANGA_QT_OFFSCREEN_PLUGIN}"
-        NAME
-    )
-endif()
+find_file(MANGA_QT_OFFSCREEN_PLUGIN_DEBUG
+    NAMES qoffscreend.dll
+    HINTS
+        "${Qt6_DIR}/../../../plugins/platforms"
+        "${CMAKE_PREFIX_PATH}/plugins/platforms"
+)
 
 function(manga_deploy_qt_runtime target)
     if(WIN32 AND MANGA_WINDEPLOYQT_EXECUTABLE)
@@ -72,14 +85,23 @@ function(manga_deploy_qt_runtime target)
         )
     endif()
 
-    if(WIN32 AND MANGA_QT_OFFSCREEN_PLUGIN)
+    if(WIN32 AND MANGA_QT_OFFSCREEN_PLUGIN_RELEASE AND MANGA_QT_OFFSCREEN_PLUGIN_DEBUG)
         add_custom_command(TARGET ${target} POST_BUILD
             COMMAND ${CMAKE_COMMAND} -E make_directory
                 "$<TARGET_FILE_DIR:${target}>/platforms"
             COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                "${MANGA_QT_OFFSCREEN_PLUGIN}"
-                "$<TARGET_FILE_DIR:${target}>/platforms/${MANGA_QT_OFFSCREEN_PLUGIN_NAME}"
-            COMMENT "Deploying Qt offscreen plugin for ${target}"
+                "$<IF:$<CONFIG:Debug>,${MANGA_QT_OFFSCREEN_PLUGIN_DEBUG},${MANGA_QT_OFFSCREEN_PLUGIN_RELEASE}>"
+                "$<TARGET_FILE_DIR:${target}>/platforms/$<IF:$<CONFIG:Debug>,qoffscreend.dll,qoffscreen.dll>"
+            COMMENT "Deploying the Qt offscreen plugin for ${target}"
+        )
+    elseif(WIN32 AND MANGA_QT_OFFSCREEN_PLUGIN_RELEASE)
+        add_custom_command(TARGET ${target} POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E make_directory
+                "$<TARGET_FILE_DIR:${target}>/platforms"
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                "${MANGA_QT_OFFSCREEN_PLUGIN_RELEASE}"
+                "$<TARGET_FILE_DIR:${target}>/platforms/qoffscreen.dll"
+            COMMENT "Deploying the Qt offscreen plugin for ${target}"
         )
     endif()
 endfunction()

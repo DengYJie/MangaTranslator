@@ -2,6 +2,7 @@ if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/main.cpp")
     qt_add_executable(MangaTranslatorApp
         main.cpp
     )
+    manga_apply_project_options(MangaTranslatorApp)
 
     target_link_libraries(MangaTranslatorApp
         PRIVATE

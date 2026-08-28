@@ -1,20 +1,19 @@
-add_library(manga_ui INTERFACE)
+add_library(manga_ui STATIC ui.cpp)
+manga_apply_project_options(manga_ui)
 
 target_include_directories(manga_ui
-    INTERFACE
+    PUBLIC
         "${PROJECT_SOURCE_DIR}/src"
 )
 
+add_subdirectory(manga)
+
 target_link_libraries(manga_ui
-    INTERFACE
+    PUBLIC
         manga_application
-        manga_data
-        manga_network
-        manga_services
+        manga_ui_manga
         Qt6::Core
         Qt6::Gui
         Qt6::Widgets
         FluentQt::FluentQt
 )
-
-add_subdirectory(manga)

@@ -1,6 +1,6 @@
 # P0：工程与构建基线
 
-> 状态：Planned  
+> 状态：Complete
 > 前置阶段：无  
 > 输出：可重复配置、构建、测试和启动的 C++23/Qt 6.11 空应用
 
@@ -12,34 +12,42 @@
 
 ### 工程结构
 
-- [ ] 创建根 `CMakeLists.txt`、`CMakePresets.json` 和 `vcpkg.json`。
-- [ ] 建立 `src/app`、`core`、`domain`、`application`、`services`、`data`、`network`、`ui` 的目标入口。
-- [ ] 建立 `manga_domain`、`manga_application`、`manga_services`、`manga_data`、`manga_network`、`manga_ui` 和应用可执行目标。
-- [ ] 只在需要的 Target 开启 `AUTOMOC`、`AUTORCC`、`AUTOUIC`。
-- [ ] 显式列出源文件，不使用递归 Glob。
+- [x] 创建根 `CMakeLists.txt`、`CMakePresets.json` 和 `vcpkg.json`。
+- [x] 建立 `src/app`、`core`、`domain`、`application`、`services`、`data`、`network`、`ui` 的目标入口。
+- [x] 建立 `manga_domain`、`manga_application`、`manga_services`、`manga_data`、`manga_network`、`manga_ui` 和应用可执行目标。
+- [x] 只在需要的 Target 开启 `AUTOMOC`、`AUTORCC`、`AUTOUIC`。
+- [x] 显式列出源文件，不使用递归 Glob。
 
 ### 工具链与依赖
 
-- [ ] 要求 C++23、关闭编译器扩展，并配置 MSVC 2022 x64。
-- [ ] 使用 Qt 6.11 imported targets，不写死 Qt 安装路径。
-- [ ] 通过 `FluentQt::FluentQt` 和公开 C++ API 链接 FluentQt。
-- [ ] 固定 vcpkg baseline；普通离线重建不得重新下载不受控依赖。
-- [ ] 项目 Target 启用 `/W4`、`/permissive-`，隔离第三方警告。
-- [ ] 提供 Debug、Release、Test Preset，并确保名称与文档一致。
+- [x] 要求 C++23、关闭编译器扩展，并配置 MSVC 2022 x64。
+- [x] 使用 Qt 6.11 imported targets，不写死 Qt 安装路径。
+- [x] 通过 `FluentQt::FluentQt` 和公开 C++ API 链接 FluentQt。
+- [x] 固定 vcpkg baseline；普通离线重建不得重新下载不受控依赖。
+- [x] 项目 Target 启用 `/W4`、`/permissive-`，隔离第三方警告。
+- [x] 提供 Debug、Release、Test Preset，并确保名称与文档一致。
 
 ### 测试与自动化
 
-- [ ] 启用 CTest，建立 Domain、Application、UI、Contract、Integration 测试目标骨架。
-- [ ] 添加最小启动测试和不依赖 GUI 的示例单元测试。
-- [ ] 配置 GitHub Actions `windows-2022` 的配置、构建和测试流程。
-- [ ] 确认所有生成物仅位于 `build/`。
+- [x] 启用 CTest，建立 Domain、Application、UI、Contract、Integration 测试目标骨架。
+- [x] 添加最小启动测试和不依赖 GUI 的示例单元测试。
+- [x] 配置 GitHub Actions `windows-2022` 的 Test/Release 矩阵，确保 PR、合并队列和 `main` 使用同一事件 SHA。
+- [x] 确认所有签入的 Preset 均将生成物写入 `build/`。
 
 ## 验证
 
-- [ ] Debug、Release、Test Preset 均可完成配置。
-- [ ] 空应用可启动和正常退出。
-- [ ] Domain/Application 测试可在不链接 UI 的情况下构建运行。
-- [ ] 干净环境不需要修改源码中的本机路径。
+- [x] Debug、Release、Test Preset 均可完成配置。
+- [x] 空应用可启动和正常退出。
+- [x] Domain/Application 测试可在不链接 UI 的情况下构建运行。
+- [x] 干净环境不需要修改源码中的本机路径。
+
+## 完成证据
+
+- Debug 和 Test 构建均通过 6 个 CTest：Domain、Application、UI、Contract、Integration 和应用 offscreen 启动测试。
+- Release Preset 可完成配置和构建，且不要求 `Qt6::Test`。
+- Domain 测试仅链接 `manga_domain` 和 C++ 标准库；Application 测试不链接 UI。
+- CI 直接响应源事件，不使用 `workflow_run` 串联；Qt、vcpkg、FluentQt 和 GitHub Actions 均使用固定版本或提交。
+- CI 首次运行将在相关改动推送到 GitHub 后验证，分支保护应要求 `Windows Test` 和 `Windows Release` 两个检查。
 
 ## 退出条件
 
