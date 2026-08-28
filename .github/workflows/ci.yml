@@ -17,8 +17,8 @@ concurrency:
 
 env:
   QT_VERSION: "6.11.2"
-  VCPKG_ROOT: ${{ github.workspace }}\.vcpkg
-  VCPKG_DEFAULT_BINARY_CACHE: ${{ github.workspace }}\.vcpkg-binary-cache
+  MANGA_VCPKG_ROOT: ${{ github.workspace }}\.vcpkg
+  MANGA_VCPKG_BINARY_CACHE: ${{ github.workspace }}\.vcpkg-binary-cache
   VCPKG_DEFAULT_TRIPLET: x64-windows
 
 jobs:
@@ -74,19 +74,25 @@ jobs:
           arch: x64
           vsversion: 2022
 
+      - name: Select pinned vcpkg
+        shell: pwsh
+        run: |
+          "VCPKG_ROOT=$env:MANGA_VCPKG_ROOT" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "VCPKG_DEFAULT_BINARY_CACHE=$env:MANGA_VCPKG_BINARY_CACHE" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
       - name: Restore vcpkg caches
         uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
         with:
           path: |
-            ${{ env.VCPKG_ROOT }}\downloads
-            ${{ env.VCPKG_DEFAULT_BINARY_CACHE }}
+            ${{ env.MANGA_VCPKG_ROOT }}\downloads
+            ${{ env.MANGA_VCPKG_BINARY_CACHE }}
           key: vcpkg-${{ runner.os }}-msvc2022-${{ env.QT_VERSION }}-${{ hashFiles('vcpkg.json', 'vcpkg-configuration.json') }}
 
       - name: Bootstrap vcpkg
         shell: pwsh
         run: |
-          New-Item -ItemType Directory -Path $env:VCPKG_DEFAULT_BINARY_CACHE -Force | Out-Null
-          & (Join-Path $env:VCPKG_ROOT "bootstrap-vcpkg.bat") -disableMetrics
+          New-Item -ItemType Directory -Path $env:MANGA_VCPKG_BINARY_CACHE -Force | Out-Null
+          & (Join-Path $env:MANGA_VCPKG_ROOT "bootstrap-vcpkg.bat") -disableMetrics
 
       - name: Configure
         run: cmake --preset ${{ matrix.preset }}
