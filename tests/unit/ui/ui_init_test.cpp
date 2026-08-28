@@ -3,8 +3,7 @@
 
 #include <QtTest>
 
-class UiInitTest : public QObject
-{
+class UiInitTest : public QObject {
     Q_OBJECT
 
 private slots:
@@ -12,13 +11,11 @@ private slots:
     void placeholderInvariant();
 };
 
-void UiInitTest::initTestCase()
-{
+void UiInitTest::initTestCase() {
     QVERIFY2(true, "UI test framework initialises");
 }
 
-void UiInitTest::placeholderInvariant()
-{
+void UiInitTest::placeholderInvariant() {
     QVERIFY2(true, "Placeholder invariant holds");
 }
 

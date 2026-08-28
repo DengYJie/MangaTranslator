@@ -3,6 +3,7 @@
 #include "domain/validation/ValidationResult.h"
 
 #include <QJsonObject>
+
 #include <expected>
 
 namespace manga::data {
@@ -19,15 +20,13 @@ public:
     /// Phase 1. Pre-migration envelope check.
     /// Only verifies that schemaVersion and formatVersion exist and are integers >= 1.
     /// No other content checks are performed.
-    [[nodiscard]] static std::expected<void, domain::ValidationError>
-        validateEnvelope(const QJsonObject& rootObj);
+    [[nodiscard]] static std::expected<void, domain::ValidationError> validateEnvelope(const QJsonObject& rootObj);
 
     /// Phase 2. Full structural validation (post-migration).
     /// Validates the complete object against the current schema specification:
     ///   - required fields, additionalProperties:false, type checks, enum values,
     ///     UUID v4 format, numeric ranges.
-    [[nodiscard]] static std::expected<void, domain::ValidationError>
-        validateFull(const QJsonObject& rootObj);
+    [[nodiscard]] static std::expected<void, domain::ValidationError> validateFull(const QJsonObject& rootObj);
 };
 
 } // namespace manga::data

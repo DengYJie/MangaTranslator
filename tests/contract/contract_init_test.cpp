@@ -5,8 +5,7 @@
 
 #include <QtTest>
 
-class ContractInitTest : public QObject
-{
+class ContractInitTest : public QObject {
     Q_OBJECT
 
 private slots:
@@ -14,13 +13,11 @@ private slots:
     void placeholderInvariant();
 };
 
-void ContractInitTest::initTestCase()
-{
+void ContractInitTest::initTestCase() {
     QVERIFY2(true, "Contract test framework initialises");
 }
 
-void ContractInitTest::placeholderInvariant()
-{
+void ContractInitTest::placeholderInvariant() {
     QVERIFY2(true, "Placeholder invariant holds");
 }
 

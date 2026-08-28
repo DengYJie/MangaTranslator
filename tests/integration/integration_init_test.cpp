@@ -5,8 +5,7 @@
 
 #include <QtTest>
 
-class IntegrationInitTest : public QObject
-{
+class IntegrationInitTest : public QObject {
     Q_OBJECT
 
 private slots:
@@ -14,13 +13,11 @@ private slots:
     void placeholderInvariant();
 };
 
-void IntegrationInitTest::initTestCase()
-{
+void IntegrationInitTest::initTestCase() {
     QVERIFY2(true, "Integration test framework initialises");
 }
 
-void IntegrationInitTest::placeholderInvariant()
-{
+void IntegrationInitTest::placeholderInvariant() {
     QVERIFY2(true, "Placeholder invariant holds");
 }
 

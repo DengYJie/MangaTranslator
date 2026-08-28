@@ -1,7 +1,7 @@
 #pragma once
 
-#include "domain/model/ComicProject.h"
 #include "domain/model/ComicPage.h"
+#include "domain/model/ComicProject.h"
 
 namespace manga::domain {
 

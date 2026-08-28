@@ -1,8 +1,8 @@
 #include "data/project/ProjectSerializer.h"
-#include "domain/model/RehydrationBuilder.h"
 
 #include "data/project/ProjectMigrator.h"
 #include "data/project/ProjectSchemaValidator.h"
+#include "domain/model/RehydrationBuilder.h"
 #include "domain/validation/SemanticValidator.h"
 
 #include <QJsonArray>
@@ -126,7 +126,8 @@ QJsonObject ProjectSerializer::serializeToJson(const domain::ComicProject& proje
     // isDirty is a runtime-only field and is NOT persisted to disk.
     root[QStringLiteral("sourceLanguage")] = QString::fromStdString(project.sourceLanguage().toString());
     root[QStringLiteral("targetLanguage")] = QString::fromStdString(project.targetLanguage().toString());
-    root[QStringLiteral("readingDirection")] = QString::fromStdString(readingDirectionToString(project.readingDirection()));
+    root[QStringLiteral("readingDirection")] =
+        QString::fromStdString(readingDirectionToString(project.readingDirection()));
 
     // Settings
     QJsonObject settingsObj;
@@ -319,61 +320,53 @@ std::expected<domain::ComicProject, domain::ValidationError> ProjectSerializer::
 
 std::expected<domain::ComicProject, domain::ValidationError>
 ProjectSerializer::deserializeFromJson(const QJsonObject& rawObj) {
-    // Step 1: Pre-migration envelope check 
+    // Step 1: Pre-migration envelope check
     // Only validates version integers; no field-content checks, so old schema files can proceed.
     const auto envelopeRes = ProjectSchemaValidator::validateEnvelope(rawObj);
     if (!envelopeRes) {
         return std::unexpected(envelopeRes.error());
     }
 
-    // Step 2: Migration 
+    // Step 2: Migration
     auto migratedRes = ProjectMigrator::migrateIfNeeded(rawObj);
     if (!migratedRes) {
         return std::unexpected(migratedRes.error());
     }
     const QJsonObject& root = *migratedRes;
 
-    // Step 3: Full structural validation (post-migration, current schema) 
+    // Step 3: Full structural validation (post-migration, current schema)
     const auto schemaRes = ProjectSchemaValidator::validateFull(root);
     if (!schemaRes) {
         return std::unexpected(schemaRes.error());
     }
 
-    // Step 4: Construct domain objects 
+    // Step 4: Construct domain objects
     const auto projIdRes = domain::ProjectId::parse(root["id"].toString().toStdString());
     if (!projIdRes) {
         return std::unexpected(domain::ValidationError{
-            .code = domain::ProjectErrorCode::InvalidId,
-            .message = "Invalid project ID UUID string",
-            .path = "id"
-        });
+            .code = domain::ProjectErrorCode::InvalidId, .message = "Invalid project ID UUID string", .path = "id"});
     }
 
     const auto srcLangRes = domain::LanguageCode::fromString(root["sourceLanguage"].toString().toStdString());
     if (!srcLangRes) {
-        return std::unexpected(domain::ValidationError{
-            .code = domain::ProjectErrorCode::InvalidSemanticData,
-            .message = "Invalid sourceLanguage code format",
-            .path = "sourceLanguage"
-        });
+        return std::unexpected(domain::ValidationError{.code = domain::ProjectErrorCode::InvalidSemanticData,
+                                                       .message = "Invalid sourceLanguage code format",
+                                                       .path = "sourceLanguage"});
     }
 
     const auto tgtLangRes = domain::LanguageCode::fromString(root["targetLanguage"].toString().toStdString());
     if (!tgtLangRes) {
-        return std::unexpected(domain::ValidationError{
-            .code = domain::ProjectErrorCode::InvalidSemanticData,
-            .message = "Invalid targetLanguage code format",
-            .path = "targetLanguage"
-        });
+        return std::unexpected(domain::ValidationError{.code = domain::ProjectErrorCode::InvalidSemanticData,
+                                                       .message = "Invalid targetLanguage code format",
+                                                       .path = "targetLanguage"});
     }
 
     const auto readDirOpt = stringToReadingDirection(root["readingDirection"].toString());
     if (!readDirOpt) {
-        return std::unexpected(domain::ValidationError{
-            .code = domain::ProjectErrorCode::InvalidStructure,
-            .message = "Invalid readingDirection value (must be RightToLeft or LeftToRight)",
-            .path = "readingDirection"
-        });
+        return std::unexpected(
+            domain::ValidationError{.code = domain::ProjectErrorCode::InvalidStructure,
+                                    .message = "Invalid readingDirection value (must be RightToLeft or LeftToRight)",
+                                    .path = "readingDirection"});
     }
 
     domain::ComicProject project(root["name"].toString().toStdString(), *projIdRes);
@@ -425,11 +418,9 @@ ProjectSerializer::deserializeFromJson(const QJsonObject& rawObj) {
             const QJsonObject gObj = gArr[static_cast<qsizetype>(gIdx)].toObject();
             const auto gIdRes = domain::GlossaryId::parse(gObj["id"].toString().toStdString());
             if (!gIdRes) {
-                return std::unexpected(domain::ValidationError{
-                    .code = domain::ProjectErrorCode::InvalidId,
-                    .message = "Invalid glossary entry UUID",
-                    .path = std::format("glossary[{}].id", gIdx)
-                });
+                return std::unexpected(domain::ValidationError{.code = domain::ProjectErrorCode::InvalidId,
+                                                               .message = "Invalid glossary entry UUID",
+                                                               .path = std::format("glossary[{}].id", gIdx)});
             }
             domain::GlossaryEntry gEntry;
             gEntry.id = *gIdRes;
@@ -440,12 +431,10 @@ ProjectSerializer::deserializeFromJson(const QJsonObject& rawObj) {
             gEntry.enabled = gObj.contains("enabled") ? gObj["enabled"].toBool(true) : true;
 
             if (!project.addGlossaryEntry(gEntry)) {
-                return std::unexpected(domain::ValidationError{
-                    .code = domain::ProjectErrorCode::DuplicateId,
-                    .message = "Duplicate glossary entry ID",
-                    .path = std::format("glossary[{}].id", gIdx),
-                    .entityId = gEntry.id.toString()
-                });
+                return std::unexpected(domain::ValidationError{.code = domain::ProjectErrorCode::DuplicateId,
+                                                               .message = "Duplicate glossary entry ID",
+                                                               .path = std::format("glossary[{}].id", gIdx),
+                                                               .entityId = gEntry.id.toString()});
             }
         }
     }
@@ -459,18 +448,16 @@ ProjectSerializer::deserializeFromJson(const QJsonObject& rawObj) {
 
         const auto pageIdRes = domain::PageId::parse(pObj["id"].toString().toStdString());
         if (!pageIdRes) {
-            return std::unexpected(domain::ValidationError{
-                .code = domain::ProjectErrorCode::InvalidId,
-                .message = "Invalid page ID UUID string",
-                .path = pagePath + ".id"
-            });
+            return std::unexpected(domain::ValidationError{.code = domain::ProjectErrorCode::InvalidId,
+                                                           .message = "Invalid page ID UUID string",
+                                                           .path = pagePath + ".id"});
         }
 
         const QJsonObject sizeObj = pObj["imageSize"].toObject();
         const domain::ImageSize imgSize{.width = sizeObj["width"].toInt(), .height = sizeObj["height"].toInt()};
 
-        domain::ComicPage page(*pageIdRes, pObj["originalAsset"].toString().toStdString(), imgSize,
-                               pObj["orderIndex"].toInt());
+        domain::ComicPage page(
+            *pageIdRes, pObj["originalAsset"].toString().toStdString(), imgSize, pObj["orderIndex"].toInt());
 
         if (pObj.contains("layers") && pObj["layers"].isObject()) {
             const QJsonObject lObj = pObj["layers"].toObject();
@@ -493,21 +480,17 @@ ProjectSerializer::deserializeFromJson(const QJsonObject& rawObj) {
 
             const auto regIdRes = domain::RegionId::parse(rObj["id"].toString().toStdString());
             if (!regIdRes) {
-                return std::unexpected(domain::ValidationError{
-                    .code = domain::ProjectErrorCode::InvalidId,
-                    .message = "Invalid region ID UUID string",
-                    .path = regionPath + ".id"
-                });
+                return std::unexpected(domain::ValidationError{.code = domain::ProjectErrorCode::InvalidId,
+                                                               .message = "Invalid region ID UUID string",
+                                                               .path = regionPath + ".id"});
             }
 
             // Geometry
             const QJsonObject geoObj = rObj["geometry"].toObject();
-            domain::RectGeometry geometry{
-                .x = geoObj["x"].toDouble(),
-                .y = geoObj["y"].toDouble(),
-                .width = geoObj["width"].toDouble(),
-                .height = geoObj["height"].toDouble()
-            };
+            domain::RectGeometry geometry{.x = geoObj["x"].toDouble(),
+                                          .y = geoObj["y"].toDouble(),
+                                          .width = geoObj["width"].toDouble(),
+                                          .height = geoObj["height"].toDouble()};
 
             domain::TextRegion region(*regIdRes, geometry, rObj["orderIndex"].toInt());
 
@@ -534,12 +517,10 @@ ProjectSerializer::deserializeFromJson(const QJsonObject& rawObj) {
                 for (const auto& cVal : candArr) {
                     if (cVal.isObject()) {
                         const QJsonObject cObj = cVal.toObject();
-                        translation.addCandidate({
-                            .id = cObj["id"].toString().toStdString(),
-                            .text = cObj["text"].toString().toStdString(),
-                            .confidence = cObj["confidence"].toDouble(1.0),
-                            .provider = cObj["provider"].toString().toStdString()
-                        });
+                        translation.addCandidate({.id = cObj["id"].toString().toStdString(),
+                                                  .text = cObj["text"].toString().toStdString(),
+                                                  .confidence = cObj["confidence"].toDouble(1.0),
+                                                  .provider = cObj["provider"].toString().toStdString()});
                     }
                 }
             }
@@ -551,8 +532,7 @@ ProjectSerializer::deserializeFromJson(const QJsonObject& rawObj) {
                             .code = domain::ProjectErrorCode::InvalidCandidateSelection,
                             .message = std::format("selectedCandidateId '{}' does not exist in candidates list", selId),
                             .path = regionPath + ".translation.selectedCandidateId",
-                            .entityId = region.id().toString()
-                        });
+                            .entityId = region.id().toString()});
                     }
                 }
             }
@@ -615,8 +595,7 @@ ProjectSerializer::deserializeFromJson(const QJsonObject& rawObj) {
                     .message = "Failed to load region into page (invalid geometry, out-of-bounds, "
                                "duplicate ID, or orderIndex mismatch)",
                     .path = regionPath,
-                    .entityId = region.id().toString()
-                });
+                    .entityId = region.id().toString()});
             }
         }
 
@@ -627,18 +606,17 @@ ProjectSerializer::deserializeFromJson(const QJsonObject& rawObj) {
                 .message = "Failed to load page into project (duplicate ID, invalid page structure, "
                            "or orderIndex mismatch)",
                 .path = pagePath,
-                .entityId = page.id().toString()
-            });
+                .entityId = page.id().toString()});
         }
     }
 
-    // Step 5: Semantic Validation 
+    // Step 5: Semantic Validation
     const auto semRes = domain::SemanticValidator::validate(project);
     if (!semRes) {
         return std::unexpected(semRes.error().front());
     }
 
-    // Step 6: Mark clean. isDirty is runtime-only. Successful load means clean state. 
+    // Step 6: Mark clean. isDirty is runtime-only. Successful load means clean state.
     project.markClean();
 
     return project;
