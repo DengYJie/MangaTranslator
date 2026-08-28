@@ -14,7 +14,7 @@
 ### 任务执行
 
 - [ ] 建立有界 `QThreadPool + QRunnable` 执行器。
-- [ ] 实现合作式取消、进度回调、请求 generation 和结果投递线程切换。
+- [ ] 实现合作式取消、进度回调、请求 generation 和结果投递线程切换：适配器通过 `QPromise` 完成 `QFuture`；GUI 侧用 `QFutureWatcher`（持有于 ViewModel）将结果与进度切回 GUI 线程；Port 接口不感知 GUI 线程。
 - [ ] 输入使用不可变快照；Worker 不访问 QWidget、QPixmap 或 Scene。
 - [ ] 关闭页面、项目或应用后拒绝投递过期结果。
 
@@ -30,7 +30,7 @@
 
 - [ ] 实现 OpenAI-compatible Chat Completions 非流式适配器。
 - [ ] 配置 endpoint、model、timeout 和非敏感生成参数。
-- [ ] 使用 Windows Credential Manager 保存 API key。
+- [ ] 使用 Windows Credential Manager（`CredWriteW`/`CredReadW`）保存和读取 API key；密钥不进入 QSettings、项目文件、日志或错误信息。
 - [ ] 实现结构化请求/响应、超时、认证、限流、有限重试和取消。
 - [ ] 取消后停止等待；明确不能保证服务端停止执行或计费。
 - [ ] 默认日志不记录密钥、完整漫画文本或完整远程响应。
