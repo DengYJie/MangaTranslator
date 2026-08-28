@@ -1,0 +1,239 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://mangaflow.app/schemas/v1/project.schema.json",
+  "title": "MangaTranslator Project Format Schema",
+  "description": "JSON schema for MangaTranslator project.json file (Draft 2020-12)",
+  "type": "object",
+  "required": [
+    "projectVersion",
+    "schemaVersion",
+    "formatVersion",
+    "id",
+    "name",
+    "sourceLanguage",
+    "targetLanguage",
+    "readingDirection",
+    "pages"
+  ],
+  "properties": {
+    "projectVersion": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+.*$"
+    },
+    "schemaVersion": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "formatVersion": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "id": {
+      "$ref": "#/$defs/uuidV4"
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1
+    },
+    "sourceLanguage": {
+      "type": "string",
+      "minLength": 1
+    },
+    "targetLanguage": {
+      "type": "string",
+      "minLength": 1
+    },
+    "readingDirection": {
+      "type": "string",
+      "enum": ["RightToLeft", "LeftToRight"]
+    },
+    "settings": {
+      "$ref": "#/$defs/projectSettings"
+    },
+    "glossary": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/glossaryEntry"
+      }
+    },
+    "pages": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/page"
+      }
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "uuidV4": {
+      "type": "string",
+      "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$"
+    },
+    "projectSettings": {
+      "type": "object",
+      "properties": {
+        "defaultFontFamily": { "type": "string" },
+        "defaultFontSizePt": { "type": "number", "exclusiveMinimum": 0 },
+        "defaultOrientation": { "type": "string", "enum": ["Horizontal", "Vertical"] },
+        "readingDirection": { "type": "string", "enum": ["RightToLeft", "LeftToRight"] },
+        "ocrEngine": { "type": "string" },
+        "translatorEngine": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "glossaryEntry": {
+      "type": "object",
+      "required": ["id", "source", "target"],
+      "properties": {
+        "id": { "$ref": "#/$defs/uuidV4" },
+        "source": { "type": "string", "minLength": 1 },
+        "target": { "type": "string", "minLength": 1 },
+        "category": { "type": "string" },
+        "caseSensitive": { "type": "boolean" },
+        "enabled": { "type": "boolean" }
+      },
+      "additionalProperties": false
+    },
+    "page": {
+      "type": "object",
+      "required": ["id", "originalAsset", "imageSize", "orderIndex", "regions"],
+      "properties": {
+        "id": { "$ref": "#/$defs/uuidV4" },
+        "originalAsset": { "type": "string", "minLength": 1 },
+        "imageSize": {
+          "type": "object",
+          "required": ["width", "height"],
+          "properties": {
+            "width": { "type": "integer", "minimum": 1 },
+            "height": { "type": "integer", "minimum": 1 }
+          },
+          "additionalProperties": false
+        },
+        "orderIndex": { "type": "integer", "minimum": 0, "maximum": 2147483647 },
+        "layers": {
+          "type": "object",
+          "properties": {
+            "clear": { "type": "string" },
+            "translation": { "type": "string" },
+            "manualOverride": { "type": "string" }
+          },
+          "additionalProperties": false
+        },
+        "regions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/region"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "region": {
+      "type": "object",
+      "required": ["id", "geometry", "orderIndex", "source", "translation", "layout", "clear"],
+      "properties": {
+        "id": { "$ref": "#/$defs/uuidV4" },
+        "orderIndex": { "type": "integer", "minimum": 0, "maximum": 2147483647 },
+        "geometry": {
+          "type": "object",
+          "required": ["type", "x", "y", "width", "height"],
+          "properties": {
+            "type": { "type": "string", "enum": ["rect"] },
+            "x": { "type": "number", "minimum": 0 },
+            "y": { "type": "number", "minimum": 0 },
+            "width": { "type": "number", "minimum": 2.0 },
+            "height": { "type": "number", "minimum": 2.0 }
+          },
+          "additionalProperties": false
+        },
+        "source": {
+          "type": "object",
+          "required": ["text", "sourceType"],
+          "properties": {
+            "text": { "type": "string" },
+            "sourceType": { "type": "string", "enum": ["OcrAuto", "OcrManualModified", "PureManual"] },
+            "confidence": { "type": "number", "minimum": 0.0, "maximum": 1.0 },
+            "ocrEngine": { "type": "string" },
+            "revision": { "type": "integer", "minimum": 0 }
+          },
+          "additionalProperties": false
+        },
+        "translation": {
+          "type": "object",
+          "properties": {
+            "modelText": { "type": ["string", "null"] },
+            "selectedCandidateId": { "type": ["string", "null"] },
+            "manualText": { "type": ["string", "null"] },
+            "candidates": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": ["id", "text"],
+                "properties": {
+                  "id": { "type": "string" },
+                  "text": { "type": "string" },
+                  "confidence": { "type": "number", "minimum": 0.0, "maximum": 1.0 },
+                  "provider": { "type": "string" }
+                },
+                "additionalProperties": false
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        "layout": {
+          "type": "object",
+          "required": ["fontFamily", "fontSizePt", "orientation", "alignment", "lineSpacing", "margins"],
+          "properties": {
+            "fontFamily": { "type": "string" },
+            "fontSizePt": { "type": "number", "exclusiveMinimum": 0 },
+            "orientation": { "type": "string", "enum": ["Horizontal", "Vertical"] },
+            "alignment": {
+              "type": "object",
+              "required": ["horizontal", "vertical"],
+              "properties": {
+                "horizontal": { "type": "string", "enum": ["Left", "Center", "Right", "Justify"] },
+                "vertical": { "type": "string", "enum": ["Top", "Middle", "Bottom"] }
+              },
+              "additionalProperties": false
+            },
+            "lineSpacing": { "type": "number", "exclusiveMinimum": 0 },
+            "margins": {
+              "type": "object",
+              "required": ["top", "right", "bottom", "left"],
+              "properties": {
+                "top": { "type": "number", "minimum": 0 },
+                "right": { "type": "number", "minimum": 0 },
+                "bottom": { "type": "number", "minimum": 0 },
+                "left": { "type": "number", "minimum": 0 }
+              },
+              "additionalProperties": false
+            },
+            "wordWrap": { "type": "boolean" },
+            "autoFit": { "type": "boolean" },
+            "minFontSizePt": { "type": "number", "exclusiveMinimum": 0 },
+            "maxFontSizePt": { "type": "number", "exclusiveMinimum": 0 },
+            "rotationDeg": { "type": "number" }
+          },
+          "additionalProperties": false
+        },
+        "clear": {
+          "type": "object",
+          "required": ["enabled", "colorHex", "opacity"],
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "colorHex": { "type": "string" },
+            "opacity": { "type": "number", "minimum": 0.0, "maximum": 1.0 }
+          },
+          "additionalProperties": false
+        },
+        "enabled": { "type": "boolean" },
+        "locked": { "type": "boolean" },
+        "translationVisible": { "type": "boolean" },
+        "isCleared": { "type": "boolean" },
+        "contentRevision": { "type": "integer", "minimum": 0 }
+      },
+      "additionalProperties": false
+    }
+  }
+}
