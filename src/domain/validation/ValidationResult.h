@@ -23,6 +23,7 @@ enum class ProjectErrorCode {
     // Edit operation errors
     EditNotFound,
     EditGeometryRejected,
+    EditOrderRejected,
     EditLayoutRejected,
     EditTranslationRejected,
 };

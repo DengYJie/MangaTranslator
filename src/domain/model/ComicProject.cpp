@@ -146,6 +146,41 @@ ComicProject::setRegionTranslationOnPage(const PageId& pageId, const RegionId& r
     return {};
 }
 
+std::expected<void, ProjectEditError>
+ComicProject::reorderRegionOnPage(const PageId& pageId, const RegionId& regionId, int newOrderIndex) {
+    ComicPage* page = findPageMutable(pageId);
+    if (page == nullptr) {
+        return std::unexpected(ProjectEditError{
+            .code = ProjectErrorCode::EditNotFound,
+            .message = "Page not found",
+            .entityId = pageId.toString(),
+        });
+    }
+    if (page->findRegion(regionId) == nullptr) {
+        return std::unexpected(ProjectEditError{
+            .code = ProjectErrorCode::EditNotFound,
+            .message = "Region not found",
+            .entityId = regionId.toString(),
+        });
+    }
+    if (newOrderIndex < 0 || newOrderIndex >= static_cast<int>(page->regions().size())) {
+        return std::unexpected(ProjectEditError{
+            .code = ProjectErrorCode::EditOrderRejected,
+            .message = "Region order index is invalid",
+            .entityId = regionId.toString(),
+        });
+    }
+    if (!page->reorderRegion(regionId, newOrderIndex)) {
+        return std::unexpected(ProjectEditError{
+            .code = ProjectErrorCode::EditOrderRejected,
+            .message = "Region order could not be changed",
+            .entityId = regionId.toString(),
+        });
+    }
+    markDirty();
+    return {};
+}
+
 std::expected<void, ProjectEditError> ComicProject::applyPageRegionEdits(const PageId& pageId,
                                                                          std::span<const PageRegionEdit> edits) {
     ComicPage* page = findPageMutable(pageId);
@@ -166,6 +201,14 @@ std::expected<void, ProjectEditError> ComicProject::applyPageRegionEdits(const P
                 return std::unexpected(ProjectEditError{.code = ProjectErrorCode::EditGeometryRejected,
                                                         .message = "Geometry update rejected during batch edit",
                                                         .entityId = edit.regionId.toString()});
+            }
+            changed = true;
+        }
+        if (edit.source.has_value()) {
+            auto res = page->updateRegionSource(edit.regionId, *edit.source);
+            if (!res) {
+                *page = snapshot;
+                return res;
             }
             changed = true;
         }

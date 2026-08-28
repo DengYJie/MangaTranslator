@@ -6,15 +6,11 @@
 namespace manga::domain {
 
 bool ComicPage::hasRegion(const RegionId& regionId) const noexcept {
-    return std::ranges::any_of(m_regions, [&regionId](const TextRegion& r) {
-        return r.id() == regionId;
-    });
+    return std::ranges::any_of(m_regions, [&regionId](const TextRegion& r) { return r.id() == regionId; });
 }
 
 const TextRegion* ComicPage::findRegion(const RegionId& regionId) const noexcept {
-    const auto it = std::ranges::find_if(m_regions, [&regionId](const TextRegion& r) {
-        return r.id() == regionId;
-    });
+    const auto it = std::ranges::find_if(m_regions, [&regionId](const TextRegion& r) { return r.id() == regionId; });
     return (it != m_regions.end()) ? &(*it) : nullptr;
 }
 
@@ -54,9 +50,7 @@ bool ComicPage::loadRegion(TextRegion region) {
 }
 
 bool ComicPage::removeRegion(const RegionId& regionId) {
-    const auto it = std::ranges::find_if(m_regions, [&regionId](const TextRegion& r) {
-        return r.id() == regionId;
-    });
+    const auto it = std::ranges::find_if(m_regions, [&regionId](const TextRegion& r) { return r.id() == regionId; });
     if (it == m_regions.end()) {
         return false;
     }
@@ -65,11 +59,30 @@ bool ComicPage::removeRegion(const RegionId& regionId) {
     return true;
 }
 
-std::optional<RectGeometry> ComicPage::updateRegionGeometry(const RegionId& regionId,
-                                                             const RectGeometry& newGeometry) {
-    auto it = std::ranges::find_if(m_regions, [&regionId](const TextRegion& r) {
-        return r.id() == regionId;
-    });
+bool ComicPage::reorderRegion(const RegionId& regionId, int newOrderIndex) {
+    if (newOrderIndex < 0 || newOrderIndex >= static_cast<int>(m_regions.size())) {
+        return false;
+    }
+    const auto it =
+        std::ranges::find_if(m_regions, [&regionId](const TextRegion& region) { return region.id() == regionId; });
+    if (it == m_regions.end()) {
+        return false;
+    }
+
+    const auto currentIndex = std::distance(m_regions.begin(), it);
+    if (currentIndex == newOrderIndex) {
+        return true;
+    }
+
+    TextRegion region = std::move(*it);
+    m_regions.erase(it);
+    m_regions.insert(m_regions.begin() + newOrderIndex, std::move(region));
+    normalizeRegionOrder();
+    return true;
+}
+
+std::optional<RectGeometry> ComicPage::updateRegionGeometry(const RegionId& regionId, const RectGeometry& newGeometry) {
+    auto it = std::ranges::find_if(m_regions, [&regionId](const TextRegion& r) { return r.id() == regionId; });
     if (it == m_regions.end()) {
         return std::nullopt;
     }
@@ -84,65 +97,45 @@ std::optional<RectGeometry> ComicPage::updateRegionGeometry(const RegionId& regi
     return clamped;
 }
 
-std::expected<void, ProjectEditError> ComicPage::updateRegionSource(const RegionId& regionId,
-                                                                     TextContent source) {
-    auto it = std::ranges::find_if(m_regions, [&regionId](const TextRegion& r) {
-        return r.id() == regionId;
-    });
+std::expected<void, ProjectEditError> ComicPage::updateRegionSource(const RegionId& regionId, TextContent source) {
+    auto it = std::ranges::find_if(m_regions, [&regionId](const TextRegion& r) { return r.id() == regionId; });
     if (it == m_regions.end()) {
         return std::unexpected(ProjectEditError{
-            .code = ProjectErrorCode::EditNotFound,
-            .message = "Region not found",
-            .entityId = regionId.toString()
-        });
+            .code = ProjectErrorCode::EditNotFound, .message = "Region not found", .entityId = regionId.toString()});
     }
     it->setSource(std::move(source));
     return {};
 }
 
-std::expected<void, ProjectEditError> ComicPage::updateRegionTranslation(
-    const RegionId& regionId, TranslationEntry translation) {
-    auto it = std::ranges::find_if(m_regions, [&regionId](const TextRegion& r) {
-        return r.id() == regionId;
-    });
+std::expected<void, ProjectEditError> ComicPage::updateRegionTranslation(const RegionId& regionId,
+                                                                         TranslationEntry translation) {
+    auto it = std::ranges::find_if(m_regions, [&regionId](const TextRegion& r) { return r.id() == regionId; });
     if (it == m_regions.end()) {
         return std::unexpected(ProjectEditError{
-            .code = ProjectErrorCode::EditNotFound,
-            .message = "Region not found",
-            .entityId = regionId.toString()
-        });
+            .code = ProjectErrorCode::EditNotFound, .message = "Region not found", .entityId = regionId.toString()});
     }
     it->setTranslation(std::move(translation));
     return {};
 }
 
-std::expected<void, ProjectEditError> ComicPage::updateRegionLayout(const RegionId& regionId,
-                                                                     TextLayout layout) {
+std::expected<void, ProjectEditError> ComicPage::updateRegionLayout(const RegionId& regionId, TextLayout layout) {
     if (!layout.isValid()) {
-        return std::unexpected(ProjectEditError{
-            .code = ProjectErrorCode::EditLayoutRejected,
-            .message = "Layout is invalid (fontSizePt > 0, lineSpacing > 0, valid margins required)",
-            .entityId = regionId.toString()
-        });
+        return std::unexpected(
+            ProjectEditError{.code = ProjectErrorCode::EditLayoutRejected,
+                             .message = "Layout is invalid (fontSizePt > 0, lineSpacing > 0, valid margins required)",
+                             .entityId = regionId.toString()});
     }
-    auto it = std::ranges::find_if(m_regions, [&regionId](const TextRegion& r) {
-        return r.id() == regionId;
-    });
+    auto it = std::ranges::find_if(m_regions, [&regionId](const TextRegion& r) { return r.id() == regionId; });
     if (it == m_regions.end()) {
         return std::unexpected(ProjectEditError{
-            .code = ProjectErrorCode::EditNotFound,
-            .message = "Region not found",
-            .entityId = regionId.toString()
-        });
+            .code = ProjectErrorCode::EditNotFound, .message = "Region not found", .entityId = regionId.toString()});
     }
     it->setLayout(std::move(layout));
     return {};
 }
 
 bool ComicPage::setRegionEnabled(const RegionId& regionId, bool enabled) noexcept {
-    auto it = std::ranges::find_if(m_regions, [&regionId](const TextRegion& r) {
-        return r.id() == regionId;
-    });
+    auto it = std::ranges::find_if(m_regions, [&regionId](const TextRegion& r) { return r.id() == regionId; });
     if (it == m_regions.end()) {
         return false;
     }
@@ -151,9 +144,7 @@ bool ComicPage::setRegionEnabled(const RegionId& regionId, bool enabled) noexcep
 }
 
 bool ComicPage::setRegionLocked(const RegionId& regionId, bool locked) noexcept {
-    auto it = std::ranges::find_if(m_regions, [&regionId](const TextRegion& r) {
-        return r.id() == regionId;
-    });
+    auto it = std::ranges::find_if(m_regions, [&regionId](const TextRegion& r) { return r.id() == regionId; });
     if (it == m_regions.end()) {
         return false;
     }
@@ -162,9 +153,7 @@ bool ComicPage::setRegionLocked(const RegionId& regionId, bool locked) noexcept 
 }
 
 bool ComicPage::setRegionTranslationVisible(const RegionId& regionId, bool visible) noexcept {
-    auto it = std::ranges::find_if(m_regions, [&regionId](const TextRegion& r) {
-        return r.id() == regionId;
-    });
+    auto it = std::ranges::find_if(m_regions, [&regionId](const TextRegion& r) { return r.id() == regionId; });
     if (it == m_regions.end()) {
         return false;
     }
@@ -173,9 +162,7 @@ bool ComicPage::setRegionTranslationVisible(const RegionId& regionId, bool visib
 }
 
 bool ComicPage::setRegionIsCleared(const RegionId& regionId, bool cleared) noexcept {
-    auto it = std::ranges::find_if(m_regions, [&regionId](const TextRegion& r) {
-        return r.id() == regionId;
-    });
+    auto it = std::ranges::find_if(m_regions, [&regionId](const TextRegion& r) { return r.id() == regionId; });
     if (it == m_regions.end()) {
         return false;
     }
@@ -190,8 +177,7 @@ void ComicPage::normalizeRegionOrder() noexcept {
 }
 
 bool ComicPage::isValid() const noexcept {
-    if (!m_id.isValid() || m_orderIndex < 0 || !m_imageSize.isValid() ||
-        m_originalAssetPath.empty()) {
+    if (!m_id.isValid() || m_orderIndex < 0 || !m_imageSize.isValid() || m_originalAssetPath.empty()) {
         return false;
     }
 
@@ -217,10 +203,9 @@ bool ComicPage::isValid() const noexcept {
 }
 
 bool ComicPage::operator==(const ComicPage& other) const noexcept {
-    return m_id == other.m_id && m_originalAssetPath == other.m_originalAssetPath &&
-           m_imageSize == other.m_imageSize && m_orderIndex == other.m_orderIndex &&
-           m_regions == other.m_regions && m_clearLayerAsset == other.m_clearLayerAsset &&
-           m_translationLayerAsset == other.m_translationLayerAsset &&
+    return m_id == other.m_id && m_originalAssetPath == other.m_originalAssetPath && m_imageSize == other.m_imageSize &&
+           m_orderIndex == other.m_orderIndex && m_regions == other.m_regions &&
+           m_clearLayerAsset == other.m_clearLayerAsset && m_translationLayerAsset == other.m_translationLayerAsset &&
            m_manualOverrideLayerAsset == other.m_manualOverrideLayerAsset;
 }
 

@@ -18,6 +18,7 @@ namespace manga::domain {
 struct PageRegionEdit {
     RegionId regionId;
     std::optional<RectGeometry> geometry;
+    std::optional<TextContent> source;
     std::optional<TranslationEntry> translation;
     std::optional<TextLayout> layout;
 };
@@ -32,34 +33,68 @@ public:
     ComicProject();
     explicit ComicProject(std::string name, ProjectId id = ProjectId::generate());
 
-    [[nodiscard]] const ProjectId& id() const noexcept { return m_id; }
-    [[nodiscard]] const std::string& name() const noexcept { return m_name; }
-    [[nodiscard]] const std::string& projectVersion() const noexcept { return m_projectVersion; }
-    [[nodiscard]] int schemaVersion() const noexcept { return m_schemaVersion; }
-    [[nodiscard]] int formatVersion() const noexcept { return m_formatVersion; }
+    [[nodiscard]] const ProjectId& id() const noexcept {
+        return m_id;
+    }
+    [[nodiscard]] const std::string& name() const noexcept {
+        return m_name;
+    }
+    [[nodiscard]] const std::string& projectVersion() const noexcept {
+        return m_projectVersion;
+    }
+    [[nodiscard]] int schemaVersion() const noexcept {
+        return m_schemaVersion;
+    }
+    [[nodiscard]] int formatVersion() const noexcept {
+        return m_formatVersion;
+    }
 
     /// Runtime dirty state: not persisted to disk. Managed by the application layer (load/save).
-    [[nodiscard]] bool isDirty() const noexcept { return m_isDirty; }
+    [[nodiscard]] bool isDirty() const noexcept {
+        return m_isDirty;
+    }
 
-    [[nodiscard]] const LanguageCode& sourceLanguage() const noexcept { return m_sourceLanguage; }
-    [[nodiscard]] const LanguageCode& targetLanguage() const noexcept { return m_targetLanguage; }
-    [[nodiscard]] ReadingDirection readingDirection() const noexcept { return m_readingDirection; }
+    [[nodiscard]] const LanguageCode& sourceLanguage() const noexcept {
+        return m_sourceLanguage;
+    }
+    [[nodiscard]] const LanguageCode& targetLanguage() const noexcept {
+        return m_targetLanguage;
+    }
+    [[nodiscard]] ReadingDirection readingDirection() const noexcept {
+        return m_readingDirection;
+    }
 
-    [[nodiscard]] const std::vector<ComicPage>& pages() const noexcept { return m_pages; }
-    [[nodiscard]] const ProjectSettings& settings() const noexcept { return m_settings; }
-    [[nodiscard]] const std::vector<GlossaryEntry>& glossary() const noexcept { return m_glossary; }
+    [[nodiscard]] const std::vector<ComicPage>& pages() const noexcept {
+        return m_pages;
+    }
+    [[nodiscard]] const ProjectSettings& settings() const noexcept {
+        return m_settings;
+    }
+    [[nodiscard]] const std::vector<GlossaryEntry>& glossary() const noexcept {
+        return m_glossary;
+    }
 
-    // Project Metadata Mutators 
+    // Project Metadata Mutators
     void setName(std::string name) {
         m_name = std::move(name);
         markDirty();
     }
-    void setProjectVersion(std::string version) { m_projectVersion = std::move(version); }
-    void setSchemaVersion(int version) noexcept { m_schemaVersion = version; }
-    void setFormatVersion(int version) noexcept { m_formatVersion = version; }
+    void setProjectVersion(std::string version) {
+        m_projectVersion = std::move(version);
+    }
+    void setSchemaVersion(int version) noexcept {
+        m_schemaVersion = version;
+    }
+    void setFormatVersion(int version) noexcept {
+        m_formatVersion = version;
+    }
 
-    void markDirty() noexcept { m_isDirty = true; }
-    void markClean() noexcept { m_isDirty = false; }
+    void markDirty() noexcept {
+        m_isDirty = true;
+    }
+    void markClean() noexcept {
+        m_isDirty = false;
+    }
 
     void setSourceLanguage(LanguageCode lang) noexcept {
         m_sourceLanguage = std::move(lang);
@@ -78,7 +113,7 @@ public:
         markDirty();
     }
 
-    // Page Lifecycle 
+    // Page Lifecycle
 
     [[nodiscard]] bool hasPage(const PageId& pageId) const noexcept;
     [[nodiscard]] const ComicPage* findPage(const PageId& pageId) const noexcept;
@@ -92,40 +127,38 @@ public:
 
     void normalizePageOrder() noexcept;
 
-    // Region Lifecycle (project-level, maintains cross-page RegionId uniqueness) 
+    // Region Lifecycle (project-level, maintains cross-page RegionId uniqueness)
 
     /// Adds a region to a specific page. Validates project-wide RegionId uniqueness.
-    [[nodiscard]] std::expected<void, ProjectEditError> addRegionToPage(const PageId& pageId,
-                                                                        TextRegion region);
+    [[nodiscard]] std::expected<void, ProjectEditError> addRegionToPage(const PageId& pageId, TextRegion region);
 
     /// Removes a region from a specific page.
     [[nodiscard]] std::expected<void, ProjectEditError> removeRegionFromPage(const PageId& pageId,
                                                                              const RegionId& regionId);
 
-    // Region Content Mutations (project-level, marks Dirty) 
+    // Region Content Mutations (project-level, marks Dirty)
 
     /// Updates region geometry on a specific page (clamps to bounds).
     [[nodiscard]] std::expected<RectGeometry, ProjectEditError>
-        updateRegionGeometryOnPage(const PageId& pageId,
-                                   const RegionId& regionId,
-                                   const RectGeometry& newGeometry);
+    updateRegionGeometryOnPage(const PageId& pageId, const RegionId& regionId, const RectGeometry& newGeometry);
 
     /// Updates region translation on a specific page.
     [[nodiscard]] std::expected<void, ProjectEditError>
-        setRegionTranslationOnPage(const PageId& pageId,
-                                   const RegionId& regionId,
-                                   TranslationEntry translation);
+    setRegionTranslationOnPage(const PageId& pageId, const RegionId& regionId, TranslationEntry translation);
+
+    [[nodiscard]] std::expected<void, ProjectEditError>
+    reorderRegionOnPage(const PageId& pageId, const RegionId& regionId, int newOrderIndex);
 
     /// Applies a batch of region edits to a single page atomically (snapshot/rollback).
-    [[nodiscard]] std::expected<void, ProjectEditError>
-        applyPageRegionEdits(const PageId& pageId, std::span<const PageRegionEdit> edits);
+    [[nodiscard]] std::expected<void, ProjectEditError> applyPageRegionEdits(const PageId& pageId,
+                                                                             std::span<const PageRegionEdit> edits);
 
-    // Glossary 
+    // Glossary
 
     bool addGlossaryEntry(GlossaryEntry entry);
     bool removeGlossaryEntry(const GlossaryId& id);
 
-    // Validation 
+    // Validation
 
     [[nodiscard]] bool isValid() const noexcept;
     [[nodiscard]] bool operator==(const ComicProject& other) const noexcept;

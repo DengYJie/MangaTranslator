@@ -17,15 +17,24 @@ public:
     ComicPage() : m_id(PageId::generate()) {}
     explicit ComicPage(PageId id) : m_id(id) {}
     ComicPage(PageId id, std::string originalAssetPath, ImageSize size, int orderIndex = 0)
-        : m_id(id), m_originalAssetPath(std::move(originalAssetPath)), m_imageSize(size),
-          m_orderIndex(orderIndex) {}
+        : m_id(id), m_originalAssetPath(std::move(originalAssetPath)), m_imageSize(size), m_orderIndex(orderIndex) {}
 
-    [[nodiscard]] const PageId& id() const noexcept { return m_id; }
-    [[nodiscard]] const std::string& originalAssetPath() const noexcept { return m_originalAssetPath; }
-    [[nodiscard]] const ImageSize& imageSize() const noexcept { return m_imageSize; }
-    [[nodiscard]] int orderIndex() const noexcept { return m_orderIndex; }
+    [[nodiscard]] const PageId& id() const noexcept {
+        return m_id;
+    }
+    [[nodiscard]] const std::string& originalAssetPath() const noexcept {
+        return m_originalAssetPath;
+    }
+    [[nodiscard]] const ImageSize& imageSize() const noexcept {
+        return m_imageSize;
+    }
+    [[nodiscard]] int orderIndex() const noexcept {
+        return m_orderIndex;
+    }
 
-    [[nodiscard]] const std::vector<TextRegion>& regions() const noexcept { return m_regions; }
+    [[nodiscard]] const std::vector<TextRegion>& regions() const noexcept {
+        return m_regions;
+    }
 
     // Layer asset paths (non-destructive derived / manual layers)
     [[nodiscard]] const std::optional<std::string>& clearLayerAsset() const noexcept {
@@ -39,9 +48,15 @@ public:
     }
 
     // Page-level mutators
-    void setOriginalAssetPath(std::string path) { m_originalAssetPath = std::move(path); }
-    void setImageSize(ImageSize size) noexcept { m_imageSize = size; }
-    void setOrderIndex(int index) noexcept { m_orderIndex = index; }
+    void setOriginalAssetPath(std::string path) {
+        m_originalAssetPath = std::move(path);
+    }
+    void setImageSize(ImageSize size) noexcept {
+        m_imageSize = size;
+    }
+    void setOrderIndex(int index) noexcept {
+        m_orderIndex = index;
+    }
 
     void setClearLayerAsset(std::optional<std::string> path) {
         m_clearLayerAsset = std::move(path);
@@ -53,7 +68,7 @@ public:
         m_manualOverrideLayerAsset = std::move(path);
     }
 
-    // Region Lifecycle (for ComicProject's use; validates page-internal invariants) 
+    // Region Lifecycle (for ComicProject's use; validates page-internal invariants)
 
     [[nodiscard]] bool hasRegion(const RegionId& regionId) const noexcept;
     [[nodiscard]] const TextRegion* findRegion(const RegionId& regionId) const noexcept;
@@ -66,24 +81,24 @@ public:
     /// Removes a region by ID and re-normalizes orderIndex to contiguous 0..N-1.
     bool removeRegion(const RegionId& regionId);
 
-    // Region Content Mutations (maintain revision, validate constraints) 
+    [[nodiscard]] bool reorderRegion(const RegionId& regionId, int newOrderIndex);
+
+    // Region Content Mutations (maintain revision, validate constraints)
 
     /// Updates region geometry with safe boundary clamping to image bounds.
     /// Returns clamped geometry on success, or std::nullopt if clamped size < 2×2.
-    std::optional<RectGeometry> updateRegionGeometry(const RegionId& regionId,
-                                                     const RectGeometry& newGeometry);
+    std::optional<RectGeometry> updateRegionGeometry(const RegionId& regionId, const RectGeometry& newGeometry);
 
     /// Updates region OCR/manual source text and bumps contentRevision.
     [[nodiscard]] std::expected<void, ProjectEditError> updateRegionSource(const RegionId& regionId,
                                                                            TextContent source);
 
     /// Updates region translation entry and bumps contentRevision.
-    [[nodiscard]] std::expected<void, ProjectEditError>
-        updateRegionTranslation(const RegionId& regionId, TranslationEntry translation);
+    [[nodiscard]] std::expected<void, ProjectEditError> updateRegionTranslation(const RegionId& regionId,
+                                                                                TranslationEntry translation);
 
     /// Updates region text layout (validates layout invariants) and bumps contentRevision.
-    [[nodiscard]] std::expected<void, ProjectEditError> updateRegionLayout(const RegionId& regionId,
-                                                                           TextLayout layout);
+    [[nodiscard]] std::expected<void, ProjectEditError> updateRegionLayout(const RegionId& regionId, TextLayout layout);
 
     /// Sets region enabled/locked/translationVisible/isCleared flags (no revision bump needed).
     bool setRegionEnabled(const RegionId& regionId, bool enabled) noexcept;
@@ -94,7 +109,7 @@ public:
     /// Normalizes region orderIndex values to contiguous integers: 0, 1, 2, ..., N-1.
     void normalizeRegionOrder() noexcept;
 
-    // Page-level Validation 
+    // Page-level Validation
 
     /// Validates whether a replacement image dimension matches current page dimensions.
     [[nodiscard]] bool canReplaceOriginalImage(const ImageSize& newSize) const noexcept {
