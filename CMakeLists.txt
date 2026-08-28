@@ -24,8 +24,8 @@ if(NOT TARGET FluentQt::FluentQt)
     set(FLUENT_QT_INSTALL OFF CACHE BOOL "" FORCE)
 
     FetchContent_Declare(fluentqt
-        GIT_REPOSITORY https://github.com/L-1124/Fluent-Qt.git
-        GIT_TAG ff2ee27081458ad1ff9fe83a71c651acef056824
+        GIT_REPOSITORY https://github.com/calvinhxx/Fluent-Qt.git
+        GIT_TAG v1.7.3
     )
     FetchContent_MakeAvailable(fluentqt)
 endif()
