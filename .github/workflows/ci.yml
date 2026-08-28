@@ -17,8 +17,10 @@ concurrency:
 
 env:
   QT_VERSION: "6.11.2"
+  MANGA_FLUENTQT_ROOT: ${{ github.workspace }}\.deps\fluentqt
   MANGA_VCPKG_ROOT: ${{ github.workspace }}\.vcpkg
   MANGA_VCPKG_BINARY_CACHE: ${{ github.workspace }}\.vcpkg-binary-cache
+  SCCACHE_GHA_ENABLED: "true"
   VCPKG_DEFAULT_TRIPLET: x64-windows
 
 jobs:
@@ -52,6 +54,14 @@ jobs:
           path: .vcpkg
           persist-credentials: false
 
+      - name: Check out pinned FluentQt
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          repository: calvinhxx/Fluent-Qt
+          ref: 50ad2fa1ad263c834adfd280b2c19dfdc2278dae
+          path: .deps/fluentqt
+          persist-credentials: false
+
       - name: Install Qt
         uses: jurplel/install-qt-action@48d3ad6db93f3627c8ee7a0454bc6f3744f7e730 # v4.3.1
         with:
@@ -80,6 +90,11 @@ jobs:
           "VCPKG_ROOT=$env:MANGA_VCPKG_ROOT" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           "VCPKG_DEFAULT_BINARY_CACHE=$env:MANGA_VCPKG_BINARY_CACHE" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
+      - name: Set up sccache
+        uses: mozilla-actions/sccache-action@fc920bf0ec8de6ee65d409111f7ec508035751ba # v0.0.11
+        with:
+          version: v0.17.0
+
       - name: Restore vcpkg caches
         uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
         with:
@@ -95,7 +110,11 @@ jobs:
           & (Join-Path $env:MANGA_VCPKG_ROOT "bootstrap-vcpkg.bat") -disableMetrics
 
       - name: Configure
-        run: cmake --preset ${{ matrix.preset }}
+        shell: pwsh
+        run: >-
+          cmake --preset ${{ matrix.preset }}
+          "-DFETCHCONTENT_SOURCE_DIR_FLUENTQT=$env:MANGA_FLUENTQT_ROOT"
+          "-DCMAKE_CXX_COMPILER_LAUNCHER=sccache"
 
       - name: Build
         run: cmake --build --preset ${{ matrix.preset }} --parallel
