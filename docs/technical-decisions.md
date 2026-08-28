@@ -175,6 +175,7 @@ MSVC 生产目标启用 `/W4` 与 `/permissive-`；第三方警告不提升为�
 - 缺失 ID：对应 Region 失败，不影响其他合法 Region。
 - 重复 ID：整次响应视为协议错误，不自动采用。
 - 未知 ID：忽略并记录安全诊断，同时提示响应异常。
+- sourceText 与请求不符：对应 Region 失败，不影响其他合法 Region。
 - 超时和限流：使用有限次数指数退避。
 - 非幂等操作不得自动重复提交。
 - 取消后停止等待并标记取消；界面明确说明无法保证服务端停止执行或计费。
@@ -186,8 +187,9 @@ MSVC 生产目标启用 `/W4` 与 `/permissive-`；第三方警告不提升为�
 ### 6.1 任务执行器
 
 - 使用有界 `QThreadPool + QRunnable`。
-- 使用项目自有取消令牌、进度回调和请求 generation。
-- 不把 QtConcurrent 作为核心任务抽象。
+- Port 异步契约统一返回 `QFuture<std::expected<T, ApplicationError>>`；接口不继承 `QObject`、不定义 signal。
+- 取消使用标准 `std::stop_token`，随 `OperationContext`（`OperationId`、generation、令牌）传入；进度通过 `QFuture/QPromise` 进度通道报告；generation 负责过期判断。
+- 不把 QtConcurrent 作为核心任务抽象（`QFuture/QPromise` 属 QtCore，不在此列）。
 - 任务输入使用不可变快照，并携带所属项目、页面和请求 ID。
 - 关闭页面、项目或应用后，旧任务不得发布结果。
 

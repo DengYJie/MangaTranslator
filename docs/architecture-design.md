@@ -110,6 +110,8 @@ Application 表达“系统要做什么”。
 
 UseCase 只依赖 Domain 和 Port，不知道具体使用哪种 OCR、LLM、数据库或 Widget。
 
+Port 契约统一形态：异步操作返回 `QFuture<std::expected<T, ApplicationError>>`，取消通过 `OperationContext` 携带标准 `std::stop_token`，进度通过 `QFuture/QPromise` 进度通道投递；Port 接口不继承 `QObject`、不定义 signal，`QObject` 与网络栈只出现在适配器内部。`OperationId`（UUID v4）用于日志与流水线追踪，`generation`（quint64）只用于过期判断。Application 目录按 `error/`、`operation/`、`dto/`、`ports/`、`mapping/`、`usecase/`、`workflow/` 组织；DTO 与 Domain 的映射放在 `mapping/`，第三方类型不穿越 Port。
+
 术语数据遵循两层持久归属：全局术语保存在用户目录 SQLite，项目术语随 `ComicProject` 保存。术语键在 Unicode NFKC、去首尾空白和大小写折叠后，由源语言、目标语言与规范化源词共同确定。项目术语与启用的全局术语匹配同一键时，项目术语优先。解析 UseCase 必须返回可追踪来源的 `EffectiveGlossaryItem`，检测同一归属内的歧义，并保证 UI 预览与翻译请求使用同一份解析结果。无当前项目时只能解析和修改全局术语。
 
 项目切换、关闭和异步索引完成均携带稳定项目 ID/请求 generation；旧项目的完成结果不得发布到新项目 State。缓存或术语索引可重建，不能成为全局或项目术语的唯一副本。
@@ -326,7 +328,7 @@ GUI Thread 只负责 Widget、ViewModel、Scene、`QPixmap` 和轻量 State 渲�
 - Inpainting。
 - 全页排版、渲染和导出。
 
-V0.1 采用有界 `QThreadPool + QRunnable` 任务执行器，配合自定义取消令牌、进度回调和请求 generation。`QtConcurrent` 不作为核心任务抽象；禁止每页创建一个无管理线程。
+V0.1 采用有界 `QThreadPool + QRunnable` 任务执行器，配合标准 `std::stop_token` 取消令牌、`QFuture/QPromise` 进度通道和请求 generation。`QFuture/QPromise` 属 QtCore，不引入 `QtConcurrent`；禁止每页创建一个无管理线程。
 
 每个任务必须定义：
 
@@ -365,6 +367,8 @@ Worker 使用 `QImage` 或模型缓冲区；`QPixmap` 和 Scene 只能在 GUI Th
 - 保存冲突、磁盘空间不足和导出失败。
 - 用户取消。
 
+Application 层统一 `Result<T> = std::expected<T, ApplicationError>`：错误包含稳定类别、错误码（如 `network.timeout`）、用户安全摘要、日志诊断和恢复建议。第三方异常在适配器内捕获并映射，不穿越 Port 边界。
+
 State 保存可恢复状态；一次性提示使用 Signal。日志保留操作、模型、页面和安全诊断，不默认记录完整漫画文本、图片或密钥。
 
 ## 12. CMake 与测试边界
@@ -401,6 +405,8 @@ State 保存可恢复状态；一次性提示使用 Signal。日志保留操作�
 | V0.1 Region | UUID v4、源图像像素坐标、轴对齐矩形 |
 | V0.1 OCR | 一个 Manga OCR ONNX 实现，人工输入兜底 |
 | V0.1 翻译 | OpenAI-compatible、非流式、结构化响应 |
-| V0.1 任务 | `QThreadPool + QRunnable`、取消令牌、进度、generation |
+| V0.1 任务 | `QThreadPool + QRunnable`、`std::stop_token` 取消、`QFuture` 进度、generation |
+| Port 异步契约 | `QFuture<std::expected<T, ApplicationError>>`，接口无 QObject/signal |
+| 异步结果采用 | 后台结果不直接写 Domain，用户采用后进入 Undo |
 | V0.1 图像 | RGBA8、straight alpha、sRGB，导入时应用 EXIF 方向 |
 | V0.1 导出 | PNG/JPEG，不覆盖既有文件 |

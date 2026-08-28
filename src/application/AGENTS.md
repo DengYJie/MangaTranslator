@@ -2,8 +2,13 @@
 
 ## Layout
 
+- `error`: `ApplicationError` and the `Result` type alias.
+- `operation`: `OperationContext` and progress types.
 - `ports`: capability interfaces required by the application.
+- `dto`: request/response types that cross ports.
+- `mapping`: DTO ↔ domain mapping.
 - `usecase`: one task-oriented application operation per focused class or module.
+- `workflow`: multi-stage orchestration that coordinates UseCases and ports.
 
 Expected ports may include `ITextDetector`, `IOcrEngine`, `ITranslator`, `IInpainter`, `ITextLayouter`, and `IComicImporter`. Interfaces describe application needs, not third-party SDK shapes.
 
@@ -20,7 +25,7 @@ Expected ports may include `ITextDetector`, `IOcrEngine`, `ITranslator`, `IInpai
 
 - Ownership and thread-safety expectations are part of every port contract.
 - Use domain/application request and result types. Map provider, database, and model types inside adapters.
-- Avoid Qt signals in interfaces unless the application layer intentionally standardizes a QtCore-only asynchronous contract. Prefer testable callbacks, task/result objects, or standard cancellation abstractions.
+- Asynchronous port operations return `QFuture<std::expected<T, ApplicationError>>` — the standardized QtCore-only async contract. Interfaces do not inherit `QObject` and define no signals; cancellation uses `std::stop_token` carried in `OperationContext`.
 - Never leak API keys, network responses, ONNX tensors, archive handles, or `QGraphicsItem`s through a port.
 
 ## Tests
