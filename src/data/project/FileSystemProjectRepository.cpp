@@ -3,6 +3,7 @@
 #include "data/DataAsync.h"
 #include "data/DataErrorMapping.h"
 #include "data/project/PathSafety.h"
+#include "data/project/ProjectLayout.h"
 #include "data/project/ProjectSerializer.h"
 
 #include <QCryptographicHash>
@@ -22,12 +23,6 @@
 namespace manga::data {
 namespace {
 
-constexpr QLatin1String kProjectFileName("project.json");
-constexpr QLatin1String kBackupSuffix(".bak");
-constexpr QLatin1String kLockFileName(".mangatranslator.lock");
-constexpr QLatin1String kAssetsOriginal("assets/original");
-constexpr QLatin1String kAssetsDerived("assets/derived");
-constexpr QLatin1String kStagingDirName(".mangatranslator-staging");
 constexpr qint64 kWriteMarginBytes = 64 * 1024;
 
 application::ApplicationError makeDiskFullError() {
@@ -330,6 +325,10 @@ void FileSystemProjectRepository::setDiskSpaceProbe(DiskSpaceProbe probe) {
 
 void FileSystemProjectRepository::setSaveAsCommitProbe(SaveAsCommitProbe probe) {
     m_saveAsCommitProbe = std::move(probe);
+}
+
+void FileSystemProjectRepository::setSaveTransactionHook(SaveTransactionHook hook) {
+    m_saveTransactionHook = std::move(hook);
 }
 
 bool FileSystemProjectRepository::hasDiskSpace(const QString& root, qint64 requiredBytes) const {
@@ -684,6 +683,12 @@ FileSystemProjectRepository::saveProject(application::SaveProjectRequest request
             }
             if (!hasDiskSpace(canonicalRoot, bytes.size() + kWriteMarginBytes)) {
                 return std::unexpected(makeDiskFullError());
+            }
+
+            // Test seam: fires once the transaction has begun; stop requests made from the
+            // hook are deliberately ignored until the save completes.
+            if (m_saveTransactionHook) {
+                m_saveTransactionHook();
             }
 
             if (!session->recoveredFromBackup) {

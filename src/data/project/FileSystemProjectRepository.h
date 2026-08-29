@@ -21,6 +21,9 @@ struct RepositorySession;
 using DiskSpaceProbe = std::function<qint64(const QString& projectRoot)>;
 /// Allows a commit only when the probe accepts the staged relative path.
 using SaveAsCommitProbe = std::function<bool(const QString& relativePath, int commitIndex)>;
+/// Invoked once a save transaction has begun; stop requests made from the hook are ignored
+/// until the save completes, which lets tests exercise the no-abort guarantee.
+using SaveTransactionHook = std::function<void()>;
 
 /// Filesystem-backed project repository using the directory layout project.json plus
 /// assets/original and assets/derived. Saves are atomic QSaveFile commits guarded by a
@@ -33,6 +36,7 @@ public:
 
     void setDiskSpaceProbe(DiskSpaceProbe probe);
     void setSaveAsCommitProbe(SaveAsCommitProbe probe);
+    void setSaveTransactionHook(SaveTransactionHook hook);
 
     [[nodiscard]] QFuture<application::Result<application::ProjectDescriptor>>
     createProject(application::CreateProjectRequest request, application::OperationContext context) override;
@@ -57,6 +61,7 @@ private:
     ProjectIoCoordinator* m_coordinator;
     DiskSpaceProbe m_probe;
     SaveAsCommitProbe m_saveAsCommitProbe;
+    SaveTransactionHook m_saveTransactionHook;
     QMutex m_mutex;
     std::map<QString, std::shared_ptr<RepositorySession>> m_sessions;
 };
