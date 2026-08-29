@@ -1,0 +1,126 @@
+{
+  "manifestVersion": 1,
+  "id": "test-model",
+  "version": "1.0.0",
+  "source": {
+    "repository": "x",
+    "revision": "0123456789abcdef0123456789abcdef01234567",
+    "license": "MIT"
+  },
+  "runtime": {
+    "minimumOnnxRuntime": "1.14.0",
+    "opset": 14,
+    "executionProvider": "cpu"
+  },
+  "input": {
+    "width": 224,
+    "height": 224,
+    "layout": "NCHW",
+    "color": "RGB",
+    "sourceConversion": "RGB",
+    "resizeMode": "stretch",
+    "resample": "bicubic"
+  },
+  "normalization": {
+    "scale": 0.003921568,
+    "mean": [
+      0.485,
+      0.456,
+      0.406
+    ],
+    "std": [
+      0.229,
+      0.224,
+      0.225
+    ]
+  },
+  "generation": {
+    "maxLength": 128,
+    "strategy": "greedy",
+    "repetitionPenalty": 1.2,
+    "contentRunCap": 2
+  },
+  "postprocess": "baberu-v1",
+  "tokenizer": {
+    "type": "baberu-character-v1",
+    "vocabFile": "vocab.json",
+    "sha256": "a6eb06f3f50e93798f33e18ac15c22de529479e14c439bab989a411e16f86fca",
+    "bosTokenId": 1,
+    "eosTokenId": 2,
+    "padTokenId": 0,
+    "unkTokenId": 3
+  },
+  "graphs": [
+    {
+      "role": "vision",
+      "file": "vision_fake.onnx",
+      "sha256": "810d035068498b8c138368538355c1b1c8a97b1c3eb15abe76a372687c2ec74c",
+      "inputs": [
+        "pixel_values"
+      ],
+      "outputs": [
+        "vision_embeds"
+      ]
+    },
+    {
+      "role": "decoder-prefill",
+      "file": "prefill_fake.onnx",
+      "sha256": "9309f0a439de8bd7155a46d84166436ab520b2a0fdc6e4f1bb4084ca5dc67383",
+      "inputs": [
+        "vision_embeds",
+        "input_ids"
+      ],
+      "outputs": [
+        "logits",
+        "present_k0",
+        "present_k1",
+        "present_k2",
+        "present_k3",
+        "present_k4",
+        "present_k5",
+        "present_v0",
+        "present_v1",
+        "present_v2",
+        "present_v3",
+        "present_v4",
+        "present_v5"
+      ]
+    },
+    {
+      "role": "decoder-step",
+      "file": "step_fake.onnx",
+      "sha256": "5729484197575412a469575a65cc445ed0ac5571f380a7b5b8383ddfd83f3b06",
+      "inputs": [
+        "input_ids",
+        "position_ids",
+        "past_k0",
+        "past_k1",
+        "past_k2",
+        "past_k3",
+        "past_k4",
+        "past_k5",
+        "past_v0",
+        "past_v1",
+        "past_v2",
+        "past_v3",
+        "past_v4",
+        "past_v5"
+      ],
+      "outputs": [
+        "logits",
+        "present_k0",
+        "present_k1",
+        "present_k2",
+        "present_k3",
+        "present_k4",
+        "present_k5",
+        "present_v0",
+        "present_v1",
+        "present_v2",
+        "present_v3",
+        "present_v4",
+        "present_v5"
+      ]
+    }
+  ]
+}

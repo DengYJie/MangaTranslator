@@ -1,3 +1,5 @@
+#include "BaberuOcrIntegrationTest.h"
+#include "BaberuOcrTest.h"
 #include "BoundedTaskExecutorTest.h"
 #include "SolidColorInpainterTest.h"
 
@@ -20,6 +22,15 @@ int main(int argc, char* argv[]) {
         }
     };
 
+    {
+        manga::services::test::BaberuOcrTest suite;
+        runSuite("BaberuOcrTest", &suite);
+    }
+
+    {
+        manga::services::test::BaberuOcrIntegrationTest suite;
+        runSuite("BaberuOcrIntegrationTest", &suite);
+    }
     {
         BoundedTaskExecutorTest suite;
         runSuite("BoundedTaskExecutorTest", &suite);
