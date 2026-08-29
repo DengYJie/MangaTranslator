@@ -351,13 +351,13 @@ assets/derived/
 └── <page-uuid>/
     ├── work/v1.png          ← V0.1 不写入，加载时即时规范化
     ├── thumbnail/v1.png     ← 约定路径，不进 project.json
-    ├── cleaning/v1.png      ← 进 project.json layers.clear
+    ├── cleaning/v1/<sha256>.png ← 进 project.json layers.clear，由 P4 内容寻址生成
     └── preview/v1.png       ← 约定路径，不进 project.json
 ```
 
 - **清除层/译文层/人工覆盖层**：引用写入 `project.json` 的 `layers` 对象（P1 Schema 已支持 `clear`/`translation`/`manualOverride` 字符串字段）。
 - **缩略图/work/preview**：按约定路径查找，不进 `project.json`；缺失或损坏即视为 stale。后台生成与重建由后续阶段的派生资产服务负责。
-- 版本号写入路径段：生成器升级时写 `v2` 并清理旧版本文件。
+- 版本号写入路径段：生成器升级时写 `v2/`。清除层由 P4 以规范化图像内容 SHA-256 命名为不可变文件，使文件提交与 Domain 引用更新之间无需覆盖旧内容；未引用文件可延迟清理。
 - 失效判据：文件不存在或无法解码；派生资产可安全丢弃，不作为用户数据唯一副本。
 
 ### 多实例并发

@@ -29,7 +29,7 @@ V0.1 不包含 CBZ/ZIP、PDF、自动文字检测、OpenCV/LaMa Inpaint、跨页
 | P1 | [Domain 与项目格式](phase-1-domain-project.md) | 冻结 V0.1 核心数据与 Schema | P0 |
 | P2 | [Application 契约与 UseCase](phase-2-application.md) | 可由 Fake 驱动的业务边界 | P1 |
 | P3 | [数据持久化与图片导入](phase-3-data-import.md) | 可恢复项目和图片来源 | P2 |
-| P4 | [OCR、翻译、清除与排版](phase-4-processing.md) | 可替换处理适配器 | P2 |
+| P4 | [OCR、翻译、清除、排版与导出](phase-4-processing.md) | 可替换处理与导出适配器 | P2 |
 | P5 | [UI、MVVM 与漫画画布](phase-5-ui-editor.md) | 可人工编辑的工作台 | P2 |
 | P6 | [纵向切片集成](phase-6-integration.md) | 端到端真实工作流 | P3、P4、P5 |
 | P7 | [稳定性与发布验收](phase-7-release.md) | V0.1 发布候选 | P6 |
