@@ -1,4 +1,7 @@
-add_library(manga_services STATIC services.cpp)
+add_library(manga_services STATIC
+    execution/BoundedTaskExecutor.cpp
+    services.cpp
+)
 manga_apply_project_options(manga_services)
 
 target_include_directories(manga_services
@@ -9,4 +12,5 @@ target_include_directories(manga_services
 target_link_libraries(manga_services
     PUBLIC
         manga_application
+        Qt6::Core
 )
