@@ -10,5 +10,7 @@ private slots:
     void testReorderRegionRejectsInvalidIndex();
     void testExportResolvesSelectedPages();
     void testExportRejectsMissingSnapshot();
+    void testExportRejectsInvalidOutputStem();
+    void testExportRejectsMismatchedLayer();
     void testProjectMapperProducesQtDto();
 };

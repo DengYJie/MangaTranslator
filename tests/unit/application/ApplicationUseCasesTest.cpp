@@ -51,10 +51,11 @@ ComicProject makeProject(PageId& firstPageId,
 }
 
 ExportPageSnapshot snapshot(PageId pageId) {
-    return ExportPageSnapshot{
-        .pageId = pageId,
-        .sourceImage = QImage(100, 100, QImage::Format_RGBA8888),
-    };
+    ExportPageSnapshot result;
+    result.pageId = pageId;
+    result.outputStem = QStringLiteral("page_0001_translated");
+    result.sourceImage = QImage(100, 100, QImage::Format_RGBA8888);
+    return result;
 }
 
 } // namespace
@@ -132,6 +133,52 @@ void ApplicationUseCasesTest::testExportRejectsMissingSnapshot() {
     QVERIFY(future.isFinished());
     QVERIFY(!future.result().has_value());
     QCOMPARE(future.result().error().code, QString("input.missing_page_snapshot"));
+    QCOMPARE(exporter.callCount, 0);
+}
+
+void ApplicationUseCasesTest::testExportRejectsInvalidOutputStem() {
+    PageId firstPageId;
+    PageId secondPageId;
+    auto project = makeProject(firstPageId, secondPageId);
+    FakeComicExporter exporter;
+    ExportPagesUseCase useCase(&exporter, &project);
+    ExportPagesRequest request;
+    request.projectId = project.id();
+    request.scope = ExportScope::SelectedPages;
+    request.outputDir = "output";
+    auto badSnapshot = snapshot(firstPageId);
+    badSnapshot.outputStem = QStringLiteral("bad stem!");
+    request.pageSnapshots = {badSnapshot};
+    request.selectedPageIds = {firstPageId};
+
+    const auto future = useCase.execute(request, {});
+
+    QVERIFY(future.isFinished());
+    QVERIFY(!future.result().has_value());
+    QCOMPARE(future.result().error().code, QString("export.invalid_output_name"));
+    QCOMPARE(exporter.callCount, 0);
+}
+
+void ApplicationUseCasesTest::testExportRejectsMismatchedLayer() {
+    PageId firstPageId;
+    PageId secondPageId;
+    auto project = makeProject(firstPageId, secondPageId);
+    FakeComicExporter exporter;
+    ExportPagesUseCase useCase(&exporter, &project);
+    ExportPagesRequest request;
+    request.projectId = project.id();
+    request.scope = ExportScope::SelectedPages;
+    request.outputDir = "output";
+    auto badSnapshot = snapshot(firstPageId);
+    badSnapshot.clearLayer = QImage(50, 50, QImage::Format_RGBA8888);
+    request.pageSnapshots = {badSnapshot};
+    request.selectedPageIds = {firstPageId};
+
+    const auto future = useCase.execute(request, {});
+
+    QVERIFY(future.isFinished());
+    QVERIFY(!future.result().has_value());
+    QCOMPARE(future.result().error().code, QString("export.invalid_layer"));
     QCOMPARE(exporter.callCount, 0);
 }
 

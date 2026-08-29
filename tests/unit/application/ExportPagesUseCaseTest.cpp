@@ -28,10 +28,11 @@ struct ExportFixture {
         request.outputDir = "output";
         request.scope = ExportScope::SelectedPages;
         request.selectedPageIds = {pageId};
-        request.pageSnapshots.append({
-            .pageId = pageId,
-            .sourceImage = QImage(100, 100, QImage::Format_RGBA8888),
-        });
+        ExportPageSnapshot snapshot;
+        snapshot.pageId = pageId;
+        snapshot.outputStem = QStringLiteral("page_0001_translated");
+        snapshot.sourceImage = QImage(100, 100, QImage::Format_RGBA8888);
+        request.pageSnapshots.append(snapshot);
         return request;
     }
 };

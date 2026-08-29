@@ -2,9 +2,23 @@
 
 #include "application/operation/AsyncResult.h"
 
+#include <QRegularExpression>
 #include <QSet>
 
 namespace manga::application {
+namespace {
+
+// Mirrors the exporter contract: a safe file stem with no path segments and no trailing dot.
+[[nodiscard]] bool isValidOutputStem(const QString& stem) {
+    static const QRegularExpression pattern(QStringLiteral("^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"));
+    return pattern.match(stem).hasMatch() && !stem.endsWith(QLatin1Char('.'));
+}
+
+[[nodiscard]] bool isUsableLayer(const QImage& layer, const QImage& source) {
+    return layer.isNull() || (layer.size() == source.size() && layer.format() == QImage::Format_RGBA8888);
+}
+
+} // namespace
 
 QFuture<Result<ExportResponse>> ExportPagesUseCase::execute(const ExportPagesRequest& request,
                                                             const OperationContext& context) {
@@ -55,11 +69,20 @@ QFuture<Result<ExportResponse>> ExportPagesUseCase::execute(const ExportPagesReq
     QSet<QString> snapshotIds;
     for (const auto& snapshot : request.pageSnapshots) {
         const auto key = QString::fromStdString(snapshot.pageId.toString());
-        const auto* page = m_project->findPage(snapshot.pageId);
         if (!snapshot.pageId.isValid() || snapshot.sourceImage.isNull() || snapshotIds.contains(key) ||
-            page == nullptr || snapshot.regions != page->regions()) {
+            m_project->findPage(snapshot.pageId) == nullptr) {
             return makeFailedFuture<ExportResponse>(makeApplicationError(
                 ErrorCategory::Input, "input.invalid_page_snapshot", "Export page snapshot is invalid"));
+        }
+        if (!isValidOutputStem(snapshot.outputStem)) {
+            return makeFailedFuture<ExportResponse>(makeApplicationError(
+                ErrorCategory::Input, "export.invalid_output_name", "An export output stem is invalid"));
+        }
+        if (!isUsableLayer(snapshot.clearLayer, snapshot.sourceImage) ||
+            !isUsableLayer(snapshot.translationLayer, snapshot.sourceImage) ||
+            !isUsableLayer(snapshot.manualOverrideLayer, snapshot.sourceImage)) {
+            return makeFailedFuture<ExportResponse>(
+                makeApplicationError(ErrorCategory::Input, "export.invalid_layer", "An export layer is invalid"));
         }
         snapshotIds.insert(key);
         if (request.scope == ExportScope::AllPages || selectedIds.contains(key)) {
