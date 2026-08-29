@@ -1,10 +1,11 @@
-#include "data/import/FileSystemComicImporter.h"
+﻿#include "data/import/FileSystemComicImporter.h"
 
 #include "application/usecase/import/ImportUseCases.h"
 #include "data/DataAsync.h"
 #include "data/DataErrorMapping.h"
 #include "data/image/ImageNormalization.h"
 #include "data/project/PathSafety.h"
+#include "data/project/ProjectLayout.h"
 
 #include <QCryptographicHash>
 #include <QDir>
@@ -21,9 +22,6 @@
 
 namespace manga::data {
 namespace {
-
-constexpr QLatin1String kAssetsOriginal("assets/original");
-constexpr QLatin1String kAssetsStaging("assets/staging");
 
 application::ApplicationError makeCancelledError(QStringView what) {
     return application::makeApplicationError(application::ErrorCategory::Cancelled,
@@ -342,7 +340,7 @@ FileSystemComicImporter::importImagesBlocking(const application::ImportImagesReq
     promise.setProgressRange(0, totalFiles);
 
     const QString originalDir = canonicalRoot + QLatin1Char('/') + kAssetsOriginal;
-    const QString stagingDir = canonicalRoot + QLatin1Char('/') + kAssetsStaging;
+    const QString stagingDir = canonicalRoot + QLatin1Char('/') + kStagingDirName;
     if (!QDir().mkpath(originalDir) || !QDir().mkpath(stagingDir)) {
         return std::unexpected(toPersistenceError(QFileDevice::PermissionsError));
     }
@@ -379,7 +377,7 @@ FileSystemComicImporter::importImagesBlocking(const application::ImportImagesReq
                 for (const QString& path : committedAssets) {
                     QFile::remove(path);
                 }
-                QDir(canonicalRoot).rmdir(kAssetsStaging.toString());
+                QDir(canonicalRoot).rmdir(kStagingDirName.toString());
                 return std::unexpected(makeCancelledError(u"Import"));
             }
             auto outcome =
@@ -402,10 +400,10 @@ FileSystemComicImporter::importImagesBlocking(const application::ImportImagesReq
         for (const QString& path : committedAssets) {
             QFile::remove(path);
         }
-        QDir(canonicalRoot).rmdir(kAssetsStaging.toString());
+        QDir(canonicalRoot).rmdir(kStagingDirName.toString());
         return std::unexpected(makeCancelledError(u"Import"));
     }
-    QDir(canonicalRoot).rmdir(kAssetsStaging.toString());
+    QDir(canonicalRoot).rmdir(kStagingDirName.toString());
     if (!result.importedPages.isEmpty()) {
         PendingBatch batch;
         batch.projectId = request.projectId;
