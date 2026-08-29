@@ -502,11 +502,11 @@ P4/P5 实现前对 P2 契约的小范围扩展；这些类型仍是 Application 
 
 #### P5 开工前必须落地的契约修订
 
-- [ ] 把 generation 拆成视图范围与项目会话范围，并更新所有请求快照、采用检查和测试。
+- [x] 把 generation 拆成视图范围与项目会话范围，并更新所有请求快照、采用检查和测试。
 - [ ] 增加 `IThumbnailStore`、`LoadOrGenerateThumbnailUseCase` 及固定路径语义。
-- [ ] 增加不暴露 Secret 的凭据状态/配置/清除 UseCase。
-- [ ] 把 Clear 采用改为 `PrepareClearResultUseCase` + 同步 `ApplyPreparedClearChangeUseCase` 两阶段协议。
-- [ ] 增加应用设置与最近项目窄 Port，避免 ViewModel 直接使用 `QSettings`。
+- [x] 增加不暴露 Secret 的凭据状态/配置/清除 UseCase。
+- [x] 把 Clear 采用改为 `PrepareClearResultUseCase` + 同步 `ApplyPreparedClearChangeUseCase` 两阶段协议。
+- [x] 增加应用设置与最近项目窄 Port，避免 ViewModel 直接使用 `QSettings`。
 
 ### Workflow 编排原则
 
