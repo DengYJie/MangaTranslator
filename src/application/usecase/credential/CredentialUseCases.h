@@ -13,8 +13,14 @@ struct CredentialStatusRequest {
     QString providerId;
 };
 
+enum class CredentialState {
+    Configured,
+    Missing,
+    Unavailable
+};
+
 struct CredentialStatusResult {
-    bool hasCredential;
+    CredentialState state;
 };
 
 class CheckCredentialStatusUseCase {
@@ -33,14 +39,12 @@ public:
                                                         QStringLiteral("Provider ID is required")));
         }
 
-        // The status query never reads or copies the secret blob.
         auto result = m_store->hasApiKey(request.providerId.trimmed());
         if (!result) {
-            // A status failure is reported as not configured; the UI offers setup.
-            return CredentialStatusResult{false};
+            return CredentialStatusResult{CredentialState::Unavailable};
         }
 
-        return CredentialStatusResult{*result};
+        return CredentialStatusResult{*result ? CredentialState::Configured : CredentialState::Missing};
     }
 
 private:

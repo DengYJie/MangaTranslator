@@ -42,7 +42,10 @@ struct PreparedClearChange {
     domain::ProjectId projectId;
     domain::PageId pageId;
     domain::RegionId regionId;
-    QString relativePath;
+    QString beforeRef;
+    QString afterRef;
+    bool beforeState{false};
+    bool afterState{true};
 };
 
 /// Prepares a clear patch by compositing it onto the current page clear layer, and committing
@@ -136,45 +139,53 @@ public:
             layerFuture = store->readDerivedLayer(std::move(readRequest), requestSnapshot.context);
         }
 
-        layerFuture.then([store, request = requestSnapshot, promise](Result<QImage> current) {
-            if (!current) {
-                promise->addResult(std::unexpected(current.error()));
-                promise->finish();
-                return;
-            }
-            if ((*current).size() != request.pageSize || (*current).format() != QImage::Format_RGBA8888) {
-                promise->addResult(std::unexpected(detail::applyError(
-                    ErrorCategory::Input, "clear.layer_read_failed", "The stored clear layer is not usable")));
-                promise->finish();
-                return;
-            }
-            const int left = qFloor(request.result.affectedBounds.x);
-            const int top = qFloor(request.result.affectedBounds.y);
-            QPainter painter(&*current);
-            painter.setCompositionMode(QPainter::CompositionMode_SourceOver);
-            painter.drawImage(QPoint(left, top), request.result.patch);
-            painter.end();
-            (*current).setColorSpace(QColorSpace(QColorSpace::SRgb));
+        bool beforeState = region->isCleared();
 
-            CommitDerivedLayerRequest commitRequest;
-            commitRequest.projectId = request.projectId;
-            commitRequest.projectRoot = request.projectRoot;
-            commitRequest.pageId = request.pageId;
-            commitRequest.layerKind = DerivedLayerKind::Clear;
-            commitRequest.layer = *current;
-            store->commitDerivedLayer(std::move(commitRequest), request.context)
-                .then([request, promise](Result<CommitDerivedLayerResponse> committed) {
-                    if (!committed) {
-                        promise->addResult(std::unexpected(committed.error()));
-                        promise->finish();
-                        return;
-                    }
-                    PreparedClearChange change{
-                        request.projectId, request.pageId, request.expectedRegionId, committed->relativePath};
-                    promise->addResult(change);
+        layerFuture.then(
+            [store, request = requestSnapshot, promise, relativePath, beforeState](Result<QImage> current) {
+                if (!current) {
+                    promise->addResult(std::unexpected(current.error()));
                     promise->finish();
-                });
-        });
+                    return;
+                }
+                if ((*current).size() != request.pageSize || (*current).format() != QImage::Format_RGBA8888) {
+                    promise->addResult(std::unexpected(detail::applyError(
+                        ErrorCategory::Input, "clear.layer_read_failed", "The stored clear layer is not usable")));
+                    promise->finish();
+                    return;
+                }
+                const int left = qFloor(request.result.affectedBounds.x);
+                const int top = qFloor(request.result.affectedBounds.y);
+                QPainter painter(&*current);
+                painter.setCompositionMode(QPainter::CompositionMode_SourceOver);
+                painter.drawImage(QPoint(left, top), request.result.patch);
+                painter.end();
+                (*current).setColorSpace(QColorSpace(QColorSpace::SRgb));
+
+                CommitDerivedLayerRequest commitRequest;
+                commitRequest.projectId = request.projectId;
+                commitRequest.projectRoot = request.projectRoot;
+                commitRequest.pageId = request.pageId;
+                commitRequest.layerKind = DerivedLayerKind::Clear;
+                commitRequest.layer = *current;
+                store->commitDerivedLayer(std::move(commitRequest), request.context)
+                    .then([request, promise, relativePath, beforeState](Result<CommitDerivedLayerResponse> committed) {
+                        if (!committed) {
+                            promise->addResult(std::unexpected(committed.error()));
+                            promise->finish();
+                            return;
+                        }
+                        PreparedClearChange change{request.projectId,
+                                                   request.pageId,
+                                                   request.expectedRegionId,
+                                                   relativePath,
+                                                   committed->relativePath,
+                                                   beforeState,
+                                                   true};
+                        promise->addResult(change);
+                        promise->finish();
+                    });
+            });
         return future;
     }
 
@@ -197,7 +208,10 @@ struct ApplyPreparedClearChangeRequest {
     domain::ProjectId projectId;
     domain::PageId pageId;
     domain::RegionId expectedRegionId;
-    QString relativePath;
+    QString beforeRef;
+    QString afterRef;
+    bool beforeState{false};
+    bool afterState{true};
     quint64 sessionGeneration{0};
     quint64 currentSessionGeneration{0};
     quint64 expectedRevision{0};
@@ -242,13 +256,19 @@ public:
             return std::unexpected(
                 detail::applyError(ErrorCategory::Input, "input.manual_override", "Region is under manual control"));
         }
-        if (request.relativePath.isEmpty()) {
-            return std::unexpected(detail::applyError(
-                ErrorCategory::Protocol, "protocol.invalid_clear_result", "Clear change has empty path"));
+        if (request.afterRef.isEmpty() && request.afterState) {
+            return std::unexpected(detail::applyError(ErrorCategory::Protocol,
+                                                      "protocol.invalid_clear_result",
+                                                      "Clear change has empty path but state is cleared"));
         }
 
-        const auto applied = m_project->applyClearResultOnPage(
-            request.pageId, request.expectedRegionId, request.relativePath.toStdString());
+        std::optional<std::string> targetRef = std::nullopt;
+        if (!request.afterRef.isEmpty()) {
+            targetRef = request.afterRef.toStdString();
+        }
+
+        const auto applied =
+            m_project->applyClearChangeOnPage(request.pageId, request.expectedRegionId, targetRef, request.afterState);
         if (!applied) {
             return std::unexpected(
                 detail::applyError(ErrorCategory::Input, "input.edit_rejected", "Clear result could not be applied"));

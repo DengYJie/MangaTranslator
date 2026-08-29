@@ -89,7 +89,7 @@ application::Result<bool> WindowsCredentialStore::hasApiKey(const QString& provi
         return std::unexpected(invalidProviderError());
     }
     const QString target = credentialTargetName(providerId);
-    const QString filter = target;
+    const QString filter = target + "*";
     unsigned long count = 0;
     PCREDENTIALW* credentials = nullptr;
     // Enumerating names avoids touching CredentialBlob, so a status query never loads the

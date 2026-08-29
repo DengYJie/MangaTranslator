@@ -48,13 +48,13 @@ void CredentialUseCasesTest::testCheckCredentialStatus() {
 
     auto res = useCase.execute(req);
     QVERIFY(res.has_value());
-    QVERIFY(!res->hasCredential);
+    QCOMPARE(res->state, CredentialState::Missing);
 
     store.store.insert(QStringLiteral("openai"), QByteArray("sk-12345"));
 
     res = useCase.execute(req);
     QVERIFY(res.has_value());
-    QVERIFY(res->hasCredential);
+    QCOMPARE(res->state, CredentialState::Configured);
 
     // A status query must never read the secret blob.
     QCOMPARE(store.hasCount, 2);

@@ -19,7 +19,7 @@ public:
     int commitCount{0};
     CommitDerivedLayerRequest lastCommitRequest;
 
-    [[nodiscard]] QFuture<Result<QImage>> readDerivedLayer(ReadDerivedLayerRequest request,
+    [[nodiscard]] QFuture<Result<QImage>> readDerivedLayer([[maybe_unused]] ReadDerivedLayerRequest request,
                                                            OperationContext context) override {
         ++readCount;
         QPromise<Result<QImage>> promise;

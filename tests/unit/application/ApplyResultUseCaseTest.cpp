@@ -363,7 +363,7 @@ void ApplyResultUseCaseTest::testApplyClearSuccess() {
     QVERIFY(future.isFinished());
     const auto result = future.result();
     QVERIFY(result.has_value());
-    QCOMPARE(result->relativePath, store.nextRelativePath);
+    QCOMPARE(result->afterRef, store.nextRelativePath);
     QCOMPARE(store.commitCount, 1);
     QCOMPARE(store.lastCommitRequest.layer.size(), QSize(800, 600));
 
@@ -373,7 +373,10 @@ void ApplyResultUseCaseTest::testApplyClearSuccess() {
     applyReq.projectId = req.projectId;
     applyReq.pageId = req.pageId;
     applyReq.expectedRegionId = req.expectedRegionId;
-    applyReq.relativePath = result->relativePath;
+    applyReq.beforeRef = result->beforeRef;
+    applyReq.afterRef = result->afterRef;
+    applyReq.beforeState = result->beforeState;
+    applyReq.afterState = result->afterState;
     applyReq.sessionGeneration = req.sessionGeneration;
     applyReq.currentSessionGeneration = req.currentSessionGeneration;
     applyReq.expectedRevision = req.expectedRevision;
