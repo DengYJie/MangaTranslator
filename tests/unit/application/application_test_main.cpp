@@ -1,6 +1,7 @@
 #include "ApplicationUseCasesTest.h"
 #include "ApplyResultUseCaseTest.h"
 #include "ClearRegionUseCaseTest.h"
+#include "CredentialUseCasesTest.h"
 #include "ExportPagesUseCaseTest.h"
 #include "ImportImagesUseCaseTest.h"
 #include "LayoutRegionUseCaseTest.h"
@@ -8,6 +9,7 @@
 #include "ProjectUseCasesTest.h"
 #include "RecognizeRegionUseCaseTest.h"
 #include "RegionUseCasesTest.h"
+#include "TaskProgressTest.h"
 #include "TextUseCasesTest.h"
 #include "TranslatePageUseCaseTest.h"
 
@@ -75,8 +77,16 @@ int main(int argc, char* argv[]) {
         runSuite("TextUseCasesTest", &suite);
     }
     {
+        TaskProgressTest suite;
+        runSuite("TaskProgressTest", &suite);
+    }
+    {
         ProjectUseCasesTest suite;
         runSuite("ProjectUseCasesTest", &suite);
+    }
+    {
+        CredentialUseCasesTest suite;
+        runSuite("CredentialUseCasesTest", &suite);
     }
 
     return status;
