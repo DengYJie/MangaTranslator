@@ -48,7 +48,7 @@
 - [x] 保存期间中断、磁盘不足、拒绝写入和残留临时文件。（磁盘满经注入探测模拟，拒绝写入经 `icacls` deny ACE 测试；`saveIgnoresStopRequestAfterTransactionStart` 经事务 hook 注入取消并断言保存成功且根目录无半写临时文件）
 - [x] Unicode/NFKC、自然排序、同请求重复拒绝和后续重复导入。
 - [x] 损坏、伪装扩展名、高位深、ICC、EXIF 和透明图片。
-- [x] 测试夹具使用手工构造的最小二进制基线文件（EXIF JPEG、ICC PNG、16-bit PNG、动画 WEBP、CMYK JPEG、伪装扩展名），每个几百字节；QImage 无法生成带元数据的样本。（基线由 `tests/unit/data/fixtures/generate_fixtures.py` 用 Pillow 生成后检入）
+- [x] 测试夹具使用手工构造的最小二进制基线文件（EXIF JPEG、ICC PNG、16-bit PNG、动画 WEBP、CMYK JPEG、伪装扩展名），多数不足 1 KB（大尺寸异常样本除外）；QImage 无法生成带元数据的样本。（基线由 `tests/unit/data/fixtures/generate_fixtures.py` 用 Pillow 生成后检入）
 - [x] 源图哈希在导入、保存、编辑和导出后保持不变。
 - [x] 第二实例打开同一项目被 `persistence.locked` 拒绝；崩溃残留锁可被识别清除。
 - [x] 部分导入失败：成功页面保持确定性顺序，失败项逐条携带原因。
