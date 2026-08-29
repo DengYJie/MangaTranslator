@@ -45,21 +45,21 @@
 ## 测试
 
 - [x] 保存、重开、另存及备份恢复往返。
-- [x] 保存期间中断、磁盘不足、拒绝写入和残留临时文件。（磁盘满经注入探测模拟，拒绝写入经 `icacls` deny ACE 测试；保存事务开始后忽略取消并由 QSaveFile 保证不留半写文件）
+- [x] 保存期间中断、磁盘不足、拒绝写入和残留临时文件。（磁盘满经注入探测模拟，拒绝写入经 `icacls` deny ACE 测试；`saveIgnoresStopRequestAfterTransactionStart` 经事务 hook 注入取消并断言保存成功且根目录无半写临时文件）
 - [x] Unicode/NFKC、自然排序、同请求重复拒绝和后续重复导入。
 - [x] 损坏、伪装扩展名、高位深、ICC、EXIF 和透明图片。
 - [x] 测试夹具使用手工构造的最小二进制基线文件（EXIF JPEG、ICC PNG、16-bit PNG、动画 WEBP、CMYK JPEG、伪装扩展名），每个几百字节；QImage 无法生成带元数据的样本。（基线由 `tests/unit/data/fixtures/generate_fixtures.py` 用 Pillow 生成后检入）
-- [x] 源图哈希在导入和保存后保持不变。
+- [x] 源图哈希在导入、保存、编辑和导出后保持不变。
 - [x] 第二实例打开同一项目被 `persistence.locked` 拒绝；崩溃残留锁可被识别清除。
 - [x] 部分导入失败：成功页面保持确定性顺序，失败项逐条携带原因。
 - [x] 重复导入相同文件始终生成新 Page 与新资产，不触碰已有 Region。
 - [x] 页面图像加载与导入使用同一规范化输出（EXIF、ICC、RGBA8）。
 - [x] SaveAs 完整切换后旧目录原样保留。
-- [x] 保存期间继续编辑时，旧保存结果不清除新修改的 Dirty 状态。
+- [x] 保存期间继续编辑时，旧保存结果不清除新修改的 Dirty 状态。（`saveResultDoesNotClearEditsMadeDuringSave` 在 data 层验证）
 - [x] save/import/saveAs/close 写操作按项目串行，close 等待页面加载租约，资产序号不冲突。
 - [x] 绝对路径、`..`、符号链接、junction/reparse point 和项目根逃逸均被拒绝。（包含性校验经 `std::filesystem::weakly_canonical` 解析重解析点，junction 逃逸有专项测试）
 - [x] 导入在预检、暂存复制、解码和文件间检查取消；取消后的清理范围可验证。（文件间取消经进度回调触发，验证已提交资产全部回滚）
-- [x] warning 可到达 Application DTO；错误码、RecoveryAction 和 diagnostic 不泄露本机路径或用户内容。
+- [x] warning 可到达 Application DTO；错误码、RecoveryAction 和 diagnostic 不泄露本机路径或用户内容。（`errorsAndWarningsDoNotLeakPathsOrUserContent` 与 `importErrorsDoNotLeakPathsOrUserContent` 以哨兵串和路径正则断言）
 - [x] WEBP 插件在测试配置中可用；缺失时配置或测试明确失败。
 
 ## 退出条件
@@ -131,24 +131,29 @@ ValidationError（结构/语义/版本）→ ErrorCategory::Project
 OS 与文件系统错误              → ErrorCategory::Persistence
 ```
 
-稳定错误码：
+稳定错误码（P3 实现的完整清单，按用途分组；warning 不进入 `std::unexpected`，随成功 DTO 返回）：
 
 ```text
+Input（请求与输入内容错误）：
 input.empty_import
 input.duplicate_import_path
 input.invalid_import_request
 input.invalid_import_cleanup
 input.invalid_image_request
-input.image_too_large
+input.invalid_project            创建项目时 name/path/langs 非法
+input.invalid_save_as            另存目标路径非法
+input.image_too_large            尺寸或 RGBA8 内存超限
 
+Project（项目数据与资产错误）：
 project.invalid_structure
 project.invalid_semantic
 project.unsupported_schema_version
 project.unsupported_format_version
 project.missing_asset
-project.image_dimension_mismatch
+project.image_dimension_mismatch 加载图与 Domain imageSize 不一致
 project.not_open
 
+Persistence（OS 与文件系统错误）：
 persistence.not_found
 persistence.permission_denied
 persistence.read_only
@@ -160,6 +165,31 @@ persistence.locked
 persistence.recovery_failed
 persistence.target_not_empty
 persistence.save_conflict
+
+Import errors（导入与解码失败，进入 ImportFailure）：
+import.unsupported_format        内容非白名单格式
+import.decode_failed             格式正确但无法解码
+
+Import warnings（非阻塞，随 ImportedPage 返回）：
+import.extension_mismatch        内容与扩展名不符
+import.cmyk_converted
+import.animated_webp_first_frame
+import.invalid_color_profile_assumed_srgb
+
+Project warnings（非阻塞，随 OpenProjectResult 返回）：
+project.derived_asset_missing    派生资产缺失，可重建
+project.derived_asset_invalid    派生资产存在但不可解码
+project.recovered_from_backup    本次打开来自 .bak 恢复
+
+Cancelled（取消，非失败）：
+cancelled.before_start           检查点在事务开始前
+cancelled.decode
+cancelled.import
+cancelled.project_operation
+cancelled.stale_generation       属于 P2 契约，P3 结果采用时复用
+
+Internal（编程错误，UI 不应依赖穷举）：
+internal.unexpected_exception    适配器兜底
 ```
 
 序列化器现有的 `std::expected<T, ValidationError>` 是 data 层内部返回类型，由 Repository 在 Port 边界映射为 `ApplicationError`。第三方与标准库异常在适配器内捕获，不穿越 Port。
@@ -178,7 +208,8 @@ serialize
 ```
 
 - 选用 `QSaveFile`，不直接调用 Win32 API；`directWriteFallback` 保持 false，不牺牲原子性。
-- **`.bak` 轮转条件**：仅当 current 通过完整 Schema、版本和语义校验时才轮转；备份写入失败保留旧 `.bak` 并终止保存。从 Backup 恢复后首次保存跳过轮转，以保留唯一好副本。
+- **`.bak` 轮转条件**：仅当 current 通过完整 Schema、版本和语义校验时才轮转；备份写入失败保留旧 `.bak` 并终止保存（写保护目录因此先表现为 `persistence.backup_failed`）。从 Backup 恢复后首次保存跳过轮转，以保留唯一好副本。
+- **从备份恢复后的首次保存不做冲突检测**：current 已知损坏且其指纹从未记录，`recoveredFromBackup` 会话跳过指纹读取、指纹比对与轮转，直接 commit；提交成功后重新记录指纹并清除该标志。
 - **取消边界**：save/saveAs 的取消检查点只在 serialize + validate 阶段；事务开始后（bak 轮转 → QSaveFile commit）忽略 `stopToken`，保证原子性不被中断。
 - 不引入 `.pending` 恢复层：`QSaveFile` 本身就是同文件系统临时写入、失败即清理、崩溃时当前文件保持完整。恢复链保持两级：
 
@@ -190,7 +221,7 @@ current 损坏     → openProject 返回 persistence.recovery_failed
 ```
 
 - `.bak` 单代；`QSaveFile` 自身的临时文件永远不是恢复候选。
-- 不扫描或删除 Qt 私有临时文件命名。需要显式暂存的批量操作只使用应用自有 staging 目录，并记录本次创建的精确路径用于失败清理。
+- 不扫描或删除 Qt 私有临时文件命名。需要显式暂存的批量操作统一使用项目根内的 `.mangatranslator-staging/`（应用自有 staging 目录，与资产目标同卷，保证 rename 原子性；不放在 `assets/` 内，避免崩溃残留被误认为项目内容），并记录本次创建的精确路径用于失败清理。
 - 会话保存 `project.json` 的大小、最后修改时间和 SHA-256；任一变化都重新计算并比较内容指纹，防止外部程序绕过 `QLockFile` 后静默覆盖。
 
 ### 打开与资产校验
@@ -223,7 +254,7 @@ newPath 必须为空目录或不存在；非空返回 persistence.target_not_emp
 
 ### 进程内并发与会话生命周期
 
-- `data` 内部使用由 `ApplicationContext` 注入给 Repository、Importer 和 Loader 的项目 I/O 协调器；它不是全局单例，也不进入 Application Port。
+- `data` 内部使用由组合根（ApplicationContext，P6 交付）构造并注入给 Repository、Importer 和 Loader 的项目 I/O 协调器；它不是全局单例，也不进入 Application Port。
 - Repository 在完整验证成功后显式绑定 `ProjectId → canonical root`；Importer、Loader 和清理操作只能取得已绑定会话的票据，未知、路径不匹配、恢复中或已关闭的项目返回 `project.not_open`。
 - create/save/saveAs/import/close 按 canonical 项目根串行；页面加载可并发读取，但必须持有会话租约，close 等待现有租约释放且不接受新操作。
 - 资产序号扫描与最终存在性检查位于同一写临界区；即使发生意外冲突也继续取下一个序号，绝不覆盖。
