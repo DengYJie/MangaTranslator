@@ -38,6 +38,7 @@ int BoundedTaskExecutor::defaultWorkerCount() {
 }
 
 BoundedTaskExecutor::BoundedTaskExecutor(int workerCount) : m_workerCount(std::clamp(workerCount, 1, 4)) {
+    m_state = std::make_shared<SharedState>();
     m_pool.setMaxThreadCount(m_workerCount);
 }
 
@@ -49,12 +50,12 @@ BoundedTaskExecutor::~BoundedTaskExecutor() {
 void BoundedTaskExecutor::shutdown() {
     std::deque<PendingTask> cancelled;
     {
-        QMutexLocker locker(&m_mutex);
-        m_shutdown = true;
-        cancelled.swap(m_interactive);
-        while (!m_background.empty()) {
-            cancelled.push_back(std::move(m_background.front()));
-            m_background.pop_front();
+        QMutexLocker locker(&m_state->mutex);
+        m_state->shutdown = true;
+        cancelled.swap(m_state->interactive);
+        while (!m_state->background.empty()) {
+            cancelled.push_back(std::move(m_state->background.front()));
+            m_state->background.pop_front();
         }
     }
     for (auto& task : cancelled) {
@@ -63,61 +64,38 @@ void BoundedTaskExecutor::shutdown() {
     m_pool.waitForDone();
 }
 
-void BoundedTaskExecutor::pumpLocked(std::deque<PendingTask>& toStart) {
-    while (m_active < m_workerCount && (!m_interactive.empty() || !m_background.empty())) {
+void BoundedTaskExecutor::pumpLocked(std::shared_ptr<SharedState> state,
+                                     std::deque<PendingTask>& toStart,
+                                     int workerCount) {
+    while (state->active < workerCount && (!state->interactive.empty() || !state->background.empty())) {
         PendingTask next;
         const bool preferBackground =
-            m_interactiveSinceBackground >= kInteractiveRunBeforeBackground && !m_background.empty();
-        if (!m_background.empty() && (preferBackground || m_interactive.empty())) {
-            next = std::move(m_background.front());
-            m_background.pop_front();
-            m_interactiveSinceBackground = 0;
+            state->interactiveSinceBackground >= kInteractiveRunBeforeBackground && !state->background.empty();
+        if (!state->background.empty() && (preferBackground || state->interactive.empty())) {
+            next = std::move(state->background.front());
+            state->background.pop_front();
+            state->interactiveSinceBackground = 0;
         } else {
-            next = std::move(m_interactive.front());
-            m_interactive.pop_front();
-            // The starvation counter only accumulates while a Background task is waiting.
-            m_interactiveSinceBackground = m_background.empty() ? 0 : m_interactiveSinceBackground + 1;
+            next = std::move(state->interactive.front());
+            state->interactive.pop_front();
+            state->interactiveSinceBackground = state->background.empty() ? 0 : state->interactiveSinceBackground + 1;
         }
-        ++m_active;
+        ++state->active;
         toStart.push_back(std::move(next));
     }
 }
 
-application::ApplicationError BoundedTaskExecutor::enqueue(TaskQueue queue, PendingTask task) {
-    std::deque<PendingTask> toStart;
-    application::ApplicationError rejection;
-    {
-        QMutexLocker locker(&m_mutex);
-        if (m_shutdown) {
-            return makeShutdownError();
-        }
-        if (m_interactive.size() + m_background.size() >= kMaxPendingTasks) {
-            return makeQueueFullError();
-        }
-        if (queue == TaskQueue::Interactive) {
-            m_interactive.push_back(std::move(task));
-        } else {
-            m_background.push_back(std::move(task));
-        }
-        pumpLocked(toStart);
-    }
-    for (auto& next : toStart) {
-        auto* runnable = QRunnable::create([body = std::move(next.run)]() mutable { body(); });
-        m_pool.start(runnable);
-    }
-    return rejection;
-}
-
-void BoundedTaskExecutor::taskFinished() {
+void BoundedTaskExecutor::taskFinished(std::shared_ptr<SharedState> state, QThreadPool* pool) {
     std::deque<PendingTask> toStart;
     {
-        QMutexLocker locker(&m_mutex);
-        --m_active;
-        pumpLocked(toStart);
+        QMutexLocker locker(&state->mutex);
+        --state->active;
+        pumpLocked(state, toStart, pool->maxThreadCount());
     }
     for (auto& next : toStart) {
+        next.stopCallback.reset(); // Safely reset outside mutex
         auto* runnable = QRunnable::create([body = std::move(next.run)]() mutable { body(); });
-        m_pool.start(runnable);
+        pool->start(runnable);
     }
 }
 

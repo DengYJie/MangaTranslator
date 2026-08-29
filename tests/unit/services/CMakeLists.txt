@@ -1,6 +1,7 @@
 qt_add_executable(manga_tests_services
     services_test_main.cpp
     BoundedTaskExecutorTest.cpp
+    SolidColorInpainterTest.cpp
 )
 manga_apply_project_options(manga_tests_services)
 set_target_properties(manga_tests_services PROPERTIES

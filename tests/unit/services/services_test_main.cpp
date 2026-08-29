@@ -1,4 +1,5 @@
 #include "BoundedTaskExecutorTest.h"
+#include "SolidColorInpainterTest.h"
 
 #include <QCoreApplication>
 #include <QtTest/QtTest>
@@ -22,6 +23,10 @@ int main(int argc, char* argv[]) {
     {
         BoundedTaskExecutorTest suite;
         runSuite("BoundedTaskExecutorTest", &suite);
+    }
+    {
+        SolidColorInpainterTest suite;
+        runSuite("SolidColorInpainterTest", &suite);
     }
 
     return status;

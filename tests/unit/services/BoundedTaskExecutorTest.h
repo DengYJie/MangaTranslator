@@ -18,4 +18,7 @@ private slots:
     void testExceptionMapping();
     void testShutdownCancelsQueuedAndWaitsRunning();
     void testProgressFinalValueEqualsTotal();
+    void testConcurrentCallbackAndShutdown();
+    void testPreCancelledTaskCompletesImmediatelyWithoutConsumingCapacity();
+    void testConcurrentCancelDuringSubmissionDoesNotLeakQueueSlot();
 };

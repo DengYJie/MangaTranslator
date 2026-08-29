@@ -1,5 +1,7 @@
 #include "services/inpaint/SolidColorInpainter.h"
 
+#include "application/operation/AsyncResult.h"
+
 #include <QColor>
 #include <QColorSpace>
 #include <QPainter>
@@ -14,17 +16,34 @@ application::ApplicationError makeClearError(const QString& code, const QString&
     return application::makeApplicationError(application::ErrorCategory::Input, code, message);
 }
 
-/// Parses #RRGGBB (case-insensitive). Anything else, including named colors and alpha
-/// prefixes, is rejected: alpha comes exclusively from ClearSettings::opacity.
+[[nodiscard]] int hexDigit(QChar character) {
+    const ushort value = character.unicode();
+    if (value >= '0' && value <= '9') {
+        return value - '0';
+    }
+    if (value >= 'a' && value <= 'f') {
+        return value - 'a' + 10;
+    }
+    if (value >= 'A' && value <= 'F') {
+        return value - 'A' + 10;
+    }
+    return -1;
+}
+
+/// Parses #RRGGBB (case-insensitive, exactly six digits and no surrounding whitespace).
+/// Anything else, including named colors, short forms and alpha prefixes, is rejected:
+/// alpha comes exclusively from ClearSettings::opacity.
 [[nodiscard]] bool parseColorHex(const QString& text, int& red, int& green, int& blue) {
-    const QString value = text.trimmed();
-    if (value.size() != 7 || !value.startsWith(QLatin1Char('#'))) {
+    if (text.size() != 7 || !text.startsWith(QLatin1Char('#'))) {
         return false;
     }
-    bool ok = false;
-    const int rgb = value.mid(1).toInt(&ok, 16);
-    if (!ok) {
-        return false;
+    int rgb = 0;
+    for (qsizetype index = 1; index < text.size(); ++index) {
+        const int digit = hexDigit(text.at(index));
+        if (digit < 0) {
+            return false;
+        }
+        rgb = (rgb << 4) | digit;
     }
     red = (rgb >> 16) & 0xFF;
     green = (rgb >> 8) & 0xFF;
@@ -38,17 +57,28 @@ SolidColorInpainter::SolidColorInpainter(BoundedTaskExecutor* executor) : m_exec
 
 QFuture<application::Result<application::ClearResponse>>
 SolidColorInpainter::clear(application::ClearRequest request, application::OperationContext context) {
-    return m_executor->submit<application::ClearResponse>(
+    auto submitted = m_executor->submit<application::ClearResponse>(
         application::OperationStage::Clear,
         TaskQueue::Interactive,
         context,
-        [request = std::move(request)](const application::OperationContext& runContext,
-                                       application::TaskProgress&) -> application::Result<application::ClearResponse> {
+        [request = std::move(request)](
+            const application::OperationContext& runContext,
+            application::TaskProgress& progress) -> application::Result<application::ClearResponse> {
+            progress.setRange(0, 1);
+            progress.setValue(0);
+
             if (runContext.stopToken.stop_requested()) {
                 return std::unexpected(
                     application::makeApplicationError(application::ErrorCategory::Cancelled,
                                                       QStringLiteral("cancelled.user_requested"),
                                                       QStringLiteral("The clear task was cancelled")));
+            }
+
+            // A non-finite rect would make the pixel expansion below meaningless.
+            if (request.pageImage.isNull() || !std::isfinite(request.region.x) || !std::isfinite(request.region.y) ||
+                !std::isfinite(request.region.width) || !std::isfinite(request.region.height)) {
+                return std::unexpected(makeClearError(QStringLiteral("clear.invalid_region"),
+                                                      QStringLiteral("The clear region is not a finite rectangle")));
             }
 
             int red = 0;
@@ -105,8 +135,13 @@ SolidColorInpainter::clear(application::ClearRequest request, application::Opera
                                                            .width = static_cast<double>(width),
                                                            .height = static_cast<double>(height)};
             response.patch = patch;
+            progress.setValue(1);
             return response;
         });
+    if (!submitted) {
+        return application::makeFailedFuture<application::ClearResponse>(submitted.error());
+    }
+    return *submitted;
 }
 
 } // namespace manga::services

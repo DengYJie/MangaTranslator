@@ -7,6 +7,7 @@
 #include <QColorSpace>
 #include <QtTest/QtTest>
 
+#include <limits>
 #include <memory>
 
 using namespace manga;
@@ -35,7 +36,6 @@ application::ClearRequest makeClearRequest(const QImage& page, const domain::Rec
 } // namespace
 
 void SolidColorInpainterTest::init() {
-    m_coordinator = std::make_unique<ProjectIoCoordinator>();
     m_executor = std::make_unique<BoundedTaskExecutor>(2);
     m_inpainter = std::make_unique<SolidColorInpainter>(m_executor.get());
 }
@@ -43,7 +43,6 @@ void SolidColorInpainterTest::init() {
 void SolidColorInpainterTest::cleanup() {
     m_inpainter.reset();
     m_executor.reset();
-    m_coordinator.reset();
 }
 
 void SolidColorInpainterTest::fillProducesExactPixelsAndBounds() {
@@ -51,9 +50,13 @@ void SolidColorInpainterTest::fillProducesExactPixelsAndBounds() {
     page.fill(0);
     auto request = makeClearRequest(page, domain::RectGeometry(10.2, 20.7, 30.5, 40.3));
 
-    const auto future = m_inpainter->clear(std::move(request), {});
+    auto future = m_inpainter->clear(std::move(request), {});
     future.waitForFinished();
     const auto result = future.result();
+
+    QCOMPARE(future.progressMinimum(), 0);
+    QCOMPARE(future.progressMaximum(), 1);
+    QCOMPARE(future.progressValue(), 1);
 
     QVERIFY(result.has_value());
     const auto& response = *result;
@@ -75,7 +78,7 @@ void SolidColorInpainterTest::clampsRegionToPageBounds() {
     page.fill(0);
     auto request = makeClearRequest(page, domain::RectGeometry(-5.5, -5.5, 10, 10));
 
-    const auto future = m_inpainter->clear(std::move(request), {});
+    auto future = m_inpainter->clear(std::move(request), {});
     future.waitForFinished();
 
     const auto result = future.result();
@@ -89,7 +92,7 @@ void SolidColorInpainterTest::emptyIntersectionRejected() {
     page.fill(0);
     auto request = makeClearRequest(page, domain::RectGeometry(105, 0, 5, 5));
 
-    const auto future = m_inpainter->clear(std::move(request), {});
+    auto future = m_inpainter->clear(std::move(request), {});
     future.waitForFinished();
 
     QVERIFY(!future.result().has_value());
@@ -102,7 +105,20 @@ void SolidColorInpainterTest::clampedTinyRegionRejected() {
     // left clamps to 99, right clamps to 100: a single-pixel column is below 2x2.
     auto request = makeClearRequest(page, domain::RectGeometry(99, 0, 1.0, 5));
 
-    const auto future = m_inpainter->clear(std::move(request), {});
+    auto future = m_inpainter->clear(std::move(request), {});
+    future.waitForFinished();
+
+    QVERIFY(!future.result().has_value());
+    QCOMPARE(future.result().error().code, QStringLiteral("clear.invalid_region"));
+}
+
+void SolidColorInpainterTest::nonFiniteRegionRejected() {
+    QImage page(10, 10, QImage::Format_RGBA8888);
+    page.fill(0);
+    auto request = makeClearRequest(page, domain::RectGeometry(0, 0, 4, 4));
+    request.region.width = std::numeric_limits<double>::quiet_NaN();
+
+    auto future = m_inpainter->clear(std::move(request), {});
     future.waitForFinished();
 
     QVERIFY(!future.result().has_value());
@@ -116,7 +132,7 @@ void SolidColorInpainterTest::invalidColorRejected() {
     for (const char* bad : {"red", "#FFF", "#GGHHII", "FFFFFF", "#FFFFFF "}) {
         auto request = makeClearRequest(page, domain::RectGeometry(0, 0, 4, 4));
         request.settings.colorHex = bad;
-        const auto future = m_inpainter->clear(std::move(request), {});
+        auto future = m_inpainter->clear(std::move(request), {});
         future.waitForFinished();
         QVERIFY2(!future.result().has_value(), qPrintable(QStringLiteral("color '%1' was accepted").arg(bad)));
         QCOMPARE(future.result().error().code, QStringLiteral("clear.invalid_color"));
@@ -130,7 +146,7 @@ void SolidColorInpainterTest::invalidOpacityRejected() {
     for (double bad : {1.5, -0.25, std::numeric_limits<double>::quiet_NaN()}) {
         auto request = makeClearRequest(page, domain::RectGeometry(0, 0, 4, 4));
         request.settings.opacity = bad;
-        const auto future = m_inpainter->clear(std::move(request), {});
+        auto future = m_inpainter->clear(std::move(request), {});
         future.waitForFinished();
         QVERIFY(!future.result().has_value());
         QCOMPARE(future.result().error().code, QStringLiteral("clear.invalid_opacity"));
@@ -146,7 +162,7 @@ void SolidColorInpainterTest::preCancelledRequestReturnsCancelled() {
     application::OperationContext context;
     context.stopToken = source.get_token();
 
-    const auto future = m_inpainter->clear(makeClearRequest(page, domain::RectGeometry(0, 0, 4, 4)), context);
+    auto future = m_inpainter->clear(makeClearRequest(page, domain::RectGeometry(0, 0, 4, 4)), context);
     future.waitForFinished();
 
     QVERIFY(!future.result().has_value());

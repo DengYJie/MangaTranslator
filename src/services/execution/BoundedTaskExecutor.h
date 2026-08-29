@@ -84,26 +84,28 @@ public:
     [[nodiscard]] application::Result<QFuture<application::Result<T>>>
     submit(application::OperationStage stage, TaskQueue queue, const application::OperationContext& context, Fn&& work);
 
-private:
     struct PendingTask {
+        uint64_t id{0};
         std::function<void()> run;
         std::function<void()> completeCancelled;
+        std::shared_ptr<std::stop_callback<std::function<void()>>> stopCallback;
     };
 
-    [[nodiscard]] application::ApplicationError enqueue(TaskQueue queue, PendingTask task);
-    void taskFinished();
-    /// Dequeues pending tasks into toStart while a worker slot is free, honoring the 8:1
-    /// anti-starvation rule. Caller holds m_mutex.
-    void pumpLocked(std::deque<PendingTask>& toStart);
+    struct SharedState {
+        QMutex mutex;
+        bool shutdown{false};
+        std::deque<PendingTask> interactive;
+        std::deque<PendingTask> background;
+        int active{0};
+        int interactiveSinceBackground{0};
+        uint64_t nextTaskId{1};
+    };
 
+    static void taskFinished(std::shared_ptr<SharedState> state, QThreadPool* pool);
+    static void pumpLocked(std::shared_ptr<SharedState> state, std::deque<PendingTask>& toStart, int workerCount);
     int m_workerCount;
-    int m_active{0};
-    int m_interactiveSinceBackground{0};
-    bool m_shutdown{false};
-    std::deque<PendingTask> m_interactive;
-    std::deque<PendingTask> m_background;
+    std::shared_ptr<SharedState> m_state;
     QThreadPool m_pool;
-    QMutex m_mutex;
 };
 
 template <typename T, typename Fn>
@@ -113,6 +115,15 @@ application::Result<QFuture<application::Result<T>>> BoundedTaskExecutor::submit
     promise->start();
     auto future = promise->future();
 
+    if (context.stopToken.stop_requested()) {
+        promise->addResult(
+            std::unexpected(application::makeApplicationError(application::ErrorCategory::Cancelled,
+                                                              QStringLiteral("cancelled.user_requested"),
+                                                              QStringLiteral("The task was cancelled"))));
+        promise->finish();
+        return future;
+    }
+
     auto cancelComplete = [promise]() {
         promise->addResult(
             std::unexpected(application::makeApplicationError(application::ErrorCategory::Cancelled,
@@ -121,7 +132,14 @@ application::Result<QFuture<application::Result<T>>> BoundedTaskExecutor::submit
         promise->finish();
     };
 
-    auto run = [this, promise, context, stage, cancelComplete, work = std::forward<Fn>(work)]() mutable {
+    auto run = [state = m_state,
+                pool = &m_pool,
+                this,
+                promise,
+                context,
+                stage,
+                cancelComplete,
+                work = std::forward<Fn>(work)]() mutable {
         // QPromise has no text-only progress API; stage text is carried by callers that use
         // setProgressValueAndText through their own promise when needed.
         application::TaskProgress progress([promise](qint64 from, qint64 to) { promise->setProgressRange(from, to); },
@@ -144,7 +162,7 @@ application::Result<QFuture<application::Result<T>>> BoundedTaskExecutor::submit
         // Pre-run cancellation checkpoint.
         if (context.stopToken.stop_requested()) {
             cancelComplete();
-            taskFinished();
+            BoundedTaskExecutor::taskFinished(state, pool);
             return;
         }
         std::optional<application::Result<T>> outcome;
@@ -171,24 +189,113 @@ application::Result<QFuture<application::Result<T>>> BoundedTaskExecutor::submit
         // discards the result, so cancelled tasks never publish partial output.
         if (context.stopToken.stop_requested()) {
             cancelComplete();
-            taskFinished();
+            BoundedTaskExecutor::taskFinished(state, pool);
             return;
         }
         promise->addResult(std::move(*outcome));
         promise->finish();
-        taskFinished();
+        BoundedTaskExecutor::taskFinished(state, pool);
     };
+    uint64_t taskId = 0;
+    {
+        QMutexLocker locker(&m_state->mutex);
+        taskId = m_state->nextTaskId++;
+    }
 
     PendingTask pending;
+    pending.id = taskId;
     pending.run = run;
     pending.completeCancelled = cancelComplete;
-    auto error = enqueue(queue, std::move(pending));
-    if (!error.code.isEmpty()) {
-        // Complete the orphaned promise so the future is never left dangling.
-        promise->addResult(std::unexpected(error));
-        promise->finish();
-        return std::unexpected(std::move(error));
+    if (context.stopToken.stop_possible()) {
+        pending.stopCallback = std::make_shared<std::stop_callback<std::function<void()>>>(
+            context.stopToken, [weakState = std::weak_ptr<SharedState>(m_state), taskId]() {
+                if (auto state = weakState.lock()) {
+                    std::function<void()> completeCancelled;
+                    std::shared_ptr<std::stop_callback<std::function<void()>>> holdCb;
+                    {
+                        QMutexLocker locker(&state->mutex);
+                        for (auto it = state->interactive.begin(); it != state->interactive.end(); ++it) {
+                            if (it->id == taskId) {
+                                completeCancelled = std::move(it->completeCancelled);
+                                holdCb = std::move(it->stopCallback);
+                                state->interactive.erase(it);
+                                break;
+                            }
+                        }
+                        if (!completeCancelled) {
+                            for (auto it = state->background.begin(); it != state->background.end(); ++it) {
+                                if (it->id == taskId) {
+                                    completeCancelled = std::move(it->completeCancelled);
+                                    holdCb = std::move(it->stopCallback);
+                                    state->background.erase(it);
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                    if (completeCancelled) {
+                        completeCancelled();
+                    }
+                }
+            });
     }
+
+    std::deque<PendingTask> toStart;
+    application::ApplicationError rejection;
+    {
+        QMutexLocker locker(&m_state->mutex);
+        if (context.stopToken.stop_requested()) {
+            cancelComplete();
+            return future;
+        }
+        if (m_state->shutdown) {
+            rejection = application::makeApplicationError(application::ErrorCategory::Internal,
+                                                          QStringLiteral("internal.executor_shutdown"),
+                                                          QStringLiteral("The task executor is shutting down"));
+        } else if (m_state->interactive.size() + m_state->background.size() >= 32) { // kMaxPendingTasks = 32
+            rejection = application::makeApplicationError(application::ErrorCategory::Inference,
+                                                          QStringLiteral("inference.queue_full"),
+                                                          QStringLiteral("The task queue is full"),
+                                                          application::RecoveryAction::Retry);
+            rejection.retryable = true;
+        } else {
+            if (queue == TaskQueue::Interactive) {
+                m_state->interactive.push_back(std::move(pending));
+            } else {
+                m_state->background.push_back(std::move(pending));
+            }
+            // Inline pumpLocked logic to avoid circular headers/dependencies
+            while (m_state->active < m_workerCount && (!m_state->interactive.empty() || !m_state->background.empty())) {
+                PendingTask next;
+                const bool preferBackground = m_state->interactiveSinceBackground >= 8 && !m_state->background.empty();
+                if (!m_state->background.empty() && (preferBackground || m_state->interactive.empty())) {
+                    next = std::move(m_state->background.front());
+                    m_state->background.pop_front();
+                    m_state->interactiveSinceBackground = 0;
+                } else {
+                    next = std::move(m_state->interactive.front());
+                    m_state->interactive.pop_front();
+                    m_state->interactiveSinceBackground =
+                        m_state->background.empty() ? 0 : m_state->interactiveSinceBackground + 1;
+                }
+                ++m_state->active;
+                toStart.push_back(std::move(next));
+            }
+        }
+    }
+
+    if (!rejection.code.isEmpty()) {
+        promise->addResult(std::unexpected(rejection));
+        promise->finish();
+        return std::unexpected(std::move(rejection));
+    }
+
+    for (auto& next : toStart) {
+        next.stopCallback.reset(); // Safely outside the mutex
+        auto* runnable = QRunnable::create([body = std::move(next.run)]() mutable { body(); });
+        m_pool.start(runnable);
+    }
+
     return future;
 }
 
