@@ -3,8 +3,11 @@
 #include "network/ProviderId.h"
 
 #include <utility>
-#include <wincred.h>
+
+// clang-format off
 #include <windows.h>
+#include <wincred.h>
+// clang-format on
 
 namespace manga::network {
 namespace {
