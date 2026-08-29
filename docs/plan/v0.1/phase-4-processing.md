@@ -16,8 +16,8 @@
 - [x] 完成原 P4 DTO、基础 Credential/Derived Asset Port 与结果采用契约补丁。
 - [ ] 完成 P5 发现的后续修订：分范围 generation、非明文凭据状态、Clear prepare/同步 Apply 两阶段协议，并同步 DTO、Fake 和契约测试。
 - [ ] 建立有界 `QThreadPool + QRunnable` 执行器。
-- [ ] 实现合作式取消、进度回调和请求 generation；适配器通过 `QPromise` 完成 `QFuture`，Port 接口不感知 GUI 线程。结果与进度的 GUI 线程投递由 P5 ViewModel 负责。
-- [ ] 输入使用不可变快照；Worker 不访问 QWidget、QPixmap 或 Scene。
+- [x] 实现合作式取消、进度回调和请求 generation；适配器通过 `QPromise` 完成 `QFuture`，Port 接口不感知 GUI 线程。结果与进度的 GUI 线程投递由 P5 ViewModel 负责。
+- [x] 输入使用不可变快照；Worker 不访问 QWidget、QPixmap 或 Scene。
 - [ ] 切页只拒绝当前视图加载/预览的过期结果；项目级 OCR、翻译、清除、排版和导出继续执行。关闭/切换项目或应用退出才使项目会话结果过期。
 
 ### OCR
