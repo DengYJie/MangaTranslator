@@ -3,6 +3,7 @@
     ProjectSerializerTest.cpp
     FileSystemProjectRepositoryTest.cpp
     FileSystemComicImporterTest.cpp
+    FileSystemDerivedAssetStoreTest.cpp
 )
 manga_apply_project_options(manga_tests_data)
 set_target_properties(manga_tests_data PROPERTIES
@@ -47,4 +48,5 @@ add_test(NAME manga_tests_data COMMAND manga_tests_data)
 set_tests_properties(manga_tests_data PROPERTIES
     LABELS "unit;data"
     TIMEOUT 15
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
 )

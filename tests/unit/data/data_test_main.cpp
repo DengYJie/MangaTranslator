@@ -1,4 +1,5 @@
 #include "FileSystemComicImporterTest.h"
+#include "FileSystemDerivedAssetStoreTest.h"
 #include "FileSystemProjectRepositoryTest.h"
 #include "ProjectSerializerTest.h"
 #include "data/import/FileSystemComicImporter.h"
@@ -53,6 +54,10 @@ int main(int argc, char* argv[]) {
     {
         FileSystemComicImporterTest suite;
         runSuite("FileSystemComicImporterTest", &suite);
+    }
+    {
+        FileSystemDerivedAssetStoreTest suite;
+        runSuite("FileSystemDerivedAssetStoreTest", &suite);
     }
 
     return status;

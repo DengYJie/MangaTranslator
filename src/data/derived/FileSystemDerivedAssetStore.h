@@ -1,7 +1,7 @@
 #pragma once
 
 #include "application/ports/IDerivedAssetStore.h"
-#include "project/ProjectIoCoordinator.h"
+#include "data/project/ProjectIoCoordinator.h"
 
 #include <QFuture>
 

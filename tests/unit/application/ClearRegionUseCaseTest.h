@@ -7,5 +7,6 @@ private slots:
     void testSuccessfulClear();
     void testClearFailure();
     void testInvalidRequestDoesNotCallInpainter();
+    void testDisabledClearingNeverReachesInpainter();
     void testCancellation();
 };

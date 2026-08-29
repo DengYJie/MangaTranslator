@@ -29,7 +29,7 @@ QString layerKindDirectory(application::DerivedLayerKind kind) {
     return QStringLiteral("cleaning");
 }
 
-QString makeStorageError(const QString& code, const QString& message) {
+application::ApplicationError makeStorageError(const QString& code, const QString& message) {
     return application::makeApplicationError(application::ErrorCategory::Persistence, code, message);
 }
 
@@ -41,11 +41,21 @@ QString makeStorageError(const QString& code, const QString& message) {
     hash.addData(QByteArrayLiteral(":"));
     hash.addData(QByteArray::number(layer.height()));
     hash.addData(QByteArrayLiteral(":"));
-    hash.addData(reinterpret_cast<const char*>(layer.constBits()), static_cast<qsizetype>(layer.sizeInBytes()));
+    for (int y = 0; y < layer.height(); ++y) {
+        hash.addData(QByteArrayView(reinterpret_cast<const char*>(layer.constScanLine(y)), layer.width() * 4));
+    }
     return QString::fromLatin1(hash.result().toHex());
 }
 
-[[nodiscard]] QString layerRelativePath(const domain::PageId& pageId, const QString& kindDir, const QString& hash) {
+[[nodiscard]] /// Prefix that owns every layer version of one page and kind. Requests may only reach paths
+/// under their own page and kind directory.
+[[nodiscard]] QString
+layerDirectoryPrefix(const domain::PageId& pageId, application::DerivedLayerKind kind) {
+    return QStringLiteral("%1/%2/%3/")
+        .arg(kDerivedRoot.toString(), QString::fromStdString(pageId.toString()), layerKindDirectory(kind));
+}
+
+QString layerRelativePath(const domain::PageId& pageId, const QString& kindDir, const QString& hash) {
     return QStringLiteral("%1/%2/%3/%4/%5.png")
         .arg(kDerivedRoot.toString(),
              QString::fromStdString(pageId.toString()),
@@ -74,15 +84,16 @@ FileSystemDerivedAssetStore::readDerivedLayer(application::ReadDerivedLayerReque
             return std::unexpected(makeStorageError(QStringLiteral("clear.layer_read_failed"),
                                                     QStringLiteral("The project root is not available")));
         }
-        if (!request.pageId.isValid() || !isSafeRelativeAssetPath(request.relativePath) ||
-            !request.relativePath.startsWith(kDerivedRoot.toString() + QLatin1Char('/'))) {
+        if (!request.projectId.isValid() || !request.pageId.isValid() ||
+            !isSafeRelativeAssetPath(request.relativePath) ||
+            !request.relativePath.startsWith(layerDirectoryPrefix(request.pageId, request.layerKind))) {
             return std::unexpected(makeStorageError(QStringLiteral("clear.layer_read_failed"),
                                                     QStringLiteral("The layer reference is invalid")));
         }
-        auto lease = m_coordinator->acquireLease(canonicalRoot);
+        auto lease = m_coordinator->acquireProjectLease(request.projectId, canonicalRoot);
         if (!lease) {
             return std::unexpected(makeStorageError(QStringLiteral("clear.layer_read_failed"),
-                                                    QStringLiteral("The project session is closing")));
+                                                    QStringLiteral("The project session is not open")));
         }
         const QString resolved = resolveInsideCanonicalRoot(canonicalRoot, request.relativePath);
         if (resolved.isEmpty()) {
@@ -122,12 +133,13 @@ FileSystemDerivedAssetStore::commitDerivedLayer(application::CommitDerivedLayerR
             if (canonicalRoot.isEmpty() || !request.pageId.isValid() || !request.projectId.isValid()) {
                 return fail(QStringLiteral("The commit request is invalid"));
             }
-            if (request.layer.isNull() || request.layer.format() != QImage::Format_RGBA8888) {
-                return fail(QStringLiteral("The layer must be a non-null RGBA8 image"));
+            if (request.layer.isNull() || request.layer.width() <= 0 || request.layer.height() <= 0 ||
+                request.layer.format() != QImage::Format_RGBA8888) {
+                return fail(QStringLiteral("The layer must be a non-empty RGBA8 image"));
             }
-            auto writeTicket = m_coordinator->beginWrite(canonicalRoot);
+            auto writeTicket = m_coordinator->beginProjectWrite(request.projectId, canonicalRoot);
             if (!writeTicket) {
-                return fail(QStringLiteral("The project session is closing"));
+                return fail(QStringLiteral("The project session is not open"));
             }
 
             const QString hash = layerContentHash(request.layer);
@@ -140,12 +152,22 @@ FileSystemDerivedAssetStore::commitDerivedLayer(application::CommitDerivedLayerR
                 QImageReader reader(finalPath);
                 QImage existing = reader.read();
                 if (!existing.isNull()) {
-                    application::CommitDerivedLayerResponse response;
-                    response.relativePath = relativePath;
-                    return response;
+                    if (existing.format() != QImage::Format_RGBA8888) {
+                        existing = existing.convertToFormat(QImage::Format_RGBA8888);
+                    }
+                    if (existing.size() == request.layer.size() && layerContentHash(existing) == hash) {
+                        application::CommitDerivedLayerResponse response;
+                        response.relativePath = relativePath;
+                        return response;
+                    }
                 }
+                return fail(
+                    QStringLiteral("The derived asset exists but its content does not match the expected hash"));
             }
 
+            if (!QDir().mkpath(QFileInfo(finalPath).absolutePath())) {
+                return fail(QStringLiteral("The layer directory could not be created"));
+            }
             QSaveFile file(finalPath);
             file.setDirectWriteFallback(false);
             if (!file.open(QIODevice::WriteOnly)) {
@@ -154,6 +176,13 @@ FileSystemDerivedAssetStore::commitDerivedLayer(application::CommitDerivedLayerR
             if (!request.layer.save(&file, "PNG")) {
                 file.cancelWriting();
                 return fail(QStringLiteral("The layer file could not be encoded"));
+            }
+            if (context.stopToken.stop_requested()) {
+                file.cancelWriting();
+                return std::unexpected(
+                    application::makeApplicationError(application::ErrorCategory::Cancelled,
+                                                      QStringLiteral("cancelled.user_requested"),
+                                                      QStringLiteral("The layer commit was cancelled")));
             }
             if (!file.commit()) {
                 return fail(QStringLiteral("The layer file could not be committed"));

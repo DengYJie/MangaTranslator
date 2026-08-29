@@ -36,8 +36,8 @@ struct PrepareClearResultRequest {
     quint64 sessionGeneration{0};
     quint64 currentSessionGeneration{0};
     quint64 expectedRevision{0}; // region contentRevision captured when the clear was requested
+    OperationContext context;
 };
-
 struct PreparedClearChange {
     domain::ProjectId projectId;
     domain::PageId pageId;
@@ -46,7 +46,9 @@ struct PreparedClearChange {
 };
 
 /// Prepares a clear patch by compositing it onto the current page clear layer, and committing
-/// the result through the derived asset store. It does NOT update the Domain.
+/// the result through the derived asset store. It does NOT update the Domain. Prepare may
+/// produce an unreferenced immutable asset if the request becomes stale after preparation
+/// starts; the subsequent Apply stage is authoritative for stale checks.
 /// Any failure leaves the old layer reference and source image untouched.
 class PrepareClearResultUseCase {
 public:
@@ -115,23 +117,26 @@ public:
         promise->start();
         auto future = promise->future();
 
-        auto layerFuture = [this, &request, relativePath]() -> QFuture<Result<QImage>> {
-            if (relativePath.isEmpty()) {
-                QImage transparent(request.pageSize, QImage::Format_RGBA8888);
-                transparent.fill(0);
-                transparent.setColorSpace(QColorSpace(QColorSpace::SRgb));
-                return makeReadyFuture<QImage>(std::move(transparent));
-            }
+        auto* store = m_store;
+        const auto requestSnapshot = request;
+        QFuture<Result<QImage>> layerFuture;
+
+        if (relativePath.isEmpty()) {
+            QImage transparent(requestSnapshot.pageSize, QImage::Format_RGBA8888);
+            transparent.fill(0);
+            transparent.setColorSpace(QColorSpace(QColorSpace::SRgb));
+            layerFuture = makeReadyFuture<QImage>(std::move(transparent));
+        } else {
             ReadDerivedLayerRequest readRequest;
-            readRequest.projectId = request.projectId;
-            readRequest.projectRoot = request.projectRoot;
-            readRequest.pageId = request.pageId;
+            readRequest.projectId = requestSnapshot.projectId;
+            readRequest.projectRoot = requestSnapshot.projectRoot;
+            readRequest.pageId = requestSnapshot.pageId;
             readRequest.layerKind = DerivedLayerKind::Clear;
             readRequest.relativePath = relativePath;
-            return m_store->readDerivedLayer(std::move(readRequest), {});
-        }();
+            layerFuture = store->readDerivedLayer(std::move(readRequest), requestSnapshot.context);
+        }
 
-        layerFuture.then([this, request, promise](Result<QImage> current) {
+        layerFuture.then([store, request = requestSnapshot, promise](Result<QImage> current) {
             if (!current) {
                 promise->addResult(std::unexpected(current.error()));
                 promise->finish();
@@ -157,7 +162,7 @@ public:
             commitRequest.pageId = request.pageId;
             commitRequest.layerKind = DerivedLayerKind::Clear;
             commitRequest.layer = *current;
-            m_store->commitDerivedLayer(std::move(commitRequest), {})
+            store->commitDerivedLayer(std::move(commitRequest), request.context)
                 .then([request, promise](Result<CommitDerivedLayerResponse> committed) {
                     if (!committed) {
                         promise->addResult(std::unexpected(committed.error()));

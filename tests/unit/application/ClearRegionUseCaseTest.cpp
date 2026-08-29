@@ -77,6 +77,32 @@ void ClearRegionUseCaseTest::testInvalidRequestDoesNotCallInpainter() {
     QVERIFY(!operationId.isValid());
 }
 
+void ClearRegionUseCaseTest::testDisabledClearingNeverReachesInpainter() {
+    FakeInpainter inpainter;
+    OperationRegistry registry;
+    ClearRegionUseCase useCase(&inpainter, &registry);
+
+    ClearRequest req;
+    req.projectId = ProjectId::generate();
+    req.pageId = PageId::generate();
+    req.regionId = RegionId::generate();
+    req.pageImage = QImage(100, 100, QImage::Format_ARGB32);
+    req.region = RectGeometry(10, 10, 50, 50);
+    req.contentRevision = 10;
+    // Disabled clearing must not reach the adapter, and must never fall back to
+    // automatic color picking.
+    req.settings.enabled = false;
+
+    OperationId opId;
+    auto future = useCase.execute(req, 1, opId);
+
+    QVERIFY(future.isFinished());
+    QVERIFY(!future.result().has_value());
+    QCOMPARE(future.result().error().code, QStringLiteral("clear.disabled"));
+    QCOMPARE(inpainter.callCount, 0);
+    QVERIFY(!opId.isValid());
+}
+
 void ClearRegionUseCaseTest::testCancellation() {
     FakeInpainter inpainter;
     OperationRegistry registry;
