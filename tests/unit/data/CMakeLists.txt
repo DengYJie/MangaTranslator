@@ -1,9 +1,10 @@
-﻿qt_add_executable(manga_tests_data
+qt_add_executable(manga_tests_data
     data_test_main.cpp
     ProjectSerializerTest.cpp
     FileSystemProjectRepositoryTest.cpp
     FileSystemComicImporterTest.cpp
     FileSystemDerivedAssetStoreTest.cpp
+    FileSystemComicExporterTest.cpp
 )
 manga_apply_project_options(manga_tests_data)
 set_target_properties(manga_tests_data PROPERTIES

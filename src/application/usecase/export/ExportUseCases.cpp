@@ -2,8 +2,11 @@
 
 #include "application/operation/AsyncResult.h"
 
+#include <QColorSpace>
 #include <QRegularExpression>
 #include <QSet>
+
+#include <algorithm>
 
 namespace manga::application {
 namespace {
@@ -14,8 +17,17 @@ namespace {
     return pattern.match(stem).hasMatch() && !stem.endsWith(QLatin1Char('.'));
 }
 
+[[nodiscard]] bool isValidLayerColorSpace(const QImage& image) {
+    if (image.isNull()) {
+        return true;
+    }
+    const auto cs = image.colorSpace();
+    return !cs.isValid() || cs == QColorSpace(QColorSpace::SRgb) || cs.primaries() == QColorSpace::Primaries::SRgb;
+}
+
 [[nodiscard]] bool isUsableLayer(const QImage& layer, const QImage& source) {
-    return layer.isNull() || (layer.size() == source.size() && layer.format() == QImage::Format_RGBA8888);
+    return layer.isNull() || (layer.size() == source.size() && layer.format() == QImage::Format_RGBA8888 &&
+                              isValidLayerColorSpace(layer));
 }
 
 } // namespace
@@ -66,39 +78,56 @@ QFuture<Result<ExportResponse>> ExportPagesUseCase::execute(const ExportPagesReq
     portRequest.outputDir = request.outputDir;
     portRequest.format = request.format;
     portRequest.jpegQuality = request.jpegQuality;
-    QSet<QString> snapshotIds;
-    for (const auto& snapshot : request.pageSnapshots) {
+
+    QHash<QString, ExportPageSnapshot> snapshotMap;
+    for (auto snapshot : request.pageSnapshots) {
         const auto key = QString::fromStdString(snapshot.pageId.toString());
-        if (!snapshot.pageId.isValid() || snapshot.sourceImage.isNull() || snapshotIds.contains(key) ||
-            m_project->findPage(snapshot.pageId) == nullptr) {
+        const auto* page = m_project->findPage(snapshot.pageId);
+        if (!snapshot.pageId.isValid() || snapshot.sourceImage.isNull() || snapshotMap.contains(key) ||
+            page == nullptr) {
             return makeFailedFuture<ExportResponse>(makeApplicationError(
                 ErrorCategory::Input, "input.invalid_page_snapshot", "Export page snapshot is invalid"));
+        }
+        if (snapshot.outputStem.trimmed().isEmpty()) {
+            snapshot.outputStem =
+                QStringLiteral("page_%1_translated").arg(page->orderIndex() + 1, 4, 10, QLatin1Char('0'));
         }
         if (!isValidOutputStem(snapshot.outputStem)) {
             return makeFailedFuture<ExportResponse>(makeApplicationError(
                 ErrorCategory::Input, "export.invalid_output_name", "An export output stem is invalid"));
         }
-        if (!isUsableLayer(snapshot.clearLayer, snapshot.sourceImage) ||
+        if (!isValidLayerColorSpace(snapshot.sourceImage) ||
+            !isUsableLayer(snapshot.clearLayer, snapshot.sourceImage) ||
             !isUsableLayer(snapshot.translationLayer, snapshot.sourceImage) ||
             !isUsableLayer(snapshot.manualOverrideLayer, snapshot.sourceImage)) {
             return makeFailedFuture<ExportResponse>(
                 makeApplicationError(ErrorCategory::Input, "export.invalid_layer", "An export layer is invalid"));
         }
-        snapshotIds.insert(key);
-        if (request.scope == ExportScope::AllPages || selectedIds.contains(key)) {
-            portRequest.pages.append(snapshot);
-        }
+        snapshotMap.insert(key, snapshot);
     }
+
     if (request.scope == ExportScope::AllPages &&
-        snapshotIds.size() != static_cast<qsizetype>(m_project->pages().size())) {
+        snapshotMap.size() != static_cast<qsizetype>(m_project->pages().size())) {
         return makeFailedFuture<ExportResponse>(makeApplicationError(
             ErrorCategory::Input, "input.missing_page_snapshot", "A project page snapshot is missing"));
     }
+
+    // Preserve natural project order
+    for (const auto& page : m_project->pages()) {
+        const auto key = QString::fromStdString(page.id().toString());
+        if (snapshotMap.contains(key)) {
+            if (request.scope == ExportScope::AllPages || selectedIds.contains(key)) {
+                portRequest.pages.append(snapshotMap.value(key));
+            }
+        }
+    }
+
     if (portRequest.pages.size() !=
         (request.scope == ExportScope::AllPages ? request.pageSnapshots.size() : selectedIds.size())) {
         return makeFailedFuture<ExportResponse>(makeApplicationError(
             ErrorCategory::Input, "input.missing_page_snapshot", "A selected page snapshot is missing"));
     }
+
     return m_exporter->exportPages(portRequest, context);
 }
 

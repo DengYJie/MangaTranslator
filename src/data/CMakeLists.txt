@@ -1,5 +1,6 @@
 add_library(manga_data STATIC
     derived/FileSystemDerivedAssetStore.cpp
+    export/FileSystemComicExporter.cpp
     import/FileSystemComicImporter.cpp
     import/FileSystemPageImageLoader.cpp
     project/FileSystemProjectRepository.cpp

@@ -35,7 +35,7 @@ public:
 
         if (m_context.stopToken.stop_requested()) {
             m_promise->addResult(std::unexpected(
-                makeApplicationError(ErrorCategory::Cancelled, "cancelled.export", "Export was cancelled")));
+                makeApplicationError(ErrorCategory::Cancelled, "cancelled.user_requested", "Export was cancelled")));
         } else if (shouldFail) {
             m_promise->addResult(std::unexpected(nextError));
         } else {

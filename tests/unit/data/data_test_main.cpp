@@ -1,3 +1,4 @@
+#include "FileSystemComicExporterTest.h"
 #include "FileSystemComicImporterTest.h"
 #include "FileSystemDerivedAssetStoreTest.h"
 #include "FileSystemProjectRepositoryTest.h"
@@ -43,6 +44,10 @@ int main(int argc, char* argv[]) {
         }
     };
 
+    {
+        FileSystemComicExporterTest suite;
+        runSuite("FileSystemComicExporterTest", &suite);
+    }
     {
         ProjectSerializerTest suite;
         runSuite("ProjectSerializerTest", &suite);
