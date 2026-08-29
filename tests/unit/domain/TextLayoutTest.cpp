@@ -10,6 +10,11 @@ void TextLayoutTest::testDefaults() {
     const TextLayout layout;
     QVERIFY(layout.isValid());
     QCOMPARE(layout.fontSizePt, 14.0);
+    QCOMPARE(layout.fontWeight, 400.0);
+    QCOMPARE(layout.letterSpacingEm, 0.0);
+    QCOMPARE(layout.textColorHex, QStringLiteral("#000000"));
+    QCOMPARE(layout.strokeColorHex, QStringLiteral("#FFFFFF"));
+    QCOMPARE(layout.strokeWidthPx, 0.0);
     QCOMPARE(layout.lineSpacing, 1.2);
     QCOMPARE(layout.orientation, TextOrientation::Horizontal);
     QCOMPARE(layout.alignment.horizontal, HorizontalAlignment::Center);
@@ -45,6 +50,31 @@ void TextLayoutTest::testValidation() {
     // Negative margin
     layout.margins.left = -1.0;
     QVERIFY(!layout.isValid());
+    layout.margins.left = 0.0;
+
+    // fontWeight bounds
+    layout.fontWeight = 50.0;
+    QVERIFY(!layout.isValid());
+    layout.fontWeight = 950.0;
+    QVERIFY(!layout.isValid());
+    layout.fontWeight = 700.0;
+    QVERIFY(layout.isValid());
+
+    // letterSpacingEm bounds
+    layout.letterSpacingEm = -1.0;
+    QVERIFY(!layout.isValid());
+    layout.letterSpacingEm = 3.0;
+    QVERIFY(!layout.isValid());
+    layout.letterSpacingEm = 0.5;
+    QVERIFY(layout.isValid());
+
+    // strokeWidthPx bounds
+    layout.strokeWidthPx = -1.0;
+    QVERIFY(!layout.isValid());
+    layout.strokeWidthPx = 40.0;
+    QVERIFY(!layout.isValid());
+    layout.strokeWidthPx = 2.0;
+    QVERIFY(layout.isValid());
 }
 
 void TextLayoutTest::testOrientationAndAlignment() {
@@ -65,4 +95,10 @@ void TextLayoutTest::testEquality() {
 
     l2.fontSizePt = 16.0;
     QVERIFY(l1 != l2);
+    l2.fontSizePt = 14.0;
+
+    l2.fontWeight = 700.0;
+    QVERIFY(l1 != l2);
+    l2.fontWeight = 400.0;
+    QVERIFY(l1 == l2);
 }

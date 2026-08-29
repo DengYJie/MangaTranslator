@@ -434,6 +434,11 @@ std::expected<void, domain::ValidationError> ProjectSchemaValidator::validateFul
             QStringLiteral("id"), QStringLiteral("text"), QStringLiteral("confidence"), QStringLiteral("provider")};
         static const std::unordered_set<QString> kLayoutAllowed = {QStringLiteral("fontFamily"),
                                                                    QStringLiteral("fontSizePt"),
+                                                                   QStringLiteral("fontWeight"),
+                                                                   QStringLiteral("letterSpacingEm"),
+                                                                   QStringLiteral("textColorHex"),
+                                                                   QStringLiteral("strokeColorHex"),
+                                                                   QStringLiteral("strokeWidthPx"),
                                                                    QStringLiteral("orientation"),
                                                                    QStringLiteral("alignment"),
                                                                    QStringLiteral("lineSpacing"),
@@ -761,6 +766,33 @@ std::expected<void, domain::ValidationError> ProjectSchemaValidator::validateFul
                 return std::unexpected(domain::ValidationError{.code = domain::ProjectErrorCode::InvalidStructure,
                                                                .message = "layout.rotationDeg must be a number",
                                                                .path = regionPath + ".layout.rotationDeg"});
+            }
+            if (layObj.contains("fontWeight") &&
+                (!layObj["fontWeight"].isDouble() || layObj["fontWeight"].toDouble() < 100.0 ||
+                 layObj["fontWeight"].toDouble() > 900.0)) {
+                return std::unexpected(
+                    domain::ValidationError{.code = domain::ProjectErrorCode::InvalidStructure,
+                                            .message = "layout.fontWeight must be between 100 and 900",
+                                            .path = regionPath + ".layout.fontWeight"});
+            }
+            if (layObj.contains("letterSpacingEm") && !layObj["letterSpacingEm"].isDouble()) {
+                return std::unexpected(domain::ValidationError{.code = domain::ProjectErrorCode::InvalidStructure,
+                                                               .message = "layout.letterSpacingEm must be a number",
+                                                               .path = regionPath + ".layout.letterSpacingEm"});
+            }
+            for (const auto& key : {QStringLiteral("textColorHex"), QStringLiteral("strokeColorHex")}) {
+                if (layObj.contains(key) && !layObj[key].isString()) {
+                    return std::unexpected(
+                        domain::ValidationError{.code = domain::ProjectErrorCode::InvalidStructure,
+                                                .message = std::format("layout.{} must be a string", key.toStdString()),
+                                                .path = regionPath + ".layout." + key.toStdString()});
+                }
+            }
+            if (layObj.contains("strokeWidthPx") &&
+                (!layObj["strokeWidthPx"].isDouble() || layObj["strokeWidthPx"].toDouble() < 0.0)) {
+                return std::unexpected(domain::ValidationError{.code = domain::ProjectErrorCode::InvalidStructure,
+                                                               .message = "layout.strokeWidthPx must be a number >= 0",
+                                                               .path = regionPath + ".layout.strokeWidthPx"});
             }
 
             // Clear

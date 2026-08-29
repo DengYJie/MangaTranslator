@@ -38,6 +38,12 @@ struct TextAlignment {
 struct TextLayout {
     std::string fontFamily{"Sans-Serif"};
     double fontSizePt{14.0};
+    int fontWeight{400};
+    double letterSpacingEm{0.0};
+
+    std::string textColorHex{"#000000"};
+    std::string strokeColorHex{"#FFFFFF"};
+    double strokeWidthPx{0.0};
 
     TextOrientation orientation{TextOrientation::Horizontal};
     TextAlignment alignment{HorizontalAlignment::Center, VerticalAlignment::Middle};

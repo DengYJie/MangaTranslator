@@ -153,7 +153,8 @@ ValidationResult SemanticValidator::validate(const ComicProject& project) {
             if (!layout.isValid()) {
                 errors.push_back(
                     {.code = ProjectErrorCode::InvalidLayout,
-                     .message = "Invalid Region text layout parameters (fontSize > 0, lineSpacing > 0, valid margins)",
+                     .message =
+                         "Invalid Region text layout parameters (fontSize, fontWeight, color hex, stroke, or margins)",
                      .path = regionPath + ".layout",
                      .entityId = regionIdStr});
             }

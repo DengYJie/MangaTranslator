@@ -246,6 +246,11 @@ QJsonObject ProjectSerializer::serializeToJson(const domain::ComicProject& proje
             QJsonObject layoutObj;
             layoutObj["fontFamily"] = QString::fromStdString(region.layout().fontFamily);
             layoutObj["fontSizePt"] = region.layout().fontSizePt;
+            layoutObj["fontWeight"] = region.layout().fontWeight;
+            layoutObj["letterSpacingEm"] = region.layout().letterSpacingEm;
+            layoutObj["textColorHex"] = QString::fromStdString(region.layout().textColorHex);
+            layoutObj["strokeColorHex"] = QString::fromStdString(region.layout().strokeColorHex);
+            layoutObj["strokeWidthPx"] = region.layout().strokeWidthPx;
             layoutObj["orientation"] = QString::fromStdString(orientationToString(region.layout().orientation));
 
             QJsonObject alignObj;
@@ -546,6 +551,11 @@ ProjectSerializer::deserializeFromJson(const QJsonObject& rawObj) {
             domain::TextLayout layout;
             layout.fontFamily = layObj["fontFamily"].toString().toStdString();
             layout.fontSizePt = layObj["fontSizePt"].toDouble();
+            layout.fontWeight = layObj["fontWeight"].toInt(400);
+            layout.letterSpacingEm = layObj["letterSpacingEm"].toDouble(0.0);
+            layout.textColorHex = layObj["textColorHex"].toString("#000000").toStdString();
+            layout.strokeColorHex = layObj["strokeColorHex"].toString("#FFFFFF").toStdString();
+            layout.strokeWidthPx = layObj["strokeWidthPx"].toDouble(0.0);
             if (auto o = stringToOrientation(layObj["orientation"].toString())) {
                 layout.orientation = *o;
             }
