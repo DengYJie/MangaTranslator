@@ -641,7 +641,7 @@ Cancelled:
 
 #### Layout
 
-- 随测试分发一个允许再分发且附完整许可证的确定版本字体；不得依赖 Windows 当前安装字体做 Golden。系统字体只用于单独 fallback smoke test。
+- 随测试分发一个允许再分发且附完整许可证的确定版本字体；不得依赖 Windows 当前安装字体做 Golden。系统字体只用于单独 fallback smoke test。**已选型：Noto Sans CJK（SIL OFL 1.1）**，随测试仅分发 Golden 所需字重的字体文件并附许可证文本。
 - Golden 记录 glyph/cluster source index、baseline/position、ink bounds、resolved point size、overflow 和 warning code，不对抗锯齿像素做跨平台逐像素比较。
 - 覆盖横排 wrap/no-wrap、四种水平对齐、三种垂直对齐、显式换行、quarter-point 边界、min 仍 overflow、竖排列/标点/ASCII rotation/两位 tate-chu-yoko、surrogate/combining cluster、missing family 和 missing glyph。
 
