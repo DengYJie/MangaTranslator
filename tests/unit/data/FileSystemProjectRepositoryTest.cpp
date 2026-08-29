@@ -12,11 +12,13 @@
 #include <QFile>
 #include <QFuture>
 #include <QProcess>
+#include <QRegularExpression>
 #include <QtTest/QtTest>
 
 #include <algorithm>
 #include <memory>
 #include <optional>
+#include <stop_token>
 
 using namespace manga;
 using namespace manga::data;
@@ -24,6 +26,10 @@ using domain::ComicPage;
 using domain::ComicProject;
 using domain::ImageSize;
 using domain::PageId;
+using domain::RectGeometry;
+using domain::RegionId;
+using domain::TextContent;
+using domain::TextRegion;
 
 namespace {
 
@@ -729,6 +735,175 @@ void FileSystemProjectRepositoryTest::reparsePointEscapeRejectsOpen() {
 #else
     QSKIP("Windows-only junction test");
 #endif
+}
+
+void FileSystemProjectRepositoryTest::saveIgnoresStopRequestAfterTransactionStart() {
+    const QString root = newRoot();
+    auto descriptor = createProject(root);
+    QVERIFY(descriptor.has_value());
+    auto opened = openProject(root);
+    QVERIFY(opened.has_value());
+    ComicProject& project = opened->project;
+
+    std::stop_source source;
+    application::OperationContext context;
+    context.stopToken = source.get_token();
+    m_repository->setSaveTransactionHook([&source] { source.request_stop(); });
+
+    project.setName("Saved Despite Stop");
+    application::SaveProjectRequest saveRequest;
+    saveRequest.project = project;
+    const auto saveResult = await(m_repository->saveProject(std::move(saveRequest), context));
+    m_repository->setSaveTransactionHook({});
+
+    QVERIFY(saveResult.has_value());
+    QCOMPARE(saveResult->savedRevision, project.revision());
+    expectStdString(project.name(), QStringLiteral("Saved Despite Stop"));
+    // No half-written temporary file remains next to the committed project files.
+    QStringList files = QDir(root).entryList(QDir::Files | QDir::NoDotAndDotDot);
+    files.sort();
+    QCOMPARE(files,
+             QStringList({QStringLiteral(".mangatranslator.lock"),
+                          QStringLiteral("project.json"),
+                          QStringLiteral("project.json.bak")}));
+}
+
+void FileSystemProjectRepositoryTest::saveResultDoesNotClearEditsMadeDuringSave() {
+    const QString root = newRoot();
+    auto descriptor = createProject(root);
+    QVERIFY(descriptor.has_value());
+    auto opened = openProject(root);
+    QVERIFY(opened.has_value());
+    ComicProject& project = opened->project;
+
+    const quint64 revisionAtSave = project.revision();
+    application::SaveProjectRequest saveRequest;
+    saveRequest.project = project;
+    project.setName("Edited During Save");
+
+    const auto saveResult = await(m_repository->saveProject(std::move(saveRequest), {}));
+    QVERIFY(saveResult.has_value());
+    QCOMPARE(saveResult->savedRevision, revisionAtSave);
+
+    // The stale save completion must not clear the newer edit.
+    QVERIFY(!project.markCleanIfRevision(saveResult->savedRevision));
+    QVERIFY(project.isDirty());
+
+    expectNoError(saveProject(project));
+    expectNoError(closeProject(project));
+    auto reopened = openProject(root);
+    QVERIFY(reopened.has_value());
+    expectStdString(reopened->project.name(), QStringLiteral("Edited During Save"));
+}
+
+void FileSystemProjectRepositoryTest::errorsAndWarningsDoNotLeakPathsOrUserContent() {
+    const auto leak = [this](const QString& text, const char* context) {
+        QVERIFY2(!text.contains(QRegularExpression(QStringLiteral("[A-Za-z]:[\\\\/]"))),
+                 qPrintable(QStringLiteral("%1 leaks an absolute path: %2").arg(QLatin1String(context), text)));
+        QVERIFY2(!text.contains(m_tempDir.path()),
+                 qPrintable(QStringLiteral("%1 leaks the project root: %2").arg(QLatin1String(context), text)));
+        QVERIFY2(!text.contains(QStringLiteral("LEAK-NAME")),
+                 qPrintable(QStringLiteral("%1 leaks project content: %2").arg(QLatin1String(context), text)));
+        QVERIFY2(!text.contains(QStringLiteral("LEAK-TEXT")),
+                 qPrintable(QStringLiteral("%1 leaks project content: %2").arg(QLatin1String(context), text)));
+    };
+
+    // Project A: derived asset warning, save conflict.
+    {
+        const QString root = newRoot();
+        auto descriptor = createProject(root);
+        QVERIFY(descriptor.has_value());
+        auto opened = openProject(root);
+        QVERIFY(opened.has_value());
+        ComicProject& project = opened->project;
+        QVERIFY(addAssetPage(project, root, true));
+        project.setName("LEAK-NAME-SENTINEL");
+        expectNoError(saveProject(project));
+        expectNoError(closeProject(project));
+
+        QFile external(root + QStringLiteral("/project.json"));
+        QVERIFY(external.open(QIODevice::Append));
+        // Whitespace-only trailing bytes keep the JSON parseable while changing the
+        // fingerprint, which is what triggers the save conflict below.
+        external.write("\n\n\n");
+        external.close();
+
+        auto conflicted = openProject(root);
+        QVERIFY(conflicted.has_value());
+        ComicProject& conflictedProject = conflicted->project;
+        conflictedProject.setName("Second");
+        const auto conflictError = saveProject(conflictedProject);
+        leak(conflictError.safeMessage, "save conflict safeMessage");
+        leak(conflictError.diagnostic, "save conflict diagnostic");
+        expectNoError(closeProject(conflictedProject));
+    }
+
+    // Project B: missing original asset and derived asset warnings on open.
+    {
+        const QString root = newRoot();
+        QVERIFY(createProject(root).has_value());
+        auto opened = openProject(root);
+        QVERIFY(opened.has_value());
+        ComicProject& project = opened->project;
+        ComicPage page(PageId::generate(), std::string("assets/original/page_0001.png"), ImageSize{3, 2}, 0);
+        TextRegion region(RegionId::generate(), RectGeometry(0, 0, 3, 2));
+        domain::TextContent source;
+        source.text = "LEAK-TEXT-SENTINEL";
+        region.setSource(source);
+        page.setClearLayerAsset(std::string("assets/derived/missing_layer.png"));
+        QFile asset(root + QStringLiteral("/assets/original/page_0001.png"));
+        QVERIFY(asset.open(QIODevice::WriteOnly));
+        asset.write("asset bytes");
+        asset.close();
+        QVERIFY(project.addPage(page));
+        expectNoError(saveProject(project));
+        expectNoError(closeProject(project));
+
+        auto reopened = openProject(root);
+        QVERIFY(reopened.has_value());
+        for (const auto& warning : reopened->warnings) {
+            leak(warning.safeMessage, "derived asset warning safeMessage");
+        }
+        expectNoError(closeProject(reopened->project));
+    }
+
+    // Project C: missing asset and escape rejections on open. The invalid on-disk states are
+    // written through the serializer directly, bypassing the save-time asset validation.
+    {
+        const QString root = newRoot();
+        QVERIFY(createProject(root).has_value());
+        auto opened = openProject(root);
+        QVERIFY(opened.has_value());
+        ComicProject& project = opened->project;
+        QVERIFY(addAssetPage(project, root, true));
+        expectNoError(saveProject(project));
+        expectNoError(closeProject(project));
+        QVERIFY(QFile::remove(root + QStringLiteral("/assets/original/page_0001.png")));
+        const auto missingError = openProjectError(root);
+        leak(missingError.safeMessage, "missing asset safeMessage");
+        leak(missingError.diagnostic, "missing asset diagnostic");
+        QCOMPARE(missingError.code, QStringLiteral("project.missing_asset"));
+
+        QFile restored(root + QStringLiteral("/assets/original/page_0001.png"));
+        QVERIFY(restored.open(QIODevice::WriteOnly));
+        restored.write("asset bytes");
+        restored.close();
+        auto secondOpen = openProject(root);
+        QVERIFY(secondOpen.has_value());
+        ComicProject& escapeProject = secondOpen->project;
+        ComicPage escape(PageId::generate(), std::string("../evil.png"), ImageSize{3, 2}, 0);
+        QVERIFY(escapeProject.addPage(escape));
+        expectNoError(closeProject(escapeProject));
+        QFile projectJson(root + QStringLiteral("/project.json"));
+        QVERIFY(projectJson.open(QIODevice::WriteOnly | QIODevice::Truncate));
+        const QByteArray bytes = ProjectSerializer::serialize(escapeProject);
+        QCOMPARE(projectJson.write(bytes), bytes.size());
+        projectJson.close();
+        const auto escapeError = openProjectError(root);
+        leak(escapeError.safeMessage, "escape safeMessage");
+        leak(escapeError.diagnostic, "escape diagnostic");
+        QCOMPARE(escapeError.code, QStringLiteral("project.invalid_semantic"));
+    }
 }
 
 #include "moc_FileSystemProjectRepositoryTest.cpp"

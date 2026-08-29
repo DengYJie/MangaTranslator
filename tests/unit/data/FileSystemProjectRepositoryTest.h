@@ -47,6 +47,9 @@ private slots:
     void saveFailsWhenDiskSpaceProbeReportsFull();
     void saveRejectsWriteProtectedDirectory();
     void reparsePointEscapeRejectsOpen();
+    void saveIgnoresStopRequestAfterTransactionStart();
+    void saveResultDoesNotClearEditsMadeDuringSave();
+    void errorsAndWarningsDoNotLeakPathsOrUserContent();
 
 private:
     [[nodiscard]] QString newRoot();

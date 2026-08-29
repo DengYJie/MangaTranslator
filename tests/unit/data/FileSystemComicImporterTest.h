@@ -46,6 +46,7 @@ private slots:
     void loaderRoundTripMatchesImport();
     void loaderRejectsMissingAndEscape();
     void loaderRejectsDimensionMismatch();
+    void importErrorsDoNotLeakPathsOrUserContent();
     void sourceFileUnchangedAfterImportAndSave();
 
 private:

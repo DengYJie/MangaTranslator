@@ -15,6 +15,7 @@
 #include <QFileInfo>
 #include <QFuture>
 #include <QImageReader>
+#include <QRegularExpression>
 #include <QSet>
 #include <QtTest/QtTest>
 
@@ -540,6 +541,70 @@ void FileSystemComicImporterTest::loaderRejectsDimensionMismatch() {
 
     QVERIFY(!result.has_value());
     QCOMPARE(result.error().code, QStringLiteral("project.image_dimension_mismatch"));
+}
+
+void FileSystemComicImporterTest::importErrorsDoNotLeakPathsOrUserContent() {
+    // Sentinel user content: a project name that is never sent to any adapter, and a source
+    // file whose bytes are pure text.
+    const QString sentinelProjectName = QStringLiteral("LEAK-NAME-SENTINEL");
+    QVERIFY(createTestProject());
+    m_projectDescriptor.name = sentinelProjectName;
+
+    QVector<QString> texts;
+    const auto collectFailure = [&texts](const application::ImportFailure& failure) {
+        texts.append(failure.error.safeMessage);
+        texts.append(failure.error.diagnostic);
+    };
+    const auto collectWarnings = [&texts](const QVector<application::ImportWarning>& warnings) {
+        for (const auto& warning : warnings) {
+            texts.append(warning.safeMessage);
+        }
+    };
+
+    // Disguised extension (warning), text content (failure), oversized header (failure).
+    const auto mixed = import({fixture(QStringLiteral("disguised.jpg")),
+                               fixture(QStringLiteral("not-an-image.png")),
+                               fixture(QStringLiteral("too-wide.png"))});
+    QVERIFY(mixed.has_value());
+    for (const auto& imported : mixed->importedPages) {
+        collectWarnings(imported.warnings);
+    }
+    for (const auto& failure : mixed->failures) {
+        collectFailure(failure);
+    }
+
+    // Loader rejections: missing asset and path escape.
+    application::LoadPageImageRequest missing;
+    missing.projectId = m_projectDescriptor.id;
+    missing.projectRoot = m_projectRoot;
+    missing.pageId = PageId::generate();
+    missing.assetPath = QStringLiteral("assets/original/does-not-exist.png");
+    missing.expectedSize = {3, 2};
+    auto missingResult = await(m_loader->loadPageImage(std::move(missing), {}));
+    QVERIFY(!missingResult.has_value());
+    texts.append(missingResult.error().safeMessage);
+    texts.append(missingResult.error().diagnostic);
+
+    application::LoadPageImageRequest escape;
+    escape.projectId = m_projectDescriptor.id;
+    escape.projectRoot = m_projectRoot;
+    escape.pageId = PageId::generate();
+    escape.assetPath = QStringLiteral("../outside.png");
+    escape.expectedSize = {3, 2};
+    auto escapeResult = await(m_loader->loadPageImage(std::move(escape), {}));
+    QVERIFY(!escapeResult.has_value());
+    texts.append(escapeResult.error().safeMessage);
+    texts.append(escapeResult.error().diagnostic);
+
+    QVERIFY(!texts.isEmpty());
+    for (const QString& text : texts) {
+        QVERIFY2(!text.contains(QRegularExpression(QStringLiteral("[A-Za-z]:[\\\\/]"))),
+                 qPrintable(QStringLiteral("error text leaks an absolute path: %1").arg(text)));
+        QVERIFY2(!text.contains(m_tempDir.path()),
+                 qPrintable(QStringLiteral("error text leaks the project root: %1").arg(text)));
+        QVERIFY2(!text.contains(sentinelProjectName),
+                 qPrintable(QStringLiteral("error text leaks project content: %1").arg(text)));
+    }
 }
 
 void FileSystemComicImporterTest::sourceFileUnchangedAfterImportAndSave() {
