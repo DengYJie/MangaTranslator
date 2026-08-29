@@ -289,6 +289,8 @@ std::expected<NormalizedImage, application::ApplicationError> loadNormalizedImag
     const FormatScan scan = scanImageContent(format, head);
 
     QImageReader reader(filePath);
+    // The EXIF transform is applied exactly once, here; the resulting dimensions are the
+    // domain imageSize and callers must never apply the orientation a second time.
     reader.setAutoTransform(true);
     const QSize headerSize = reader.size();
     if (headerSize.isValid() && !imageDimensionsWithinLimits(headerSize.width(), headerSize.height())) {
