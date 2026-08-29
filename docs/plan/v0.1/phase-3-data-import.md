@@ -143,6 +143,7 @@ input.invalid_image_request
 input.invalid_project            创建项目时 name/path/langs 非法
 input.invalid_save_as            另存目标路径非法
 input.image_too_large            尺寸或 RGBA8 内存超限
+input.invalid_request            请求参数无效
 
 Project（项目数据与资产错误）：
 project.invalid_structure
@@ -183,12 +184,15 @@ project.recovered_from_backup    本次打开来自 .bak 恢复
 
 Cancelled（取消，非失败）：
 cancelled.before_start           检查点在事务开始前
+cancelled.during_generation        生成中被取消
+cancelled.after_load               加载后被取消
 cancelled.decode
 cancelled.import
 cancelled.project_operation
 cancelled.stale_generation       属于 P2 契约，P3 结果采用时复用
 
 Internal（编程错误，UI 不应依赖穷举）：
+internal.null_port               依赖端口为空
 internal.unexpected_exception    适配器兜底
 ```
 

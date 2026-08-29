@@ -36,7 +36,7 @@
 
 ### P5 前置排版契约修订
 
-- [ ] 扩展 `TextLayout`，加入字重、字距、文字色、描边色和描边宽度，确保 Inspector、画布预览与导出使用同一份持久数据。
+- [x] 扩展 `TextLayout`，加入字重、字距、文字色、描边色和描边宽度，确保 Inspector、画布预览与导出使用同一份持久数据。
 - [x] ~~将 `schemaVersion` 提升到 2，并实现 `migrateV1ToV2()`~~（项目尚未发布 V0.1，无存量历史文件，直接在 V1 Schema 中扩展即可）。
 - [x] 更新 Domain 校验、Schema、序列化往返和非法边界测试；修订完成前 P5 不实现对应 Inspector 控件。
 

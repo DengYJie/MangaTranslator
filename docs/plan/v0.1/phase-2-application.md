@@ -1,7 +1,7 @@
 # P2：Application 契约与 UseCase
 
 > 状态：Complete
-> P5 前置修订：Pending（generation、缩略图、凭据状态与 Clear Undo）
+> P5 前置修订：UseCase 层已实现，Data 层待办（generation、缩略图、凭据状态与 Clear Undo）
 > 前置阶段：P1
 > 输出：可由 Fake Port 完整驱动的 V0.1 业务流程
 
@@ -494,7 +494,7 @@ P4/P5 实现前对 P2 契约的小范围扩展；这些类型仍是 Application 
 - `ICredentialStore`（`application/ports`）：同步窄端口，`SecretBytes` 为 move-only 零化容器；提供 `readApiKey`/`writeApiKey`/`deleteApiKey`，并提供不返回明文的 `hasApiKey(providerId)`。UI 只能调用凭据状态、配置和清除 UseCase，不得直接读取 Secret。
 - `IDerivedAssetStore`（`application/ports`）：仅负责读取和原子提交页面派生图层；请求携带 `ProjectId + projectRoot + PageId + layerKind + QImage`，返回项目根相对的内容寻址路径。
 - `IThumbnailStore`（`application/ports`）：读取和原子提交固定版本的页面缩略图，不接受调用方自定义路径。`LoadOrGenerateThumbnailUseCase` 协调 `IPageImageLoader`、最长边 256 px 的等比缩放和该 Store；失败不修改 Domain。
-- `IApplicationSettingsStore` 与 `IRecentProjectStore`：保存非项目级应用设置和最近项目元数据；Data 层可用 `QSettings` 实现，绝不存储 API Key。
+- `IAppSettingsStore` 与 `IRecentProjectsStore`：保存非项目级应用设置和最近项目元数据；Data 层可用 `QSettings` 实现，绝不存储 API Key。
 - `PrepareClearResultUseCase`：执行采用检查、合成 patch 并通过 `IDerivedAssetStore` 原子提交不可变内容，返回只含 before/after 引用与 Region 状态的 `PreparedClearChange`，不修改 Domain。
 - `ApplyPreparedClearChangeUseCase`：仅同步切换已存在的 layer 引用与 Region `isCleared`；供 GUI 线程上的 Undo Command 的 `redo()`/`undo()` 调用，不执行 I/O。
 - `ApplyLayoutResultUseCase`：通过 `applyPageRegionEdits` 原子写入 `resolvedLayout`。
@@ -503,7 +503,7 @@ P4/P5 实现前对 P2 契约的小范围扩展；这些类型仍是 Application 
 #### P5 开工前必须落地的契约修订
 
 - [x] 把 generation 拆成视图范围与项目会话范围，并更新所有请求快照、采用检查和测试。
-- [ ] 增加 `IThumbnailStore`、`LoadOrGenerateThumbnailUseCase` 及固定路径语义。
+- [x] 增加 `IThumbnailStore`、`LoadOrGenerateThumbnailUseCase` 及固定路径语义（Port/UseCase 已实现，Data 层 Adapter 归 P5 跨层补丁）。
 - [x] 增加不暴露 Secret 的凭据状态/配置/清除 UseCase。
 - [x] 把 Clear 采用改为 `PrepareClearResultUseCase` + 同步 `ApplyPreparedClearChangeUseCase` 两阶段协议。
 - [x] 增加应用设置与最近项目窄 Port，避免 ViewModel 直接使用 `QSettings`。

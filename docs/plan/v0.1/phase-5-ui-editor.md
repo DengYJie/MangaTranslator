@@ -21,7 +21,7 @@
 
 ### 开工前契约
 
-- [ ] 完成 P1 `TextLayout` 样式字段与 schema v1 → v2 迁移，更新 Domain/Schema 测试。
+- [ ] 完成 P1 `TextLayout` 样式字段在 V1 Schema 的序列化与校验，更新 Domain/Schema 测试。
 - [ ] 完成 P2 分范围 generation、`IThumbnailStore`、凭据状态 UseCase、应用设置 Port 和 Clear 两阶段采用协议。
 - [ ] 作为 P5 跨层前置补丁，在 Data 层实现 `IThumbnailStore` 和应用设置/最近项目 Port Adapter；UI 不直接承担文件或 QSettings 读写。
 - [ ] 建立 `manga_rendering` target，并让 UI、排版 Adapter 与 Exporter 共享同一测量/栅格化实现。
