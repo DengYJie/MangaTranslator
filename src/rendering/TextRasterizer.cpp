@@ -25,8 +25,6 @@ void TextRasterizer::draw(QPainter& painter, const LayoutResult& layout, double 
     painter.setRenderHint(QPainter::TextAntialiasing, true);
 
     if (constraints.orientation == domain::TextOrientation::Horizontal) {
-        // We re-run horizontal layout strictly for painting using QTextLayout format rendering
-        // so that justification and word spacing is exactly as measured.
         QTextOption option;
         if (constraints.wordWrap) {
             option.setWrapMode(QTextOption::WrapAtWordBoundaryOrAnywhere);
@@ -49,13 +47,59 @@ void TextRasterizer::draw(QPainter& painter, const LayoutResult& layout, double 
                 break;
         }
 
-        QTextLayout qlayout(layout.clusters.isEmpty() ? "" : layout.clusters.first().text, font, painter.device());
-        // Wait, TextLayoutEngine horizontal doesn't populate clusters!
-        // We didn't pass the text into LayoutResult...
-        // Ah, LayoutResult doesn't have the original text. We need to put it there or pass it to draw.
-        // But for vertical we have clusters.
-        // Let's modify LayoutResult to include `QString originalText;` ?
-        // Or if clusters are empty, it's an error.
+        QTextLayout qlayout(layout.originalText, font, painter.device());
+        qlayout.setTextOption(option);
+        qlayout.beginLayout();
+
+        double availW = layout.layoutBounds.width();
+        double availH = layout.layoutBounds.height();
+        double y = 0.0;
+        QFontMetricsF fm(font);
+        double lineHeight = fm.height() * constraints.lineSpacing;
+
+        while (true) {
+            QTextLine line = qlayout.createLine();
+            if (!line.isValid())
+                break;
+
+            line.setLineWidth(availW);
+            line.setPosition(QPointF(0, y));
+            y += lineHeight;
+        }
+        qlayout.endLayout();
+
+        double textHeight = y;
+        double yOffset = layout.layoutBounds.top();
+        switch (constraints.alignment.vertical) {
+            case domain::VerticalAlignment::Top:
+                break;
+            case domain::VerticalAlignment::Middle:
+                yOffset += (availH - textHeight) / 2.0;
+                break;
+            case domain::VerticalAlignment::Bottom:
+                yOffset += (availH - textHeight);
+                break;
+        }
+        double xOffset = layout.layoutBounds.left();
+
+        QPainterPath path;
+        for (int i = 0; i < qlayout.lineCount(); ++i) {
+            QTextLine line = qlayout.lineAt(i);
+            QString lineText = layout.originalText.mid(line.textStart(), line.textLength());
+            QPointF baseline(xOffset + line.position().x(), yOffset + line.position().y() + line.ascent());
+            path.addText(baseline, font, lineText);
+        }
+
+        if (strokeWidth > 0.0) {
+            QPen pen(strokeColor, strokeWidth, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin);
+            painter.setPen(pen);
+            painter.setBrush(Qt::NoBrush);
+            painter.drawPath(path);
+        }
+
+        painter.setPen(Qt::NoPen);
+        painter.setBrush(textColor);
+        painter.drawPath(path);
     } else {
         // Vertical rendering with clusters
         QPainterPath path;

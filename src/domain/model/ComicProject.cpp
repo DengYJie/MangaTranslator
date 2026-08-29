@@ -243,8 +243,10 @@ std::expected<void, ProjectEditError> ComicProject::applyPageRegionEdits(const P
     return {};
 }
 
-std::expected<void, ProjectEditError>
-ComicProject::applyClearResultOnPage(const PageId& pageId, const RegionId& regionId, std::string relativeLayerPath) {
+std::expected<void, ProjectEditError> ComicProject::applyClearChangeOnPage(const PageId& pageId,
+                                                                           const RegionId& regionId,
+                                                                           std::optional<std::string> layerPath,
+                                                                           bool isCleared) {
     ComicPage* page = findPageMutable(pageId);
     if (!page) {
         return std::unexpected(ProjectEditError{
@@ -254,12 +256,9 @@ ComicProject::applyClearResultOnPage(const PageId& pageId, const RegionId& regio
         return std::unexpected(ProjectEditError{
             .code = ProjectErrorCode::EditNotFound, .message = "Region not found", .entityId = regionId.toString()});
     }
-    if (relativeLayerPath.empty()) {
-        return std::unexpected(
-            ProjectEditError{.code = ProjectErrorCode::EditNotFound, .message = "Clear layer path is empty"});
-    }
 
-    page->applyClearResult(regionId, std::move(relativeLayerPath));
+    page->setClearLayerAsset(std::move(layerPath));
+    page->setRegionIsCleared(regionId, isCleared);
     markDirty();
     return {};
 }

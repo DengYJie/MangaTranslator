@@ -168,8 +168,10 @@ public:
     /// Atomic clear adoption: sets the page clear layer reference and marks the region
     /// cleared in one validation pass with one markDirty. The layer path must already be a
     /// committed, project-relative content-addressed reference.
-    [[nodiscard]] std::expected<void, ProjectEditError>
-    applyClearResultOnPage(const PageId& pageId, const RegionId& regionId, std::string relativeLayerPath);
+    [[nodiscard]] std::expected<void, ProjectEditError> applyClearChangeOnPage(const PageId& pageId,
+                                                                               const RegionId& regionId,
+                                                                               std::optional<std::string> layerPath,
+                                                                               bool isCleared);
 
     // Glossary
 

@@ -680,6 +680,60 @@ std::expected<void, domain::ValidationError> ProjectSchemaValidator::validateFul
                         "layout must contain valid fontFamily, fontSizePt (>0), orientation, and lineSpacing (>0)",
                     .path = regionPath + ".layout"});
             }
+
+            if (!layObj.contains("fontWeight") || !isStrictInteger(layObj["fontWeight"])) {
+                return std::unexpected(domain::ValidationError{.code = domain::ProjectErrorCode::InvalidStructure,
+                                                               .message = "layout must contain fontWeight integer",
+                                                               .path = regionPath + ".layout.fontWeight"});
+            }
+            int fw = layObj["fontWeight"].toInt();
+            if (fw < 100 || fw > 900 || (fw % 100) != 0) {
+                return std::unexpected(
+                    domain::ValidationError{.code = domain::ProjectErrorCode::InvalidStructure,
+                                            .message = "fontWeight must be between 100 and 900 in multiples of 100",
+                                            .path = regionPath + ".layout.fontWeight"});
+            }
+
+            if (!layObj.contains("letterSpacingEm") || !layObj["letterSpacingEm"].isDouble()) {
+                return std::unexpected(domain::ValidationError{.code = domain::ProjectErrorCode::InvalidStructure,
+                                                               .message = "layout must contain letterSpacingEm number",
+                                                               .path = regionPath + ".layout.letterSpacingEm"});
+            }
+            double ls = layObj["letterSpacingEm"].toDouble();
+            if (ls < -0.5 || ls > 2.0) {
+                return std::unexpected(
+                    domain::ValidationError{.code = domain::ProjectErrorCode::InvalidStructure,
+                                            .message = "letterSpacingEm must be between -0.5 and 2.0",
+                                            .path = regionPath + ".layout.letterSpacingEm"});
+            }
+
+            static const QRegularExpression hexColorRegex(QStringLiteral("^#[0-9a-fA-F]{6}$"));
+            if (!layObj.contains("textColorHex") || !layObj["textColorHex"].isString() ||
+                !hexColorRegex.match(layObj["textColorHex"].toString()).hasMatch()) {
+                return std::unexpected(
+                    domain::ValidationError{.code = domain::ProjectErrorCode::InvalidStructure,
+                                            .message = "textColorHex must be a valid hex color string",
+                                            .path = regionPath + ".layout.textColorHex"});
+            }
+            if (!layObj.contains("strokeColorHex") || !layObj["strokeColorHex"].isString() ||
+                !hexColorRegex.match(layObj["strokeColorHex"].toString()).hasMatch()) {
+                return std::unexpected(
+                    domain::ValidationError{.code = domain::ProjectErrorCode::InvalidStructure,
+                                            .message = "strokeColorHex must be a valid hex color string",
+                                            .path = regionPath + ".layout.strokeColorHex"});
+            }
+
+            if (!layObj.contains("strokeWidthPx") || !layObj["strokeWidthPx"].isDouble()) {
+                return std::unexpected(domain::ValidationError{.code = domain::ProjectErrorCode::InvalidStructure,
+                                                               .message = "layout must contain strokeWidthPx number",
+                                                               .path = regionPath + ".layout.strokeWidthPx"});
+            }
+            double sw = layObj["strokeWidthPx"].toDouble();
+            if (sw < 0.0 || sw > 32.0) {
+                return std::unexpected(domain::ValidationError{.code = domain::ProjectErrorCode::InvalidStructure,
+                                                               .message = "strokeWidthPx must be between 0 and 32",
+                                                               .path = regionPath + ".layout.strokeWidthPx"});
+            }
             const QString orientation = layObj["orientation"].toString();
             if (orientation != QStringLiteral("Horizontal") && orientation != QStringLiteral("Vertical")) {
                 return std::unexpected(

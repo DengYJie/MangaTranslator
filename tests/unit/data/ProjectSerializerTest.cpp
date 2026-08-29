@@ -23,6 +23,11 @@ constexpr const char* kValidRegionJson = R"({
     "layout": {
         "fontFamily": "Sans",
         "fontSizePt": 12,
+        "fontWeight": 700,
+        "letterSpacingEm": 0.5,
+        "textColorHex": "#FF0000",
+        "strokeColorHex": "#00FF00",
+        "strokeWidthPx": 2.5,
         "orientation": "Horizontal",
         "lineSpacing": 1.2,
         "alignment": { "horizontal": "Center", "vertical": "Middle" },
@@ -122,6 +127,11 @@ ComicProject createFullTestProject() {
     TextLayout layout1;
     layout1.fontFamily = "Noto Sans CJK SC";
     layout1.fontSizePt = 18.0;
+    layout1.fontWeight = 700;
+    layout1.letterSpacingEm = 0.5;
+    layout1.textColorHex = "#FF0000";
+    layout1.strokeColorHex = "#00FF00";
+    layout1.strokeWidthPx = 2.5;
     layout1.orientation = TextOrientation::Vertical;
     layout1.alignment = {HorizontalAlignment::Center, VerticalAlignment::Middle};
     layout1.lineSpacing = 1.3;
@@ -413,7 +423,7 @@ void ProjectSerializerTest::testRegionOrderIndexMismatch() {
         "source": { "text": "", "sourceType": "PureManual" },
         "translation": {},
         "layout": {
-            "fontFamily": "Sans", "fontSizePt": 12, "orientation": "Horizontal", "lineSpacing": 1.2,
+            "fontFamily": "Sans", "fontSizePt": 12, "fontWeight": 400, "letterSpacingEm": 0.0, "textColorHex": "#000000", "strokeColorHex": "#FFFFFF", "strokeWidthPx": 0.0, "orientation": "Horizontal", "lineSpacing": 1.2,
             "alignment": { "horizontal": "Center", "vertical": "Middle" },
             "margins": { "top": 0, "right": 0, "bottom": 0, "left": 0 }
         },
@@ -479,7 +489,7 @@ void ProjectSerializerTest::testRegionOrderIndexDuplicate() {
                         "geometry": { "type": "rect", "x": 10, "y": 10, "width": 100, "height": 100 },
                         "source": { "text": "", "sourceType": "PureManual" },
                         "translation": {},
-                        "layout": { "fontFamily": "Sans", "fontSizePt": 12, "orientation": "Horizontal",
+                        "layout": { "fontFamily": "Sans", "fontSizePt": 12, "fontWeight": 400, "letterSpacingEm": 0.0, "textColorHex": "#000000", "strokeColorHex": "#FFFFFF", "strokeWidthPx": 0.0, "orientation": "Horizontal",
                                     "lineSpacing": 1.2,
                                     "alignment": { "horizontal": "Center", "vertical": "Middle" },
                                     "margins": { "top": 0, "right": 0, "bottom": 0, "left": 0 } },
@@ -491,7 +501,7 @@ void ProjectSerializerTest::testRegionOrderIndexDuplicate() {
                         "geometry": { "type": "rect", "x": 200, "y": 10, "width": 100, "height": 100 },
                         "source": { "text": "", "sourceType": "PureManual" },
                         "translation": {},
-                        "layout": { "fontFamily": "Sans", "fontSizePt": 12, "orientation": "Horizontal",
+                        "layout": { "fontFamily": "Sans", "fontSizePt": 12, "fontWeight": 400, "letterSpacingEm": 0.0, "textColorHex": "#000000", "strokeColorHex": "#FFFFFF", "strokeWidthPx": 0.0, "orientation": "Horizontal",
                                     "lineSpacing": 1.2,
                                     "alignment": { "horizontal": "Center", "vertical": "Middle" },
                                     "margins": { "top": 0, "right": 0, "bottom": 0, "left": 0 } },
@@ -513,7 +523,7 @@ void ProjectSerializerTest::testInvalidGeometryType() {
         "source": { "text": "", "sourceType": "PureManual" },
         "translation": {},
         "layout": {
-            "fontFamily": "Sans", "fontSizePt": 12, "orientation": "Horizontal", "lineSpacing": 1.2,
+            "fontFamily": "Sans", "fontSizePt": 12, "fontWeight": 400, "letterSpacingEm": 0.0, "textColorHex": "#000000", "strokeColorHex": "#FFFFFF", "strokeWidthPx": 0.0, "orientation": "Horizontal", "lineSpacing": 1.2,
             "alignment": { "horizontal": "Center", "vertical": "Middle" },
             "margins": { "top": 0, "right": 0, "bottom": 0, "left": 0 }
         },
@@ -548,7 +558,7 @@ void ProjectSerializerTest::testOutOfBoundsGeometryInJson() {
                         "source": { "text": "", "sourceType": "PureManual" },
                         "translation": {},
                         "layout": {
-                            "fontFamily": "Sans", "fontSizePt": 12, "orientation": "Horizontal", "lineSpacing": 1.2,
+                            "fontFamily": "Sans", "fontSizePt": 12, "fontWeight": 400, "letterSpacingEm": 0.0, "textColorHex": "#000000", "strokeColorHex": "#FFFFFF", "strokeWidthPx": 0.0, "orientation": "Horizontal", "lineSpacing": 1.2,
                             "alignment": { "horizontal": "Center", "vertical": "Middle" },
                             "margins": { "top": 0, "right": 0, "bottom": 0, "left": 0 }
                         },
@@ -572,7 +582,7 @@ void ProjectSerializerTest::testGeometryUnknownFieldRejected() {
         "source": { "text": "", "sourceType": "PureManual" },
         "translation": {},
         "layout": {
-            "fontFamily": "Sans", "fontSizePt": 12, "orientation": "Horizontal", "lineSpacing": 1.2,
+            "fontFamily": "Sans", "fontSizePt": 12, "fontWeight": 400, "letterSpacingEm": 0.0, "textColorHex": "#000000", "strokeColorHex": "#FFFFFF", "strokeWidthPx": 0.0, "orientation": "Horizontal", "lineSpacing": 1.2,
             "alignment": { "horizontal": "Center", "vertical": "Middle" },
             "margins": { "top": 0, "right": 0, "bottom": 0, "left": 0 }
         },
@@ -590,7 +600,7 @@ void ProjectSerializerTest::testSourceUnknownFieldRejected() {
         "source": { "text": "", "sourceType": "PureManual", "unknownSourceField": true },
         "translation": {},
         "layout": {
-            "fontFamily": "Sans", "fontSizePt": 12, "orientation": "Horizontal", "lineSpacing": 1.2,
+            "fontFamily": "Sans", "fontSizePt": 12, "fontWeight": 400, "letterSpacingEm": 0.0, "textColorHex": "#000000", "strokeColorHex": "#FFFFFF", "strokeWidthPx": 0.0, "orientation": "Horizontal", "lineSpacing": 1.2,
             "alignment": { "horizontal": "Center", "vertical": "Middle" },
             "margins": { "top": 0, "right": 0, "bottom": 0, "left": 0 }
         },
@@ -608,12 +618,31 @@ void ProjectSerializerTest::testSourceConfidenceOutOfRange() {
         "source": { "text": "", "sourceType": "PureManual", "confidence": 1.5 },
         "translation": {},
         "layout": {
-            "fontFamily": "Sans", "fontSizePt": 12, "orientation": "Horizontal", "lineSpacing": 1.2,
+            "fontFamily": "Sans", "fontSizePt": 12, "fontWeight": 400, "letterSpacingEm": 0.0, "textColorHex": "#000000", "strokeColorHex": "#FFFFFF", "strokeWidthPx": 0.0, "orientation": "Horizontal", "lineSpacing": 1.2,
             "alignment": { "horizontal": "Center", "vertical": "Middle" },
             "margins": { "top": 0, "right": 0, "bottom": 0, "left": 0 }
         },
         "clear": { "enabled": true, "colorHex": "#FFFFFF", "opacity": 1.0 }
     })"));
+    QVERIFY(!res.has_value());
+    QCOMPARE(res.error().code, ProjectErrorCode::InvalidStructure);
+}
+
+void ProjectSerializerTest::testLayoutStylesOutOfRange() {
+    const auto res = ProjectSerializer::deserialize(wrapInProject(R"({
+        "id": "123e4567-e89b-42d3-a456-426614174002",
+        "orderIndex": 0,
+        "geometry": { "type": "rect", "x": 10, "y": 10, "width": 100, "height": 100 },
+        "source": { "text": "", "sourceType": "PureManual" },
+        "translation": {},
+        "layout": {
+            "fontFamily": "Sans", "fontSizePt": 12, "fontWeight": 450, "letterSpacingEm": 0.0, "textColorHex": "#000000", "strokeColorHex": "#FFFFFF", "strokeWidthPx": 0.0, "orientation": "Horizontal", "lineSpacing": 1.2,
+            "alignment": { "horizontal": "Center", "vertical": "Middle" },
+            "margins": { "top": 0, "right": 0, "bottom": 0, "left": 0 }
+        },
+        "clear": { "enabled": true, "colorHex": "#FFFFFF", "opacity": 1.0 }
+    })"));
+    // fontWeight=450 is invalid (must be multiple of 100)
     QVERIFY(!res.has_value());
     QCOMPARE(res.error().code, ProjectErrorCode::InvalidStructure);
 }
@@ -626,7 +655,7 @@ void ProjectSerializerTest::testTranslationUnknownFieldRejected() {
         "source": { "text": "", "sourceType": "PureManual" },
         "translation": { "unknownTransField": "bad" },
         "layout": {
-            "fontFamily": "Sans", "fontSizePt": 12, "orientation": "Horizontal", "lineSpacing": 1.2,
+            "fontFamily": "Sans", "fontSizePt": 12, "fontWeight": 400, "letterSpacingEm": 0.0, "textColorHex": "#000000", "strokeColorHex": "#FFFFFF", "strokeWidthPx": 0.0, "orientation": "Horizontal", "lineSpacing": 1.2,
             "alignment": { "horizontal": "Center", "vertical": "Middle" },
             "margins": { "top": 0, "right": 0, "bottom": 0, "left": 0 }
         },
@@ -645,7 +674,7 @@ void ProjectSerializerTest::testCandidateMissingIdOrText() {
         "source": { "text": "", "sourceType": "PureManual" },
         "translation": { "candidates": [ { "text": "candidate without id" } ] },
         "layout": {
-            "fontFamily": "Sans", "fontSizePt": 12, "orientation": "Horizontal", "lineSpacing": 1.2,
+            "fontFamily": "Sans", "fontSizePt": 12, "fontWeight": 400, "letterSpacingEm": 0.0, "textColorHex": "#000000", "strokeColorHex": "#FFFFFF", "strokeWidthPx": 0.0, "orientation": "Horizontal", "lineSpacing": 1.2,
             "alignment": { "horizontal": "Center", "vertical": "Middle" },
             "margins": { "top": 0, "right": 0, "bottom": 0, "left": 0 }
         },
@@ -663,7 +692,7 @@ void ProjectSerializerTest::testCandidateConfidenceOutOfRange() {
         "source": { "text": "", "sourceType": "PureManual" },
         "translation": { "candidates": [ { "id": "c1", "text": "ok", "confidence": -0.1 } ] },
         "layout": {
-            "fontFamily": "Sans", "fontSizePt": 12, "orientation": "Horizontal", "lineSpacing": 1.2,
+            "fontFamily": "Sans", "fontSizePt": 12, "fontWeight": 400, "letterSpacingEm": 0.0, "textColorHex": "#000000", "strokeColorHex": "#FFFFFF", "strokeWidthPx": 0.0, "orientation": "Horizontal", "lineSpacing": 1.2,
             "alignment": { "horizontal": "Center", "vertical": "Middle" },
             "margins": { "top": 0, "right": 0, "bottom": 0, "left": 0 }
         },
@@ -681,7 +710,7 @@ void ProjectSerializerTest::testLayoutMissingAlignment() {
         "source": { "text": "", "sourceType": "PureManual" },
         "translation": {},
         "layout": {
-            "fontFamily": "Sans", "fontSizePt": 12, "orientation": "Horizontal", "lineSpacing": 1.2,
+            "fontFamily": "Sans", "fontSizePt": 12, "fontWeight": 400, "letterSpacingEm": 0.0, "textColorHex": "#000000", "strokeColorHex": "#FFFFFF", "strokeWidthPx": 0.0, "orientation": "Horizontal", "lineSpacing": 1.2,
             "margins": { "top": 0, "right": 0, "bottom": 0, "left": 0 }
         },
         "clear": { "enabled": true, "colorHex": "#FFFFFF", "opacity": 1.0 }
@@ -698,7 +727,7 @@ void ProjectSerializerTest::testLayoutMissingMargins() {
         "source": { "text": "", "sourceType": "PureManual" },
         "translation": {},
         "layout": {
-            "fontFamily": "Sans", "fontSizePt": 12, "orientation": "Horizontal", "lineSpacing": 1.2,
+            "fontFamily": "Sans", "fontSizePt": 12, "fontWeight": 400, "letterSpacingEm": 0.0, "textColorHex": "#000000", "strokeColorHex": "#FFFFFF", "strokeWidthPx": 0.0, "orientation": "Horizontal", "lineSpacing": 1.2,
             "alignment": { "horizontal": "Center", "vertical": "Middle" }
         },
         "clear": { "enabled": true, "colorHex": "#FFFFFF", "opacity": 1.0 }
@@ -715,7 +744,7 @@ void ProjectSerializerTest::testLayoutUnknownFieldRejected() {
         "source": { "text": "", "sourceType": "PureManual" },
         "translation": {},
         "layout": {
-            "fontFamily": "Sans", "fontSizePt": 12, "orientation": "Horizontal", "lineSpacing": 1.2,
+            "fontFamily": "Sans", "fontSizePt": 12, "fontWeight": 400, "letterSpacingEm": 0.0, "textColorHex": "#000000", "strokeColorHex": "#FFFFFF", "strokeWidthPx": 0.0, "orientation": "Horizontal", "lineSpacing": 1.2,
             "alignment": { "horizontal": "Center", "vertical": "Middle" },
             "margins": { "top": 0, "right": 0, "bottom": 0, "left": 0 },
             "unknownLayoutField": "bad"
@@ -769,7 +798,7 @@ void ProjectSerializerTest::testInvalidCandidateSelectionInJson() {
             "candidates": [ { "id": "valid_c1", "text": "Candidate 1" } ]
         },
         "layout": {
-            "fontFamily": "Sans", "fontSizePt": 12, "orientation": "Horizontal", "lineSpacing": 1.2,
+            "fontFamily": "Sans", "fontSizePt": 12, "fontWeight": 400, "letterSpacingEm": 0.0, "textColorHex": "#000000", "strokeColorHex": "#FFFFFF", "strokeWidthPx": 0.0, "orientation": "Horizontal", "lineSpacing": 1.2,
             "alignment": { "horizontal": "Center", "vertical": "Middle" },
             "margins": { "top": 0, "right": 0, "bottom": 0, "left": 0 }
         },

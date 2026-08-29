@@ -1,4 +1,4 @@
-﻿#include "ComicProjectTest.h"
+#include "ComicProjectTest.h"
 
 #include "domain/model/ComicProject.h"
 
@@ -119,7 +119,7 @@ void ComicProjectTest::testMarkCleanRejectsStaleSaveRevision() {
     QVERIFY(!project.isDirty());
 }
 
-void ComicProjectTest::testApplyClearResultOnPageSuccess() {
+void ComicProjectTest::testApplyClearChangeOnPageSuccess() {
     ComicProject project("Test");
     const PageId pageId = PageId::generate();
     QVERIFY(project.addPage(ComicPage(pageId, "assets/original/page.png", {.width = 1000, .height = 1000})));
@@ -127,21 +127,17 @@ void ComicProjectTest::testApplyClearResultOnPageSuccess() {
     QVERIFY(project.addRegionToPage(pageId, makeRegion(regionId)).has_value());
     project.markClean();
 
-    // Shape mandated by the P4 derived asset protocol: content-addressed, page-scoped,
-    // versioned directory segment.
-    const std::string layerPath =
-        "assets/derived/" + pageId.toString() + "/cleaning/v1/" + std::string(64, 'a') + ".png";
-
-    const auto result = project.applyClearResultOnPage(pageId, regionId, layerPath);
-
+    const std::string layerPath = "assets/derived/clear.png";
+    const auto result = project.applyClearChangeOnPage(pageId, regionId, layerPath, true);
     QVERIFY(result.has_value());
-    const auto* page = project.findPage(pageId);
-    QCOMPARE(*page->clearLayerAsset(), layerPath);
-    QVERIFY(page->findRegion(regionId)->isCleared());
+
+    const auto* updatedRegion = project.findPage(pageId)->findRegion(regionId);
+    QVERIFY(updatedRegion->isCleared());
+    QCOMPARE(project.findPage(pageId)->clearLayerAsset().value(), layerPath);
     QVERIFY(project.isDirty());
 }
 
-void ComicProjectTest::testApplyClearResultOnPageRejectsUnknownIds() {
+void ComicProjectTest::testApplyClearChangeOnPageRejectsUnknownIds() {
     ComicProject project("Test");
     const PageId pageId = PageId::generate();
     QVERIFY(project.addPage(ComicPage(pageId, "assets/original/page.png", {.width = 1000, .height = 1000})));
@@ -149,27 +145,13 @@ void ComicProjectTest::testApplyClearResultOnPageRejectsUnknownIds() {
     QVERIFY(project.addRegionToPage(pageId, makeRegion(regionId)).has_value());
     project.markClean();
 
-    const auto missingPage = project.applyClearResultOnPage(PageId::generate(), regionId, "assets/derived/x.png");
+    const auto missingPage = project.applyClearChangeOnPage(PageId::generate(), regionId, "assets/derived/x.png", true);
     QVERIFY(!missingPage.has_value());
     QCOMPARE(missingPage.error().code, ProjectErrorCode::EditNotFound);
 
-    const auto missingRegion = project.applyClearResultOnPage(pageId, RegionId::generate(), "assets/derived/x.png");
+    const auto missingRegion =
+        project.applyClearChangeOnPage(pageId, RegionId::generate(), "assets/derived/x.png", true);
     QVERIFY(!missingRegion.has_value());
     QCOMPARE(missingRegion.error().code, ProjectErrorCode::EditNotFound);
     QVERIFY(!project.isDirty());
-}
-
-void ComicProjectTest::testApplyClearResultOnPageRejectsEmptyPath() {
-    ComicProject project("Test");
-    const PageId pageId = PageId::generate();
-    QVERIFY(project.addPage(ComicPage(pageId, "assets/original/page.png", {.width = 1000, .height = 1000})));
-    const RegionId regionId = RegionId::generate();
-    QVERIFY(project.addRegionToPage(pageId, makeRegion(regionId)).has_value());
-    project.markClean();
-
-    const auto result = project.applyClearResultOnPage(pageId, regionId, "");
-
-    QVERIFY(!result.has_value());
-    QVERIFY(!project.isDirty());
-    QVERIFY(!project.findPage(pageId)->clearLayerAsset().has_value());
 }

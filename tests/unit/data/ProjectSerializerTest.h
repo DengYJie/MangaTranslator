@@ -38,6 +38,7 @@ private slots:
     void testLayoutMissingAlignment();
     void testLayoutMissingMargins();
     void testLayoutUnknownFieldRejected();
+    void testLayoutStylesOutOfRange();
     // Semantic
     void testDuplicateIdsInJson();
     void testInvalidCandidateSelectionInJson();

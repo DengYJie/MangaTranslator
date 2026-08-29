@@ -183,7 +183,7 @@
         },
         "layout": {
           "type": "object",
-          "required": ["fontFamily", "fontSizePt", "orientation", "alignment", "lineSpacing", "margins"],
+          "required": ["fontFamily", "fontSizePt", "fontWeight", "letterSpacingEm", "textColorHex", "strokeColorHex", "strokeWidthPx", "orientation", "alignment", "lineSpacing", "margins"],
           "properties": {
             "fontFamily": { "type": "string" },
             "fontSizePt": { "type": "number", "exclusiveMinimum": 0 },
