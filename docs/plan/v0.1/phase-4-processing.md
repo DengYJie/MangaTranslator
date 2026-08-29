@@ -57,10 +57,10 @@
 
 ### 导出
 
-- [ ] 扩充导出快照，使 Adapter 不回读项目、资产或 UI 状态。
-- [ ] 按 `Original → Clear → Translation → ManualOverride` 合成并编码 PNG/JPEG。
-- [ ] 实现永不覆盖的文件名分配与同目录 staging 原子提交。
-- [ ] 支持逐页成功/失败、取消和安全诊断。
+- [x] 扩充导出快照，使 Adapter 不回读项目、资产或 UI 状态。（`ExportPageSnapshot` 包含不可变图层与工作底图，`ExportPagesUseCase` 按项目 `orderIndex` 排序、校验并分派）
+- [x] 按 `Original → Clear → Translation → ManualOverride` 合成并编码 PNG/JPEG。（`FileSystemComicExporter` 严格按顺序在 `Format_RGBA8888` sRGB 上执行 `SourceOver` 合成与 JPEG 白底转换）
+- [x] 实现永不覆盖的文件名分配与同目录 staging 原子提交。（`.mangatranslator-export.lock` 锁保护、`_001` 递增分配、带 operationId 的 `QTemporaryFile` 同目录写入与原子 rename）
+- [x] 支持逐页成功/失败、取消和安全诊断。（逐页独立处理，单页失败不影响他页，`stopToken` 触发时返回部分成功与剩余 Cancelled 记录）
 
 ## 测试
 
@@ -71,7 +71,7 @@
 - [x] 清除层非破坏性、无效输入和失败回退。（`SolidColorInpainterTest` 覆盖取整、2×2 下限、非法颜色/透明度、非有限矩形与取消；`ApplyResultUseCaseTest` 覆盖提交失败与 patch 尺寸不符时 Domain 不变）
 - [ ] 横排/竖排、长文本、溢出、字体回退和缺字。
 - [ ] 派生资产孤儿清理边界。（内容寻址复用与 Domain Apply 失败已由 `FileSystemDerivedAssetStoreTest` 和 `ApplyResultUseCaseTest` 覆盖；项目关闭后的孤儿清理尚未实现）
-- [ ] PNG/JPEG 合成、编码、文件冲突、逐页失败和无临时文件残留。
+- [x] PNG/JPEG 合成、编码、文件冲突、逐页失败和无临时文件残留。（`FileSystemComicExporterTest` 覆盖半透明四层 Golden Porter-Duff 混合、JPEG 白底与 metadata 排除、永不覆盖 SHA-256 不变性、`export.name_exhausted` 与 `.tmp`/`.lock` 零残留断言）
 
 ## 退出条件
 
@@ -624,6 +624,17 @@ Export:
   export.encode_failed
   export.commit_failed
   export.name_exhausted
+
+Input:
+  input.invalid_export
+  input.missing_current_page
+  input.invalid_page_selection
+  input.empty_page_selection
+  input.invalid_page_snapshot
+  input.missing_page_snapshot
+
+Internal:
+  internal.unavailable_export_dependency
 
 Cancelled:
   cancelled.user_requested
