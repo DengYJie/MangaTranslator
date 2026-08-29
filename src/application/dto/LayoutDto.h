@@ -5,8 +5,15 @@
 #include "domain/model/Uuid.h"
 
 #include <QString>
+#include <QVector>
 
 namespace manga::application {
+
+/// Non-blocking warning attached to a successful layout result.
+struct LayoutWarning {
+    QString code; // layout.font_missing / layout.missing_glyph / layout.vertical_fallback
+    QString safeMessage;
+};
 
 struct LayoutRequest {
     domain::PageId pageId;
@@ -22,6 +29,7 @@ struct LayoutResponse {
     domain::RegionId regionId;
     domain::TextLayout resolvedLayout;
     bool overflow{false};
+    QVector<LayoutWarning> warnings;
 };
 
 } // namespace manga::application

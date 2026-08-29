@@ -32,6 +32,9 @@ struct TranslationResponseItem {
 };
 
 struct TranslationResponse {
+    // Identity of the provider configuration that produced this response; model candidates
+    // reference it instead of a hardcoded translator name.
+    QString providerId;
     QVector<TranslationResponseItem> items;
 };
 

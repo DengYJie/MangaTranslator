@@ -206,7 +206,7 @@ Result<TranslationAdoptionResult> ApplyTranslationResultUseCase::execute(const A
             candidates.push_back(domain::TranslationCandidate{
                 .id = item.regionId.toString() + "-" + std::to_string(index),
                 .text = item.candidates[index].toStdString(),
-                .provider = "translator",
+                .provider = request.result.providerId.toStdString(),
             });
         }
         auto translation = region->translation();
