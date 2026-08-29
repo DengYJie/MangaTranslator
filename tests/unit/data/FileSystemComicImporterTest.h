@@ -38,6 +38,7 @@ private slots:
     void oversizeImagesRejected();
     void partialFailureKeepsOrder();
     void cancelledImportWritesNothing();
+    void cancelledMidImportRollsBackCommittedAssets();
     void concurrentImportsSerialize();
     void discardRemovesAssets();
     void loaderRoundTripMatchesImport();

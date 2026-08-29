@@ -37,6 +37,9 @@ private slots:
     void saveAsRelocatesSessionAndKeepsOldDirectory();
     void saveAsRejectsNonEmptyTarget();
     void closeReleasesLockAndSession();
+    void saveFailsWhenDiskSpaceProbeReportsFull();
+    void saveRejectsWriteProtectedDirectory();
+    void reparsePointEscapeRejectsOpen();
 
 private:
     [[nodiscard]] QString newRoot();

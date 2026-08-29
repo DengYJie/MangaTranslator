@@ -1,6 +1,7 @@
 ﻿#include "FileSystemProjectRepositoryTest.h"
 
 #include "data/project/FileSystemProjectRepository.h"
+#include "data/project/PathSafety.h"
 #include "data/project/ProjectIoCoordinator.h"
 #include "domain/model/ComicPage.h"
 #include "domain/model/ComicProject.h"
@@ -460,6 +461,115 @@ void FileSystemProjectRepositoryTest::closeReleasesLockAndSession() {
 
     // The lock was released, so the project can be opened again.
     QVERIFY(openProject(root).has_value());
+}
+
+void FileSystemProjectRepositoryTest::saveFailsWhenDiskSpaceProbeReportsFull() {
+    const QString root = newRoot();
+    auto descriptor = createProject(root);
+    QVERIFY(descriptor.has_value());
+    auto opened = openProject(root);
+    QVERIFY(opened.has_value());
+    ComicProject& project = opened->project;
+
+    m_repository->setDiskSpaceProbe([](const QString&) { return qint64(0); });
+    project.setName("No Space");
+    const auto error = saveProject(project);
+    QCOMPARE(error.code, QStringLiteral("persistence.disk_full"));
+    QVERIFY(error.category == application::ErrorCategory::Persistence);
+    QVERIFY(error.recovery == application::RecoveryAction::FreeDiskSpace);
+
+    // With the default probe the same save succeeds and the project stays usable.
+    m_repository->setDiskSpaceProbe({});
+    project.setName("Saved Again");
+    expectNoError(saveProject(project));
+}
+
+void FileSystemProjectRepositoryTest::saveRejectsWriteProtectedDirectory() {
+    const QString root = newRoot();
+    QVERIFY(createProject(root).has_value());
+    auto opened = openProject(root);
+    QVERIFY(opened.has_value());
+    ComicProject& project = opened->project;
+    project.setName("Blocked Save");
+
+#ifdef Q_OS_WIN
+    // A read-only directory attribute does not block file creation on NTFS; a deny ACE for
+    // "write data / create files" is what the OS actually enforces.
+    const QStringList denyArgs{
+        QDir::toNativeSeparators(root), QStringLiteral("/deny"), QStringLiteral("*S-1-1-0:(WD)")};
+    if (QProcess::execute(QStringLiteral("icacls"), denyArgs) != 0) {
+        QSKIP("modifying ACLs is not permitted in this environment");
+    }
+    const auto restore = [&root] {
+        QProcess::execute(QStringLiteral("icacls"),
+                          QStringList{QDir::toNativeSeparators(root), QStringLiteral("/reset")});
+    };
+#else
+    const auto restore = [&root] {
+        QFile::setPermissions(root,
+                              QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ReadUser |
+                                  QFileDevice::WriteUser | QFileDevice::ExeOwner | QFileDevice::ExeUser |
+                                  QFileDevice::ReadGroup | QFileDevice::WriteGroup | QFileDevice::ExeGroup);
+    };
+    if (!QFile::setPermissions(root,
+                               QFileDevice::ReadOwner | QFileDevice::ReadUser | QFileDevice::ExeOwner |
+                                   QFileDevice::ExeUser | QFileDevice::ReadGroup | QFileDevice::ExeGroup)) {
+        QSKIP("write-protecting a directory is not supported on this platform");
+    }
+#endif
+
+    const auto error = saveProject(project);
+    restore();
+
+    QVERIFY(error.category == application::ErrorCategory::Persistence);
+    // With a deny ACE the save fails while rotating the backup, which the save transaction
+    // maps to persistence.backup_failed; the direct write path surfaces permission_denied.
+    QVERIFY2(error.code == QStringLiteral("persistence.permission_denied") ||
+                 error.code == QStringLiteral("persistence.read_only") ||
+                 error.code == QStringLiteral("persistence.backup_failed"),
+             qPrintable(error.code));
+
+    // The last valid project is intact and writable again after restoring access.
+    expectNoError(saveProject(project));
+}
+
+void FileSystemProjectRepositoryTest::reparsePointEscapeRejectsOpen() {
+#ifdef Q_OS_WIN
+    const QString root = newRoot();
+    QVERIFY(createProject(root).has_value());
+
+    QTemporaryDir outsideDir;
+    QVERIFY(outsideDir.isValid());
+    QFile outsideAsset(outsideDir.path() + QStringLiteral("/outside.png"));
+    QVERIFY(outsideAsset.open(QIODevice::WriteOnly));
+    outsideAsset.write("outside bytes");
+    outsideAsset.close();
+
+    // A directory junction can be created by unprivileged users on NTFS and redirects to a
+    // target outside the project root.
+    const QString junctionPath = root + QStringLiteral("/assets/jail");
+    if (QProcess::execute(QStringLiteral("cmd"),
+                          QStringList{QStringLiteral("/c"),
+                                      QStringLiteral("mklink"),
+                                      QStringLiteral("/J"),
+                                      QDir::toNativeSeparators(junctionPath),
+                                      QDir::toNativeSeparators(outsideDir.path())}) != 0) {
+        QSKIP("NTFS junction creation is not permitted in this environment");
+    }
+
+    auto opened = openProject(root);
+    QVERIFY(opened.has_value());
+    ComicProject& project = opened->project;
+    ComicPage page(PageId::generate(), std::string("assets/jail/outside.png"), ImageSize{3, 2}, 0);
+    QVERIFY(project.addPage(page));
+    expectNoError(saveProject(project));
+    expectNoError(closeProject(project));
+
+    // The canonical containment check resolves the junction and rejects the escape.
+    expectError(openProjectError(root), QStringLiteral("project.invalid_semantic"));
+#else
+    QSKIP("Windows-only junction test");
+#endif
 }
 
 #include "moc_FileSystemProjectRepositoryTest.cpp"

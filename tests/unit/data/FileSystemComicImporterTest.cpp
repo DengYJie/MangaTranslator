@@ -15,6 +15,7 @@
 #include <QFileInfo>
 #include <QFuture>
 #include <QImageReader>
+#include <QThread>
 #include <QtTest/QtTest>
 
 #include <algorithm>
@@ -315,6 +316,58 @@ void FileSystemComicImporterTest::cancelledImportWritesNothing() {
     QCOMPARE(
         QDir(m_projectRoot + QStringLiteral("/assets/original")).entryList(QDir::Files | QDir::NoDotAndDotDot).size(),
         0);
+}
+
+void FileSystemComicImporterTest::cancelledMidImportRollsBackCommittedAssets() {
+    // Distinct copies so the request passes the duplicate rejection.
+    const QString bulkDir = m_tempDir.path() + QStringLiteral("/sources/bulk");
+    QVERIFY(QDir().mkpath(bulkDir));
+    QFile sample(fixture(QStringLiteral("sample.png")));
+    QVERIFY(sample.open(QIODevice::ReadOnly));
+    const QByteArray bytes = sample.readAll();
+    sample.close();
+
+    constexpr int kFileCount = 60;
+    QVector<QString> paths;
+    for (int i = 0; i < kFileCount; ++i) {
+        const QString name = QStringLiteral("bulk_%1.png").arg(i, 2, 10, QLatin1Char('0'));
+        QFile out(bulkDir + QLatin1Char('/') + name);
+        QVERIFY(out.open(QIODevice::WriteOnly));
+        out.write(bytes);
+        out.close();
+        paths.append(bulkDir + QLatin1Char('/') + name);
+    }
+
+    std::stop_source stopSource;
+    application::OperationContext context;
+    context.stopToken = stopSource.get_token();
+    application::ImportImagesRequest request;
+    request.projectId = m_projectDescriptor.id;
+    request.projectRoot = m_projectRoot;
+    request.filePaths = paths;
+    auto future = m_importer->importImages(std::move(request), context);
+
+    // Poll progressValue instead of a QFutureWatcher: its progress signals are queued on
+    // this thread and are not delivered without a running event loop.
+    while (!future.isFinished()) {
+        if (future.progressValue() >= 1) {
+            stopSource.request_stop();
+            break;
+        }
+        QThread::msleep(1);
+    }
+    future.waitForFinished();
+
+    auto result = future.result();
+    if (result.has_value()) {
+        QSKIP("import finished before the cancellation request was observed");
+    }
+    QVERIFY(result.error().isCancelled());
+    // Every asset committed by this request was rolled back, and the staging tree is gone.
+    QCOMPARE(
+        QDir(m_projectRoot + QStringLiteral("/assets/original")).entryList(QDir::Files | QDir::NoDotAndDotDot).size(),
+        0);
+    QVERIFY(!QFileInfo::exists(m_projectRoot + QStringLiteral("/assets/staging")));
 }
 
 void FileSystemComicImporterTest::concurrentImportsSerialize() {
