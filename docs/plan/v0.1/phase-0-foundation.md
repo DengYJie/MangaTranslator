@@ -60,3 +60,4 @@
 - 不在 P0 引入 Repository、全局 Service Locator 或业务单例。
 - 不为尚未使用的 Qt 模块和第三方库提前添加依赖。
 - FluentQt 初始化只留应用入口，不在此阶段设计页面。
+- P5 设计复审新增的 `manga_rendering` 是后续阶段按首个消费方创建的窄目标，不追溯为 P0 未完成项；它必须沿用 P0 的 target-scoped CMake、Qt imported target 和分层测试规则。

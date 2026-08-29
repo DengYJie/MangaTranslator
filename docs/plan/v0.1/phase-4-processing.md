@@ -13,11 +13,12 @@
 
 ### 任务执行
 
-- [x] 先完成本文件列出的 P2 契约补丁，并同步 DTO、Fake 和契约测试。（补丁清单与变更同步至 phase-2-application.md 的 P4 契约补丁小节）
+- [x] 完成原 P4 DTO、基础 Credential/Derived Asset Port 与结果采用契约补丁。
+- [ ] 完成 P5 发现的后续修订：分范围 generation、非明文凭据状态、Clear prepare/同步 Apply 两阶段协议，并同步 DTO、Fake 和契约测试。
 - [ ] 建立有界 `QThreadPool + QRunnable` 执行器。
 - [ ] 实现合作式取消、进度回调和请求 generation；适配器通过 `QPromise` 完成 `QFuture`，Port 接口不感知 GUI 线程。结果与进度的 GUI 线程投递由 P5 ViewModel 负责。
 - [ ] 输入使用不可变快照；Worker 不访问 QWidget、QPixmap 或 Scene。
-- [ ] 关闭页面、项目或应用后拒绝投递过期结果。
+- [ ] 切页只拒绝当前视图加载/预览的过期结果；项目级 OCR、翻译、清除、排版和导出继续执行。关闭/切换项目或应用退出才使项目会话结果过期。
 
 ### OCR
 
@@ -30,7 +31,7 @@
 ### 翻译与凭据
 
 - [ ] 实现 OpenAI-compatible Chat Completions 非流式适配器。
-- [ ] 增加 `ICredentialStore` Port、Windows Credential Manager Adapter 和内存 Fake。
+- [ ] 增加含非明文 `hasApiKey` 状态查询的 `ICredentialStore` Port、Windows Credential Manager Adapter 和内存 Fake。
 - [ ] 配置 endpoint、model、timeout 和非敏感生成参数。
 - [ ] 使用 Windows Credential Manager（`CredWriteW`/`CredReadW`）保存和读取 API key；密钥不进入 QSettings、项目文件、日志或错误信息。
 - [ ] 实现结构化请求/响应、超时、认证、限流、有限重试和取消。
@@ -40,9 +41,9 @@
 ### 清除与排版
 
 - [ ] 实现 `ClearSettings.colorHex` 驱动的纯色背景填充并输出独立清除 patch。
-- [ ] 增加派生图层原子提交 Port，并闭合清除结果 Apply、回滚和 Undo 边界。
+- [ ] 增加派生图层原子提交 Port，并以 prepare 资产 + 同步 Domain 命令闭合清除结果 Apply、回滚和 Undo 边界。
 - [ ] 无效 Region 或失败时保留现有图层和源图。
-- [ ] 使用 Qt 文本布局支持横排、竖排、换行、对齐、行距和边距。
+- [ ] 建立只依赖 Domain 与 Qt Core/Gui 的 `manga_rendering`，支持横排、竖排、换行、对齐、字重、字距、颜色、描边、行距和边距，并由排版 Adapter、UI 与 Exporter 共享。
 - [ ] 使用二分适配选择可用字号，并报告溢出。
 - [ ] 提供字体回退和缺字警告；不自动改写译文。
 
@@ -116,10 +117,10 @@ struct ExportPageSnapshot {
 - `LayoutWarning` 是成功结果的非阻塞告警；`layout.overflow` 由 `overflow` 表达，不同时作为失败返回。
 - `ExportPagesUseCase` 在调用 Port 前解析并校验所有图层；Exporter 只接收尺寸相同、RGBA8、straight alpha、sRGB 的不可变 `QImage` 快照。
 - 新增窄 Port `IDerivedAssetStore`，仅负责读取和原子提交页面派生图层。请求携带 `ProjectId + projectRoot + PageId + layerKind + QImage`，返回项目根相对的内容寻址路径；Data Adapter 必须复用 P3 的会话绑定和路径包含性规则。
-- 新增 `ApplyClearResultUseCase` 与 `ApplyLayoutResultUseCase`。两者执行 P2 的项目、页面、generation、`contentRevision` 和人工优先检查；排版通过现有 `applyPageRegionEdits` 写入 layout，Region 自然递增 `contentRevision`。
+- 新增 `PrepareClearResultUseCase`、`ApplyPreparedClearChangeUseCase` 与 `ApplyLayoutResultUseCase`。它们执行 P2 的项目、页面、所属 generation、`contentRevision` 和人工优先检查；排版通过现有 `applyPageRegionEdits` 写入 layout，Region 自然递增 `contentRevision`。
 - 当前 `ComicProject` 没有同时更新页面 clear layer 引用与 Region `isCleared` 的原子入口。补充窄操作 `applyClearResultOnPage(PageId, RegionId, relativeLayerPath)`，一次校验、一次 markDirty；不向应用层暴露 `ComicPage*`。
-- `ApplyClearResultUseCase` 先把 patch 合成到全页透明清除层，再通过 `IDerivedAssetStore` 原子提交不可变内容；提交成功后才更新 `layers.clear` 与 Region `isCleared`。Domain 更新失败或进程崩溃只会留下未引用的可清理派生资产，不会改写旧引用指向的文件。
-- P5 的 Undo Command 保存 Apply 前后的 Region 状态、图层引用和受影响 patch；P4 UseCase 不直接操作 UndoStack。
+- `PrepareClearResultUseCase` 先把 patch 合成到全页透明清除层，再通过 `IDerivedAssetStore` 原子提交不可变内容，返回 `PreparedClearChange`，但不更新 Domain。进程崩溃最多留下未引用的可清理资产，不会改写旧引用指向的文件。
+- P5 在 GUI 线程收到 `PreparedClearChange` 后构造并 push Undo Command；Command 的首次 `redo()` 与后续 `undo()`/`redo()` 都通过同步 `ApplyPreparedClearChangeUseCase` 切换 before/after 引用与 Region 状态，不执行 I/O。
 
 以上补丁完成后同步 `phase-2-application.md`，避免 P2 与 P4 出现两份冲突契约。
 
@@ -391,6 +392,7 @@ public:
 class ICredentialStore {
 public:
     virtual ~ICredentialStore() = default;
+    virtual Result<bool> hasApiKey(const QString& providerId) = 0;
     virtual Result<SecretBytes> readApiKey(const QString& providerId) = 0;
     virtual Result<void> writeApiKey(const QString& providerId, SecretBytes key) = 0;
     virtual Result<void> deleteApiKey(const QString& providerId) = 0;
@@ -398,6 +400,7 @@ public:
 ```
 
 - Port 位于 `application/ports`，Windows 实现在 `network/credentials`，测试使用 `FakeCredentialStore`。接口同步是刻意设计：Credential Manager 是短小本地调用，但 Translator 只能在网络线程调用，GUI/ViewModel 不直接读取 secret。
+- `hasApiKey()` 只返回配置状态，不读取或复制 CredentialBlob。P5 设置页通过 `QueryProviderCredentialStatusUseCase` 展示状态，通过 Configure/Clear UseCase 写入或删除；ViewModel 不持有 `SecretBytes`，除提交输入所需的最短生命周期外不保留明文。
 - `providerId` 先按 Provider 配置规则校验；TargetName 固定为 `MangaTranslator/Credential/<providerId>/ApiKey`，Type 固定 `CRED_TYPE_GENERIC`，UserName 固定 `ApiKey`。
 - Windows 没有 `CRED_PERSIST_CURRENT_USER` 常量。V0.1 使用 `CRED_PERSIST_LOCAL_MACHINE`，表示该用户在本机后续登录会话仍可读取；不使用 Enterprise roaming。
 - 写入调用 `CredWriteW(..., 0)`，同 TargetName 更新为替换；读取使用 `CredReadW`，删除使用 `CredDeleteW`，链接 `Advapi32`。每次成功 `CredReadW` 必须用 RAII 配对 `CredFree`。
@@ -421,25 +424,28 @@ public:
 
 ```text
 ClearResponse.patch
-→ ApplyClearResultUseCase 重新执行五项采用检查
+→ PrepareClearResultUseCase 重新执行五项采用检查
 → 读取当前 clear layer；缺失则创建与 source image 等尺寸的透明 RGBA8 图
 → SourceOver 合成 patch 到 affectedBounds
 → IDerivedAssetStore 写同目录 staging
 → 原子提交 assets/derived/<page-id>/cleaning/v1/<rgba-sha256>.png
-→ applyClearResultOnPage 原子设置 isCleared 与 ComicPage.layers.clear
-→ Domain 失败时保留未引用孤儿文件，旧引用内容不变
+→ 返回 PreparedClearChange(before/after)，不修改 Domain
+→ P5 GUI 线程 push ClearResultCommand
+→ ApplyPreparedClearChangeUseCase 同步切换 isCleared 与 ComicPage.layers.clear
 ```
 
 - `IDerivedAssetStore` 必须校验 ProjectId 与 canonical root 绑定、PageId 目录名、图层尺寸和相对路径；不得接受调用方提供任意输出路径。
 - SHA-256 计算规范化全页 RGBA bytes 与宽高，文件名小写 64 hex；相同内容复用已有可解码文件，不同内容永不覆盖。staging 和 commit 在项目根同一文件系统内，源图永不修改。
-- layer 中只保存已 Apply 的 Region。取消或过期 suggestion 不写盘。Apply 成功使聚合 Dirty；保存 project.json 仍由 P3 Repository 完成。
-- 删除/撤销清除可直接恢复旧 immutable layer 引用；若旧层已被清理则从所有已 Apply Region 重新生成整页 clear layer，避免反向猜测重叠 patch。生成失败保留当前可用文件和 Domain 状态。
+- layer 中只保存已 Apply 的 Region。取消或过期 suggestion 不写盘；已 prepare 但未 push 的文件可成为未引用孤儿。Command 首次 redo 成功才使聚合 Dirty；保存 project.json 仍由 P3 Repository 完成。
+- 删除/撤销清除直接恢复旧 immutable layer 引用，禁止在 `undo()`/`redo()` 中重新生成或访问文件系统。UndoStack 仍引用的 before/after 文件在项目打开期间不得清理；V0.1 只在项目关闭后按当前 Domain 引用做孤儿清理。
 
 ### 排版引擎
 
 #### 公共测量与渲染核心
 
-- `QtTextLayouter` 与导出/预览使用同一个内部 `TextLayoutEngine`，共享换行、glyph 定位和像素边界算法；禁止 UI、Exporter 各复制一套排版规则。
+- `TextLayoutEngine` 与 `TextRasterizer` 位于独立 `manga_rendering` target，只依赖 Domain 与 Qt Core/Gui。`QtTextLayouter`、UI 预览和 Exporter 都依赖这一核心；`ui` 不反向依赖 `services`，也不得复制换行、glyph 定位和像素边界算法。
+- 引擎输入覆盖 P1 `TextLayout` 的字体族、字重、字距、字号、方向、对齐、行距、边距、文字色、描边色与描边宽度。`fontWeight` 映射 Qt 100..900；`letterSpacingEm` 在换行和 overflow 测量前转换为当前字号的绝对 spacing。
+- `textColorHex` 与 `strokeColorHex` 解析为不透明 sRGB。`strokeWidthPx` 以源图像像素解释；渲染时先绘制 glyph outline 再绘制 fill，ink bounds 与 overflow 必须包含描边向外扩展的半宽。
 - `bounds` 与 `margins` 都解释为源图像像素；`fontSizePt` 以 `logicalDpi=96` 转换：`pixelSize = pointSize × 96 / 72`。P5 缩放只改变画布 transform，不改变排版结果。
 - 为避免 `QTextLayout` 在 `paintDevice=nullptr` 时使用当前屏幕 metrics，测量和渲染都绑定到设置为 96 DPI 的离屏 `QImage` paint device。
 - 可用矩形为 bounds 四边扣除 margins；任一维度小于等于 0 返回 `layout.invalid_bounds`。`rotationDeg` 在 V0.1 必须为 0。
@@ -470,8 +476,8 @@ Qt 6.11 的 `QTextLayout` 提供水平行、glyph run 和低层绘制能力，�
 - `autoFit=false` 时只测量 `fontSizePt`，不修改字号；放不下仍返回成功且 `overflow=true`。
 - `autoFit=true` 时把字号量化为整数 quarter-point：`low=ceil(minFontSizePt×4)`、`high=floor(maxFontSizePt×4)`，在闭区间上二分查找能容纳的最大值，避免浮点循环不收敛。
 - 若区间无效返回 `layout.invalid_font_range`。min size 也放不下时返回 `minFontSizePt` 与 `overflow=true`，不截断、不省略、不改写文本。
-- “容纳”定义为所有最终 glyph ink rect 的 union 位于可用矩形内，四边容差 `0.5` source pixel；任何未放置 cluster、非有限坐标或超界均为 overflow。
-- `resolvedLayout` 通常只改变 `fontSizePt`；若请求字体不存在，另把 `fontFamily` 改为实际选择的首选 fallback。方向、对齐、行距、margins、wrap 等其他约束原样回传。
+- “容纳”定义为所有最终 glyph ink rect（含描边外扩）的 union 位于可用矩形内，四边容差 `0.5` source pixel；任何未放置 cluster、非有限坐标或超界均为 overflow。
+- `resolvedLayout` 通常只改变 `fontSizePt`；若请求字体不存在，另把 `fontFamily` 改为实际选择的首选 fallback。字重、字距、颜色、描边、方向、对齐、行距、margins、wrap 等其他约束原样回传。
 
 #### 字体解析与告警
 
@@ -486,7 +492,7 @@ Qt 6.11 的 `QTextLayout` 提供水平行、glyph run 和低层绘制能力，�
 - `ExportPagesUseCase` 按项目 `orderIndex` 解析 scope，并构造补丁后的 `ExportPageSnapshot`；`outputStem` 固定为原项目页序号，例如 `page_0001_translated`，选中页导出也不重新从 1 编号。
 - source 和三个可选 layer 必须尺寸一致、RGBA8、straight alpha、sRGB。空 layer 视为全透明；尺寸或格式不符仅使该页失败为 `export.invalid_layer`。
 - Adapter 在新的 RGBA8 sRGB `QImage` 上使用 `QPainter::CompositionMode_SourceOver`，严格按 P1 顺序合成：`Original → Clear → Translation → ManualOverride`。每层 opacity=1、Normal blend，不回读 Domain 或资产。
-- Translation layer 由共享 `TextLayoutEngine` 根据已 Apply 的 Region 生成；ManualOverride layer 只包含人工覆盖内容，避免在 Exporter 中重复判断 `effectiveText()` 优先级。
+- Translation layer 由共享 `manga_rendering::TextRasterizer` 根据已 Apply 的 Region 生成；ManualOverride layer 只包含人工覆盖内容，避免在 Exporter 中重复判断 `effectiveText()` 优先级。
 
 #### 编码参数
 
@@ -525,15 +531,16 @@ TranslatePageUseCase → TranslationResponse
 → ApplyTranslationResultUseCase → PageRegionEdit.translation → contentRevision++
 
 ClearRegionUseCase → ClearResponse.patch
-→ ApplyClearResultUseCase → 原子派生资产提交
-→ applyClearResultOnPage → layer ref + isCleared + project revision++
+→ PrepareClearResultUseCase → 原子派生资产提交，不改 Domain
+→ P5 ClearResultCommand → ApplyPreparedClearChangeUseCase
+→ layer ref + isCleared + project revision++
 
 LayoutRegionUseCase → LayoutResponse.resolvedLayout
 → ApplyLayoutResultUseCase → PageRegionEdit.layout → contentRevision++
 ```
 
-- Apply 前重新检查 projectId、pageId、generation、输入 `contentRevision` 和人工优先规则；任一失败不写文件、不写 Domain、不进 Undo。
-- OCR/Translation/Layout 的 Domain 变更由 `applyPageRegionEdits` 保持原子性并只 markDirty 一次。Clear 还涉及 I/O，按前述 immutable 内容寻址协议保证失败后旧 Domain 与旧 layer 仍一致。
+- Prepare/Apply 前重新检查 projectId、pageId、所属 generation、输入 `contentRevision` 和人工优先规则；任一失败不写 Domain、不进 Undo。Clear prepare 已成功但 push 前变 stale 时允许留下未引用内容寻址文件。
+- OCR/Translation/Layout 的 Domain 变更由 `applyPageRegionEdits` 保持原子性并只 markDirty 一次。Clear 以“后台准备不可变资产、GUI 命令同步切引用”保证 UndoStack 契约与文件一致性。
 - `contentRevision` 是 Region 内容版本；项目 `revision` 是 aggregate 保存竞争版本。Region Apply 会同时推动二者，清除的 `isCleared` 当前不会自动推动 contentRevision，因此 stale 判定仍使用请求捕获的 revision，项目变更由 aggregate revision 保护。
 - Adapter 不直接修改 Domain。只有 `IDerivedAssetStore` 可以写派生资产，OCR、Translator、Inpainter、Layouter 和 Exporter 均无项目写权限。
 
@@ -631,6 +638,7 @@ Cancelled:
 - `tests/fixtures/ocr/samples/`：8 张自制日文 PNG，覆盖横排、竖排、ふりがな、标点、英数、低对比、长文本和空白；每张有 UTF-8 expected text。图片提前生成并提交，不要求 CI 安装作者机器字体。
 - Manifest 单测用 KB 级假图和假 hash 覆盖未知字段、路径逃逸、丢文件、hash、tensor、token ID 和 runtime 版本。decoder 用 fake session 固定 logits，覆盖 greedy 采样、repetition penalty、内容串上限、EOS、maxLength、KV cache prefill/step 接力与取消。
 - 真实模型验收使用单独缓存的固定 ONNX 模型包，目录由 `MANGA_OCR_MODEL_DIR` 提供；模型包 hash 必须等于 release manifest。普通单元测试和离线重建不下载 1GB 权重；P4 release CI 的 `p4-model` job 是退出条件，不得因“本机没有模型”静默跳过。
+- 本地开发与测试的模型缓存约定：模型包放在仓库根 `models/`（已在 `.gitignore`，权重不进 Git），`MANGA_OCR_MODEL_DIR` 指向包含 `manifest.json` 的模型包目录；`QStandardPaths::AppLocalDataLocation` 仅为安装态应用的运行时默认值，测试不读取 AppData。
 - CPU 固定模型、固定图片的文本应精确一致；tensor 浮点容差 `1e-6`。性能只记录代表性基线，不用不稳定 wall-clock 阈值阻塞普通 CI。
 
 #### Translation 与 Credential
@@ -638,13 +646,13 @@ Cancelled:
 - Network 内部定义可替换 transport seam；Parser/Retry 测试用 Fake Reply，另用 loopback `QTcpServer` 验证 QNetworkAccessManager 线程亲和、abort、timeout 和响应大小上限。测试禁止访问公网。
 - 覆盖 strict 成功、JSON mode 成功、refusal、length、content_filter、空 content、非法 JSON、未知键、重复/未知/缺失 ID、source mismatch、候选上限和 2 MiB 限制。
 - 用虚拟 clock 与确定性 RNG 验证 Retry-After、Full Jitter、最多 3 次总尝试、取消退避，以及 timeout/5xx 不自动重试。
-- `FakeCredentialStore` 覆盖 missing/read/write/delete 和 key 热更新；Windows 集成测试用含随机 UUID 的 TargetName，finally 中删除，不使用真实 Provider key。日志 capture 断言 key、Authorization、prompt 和 response 均不存在。
+- `FakeCredentialStore` 覆盖 status/missing/read/write/delete 和 key 热更新；断言状态查询不调用 `readApiKey`、不产生 Secret 副本。Windows 集成测试用含随机 UUID 的 TargetName，finally 中删除，不使用真实 Provider key。日志 capture 断言 key、Authorization、prompt 和 response 均不存在。
 
 #### Clear 与 derived asset
 
 - 2×2、边界外浮点 Region、部分越界 Region、opacity 0/0.5/1、非法 color、disabled 和取消均有精确像素测试。
-- Data Fake 注入 layer read、encode、commit 和 Domain apply 失败，验证任何失败都不改变源图，旧引用/旧文件保持可用，Domain 失败最多留下未引用内容寻址文件。
-- 两个重叠 Region 的 apply、undo、redo 通过整层重建验证，不依赖反向 alpha 混合。
+- Data Fake 注入 layer read、encode、commit 和同步 Domain apply 失败，验证 prepare 期间 Domain 不变、旧引用/旧文件保持可用，失败最多留下未引用内容寻址文件。
+- 两个重叠 Region 的 prepare、首次 redo、undo、redo 验证命令只切不可变引用且不执行 I/O；清空 UndoStack 前相关文件保持可达。
 
 #### Layout
 
@@ -663,11 +671,15 @@ Cancelled:
 ```text
 application:
   P2 DTO 补丁、ICredentialStore、IDerivedAssetStore
-  ApplyClearResultUseCase、ApplyLayoutResultUseCase
+  PrepareClearResultUseCase、ApplyPreparedClearChangeUseCase、ApplyLayoutResultUseCase
+
+rendering:
+  TextLayoutEngine、TextRasterizer
+  只依赖 Domain 与 Qt Core/Gui
 
 services:
   BoundedTaskExecutor、OnnxMangaOcrEngine
-  SolidColorInpainter、QtTextLayouter、TextLayoutEngine
+  SolidColorInpainter、QtTextLayouter
 
 network:
   OpenAiCompatibleTranslator、WindowsCredentialStore

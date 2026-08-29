@@ -11,6 +11,7 @@
 - For comic-text-detector/ONNX, validate tensor names, shapes, color order, normalization, scaling, padding, and coordinate restoration with tests.
 - Convert detected geometry back to canonical source-image pixel coordinates before returning it.
 - Keep OCR, translation, inpainting, and layout outputs independently reviewable. Preserve provenance and confidence where available.
+- Layout adapters delegate deterministic measurement and rasterization to `manga_rendering`; do not keep a second services-only layout engine or make UI depend on this layer.
 - Stage results must expose enough state for an application UseCase to retry a failed stage without recomputing successful expensive stages unnecessarily.
 - Keep cross-stage ordering, retry policy, progress aggregation, and application commit boundaries in `application/usecase`, not in service adapters.
 - Never mutate the persisted project incrementally from worker code without an application-level commit boundary.

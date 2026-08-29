@@ -137,6 +137,7 @@ MSVC 生产目标启用 `/W4` 与 `/permissive-`；第三方警告不提升为�
 - API key 使用 Windows Credential Manager。
 - 禁止把密钥明文写入项目、QSettings、日志、诊断包或错误信息。
 - 读取、写入和删除凭据失败必须返回明确且安全的错误。
+- 设置页通过不读取明文的状态查询显示“已配置/缺失/不可用”，只允许替换或删除，不执行 read-then-discard。
 
 ## 5. LLM 协议
 
@@ -188,10 +189,10 @@ MSVC 生产目标启用 `/W4` 与 `/permissive-`；第三方警告不提升为�
 
 - 使用有界 `QThreadPool + QRunnable`。
 - Port 异步契约统一返回 `QFuture<std::expected<T, ApplicationError>>`；接口不继承 `QObject`、不定义 signal。
-- 取消使用标准 `std::stop_token`，随 `OperationContext`（`OperationId`、generation、令牌）传入；进度通过 `QFuture/QPromise` 进度通道报告；generation 负责过期判断。
+- 取消使用标准 `std::stop_token`，随 `OperationContext`（`OperationId`、generation、令牌）传入；进度通过 `QFuture/QPromise` 进度通道报告。`viewGeneration` 只隔离当前页面视图加载，`projectSessionGeneration` 隔离打开项目的后台处理。
 - 不把 QtConcurrent 作为核心任务抽象（`QFuture/QPromise` 属 QtCore，不在此列）。
 - 任务输入使用不可变快照，并携带所属项目、页面和请求 ID。
-- 关闭页面、项目或应用后，旧任务不得发布结果。
+- 切换页面只使旧页面的图像/预览投递失效，不取消用户启动的 OCR、翻译、清除、排版或导出。切换/关闭项目或应用退出后，旧项目任务不得发布业务结果。
 
 ### 6.2 Undo/Redo
 
@@ -199,6 +200,7 @@ MSVC 生产目标启用 `/W4` 与 `/permissive-`；第三方警告不提升为�
 - 连续拖动合并为一个命令。
 - 连续文本输入按短时间窗口和同一编辑目标合并。
 - 异步 OCR 或翻译结果只有在用户确认或明确采用时进入 Undo 栈。
+- 涉及文件 I/O 的清除结果先在后台提交不可变派生资产，再由 GUI 线程 push 命令；命令 redo/undo 只同步切换 Domain 引用，不执行 I/O。
 - 保存不产生 Undo 命令，也不清空当前 Undo 历史。
 
 ## 7. 图像、清除与排版
@@ -212,15 +214,15 @@ MSVC 生产目标启用 `/W4` 与 `/permissive-`；第三方警告不提升为�
 
 ### 7.2 基础清除
 
-- V0.1 只支持纯色或近似纯色填充。
+- V0.1 只支持用户显式选择颜色与透明度的纯色填充，不猜测边缘色或近似主色。
 - 清除结果形成独立图层，不覆盖原图。
 - OpenCV inpaint 推迟到 V0.2。
 - LaMa 推迟到 V0.3。
 
 ### 7.3 基础排版
 
-- V0.1 支持横排、竖排、对齐、换行、行距、边距和字号二分适配。
-- 使用 Qt 文本布局能力。
+- V0.1 支持横排、竖排、字体、字重、字距、颜色、描边、对齐、换行、行距、边距和字号二分适配。
+- 测量与栅格化使用独立 `manga_rendering` target，只依赖 Domain 与 Qt Core/Gui；排版 Adapter、画布预览和导出共享同一实现。
 - V0.1 不承诺完整日文禁则、振假名和高级文本塑形。
 - 字体缺失时使用明确的字体回退，并在界面显示警告。
 

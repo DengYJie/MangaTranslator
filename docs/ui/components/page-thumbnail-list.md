@@ -33,6 +33,10 @@
 - 返回当前页、可视区和相邻页面时，应尽量避免重复显示加载占位。
 - 缩略图异步载入；迟到的旧缩略图不得覆盖已经切换或更新的页面。
 - 生成尺寸与显示尺寸是两个概念：显示尺寸为 §11 的 56×72（完整）/ 紧凑规格；生成产物按源页比例缩放至最长边不超过 256 px（P5 定义的生成规格），为高 DPI 与紧凑模式放大预留余量。
+- 固定派生资产路径为 `assets/derived/<page-id>/thumbnail/v1.png`，不进入 `project.json`。列表只调用 `LoadOrGenerateThumbnailUseCase`，不拼路径、不写文件，也不改变项目 Dirty。
+- 使用 `QListView + QAbstractListModel + QStyledItemDelegate`；Delegate 通过 `fluent::status_info::ShimmerPainter` 绘制加载态，禁止 `setIndexWidget()` 或每行 QWidget。
+- 只请求可视行加上下各 2 行，最多 4 个请求并发。工作线程返回 `QImage`，GUI 线程按 PageId 和 `viewGeneration` 校验后转换为 `QPixmap`。
+- `QCache` 预算为 64 MiB，cost 按像素字节数向上取 KiB；固定“缓存 50 张”不是内存上限。滚出屏幕只释放像素缓存，Model 仍保留 PageId、纵横比和状态。
 
 ## 4. 行状态
 
@@ -128,6 +132,7 @@
 ## 13. 验收清单
 
 - 1、28、500、5000 页时虚拟化和滚动稳定。
+- 5000 页模型初始化不解码全部原图或缩略图，可视区外不创建行 Widget。
 - 缩略图乱序返回不串页。
 - current 与 multi-selection 视觉语义不混淆。
 - 过滤隐藏当前页时有明确反馈。

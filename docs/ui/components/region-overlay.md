@@ -112,6 +112,10 @@ Handle 在屏幕空间保持近似固定大小，不随画布缩放变得不可�
 - 只显示四角 Handle。
 - 放大后显示全部矩形 Handle。
 
+实现上，八个 Handle 是 `RegionOverlayItem` 的独立子 `QGraphicsItem`，只给 Handle 设置 `ItemIgnoresTransformations`；父 Region 绝不设置该 flag。边界使用 cosmetic pen。Handle 的 `boundingRect()` 和 `shape()` 覆盖设备空间命中范围，不能只在 `paint()` 内反向缩放视觉矩形，否则 Scene 命中与重绘区域会错误。
+
+Overlay 的高频绘制从 Canvas 获取只读 palette view，或使用 FluentQt 的 `themeColorsRef()`；不得在每个 Item 的 `paint()` 中按值复制完整主题颜色。普通 `QGraphicsItem` 不混入 `FluentElement`，主题变化由 Canvas 统一使 Item 和缓存失效。
+
 ## 7. 移动
 
 1. 指针在 Region 内按下并超过拖动阈值。
@@ -124,7 +128,7 @@ Handle 在屏幕空间保持近似固定大小，不随画布缩放变得不可�
 
 - Shift：限制到水平或垂直主轴。
 - Alt：禁用吸附。
-- 方向键：1 源像素移动；Shift+方向键：10 像素。若缩放极低，仍以源像素为单位。
+- 方向键：1 源像素移动；若需要更大步长，未来通过用户设置提供，V0.1 不让 Shift 同时承担移动加速和 Handle 调整两种冲突语义。
 
 Region 始终限制在页面内。编辑到页面边缘时停止在边界，不允许形成越界几何。
 

@@ -1,6 +1,6 @@
 # P3：数据持久化与图片导入
 
-> 状态：Completed
+> 状态：Complete
 > 前置阶段：P2
 > 可与 P4、P5 并行
 > 输出：可移植、可恢复的目录型项目和 V0.1 图片导入
@@ -387,7 +387,9 @@ assets/derived/
 ```
 
 - **清除层/译文层/人工覆盖层**：引用写入 `project.json` 的 `layers` 对象（P1 Schema 已支持 `clear`/`translation`/`manualOverride` 字符串字段）。
-- **缩略图/work/preview**：按约定路径查找，不进 `project.json`；缺失或损坏即视为 stale。后台生成与重建由后续阶段的派生资产服务负责。
+- **缩略图/work/preview**：按约定路径查找，不进 `project.json`；缺失或损坏即视为 stale。P3 只冻结目录、版本段、路径包含性和原子文件提交规则，不承担生成时机或 UI 缓存策略。
+- 缩略图由 P5 的 `LoadOrGenerateThumbnailUseCase` 协调生成；作为 P5 跨层前置补丁，Data 层 `IThumbnailStore` Adapter 固定读写 `assets/derived/<page-uuid>/thumbnail/v1.png`。调用方不得改扩展名、另造 `thumb_256.jpg` 或传入任意输出路径。
+- 缩略图写入沿用同目录 staging、flush、原子 rename 和项目会话根目录绑定；写盘成功只完成派生资产提交，不更新 `project.json`，也不改变项目 revision/Dirty。
 - 版本号写入路径段：生成器升级时写 `v2/`。清除层由 P4 以规范化图像内容 SHA-256 命名为不可变文件，使文件提交与 Domain 引用更新之间无需覆盖旧内容；未引用文件可延迟清理。
 - 失效判据：文件不存在或无法解码；派生资产可安全丢弃，不作为用户数据唯一副本。
 

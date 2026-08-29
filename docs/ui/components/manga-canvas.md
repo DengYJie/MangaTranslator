@@ -34,12 +34,14 @@
 2. Page shadow。
 3. Original Image Layer。
 4. Cleaning Layer。
-5. Translation Layer。
+5. Translation / Manual Override Layer。
 6. Region Overlay Layer。
 7. Selection and Handles Layer。
 8. Guides and Reading Order Layer。
 9. Tool Preview Layer。
 10. Busy/Error Overlay Layer。
+
+实现使用固定 Z 值：Workspace `0`、Original `10`、Cleaning `20`、Text `30`、Region `100`、Handles `110`、Tool Preview `200`。V0.1 没有 Split Curtain，不预留帘布 Item 或裁切分支。
 
 图层显示规则：
 
@@ -64,8 +66,8 @@
 
 ### 5.1 范围
 
-- 建议最小 5% 或适应整页所需更小值。
-- 建议最大 800%；若原图极小可限制到 1600%。
+- 最小 5%，适应整页计算结果更小时仍 Clamp 到 5%。
+- 最大 1600%。
 - 常用预设：25%、50%、100%、200%、适应页面、适应宽度。
 - 缩放值在 CommandBar 可见，格式化为整数百分比；内部保留浮点。
 
@@ -183,6 +185,7 @@ V0.1 不提供多边形创建或旋转。后续版本加入多边形时，需要
 - 被用户明确采用后进入 Undo 栈。
 - 自动任务到达但尚未采用的候选不污染 Undo 栈。
 - 重新运行阶段前保存可恢复快照或生成可撤销替换命令。
+- 清除结果先在后台准备不可变派生资产；GUI 线程收到 `PreparedClearChange` 后再 push 命令，命令的 redo/undo 只同步切换 Domain 引用，不执行 I/O。
 
 ## 12. 异步覆盖层
 
@@ -206,7 +209,8 @@ V0.1 不提供多边形创建或旋转。后续版本加入多边形时，需要
 
 ## 13. 文本渲染预览
 
-- 画布使用接近导出的排版结果。
+- 画布与导出共同依赖 `manga_rendering::TextLayoutEngine/TextRasterizer`，使用相同的换行、glyph、字重、字距、颜色、描边和 overflow 结果。
+- 排版和栅格化在 `paint()` 外按 Region 预计算；`TextLayerItem::paint()` 只绘制缓存的 `QPixmap` 或轻量 glyph cache，不调用 Port、Domain 或文件系统。
 - 高倍率缩放时文字与边缘必须保持清晰；质量切换使用 Cross-fade，不能闪白。
 - 字体缺失、溢出、字形缺失在 Region 上显示 Caution，不把错误文字直接烧入清理层。
 - 编辑译文时即时预览；IME composition 文本可显示为临时下划线，但不得作为最终文本处理。
@@ -248,6 +252,7 @@ V0.1 不提供多边形创建或旋转。后续版本加入多边形时，需要
 - 指针交互和视口绘制目标 60 FPS；最低不得因后台任务持续阻塞。
 - OCR、翻译、导入、导出或全页排版期间，缩放、平移和选择仍保持响应。
 - 大图和大量 Region 不得导致内存无上限增长。
+- 当前页文字渲染缓存按像素字节成本限制为 128 MiB；只修改一个 Region 时不得重排整页其他 Region。
 - 可视区外复杂 Overlay 可降低细节，但选择和无障碍信息仍保持。
 - 高频进度更新不得造成画布跳动；几何拖动必须紧跟指针。
 
@@ -262,7 +267,7 @@ V0.1 不提供多边形创建或旋转。后续版本加入多边形时，需要
 
 ## 18. 验收清单
 
-- 所有坐标变换在 25%、100%、800% 与高 DPI 下正确。
+- 所有坐标变换在 5%、100%、1600% 与高 DPI 下正确。
 - 缩放锚点稳定，切换异步图层不跳视口。
 - 创建/移动/缩放一次对应一个 Undo Command。
 - 任务完成、失败和过期不会重置选择或覆盖人工修改。

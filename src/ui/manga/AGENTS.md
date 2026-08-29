@@ -27,8 +27,9 @@ The manga editor is a presentation and interaction layer built with `QGraphicsVi
 - Do not regenerate or replace full-resolution pixmaps on every zoom or pointer move.
 - Keep item bounding rectangles correct before geometry changes and minimize scene invalidation.
 - Avoid one heavyweight child widget per text region. Use custom items/delegates and open an editor only for the active region when practical.
-- Large pages and documents need bounded caches, lazy page loading, and cancellation of obsolete renders.
+- Large pages and documents need bounded caches and lazy page loading. Cancel obsolete view renders on page changes, but keep project-owned processing bound to its original PageId.
 - Painting must not perform I/O, inference, allocation-heavy layout, or mutate application state.
+- Text measurement and rasterization come from the shared `manga_rendering` target; canvas code must not depend on `services` or duplicate layout rules.
 
 ## Interaction
 

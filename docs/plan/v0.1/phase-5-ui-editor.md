@@ -1,9 +1,9 @@
 # P5：UI、MVVM 与漫画画布
 
 > 状态：Planned
-> 前置阶段：P2
-> 可与 P3、P4 并行
-> 输出：可完成人工 Region 编辑、文本校对和基础排版的桌面工作台
+> 前置阶段：P1、P2 契约修订，P3 图片加载与派生资产路径规则，P4 共享渲染核心与处理 Port
+> 可与 P4 Adapter 实现并行，但不得绕过未落地的前置契约
+> 输出：可完成人工 Region 编辑、文本校对、基础排版和处理结果采用的桌面工作台
 
 ## 必读规范
 
@@ -13,133 +13,107 @@
 2. [`src/ui/manga/AGENTS.md`](../../../src/ui/manga/AGENTS.md)
 3. [`docs/ui/README.md`](../../ui/README.md)
 4. UI README 指定的 foundations、control reference、相关页面和控件文档
+5. [`phase-5-ui-editor-supplement.md`](phase-5-ui-editor-supplement.md)
+
+补充规格负责冻结依赖边界、状态生命周期、渲染缓存、Undo/Dirty、缩略图、凭据与错误恢复；本文件只维护实施清单和验收门槛。
 
 ## TODO
 
-### 前置任务
+### 开工前契约
 
-- [ ] 先完成本文件末尾列出的开工前契约补丁与歧义裁决。
+- [ ] 完成 P1 `TextLayout` 样式字段与 schema v1 → v2 迁移，更新 Domain/Schema 测试。
+- [ ] 完成 P2 分范围 generation、`IThumbnailStore`、凭据状态 UseCase、应用设置 Port 和 Clear 两阶段采用协议。
+- [ ] 作为 P5 跨层前置补丁，在 Data 层实现 `IThumbnailStore` 和应用设置/最近项目 Port Adapter；UI 不直接承担文件或 QSettings 读写。
+- [ ] 建立 `manga_rendering` target，并让 UI、排版 Adapter 与 Exporter 共享同一测量/栅格化实现。
+- [ ] 用 FluentQt 公共 API 做最小探针，确认计划使用的 `NavigationView`、`CommandBar`、`ShimmerPainter`、`Expander`、主题回调和动态主题覆盖 API。
+
+### 产品与视觉设计门
+
+- [ ] 输出一句话 Design Intent、核心对象、时间模型、Hero Surface、密度和响应式策略。
+- [ ] 基于真实页面状态制作三套可比较的编辑器概念，记录保留/拒绝理由并由产品负责人选择后再进入生产 UI 实现。
+- [ ] 固定 Light/Dark 语义色、文字层级、间距、圆角、动效和画布覆盖层 token；禁止在控件中散落私有视觉常量。
+- [ ] ForgeAI 仅作为布局与 MVVM 参考，不建立源码或二进制依赖，不复制其产品身份。
 
 ### MVVM 与 UDF
 
 - [ ] 实现/复用 `BaseViewModel`、Per-Screen State、`updateState`、`stateChanged` 和 `observe`。
 - [ ] View 只渲染 State 并报告用户意图；UseCase 结果由 ViewModel 合并。
 - [ ] 一次性导航、文件选择、Toast/InfoBar 使用事件 Signal，不塞入持久 State。
-- [ ] State 保存加载、空、成功、失败、取消、Dirty 和选择状态。
-- [ ] 禁止新增 Redux Store、Reducer 或全局可变 UI State。
+- [ ] State 使用稳定 `PageId`/`RegionId`/`OperationId`，不保存 Domain 指针、列表下标、Widget 或 `QPixmap`。
+- [ ] 实现 `viewGeneration` 与 `projectSessionGeneration`；后台处理按 operationId 和目标身份更新，不以“当前页面”作为有效性条件。
+- [ ] 禁止新增 Redux Store、Reducer、全局可变 UI State 或 View 直连 Repository/Adapter。
 
-### 应用与页面
+### 应用外壳与页面
 
-- [ ] 实现 NavigationWindow、项目中心、新建项目/导入、编辑器和设置 Surface。
-- [ ] 同一个导航控件根据 Surface 显示不同目的地；进入设置时不重复显示设置入口。
-- [ ] 实现编辑器页面列表、命令区、漫画画布、Inspector 和状态反馈。
-- [ ] 页面列表按需请求异步生成的 PNG 缩略图；最长边 256 px、保持宽高比，生成或写盘失败时回退到占位状态且不影响图片导入。
-- [ ] 挂载全局 `AppStatusTaskStrip` 处理跨页面后台进度；进入设置或切导航时保留原 ViewModel 视图草稿。
-- [ ] 使用 FluentQt 公共 C++ API 和现有语义 Token。
-- [ ] 不添加自定义 QProxyStyle、全局 QSS、`ui/style` 或 themes 目录。
+- [ ] 实现项目中心、新建/打开/导入、编辑器和设置 Surface；导航只展示 V0.1 已实现且可完成的目的地。
+- [ ] 实现编辑器页面列表、命令区、漫画画布、Inspector、状态反馈和全局 `AppStatusTaskStrip`。
+- [ ] 进入设置或切换 Surface 时保留编辑器 ViewModel 草稿与项目级后台任务；关闭项目时统一取消并释放。
+- [ ] 设置页通过凭据状态/配置/清除 UseCase 展示 Provider 状态，不读取或回显 API Key。
+- [ ] 使用 FluentQt 公共 C++ API 和既有语义 Token；不添加全局 QSS、自定义 `QProxyStyle` 或第二套主题系统。
+
+### 页面列表与缩略图
+
+- [ ] `QListView + QAbstractListModel + QStyledItemDelegate` 只为可视行和小范围预取请求缩略图，不为每行创建 QWidget。
+- [ ] 通过 `LoadOrGenerateThumbnailUseCase` 读取或生成固定 PNG；UI 不拼磁盘路径、不写文件、不修改项目 Dirty。
+- [ ] 工作线程只产生 `QImage`，GUI 线程转换 `QPixmap`；缓存按像素字节成本限制，不按“50 张”粗略计数。
+- [ ] Delegate 用 `ShimmerPainter` 呈现加载态，成功交叉淡入，失败显示可重试占位；迟到结果按 PageId 和 generation 校验。
 
 ### QGraphicsView 漫画画布
 
 - [ ] 源图像像素坐标作为 Scene 权威坐标，不把 View/设备坐标持久化。
-- [ ] 实现图片加载、适应窗口、平移和缩放中心行为。明确全局统一视口，切页视角不跳跃，V0.1 无页面重排。
-- [ ] 缩放范围严格限制在 5%-1600%；处理最小尺寸、页面边界、缩放无关命中范围和选择手柄。
-- [ ] 实现矩形 Region 创建、选择、移动、八方向缩放和删除。
-- [ ] 补充 `RegionOverlay` 的纯键盘无障碍操作（Tab遍历、方向键移动、Shift+方向键缩放）。
-- [ ] `QGraphicsItem` 只投影 State，不保存权威 Region 数据。
-- [ ] 选择使用稳定 Region ID，不使用列表下标作为身份。
+- [ ] 实现图片加载、适应窗口、平移和以指针/视口中心为锚的缩放；缩放范围限制在 5%–1600%。
+- [ ] 实现矩形 Region 创建、稳定 ID 选择、移动、八方向缩放、批量选择和删除。
+- [ ] Region item 只投影 State；手柄是独立子 Item 并忽略变换，父 Region 不设置 `ItemIgnoresTransformations`。
+- [ ] 原图、清除、译文和人工覆盖遵循固定 Z-Order；排版与图层栅格化在 `paint()` 外完成，热路径只绘制缓存。
+- [ ] 提供原图/处理结果双视图同步只读对比；V0.1 不实现单画布 Split Curtain。
+- [ ] 补充纯键盘 Region 操作、可访问名称、焦点顺序和缩放无关命中范围。
 
-### 编辑与 Undo/Redo
+### Inspector 与编辑
 
-- [ ] Inspector 编辑原文、译文、字体、字号、方向、对齐、行距和边距。
-- [ ] 实现原图、清除、译文和双视图同步只读对比预览（V0.1 禁止对比模式下的单画布擦拭与工具操作）。
-- [ ] Region 创建/删除/几何、文字、排版修改使用命令对象。
-- [ ] 连续拖动合并为一个命令；连续文本输入按目标和时间窗口合并。
-- [ ] 基于 `QUndoStack` 接线 Dirty 状态与 `Ctrl+S` 保存链路；关闭项目前进行未保存拦截确认。
-- [ ] 明确分离“撤销/重做”与“项目崩溃恢复(Recover)”，后者在主页打开遇到残留 `.bak` 时弹窗触发。
-- [ ] OCR/翻译结果只在用户采用时进入 Undo 栈。
-- [ ] 提供 OCR、翻译、清除、排版、导出对话框（单页/全本参数）、取消和恢复入口。
+- [ ] 空选显示页面工作流，单选显示文本、候选和完整排版样式，多选只显示可安全批量修改的交集属性。
+- [ ] Inspector 支持原文、译文、字体、字重、字距、字号、方向、对齐、行距、边距、文字色、描边色和描边宽度。
+- [ ] 候选列表放在 `Expander`；采用候选产生独立 Undo 命令。
+- [ ] 人工文本写入 `manualText`，后续 OCR/翻译批量采用默认跳过人工覆盖，除非用户显式确认替换。
+- [ ] 为加载、空、错误、取消、字体缺失、缺字、溢出和模型不可用提供稳定状态。
 
-### 响应与无障碍
+### Undo/Redo、Dirty 与保存
 
-- [ ] 覆盖 Light/Dark、5档宽度(含极窄<720px)、2档高度(含极限扁平<560px)、高 DPI、高对比度模式和关闭动效支持。
-- [ ] 定义加载、空、错误、取消、字体缺失、溢出和模型不可用状态。
-- [ ] 完成键盘焦点顺序、快捷键、Tooltip、可访问名称和 IME 行为。
+- [ ] 每个打开项目只有一个由 `EditorViewModel` 持有的 `QUndoStack`；命令记录 PageId，跨页 Undo 先导航再刷新投影。
+- [ ] 拖拽仅在 MouseRelease 提交一条命令；同一 Region/字段/编辑会话的文本在 500ms 内合并，FocusOut 或目标变化封口。
+- [ ] 清除结果完成 prepare 后才构造并 push 命令；`redo()`/`undo()` 只切换已存在的 Domain 引用，不做 I/O。
+- [ ] `Ctrl+S` 先提交已完成的编辑会话；`ComicProject::isDirty()` 是关闭拦截权威，保存成功且 revision 未变化时调用 `markCleanIfRevision(savedRevision)` 与 `undoStack.setClean()`。
+- [ ] OCR、翻译和排版结果只在用户采用时进 Undo；保存不清空命令历史，崩溃恢复不进入 Undo。
+
+### 错误恢复与响应式
+
+- [ ] 按补充规格实现 `RecoveryAction → UI 入口` 映射；Diagnostic 永不上屏，去重并节流同类错误。
+- [ ] 覆盖 Light/Dark、5 档宽度（含 <720 px）、2 档高度（含 <560 px）、高 DPI、高对比度和关闭动效。
+- [ ] 窄宽下 Inspector 转抽屉，扁平高度下命令区压缩但主任务入口仍可见；画布始终保留主要空间。
+- [ ] 完成快捷键、Tooltip、屏幕阅读器名称、IME 组合态、Esc 取消和危险操作确认。
 
 ## 测试与视觉验收
 
-- [ ] `observe` 初始回放、相等 State 抑制和预期状态序列。
-- [ ] 自动化测试使用 `QT_QPA_PLATFORM=offscreen` 验证 ViewModel 状态轮转，摒弃依赖物理坐标的测试。
-- [ ] 性能门控：500页项目、单页300 Region负载下，平移缩放 >30fps，切页响应 <300ms。
-- [ ] 页面切换、View 销毁和 generation 变化后的过期结果。
-- [ ] 缩略图迟到结果不绑定错误页面，失败时页面列表保持可用。
-- [ ] Scene/View/源图坐标往返与不同缩放级别命中。
-- [ ] Region 命令、文本合并和完整 Undo/Redo。
-- [ ] Light/Dark、正常/窄宽度和关键空/错误状态视觉检查。
-- [ ] 键盘、IME、Esc 取消和屏幕阅读器名称检查。
+- [ ] `observe` 初始回放、相等 State 抑制、一次性事件和预期状态序列。
+- [ ] 页面切换、View 销毁、项目关闭、同目标替换操作和两种 generation 的迟到结果。
+- [ ] 500 页模型保持惰性加载；可视行外不生成 QWidget，缩略图和活动页缓存保持在文档预算内。
+- [ ] 单页 300 Region 时平移缩放稳定 >30 fps；交互中的 `paint()` 不触发排版、文件 I/O 或 Domain 查询。
+- [ ] 热缓存切页目标 <300 ms；冷加载显示即时占位且 GUI 线程不阻塞。wall-clock 只在固定测试机作为发布门，不用于普通跨机器单元 CI。
+- [ ] Scene/View/源图坐标往返、5%/100%/1600% 命中、八方向手柄、键盘移动和批量选择。
+- [ ] 文本合并、IME、跨页 Undo、Clear prepare/redo/undo、保存竞争和 Dirty/clean-point。
+- [ ] 凭据状态不读取 Secret；每个 `RecoveryAction` 都有可执行 UI 路径。
+- [ ] 按 full-profile 视觉证据矩阵检查 Light/Dark、正常/窄/扁平窗口，以及加载、空、错误、溢出和模型缺失状态。
 
 ## 退出条件
 
-- 用户不依赖自动检测即可创建并完整编辑矩形 Region。
-- View 不直接访问 Repository、网络客户端、ONNX Session 或 Credential Manager。
-- 窄窗口及扁平窗口下页面、画布、Inspector 和主要操作仍可访问。
+- 用户不依赖自动检测即可创建并完整编辑矩形 Region、文本与排版样式。
+- View 不直接访问 Repository、网络客户端、ONNX Session、文件系统、QSettings 或 Credential Manager。
+- UI 预览与导出共享 `manga_rendering` 结果，关键版式和 overflow 判定一致。
+- 切页不污染当前视图，也不误取消用户启动的项目级后台任务。
+- 窄窗口和扁平窗口下页面、画布、Inspector 与主要操作仍可访问。
 
 ## 注意事项
 
 - 文本 UI 规范优先于草稿图片。
-- 不在 Widget 中复制 Domain 校验或 UseCase 编排。
-- 不为视觉常量恢复全局 Metrics/Theme 层，**P5 严禁新建私有数值体系**，线宽、动效时间一切参照规格文档或底层 API。
-
----
-
-## 设计规格参考
-
-### 开工前契约补丁
-
-- **撤销栈双层架构**：项目级 `QUndoStack` 归属 `EditorViewModel`。纯文本由原生栈处理，`FocusOut` 时提交 `EditTextCommand` 到全局栈。跨页 Undo 自动触发视图切页。
-- **应用级持久化**：新增 `application/ports/IApplicationSettingsStore` 与 `IRecentProjectStore`，用 `QSettings` 存入系统 AppData，与项目数据物理隔离。
-- **异步生命周期**：`EditorViewModel` 持有单页与全局 `OperationContext`。切页取消单页任务，关项目取消全量。后台回传节流遵循 P4 契约的进度发布频率（最多每 50ms 一次），不得另立 100ms 等私有数值。
-- **缩略图归属**：由 `ThumbnailWorker` 懒生成至 `assets/derived/<uuid>/thumb_256.jpg`，**不写 `project.json`**。首图供首页封面借用。
-- **Dirty 与保存接线**：对比 `undoStack->index()` 与 `m_savedUndoIndex` 判定 Dirty。`Ctrl+S` 调用 `project->markCleanIfRevision` 并对齐状态。
-- **错误映射规范**：Critical 弹 `ContentDialog`（如 `persistence.locked` 强制只读）；Warning 弹 `InfoBar`；Transient 弹 `Toast`。禁止 Diagnostic 上 UI，同一错误拦截并发轰炸。
-- **P3 导入空项目漏洞补丁 (应用层实施)**：因 P3 计划已封板，其遗留的“导入取消产生空项目”漏洞在应用层调度时修复：`ImportImagesUseCase` 必须在临时系统沙箱 (`.temp_import/`) 执行文件流复制与校验，仅全部就绪且落盘 `project.json` 成功后才重命名/落地，取消或零有效图时静默清除沙箱。
-- **外壳导航规则补丁**：主导航强制保留 4 项（首页/编辑器/批量/术语库）。V0.1 未实现的批量和术语库点击呈现“🚧 建设中”的规范空白占位页。
-
-### FluentQt 控件选型与实测映射
-
-基于 `FluentQt::FluentQt` 实际代码库（`build/local-debug/_deps/fluentqt-src`），Phase 5 编辑器各区域的控件映射与命名空间如下：
-- **顶层外壳与全局导航**：直接复用 ForgeAI 项目已有的 `NavigationWindow`。它继承自 `fluent::windowing::Window` (支持 Mica/Acrylic)，并在内部正确编排了 `fluent::navigation::NavigationView` 作为外壳容器：
-  - **组件化面板**：将自定义的 `NavigationPanel` 设为 `NavigationView` 的 `mainChromeWidget`，承载汉堡按钮、主导航树与 Footer，并由 `NavigationWindow` 自动管理响应式折叠断点 (`DisplayMode`) 与侧滑展开状态。
-  - **路由控制中心**：集成 `NavigationController` 管理栈式导航 (`NavigationHistory`)，保障渲染事务原子性。
-  - **模块化注册**：实现 `INavigationRegistrar`，允许各特性模块通过 `NavigationItemDescriptor` (包含层级路由、图标与动画等) 解耦注入导航树与多 Surface 面板。
-- **顶部命令条**：`fluent::menus_toolbars::CommandBar`，浮动预览切换使用 `fluent::navigation::SelectorBar`。
-- **侧栏列表**：`fluent::collections::ListView`。加载骨架屏在 Delegate 中使用 `fluent::status_info::ShimmerPainter` 绘制（严禁为每行实例化 QWidget）。
-- **属性检查器 (Inspector)**：`fluent::layout::Card` / `Expander` / `Field`。输入类使用 `TextEdit`、`NumberBox`、`ComboBox`、`ColorPicker`、`ToggleSwitch`。
-- **反馈对话框**：`InfoBar` (行内警告)、`Toast` (轻量通知)、`ContentDialog` (模态弹窗)。
-
-### 应用程序与主题初始化流
-
-在 `src/app/main.cpp` 中严格顺序：
-1. `fluent::prepareHighDpiApplication();` (在 QApplication 前配置 High-DPI 行为)
-2. `fluent::initializeResources();`
-3. 设置全局字体 `app.setFont(Typography::fontStyle(Typography::FontRole::Body).toQFont());`
-4. 创建 `Window` 并 `show()`。
-
-### EditorState 与 MVVM
-
-- **State 结构**：维护单向数据流纯数据的值类型快照 `EditorState`（包含 `CanvasTool`、`PreviewMode`、Zoom、选中的 `RegionId` 集合等）。
-- **防腐 Generation**：切页时 `stateGeneration++`。异步结果回传 GUI 时必须核对 `requestGeneration == currentState.stateGeneration`。
-- **对比模式 (Side-by-Side) 行为**：双视图同步滚动且只读。禁用单画布擦拭与任何工具操作。
-
-### QGraphicsScene 漫画画布规范
-
-- **Z-Order 体系**：Background(0) -> PageImage(10) -> CleaningLayer(20) -> TextLayer(30) -> RegionBorder(100) -> SelectionHandles(110) -> CreationOverlay(200)。
-- **手柄与零拷贝绘制**：高频热路径（如 `SelectionHandleItem::paint`）必须使用零拷贝引用 `const auto& colors = themeColorsRef();`，严禁调用按值返回巨大结构体的 `themeColors()`。手柄尺寸基于 `levelOfDetailFromTransform` 反向缩放以保持固定屏幕像素大小。
-- **自定义视口控件**：继承 `fluent::FluentElement` 混入类并覆盖无参的 `onThemeUpdated()`。局部冻结主题通过设置 `fluentThemeOverride` 动态属性。
-
-### Undo/Redo 合并策略
-
-- **新建/缩放/排版样式**：操作释放时提交单条命令。
-- **删除选区**：支持批量操作，单次提交。
-- **移动选区**：连续拖动在 `mouseRelease` 处生成单条命令（或在 300ms 窗口内合并）。
-- **文本输入**：针对同一 Region 同一字段，失去焦点或停顿时合并为单条最终的 `EditTextCommand`。
-- **AI 结果采用**：产生独立的撤销原子命令。
+- 不在 Widget 中复制 Domain 校验、UseCase 编排或排版算法。
+- 不暴露未实现的批量、术语库等占位导航；功能进入对应版本后再加入信息架构。
+- 本阶段不实现 Split Curtain；未来若引入，应作为独立交互提案重新验收可访问性和渲染成本。

@@ -11,6 +11,7 @@
 - Save through a temporary sibling file and atomic replacement where the platform supports it. Never leave a valid project truncated after failure.
 - Preserve unknown forward-compatible fields only when the chosen format contract requires it.
 - Cache data is disposable and must not be the sole copy of user edits.
+- Thumbnail adapters use the fixed versioned derived path selected by the application contract, commit atomically, and never mark the project dirty or write a thumbnail reference into `project.json`.
 
 ## Import and export
 

@@ -1,6 +1,7 @@
 # P2：Application 契约与 UseCase
 
 > 状态：Complete
+> P5 前置修订：Pending（generation、缩略图、凭据状态与 Clear Undo）
 > 前置阶段：P1
 > 输出：可由 Fake Port 完整驱动的 V0.1 业务流程
 
@@ -56,7 +57,7 @@
 - P3：文件夹展开、文件可读性、格式、解码、尺寸、EXIF/ICC、资产命名冲突和部分导入失败。
 - P3/P4：文件系统、ONNX、HTTP 和第三方库异常在 Adapter 内映射为 `ApplicationError`。
 - P4：确定与不确定进度、处理检查点取消、翻译超时、限流退避和非幂等重试边界。
-- P5：`QFutureWatcher` GUI 线程投递、页面切换和项目关闭时递增 generation、Apply 命令进入 Undo/Redo。
+- P5：`QFutureWatcher` GUI 线程投递、视图/项目会话 generation 分流、Clear prepare 后的同步 Apply 命令进入 Undo/Redo。
 - P6：关闭项目、快速切页和 View 销毁后的迟到结果，以及人工译文、几何和排版冲突的端到端验收。
 - P6：导出文件名冲突追加序号且绝不覆盖既有文件。
 
@@ -181,16 +182,17 @@ struct OperationContext {
   - OCR：每个 Region 处理前后。
   - 翻译：发送请求前；等待期间中止底层请求（如 `QNetworkReply::abort()`）。
   - 导入/导出：每个文件或页面处理前。
-- 关闭页面、项目或应用时执行双保险：`request_stop()` + generation 递增。
+- 关闭项目或应用时执行双保险：`request_stop()` + 项目会话 generation 递增。切换页面只取消并失效当前视图的图像、预览等短任务；用户明确启动的 OCR、翻译、清除和批处理归项目会话所有，不因离开页面而取消。
 - 取消结果为 `ErrorCategory::Cancelled`，不提交部分结果；翻译等已计费调用在 UI 说明无法保证服务端停止执行或计费。
 
 #### operationId 与 generation 的分工
 
 - `OperationId` 是 Application 层自有强类型，基于 `domain::Uuid` 构建；它不是 Domain 实体身份，不进入 `project.json`（`ProjectId`/`PageId`/`RegionId` 才是 Domain 持久化身份）。
 - `operationId`（UUID）用于日志、Trace 与流水线关联；一个工作流（OCR → 翻译 → 排版）共用同一 `operationId`。
-- `generation`（quint64）只负责过期判断，由 ViewModel 维护：`beginRequest()` 递增并返回当前值、`isRequestCurrent()` 校验、`invalidateRequests()` 使全部在途结果过期。
-- 两者不相等、不互换：切换页面只递增 generation，不产生新 `operationId`。
-- 触发 invalidate 的时机：切换页面、切换或关闭项目、应用退出、用户对同一目标发起新操作替代旧操作。
+- `generation`（quint64）只负责所属生命周期范围内的过期判断，不是一个覆盖所有操作的全局时钟。P5 维护两个范围：`viewGeneration` 属当前页面视图，`projectSessionGeneration` 属打开的项目会话。
+- 页面图像、缩略图绑定和预览请求捕获 `viewGeneration`；切页使这类 UI 结果失效。OCR、翻译、清除、排版和导出捕获 `projectSessionGeneration`，切页后可继续执行并按原 PageId 采用。
+- `operationId` 负责一次工作流的追踪与显式取消；`generation` 负责生命周期隔离。两者不相等、不互换。
+- 触发 invalidate 的时机：切页只递增 `viewGeneration`；切换/关闭项目或应用退出递增 `projectSessionGeneration`；同一目标的新操作替代旧操作时显式取消旧 `operationId`，不误伤其他页面任务。
 
 #### 提交结果前的五项检查
 
@@ -198,11 +200,11 @@ UseCase 在提交异步结果前执行，任一失败即丢弃结果并按过期
 
 1. `projectId` 一致。
 2. `pageId` 一致。
-3. generation 一致。
+3. 请求所属 generation 一致：视图结果比较 `viewGeneration`，项目后台结果比较 `projectSessionGeneration`。
 4. 输入版本一致：涉及 Region 的 `contentRevision` 未变化（该值由 P1 序列化器持久化，保存重开后仍可作为输入版本依据）。
 5. 人工优先：`manualText` 有值时后台结果不得覆盖。
 
-被拒绝的结果不写 Domain、不进 Undo 历史、不触发 `stateChanged`。
+被拒绝的结果不写 Domain、不进 Undo 历史。视图过期结果静默释放；项目后台结果仍可更新任务状态，但不得错误绑定到当前页面。
 
 #### 进度
 
@@ -460,7 +462,8 @@ text/
   ApplyTranslationResultUseCase
 
 apply/
-  ApplyClearResultUseCase
+  PrepareClearResultUseCase
+  ApplyPreparedClearChangeUseCase
   ApplyLayoutResultUseCase
 
 processing/
@@ -471,20 +474,39 @@ processing/
 
 export/
   ExportPagesUseCase
+
+thumbnail/
+  LoadOrGenerateThumbnailUseCase
+
+settings/
+  QueryProviderCredentialStatusUseCase
+  ConfigureProviderCredentialUseCase
+  ClearProviderCredentialUseCase
 ```
 
 - 不为小函数造 UseCase，也不把多阶段流水线塞进 ViewModel。
 - 后台结果采用（`ApplyOcrResultUseCase` / `ApplyTranslationResultUseCase`）是独立用户行为，与产生 suggestion 的处理 UseCase 分离。
 
-### P4 契约补丁
+### P4/P5 契约补丁
 
-P4 实现前对 P2 契约的小范围扩展；这些类型仍是 Application 自有类型，不引入 ONNX、HTTP 或 UI 类型。详细行为语义见 P4 设计规格参考。
+P4/P5 实现前对 P2 契约的小范围扩展；这些类型仍是 Application 自有类型，不引入 ONNX、HTTP 或 UI 类型。详细行为语义见 P4、P5 设计规格参考。
 
-- `ICredentialStore`（`application/ports`）：同步窄端口，`SecretBytes` 为 move-only 零化容器，`readApiKey`/`writeApiKey`/`deleteApiKey`。
+- `ICredentialStore`（`application/ports`）：同步窄端口，`SecretBytes` 为 move-only 零化容器；提供 `readApiKey`/`writeApiKey`/`deleteApiKey`，并提供不返回明文的 `hasApiKey(providerId)`。UI 只能调用凭据状态、配置和清除 UseCase，不得直接读取 Secret。
 - `IDerivedAssetStore`（`application/ports`）：仅负责读取和原子提交页面派生图层；请求携带 `ProjectId + projectRoot + PageId + layerKind + QImage`，返回项目根相对的内容寻址路径。
-- `ApplyClearResultUseCase`：合成 patch 到全页清除层 → `IDerivedAssetStore` 原子提交 → `ComicProject::applyClearResultOnPage` 原子更新 layer 引用与 `isCleared`；五项采用检查在提交前执行。
+- `IThumbnailStore`（`application/ports`）：读取和原子提交固定版本的页面缩略图，不接受调用方自定义路径。`LoadOrGenerateThumbnailUseCase` 协调 `IPageImageLoader`、最长边 256 px 的等比缩放和该 Store；失败不修改 Domain。
+- `IApplicationSettingsStore` 与 `IRecentProjectStore`：保存非项目级应用设置和最近项目元数据；Data 层可用 `QSettings` 实现，绝不存储 API Key。
+- `PrepareClearResultUseCase`：执行采用检查、合成 patch 并通过 `IDerivedAssetStore` 原子提交不可变内容，返回只含 before/after 引用与 Region 状态的 `PreparedClearChange`，不修改 Domain。
+- `ApplyPreparedClearChangeUseCase`：仅同步切换已存在的 layer 引用与 Region `isCleared`；供 GUI 线程上的 Undo Command 的 `redo()`/`undo()` 调用，不执行 I/O。
 - `ApplyLayoutResultUseCase`：通过 `applyPageRegionEdits` 原子写入 `resolvedLayout`。
 - Domain 窄操作 `ComicProject::applyClearResultOnPage(PageId, RegionId, relativeLayerPath)`：一次校验、一次 markDirty，不向应用层暴露 `ComicPage*`。
+
+#### P5 开工前必须落地的契约修订
+
+- [ ] 把 generation 拆成视图范围与项目会话范围，并更新所有请求快照、采用检查和测试。
+- [ ] 增加 `IThumbnailStore`、`LoadOrGenerateThumbnailUseCase` 及固定路径语义。
+- [ ] 增加不暴露 Secret 的凭据状态/配置/清除 UseCase。
+- [ ] 把 Clear 采用改为 `PrepareClearResultUseCase` + 同步 `ApplyPreparedClearChangeUseCase` 两阶段协议。
+- [ ] 增加应用设置与最近项目窄 Port，避免 ViewModel 直接使用 `QSettings`。
 
 ### Workflow 编排原则
 
@@ -507,18 +529,25 @@ Domain 快照 → serialize → 校验 → 同文件系统临时文件 → 原�
 
 ### 结果采用与 Undo 边界
 
-后台结果不直接修改 Domain：
+后台结果不直接修改 Domain。普通 suggestion 由命令同步采用；涉及文件 I/O 的清除结果先在后台准备不可变资产，再由 GUI 线程推入命令：
 
 ```text
 OCR/翻译完成 → ViewModel 记录 suggestion（Inspector 展示）
             → 用户 Apply → ApplyOcrResultCommand / ApplyTranslationCommand
             → UndoStack
+
+清除完成 → PrepareClearResultUseCase 原子提交不可变资产，不改 Domain
+        → GUI watcher 收到 PreparedClearChange
+        → push ClearResultCommand
+        → redo/undo 仅同步切换 Domain 引用，不做 I/O
 ```
 
 - 进入 Undo 的用户可见修改：Region 创建/删除/移动/缩放、原文编辑、译文编辑、候选采用、OCR/翻译结果采用、字体/字号/排版、清除设置。
 - 拖动合并：MousePress 记录旧几何，MouseMove 只做 UI 预览，MouseRelease 生成一个命令。
 - 文本输入合并：同一 Region 同一字段，约 500ms 时间窗口内合并为一个命令。
-- 保存不产生命令，也不清空历史。
+- 保存不产生命令，也不清空历史。保存成功且 `savedRevision` 仍等于当前项目 revision 时，同时调用 `markCleanIfRevision(savedRevision)` 与 `undoStack.setClean()`。
+- `ComicProject::revision/isDirty()` 是持久化 Dirty 的权威来源；`QUndoStack::isClean()` 只描述命令历史位置，UI 关闭拦截以 Domain Dirty 为准，不用手工保存 `savedUndoIndex`。
+- Clear Command 引用的不可变派生资产在命令仍位于 UndoStack 时必须保留；V0.1 在项目打开期间不回收这些文件。项目关闭后的孤儿清理只能依据当前 Domain 引用和已释放的命令历史做可达性判断。
 
 ### 项目、导入与导出契约
 
@@ -554,7 +583,7 @@ application/
 冻结的五个决定：
 
 1. Port 异步契约统一 `QFuture<std::expected<T, ApplicationError>>`。
-2. 取消 = `std::stop_token` + generation 双保险。
-3. `OperationId`（UUID）负责追踪，`generation`（quint64）负责过期判断。
+2. 取消 = `std::stop_token` + 分范围 generation 双保险。
+3. `OperationId`（UUID）负责追踪；`viewGeneration` 与 `projectSessionGeneration` 分别负责视图和项目会话过期判断。
 4. Port 使用自有 DTO，第三方类型不穿透；`QImage` 为唯一图像载体。
 5. 后台结果不直接写 Domain，用户 Apply 后才进入 Undo 历史。

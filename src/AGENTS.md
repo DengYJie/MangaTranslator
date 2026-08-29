@@ -8,6 +8,7 @@ Keep code in the layer that owns the responsibility:
 - `core`: logging, settings, small platform-neutral utilities.
 - `domain`: entities, value objects, invariants, and repository abstractions.
 - `application`: ports and task-oriented UseCases.
+- `rendering`: deterministic text measurement and rasterization shared by UI, processing adapters, and export; Qt Core/Gui only, with no I/O or Widgets.
 - `services`: local processing implementations.
 - `data`: persistence, serialization, import, and export adapters.
 - `network`: remote clients and transport mapping.

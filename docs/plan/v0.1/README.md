@@ -30,7 +30,7 @@ V0.1 不包含 CBZ/ZIP、PDF、自动文字检测、OpenCV/LaMa Inpaint、跨页
 | P2 | [Application 契约与 UseCase](phase-2-application.md) | 可由 Fake 驱动的业务边界 | P1 |
 | P3 | [数据持久化与图片导入](phase-3-data-import.md) | 可恢复项目和图片来源 | P2 |
 | P4 | [OCR、翻译、清除、排版与导出](phase-4-processing.md) | 可替换处理与导出适配器 | P2 |
-| P5 | [UI、MVVM 与漫画画布](phase-5-ui-editor.md) | 可人工编辑的工作台 | P2 |
+| P5 | [UI、MVVM 与漫画画布](phase-5-ui-editor.md) | 可人工编辑的工作台 | P1/P2 契约修订、P3 图片/派生路径、P4 共享渲染/处理 Port |
 | P6 | [纵向切片集成](phase-6-integration.md) | 端到端真实工作流 | P3、P4、P5 |
 | P7 | [稳定性与发布验收](phase-7-release.md) | V0.1 发布候选 | P6 |
 
@@ -40,7 +40,7 @@ P0 → P1 → P2 ┬→ P3 ─┐
              └→ P5 ─┘
 ```
 
-P3、P4、P5 可以在 P2 契约冻结后并行，但不得各自复制领域规则或绕过 UseCase。
+P3、P4、P5 的主体可以在 P2 契约冻结后并行，但 P5 的画布渲染、缩略图、凭据状态和 Clear Undo 必须等待表中列出的窄契约落地；外壳、静态布局和 ViewModel 基础不必等待完整 P4 Adapter。各阶段不得复制领域规则或绕过 UseCase。
 
 ## 阶段状态规则
 

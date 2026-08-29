@@ -27,6 +27,8 @@
 5. 具体页面文档
 6. 页面引用的自定义控件文档
 
+实现 V0.1 编辑器时，还必须阅读 [`phase-5-ui-editor-supplement.md`](../plan/v0.1/phase-5-ui-editor-supplement.md)；它冻结 Qt/FluentQt 的依赖、线程、缓存、Undo 和 generation 契约，本目录继续作为用户可观察行为与视觉语义的权威来源。
+
 ## 4. 页面文档
 
 | 页面 | 文件 | 核心任务 |

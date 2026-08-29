@@ -4,6 +4,8 @@
 
 编辑器是 MangaTranslator 的核心工作区。用户在同一视觉上下文中选择页面、观察漫画、修正文本区域、执行 AI 流水线并完成排版。界面必须优先保护画布面积、输入焦点和人工修改。
 
+Qt/FluentQt 实现边界、渲染缓存、generation、Undo/Dirty、缩略图和凭据契约见 [P5 编辑器补充规格](../../plan/v0.1/phase-5-ui-editor-supplement.md)；本文仍是用户可观察行为与信息架构的权威来源。
+
 WinUI 3 参考控件：
 
 - `CommandBar`、`AppBarButton`、`AppBarToggleButton`、`AppBarSeparator`、`SplitButton`。
@@ -135,7 +137,7 @@ Secondary Commands / Overflow：
 - 无当前页：页面相关命令禁用。
 - 当前工具手势进行中：破坏当前手势的导航/处理命令禁用，Escape 可取消。
 - 当前页某阶段运行中：该阶段禁止重复提交；相互独立命令是否可用由数据锁定范围决定。
-- 有文本输入焦点：Undo/Redo 首先作用于文本编辑器；只有焦点不在可编辑文本时才作用于项目命令栈。
+- 有文本输入焦点：`Ctrl+Z/Ctrl+Y` 仍路由到项目级 `QUndoStack`；文本控件关闭独立 Undo 历史，已 commit 的文本变化通过 `EditTextCommand` 合并，IME preedit 不进入命令栈。采用单一历史是为了避免控件值与 Domain、Dirty、画布预览和导出快照分叉，完整理由见 [P5 编辑器补充规格](../../plan/v0.1/phase-5-ui-editor-supplement.md)。
 
 ## 6. Canvas Workspace
 
@@ -209,6 +211,7 @@ Inspector 只编辑当前选择的一个 Region。多选时显示批量可安全
 - 字号：`NumberBox` + `自动适配` ToggleSwitch。
 - 字重：`ComboBox`。
 - 文本色与描边色：Button 打开颜色选择 `Flyout`；该 Flyout 显示当前颜色、推荐色、最近使用颜色和可访问的自定义颜色输入。
+- 描边宽度：`NumberBox`，单位为源图像像素，范围 0–32。
 - 对齐：三项互斥 Toggle。
 - 方向：横排/竖排，使用两项 `RadioButtons` 或互斥 Toggle。
 - 行距、字距、内边距：`NumberBox` 或 `Slider + NumberBox`，保证精确输入。
@@ -231,15 +234,7 @@ V0.1 不显示旋转和多边形编辑控件。后续版本加入这些能力时
 
 ### 7.5 Cleaning section
 
-默认收起。内容：
-
-- 清除方式 `ComboBox`：自动、纯色填充、OpenCV Inpaint、高级模型。
-- Mask 扩张与羽化 `NumberBox`。
-- `预览 Mask` ToggleSwitch。
-- `重新生成清理层` Button。
-- `恢复原文` Button。
-
-模型缺失时在该 Expander 内容顶部显示局部 `InfoBar`，提供 `打开模型管理`。
+默认收起。V0.1 只提供与当前 Domain/Adapter 一致的显式纯色清除：颜色、透明度、`应用清除` 和 `恢复原文`。自动取色、Mask 扩张/羽化、OpenCV Inpaint 与高级模型没有已冻结契约，不显示禁用占位；在对应版本实现后再加入。
 
 ## 8. 选择状态
 
@@ -285,7 +280,8 @@ Inspector 显示当前页摘要：Region 数、OCR/翻译完成数、问题数�
 
 ### 9.3 过期和冲突
 
-- 切换页面不自动取消可后台完成的页面任务。
+- 切换页面只失效当前页图像/预览的 `viewGeneration`，不自动取消可后台完成的页面任务。
+- OCR、翻译、清除、排版与导出绑定 `projectSessionGeneration + operationId + ProjectId/PageId/RegionId`；只有关闭/切换项目、用户取消或同目标替换才使它们过期。
 - 删除 Region、关闭项目或重新运行同阶段会使旧请求过期。
 - 旧结果被拒绝时不弹错误 Toast；可在诊断日志记录。
 - 若用户在翻译运行期间修改原文，结果返回后显示 `有新的 AI 译文可比较`，不能覆盖当前人工稿。
@@ -360,5 +356,5 @@ Inspector 显示当前页摘要：Region 数、OCR/翻译完成数、问题数�
 - OCR/翻译运行时切页、关闭项目、删除 Region、编辑原文。
 - 页面列表与 Inspector 各自折叠/Overlay，焦点不丢失。
 - 720、1008、1200、1440 px 和低高度窗口。
-- 25%–800% 缩放、高 DPI、触控板和键盘完整操作。
+- 5%–1600% 缩放、高 DPI、触控板和键盘完整操作。
 - Light/Dark/高对比度/减少动画和 200% 文本缩放。

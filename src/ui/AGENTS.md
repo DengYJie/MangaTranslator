@@ -11,6 +11,9 @@ Before changing UI code, read the design documents in this order:
 5. The relevant `docs/ui/pages/*.md` page specification.
 6. Every `docs/ui/components/*.md` specification referenced by that page or changed component.
 
+For the V0.1 editor, also read `docs/plan/v0.1/phase-5-ui-editor-supplement.md` for shared rendering,
+generation, cache, Undo/Dirty, thumbnail, and credential boundaries.
+
 Authority is divided by concern: this `AGENTS.md` governs architecture, state flow, threading, and implementation
 constraints; `foundations.md` governs shared visual and accessibility requirements; page documents govern page layout
 and responsive behavior; component documents govern reusable component contracts. A more specific page/component
@@ -52,8 +55,10 @@ Treat MangaTranslator as a `greenfield` file-oriented workbench:
 
 - `NavigationView` for fixed top-level product areas.
 - `TabView` only for user-managed peer documents/work surfaces.
-- `SplitView` for persistent resizable project, canvas, and inspector panes.
+- Use a project-local resizable layout for the page pane, canvas, and Inspector. Do not assume a FluentQt `SplitView` API exists; verify any candidate public header before selecting it.
 - FluentQt command, collection, progress, dialog, flyout, toast, and info components according to their semantics.
+
+Only register destinations implemented in the current version. Do not expose placeholder navigation for future batch or glossary surfaces.
 
 Before using a component, verify its public C++ header/API and its Gallery sample. Link `FluentQt::FluentQt`; do not include source-private headers.
 
@@ -83,4 +88,4 @@ Prefer FluentQt controls. A raw Qt widget is allowed only when FluentQt lacks th
 
 - All widgets, `QPixmap`, scenes, and ViewModels stay on the GUI thread.
 - Render State quickly; never run disk, network, OCR, inference, inpaint, or full-page layout work in event handlers or `paintEvent`.
-- Bind async callbacks to receiver lifetime. Closing a screen cancels or detaches its work and prevents later State publication.
+- Bind async callbacks to receiver lifetime. Closing a screen cancels or detaches view-owned image/preview work and prevents later view publication; project-owned OCR, translation, clear, layout, export, and thumbnail operations continue until explicitly cancelled or the project session closes.

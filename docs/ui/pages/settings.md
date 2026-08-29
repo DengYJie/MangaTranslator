@@ -124,6 +124,7 @@ WinUI 3 参考控件：`NavigationView`、`TitleBar`、`ScrollView`、`ComboBox`
 密钥行为：
 
 - 已保存时只显示 `已配置` 或固定掩码，不把真实密钥填回 UI。
+- 配置状态通过 `QueryProviderCredentialStatusUseCase` 查询，底层只调用 `hasApiKey`，不得读取后丢弃明文；替换和删除分别走 Configure/Clear UseCase。
 - `更新密钥` 后进入替换输入；取消不清除原密钥。
 - 提供 `移除密钥` 危险次要动作，使用 `ContentDialog` 确认影响。
 - 复制、选择全部和可访问 Value 不得暴露真实密钥。

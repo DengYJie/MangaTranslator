@@ -20,13 +20,15 @@ The UI architecture follows the current ForgeAI style: per-screen State, `BaseVi
 
 ## Architecture and dependency direction
 
-Expected top-level source areas are `app`, `core`, `domain`, `application`, `services`, `data`, `network`, and `ui`.
+Expected top-level source areas are `app`, `core`, `domain`, `application`, `rendering`, `services`, `data`, `network`, and `ui`.
 
 Dependencies point inward:
 
 ```text
-ui -> application -> domain
-services/data/network -> application ports + domain
+ui -> application + rendering
+services -> application ports + rendering + domain
+data/network -> application ports + domain
+rendering -> domain
 app -> all layers (construction only)
 core -> no feature layer
 domain -> standard library
@@ -34,6 +36,7 @@ domain -> standard library
 
 - `domain` contains business concepts and invariants.
 - `application/ports` defines external capabilities; `application/usecase` coordinates them.
+- `rendering` contains deterministic Qt Core/Gui text measurement and rasterization shared by UI preview, layout adapters, and export. It has no Widgets, FluentQt, I/O, Port, or application dependencies.
 - `services`, `data`, and `network` implement ports.
 - `ui` renders state and reports user intent.
 - `app/ApplicationContext` is the only composition root.

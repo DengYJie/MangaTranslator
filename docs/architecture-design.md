@@ -48,7 +48,8 @@ src/
 ├── core/         # 日志、设置、ID、基础工具
 ├── domain/       # 漫画、页面、文本区域、翻译、排版等领域模型
 ├── application/  # ports + usecase
-├── services/     # 检测、OCR、清除、排版、渲染等本地实现
+├── rendering/    # Qt Core/Gui 排版测量与栅格化共享核心，不含 I/O 或 Widgets
+├── services/     # 检测、OCR、清除、排版等本地实现
 ├── data/         # 项目存储、SQLite、导入、导出、缓存
 ├── network/      # LLM/翻译 Provider 与 HTTP 适配器
 └── ui/           # ViewModel、State、页面、导航、Fluent 界面、漫画画布
@@ -57,16 +58,19 @@ src/
 依赖方向：
 
 ```text
-ui ----------------> application ----------------> domain
-                         ^                            ^
-                         |                            |
-services ----------------+----------------------------+
-data --------------------+----------------------------+
-network -----------------+----------------------------+
+ui ----------> application ----------> domain
+ |                                      ^
+ +-----------> rendering ---------------+
+                    ^                    ^
+                    |                    |
+services -----------+----> application --+
+data/network ------------> application --+
 
 app/ApplicationContext 构造并连接所有层
 core 不依赖任何业务层
 ```
+
+`rendering` 是唯一允许被 UI、Services 和 Exporter 共同依赖的功能共享层。它只依赖 Domain 与 Qt Core/Gui，负责确定性的文字测量、glyph 定位和源图像像素坐标下的栅格化；不得访问项目目录、Port、ViewModel、QWidget、FluentQt 或具体 Adapter。排版 Adapter、画布预览和导出必须复用该层，不能分别实现换行与竖排规则。
 
 ### 3.1 Domain
 
@@ -77,7 +81,7 @@ Domain 描述系统中的业务事实和约束，不感知 QWidget、网络、�
 - `ComicProject`：项目元数据、页面顺序、语言、阅读方向和处理配置。
 - `ComicPage`：源页面、页面身份、区域集合和非破坏性编辑数据。
 - `TextRegion`：几何、文字行、Mask、原文、译文、置信度和方向。V0.1 只使用源图像像素坐标下的轴对齐矩形；类型系统与 Schema 为后续多边形预留扩展点。
-- `TextLayout`：字体、字号、方向、对齐、行距、边距和排版边界。
+- `TextLayout`：字体、字重、字号、字距、颜色、描边、方向、对齐、行距、边距和排版边界。
 - `TranslationEntry`：原文、译文、候选译文、人工修改和来源信息。
 - `GlossaryItem`：源术语、目标译法、类别、持久归属、匹配策略和启用状态。
 - `EffectiveGlossaryItem`：由全局与当前项目术语解析出的只读结果，包含最终采用译法、真实来源和覆盖/冲突状态；它不是第三份持久数据。
@@ -110,7 +114,7 @@ Application 表达“系统要做什么”。
 
 UseCase 只依赖 Domain 和 Port，不知道具体使用哪种 OCR、LLM、数据库或 Widget。
 
-Port 契约统一形态：异步操作返回 `QFuture<std::expected<T, ApplicationError>>`，取消通过 `OperationContext` 携带标准 `std::stop_token`，进度通过 `QFuture/QPromise` 进度通道投递；Port 接口不继承 `QObject`、不定义 signal，`QObject` 与网络栈只出现在适配器内部。`OperationId`（UUID v4）用于日志与流水线追踪，`generation`（quint64）只用于过期判断。Application 目录按 `error/`、`operation/`、`dto/`、`ports/`、`mapping/`、`usecase/`、`workflow/` 组织；DTO 与 Domain 的映射放在 `mapping/`，第三方类型不穿越 Port。
+Port 契约统一形态：异步操作返回 `QFuture<std::expected<T, ApplicationError>>`，取消通过 `OperationContext` 携带标准 `std::stop_token`，进度通过 `QFuture/QPromise` 进度通道投递；Port 接口不继承 `QObject`、不定义 signal，`QObject` 与网络栈只出现在适配器内部。`OperationId`（UUID v4）用于日志与流水线追踪；`viewGeneration` 隔离当前页面视图，`projectSessionGeneration` 隔离打开项目会话。Application 目录按 `error/`、`operation/`、`dto/`、`ports/`、`mapping/`、`usecase/`、`workflow/` 组织；DTO 与 Domain 的映射放在 `mapping/`，第三方类型不穿越 Port。
 
 术语数据遵循两层持久归属：全局术语保存在用户目录 SQLite，项目术语随 `ComicProject` 保存。术语键在 Unicode NFKC、去首尾空白和大小写折叠后，由源语言、目标语言与规范化源词共同确定。项目术语与启用的全局术语匹配同一键时，项目术语优先。解析 UseCase 必须返回可追踪来源的 `EffectiveGlossaryItem`，检测同一归属内的歧义，并保证 UI 预览与翻译请求使用同一份解析结果。无当前项目时只能解析和修改全局术语。
 
@@ -118,7 +122,7 @@ Port 契约统一形态：异步操作返回 `QFuture<std::expected<T, Applicati
 
 ### 3.3 Adapters
 
-- `services` 实现本地计算 Port，包括 ONNX 检测与 OCR、清除、排版和最终渲染。V0.1 只接入一个 Manga OCR ONNX 实现与基础纯色清除；OpenCV 和 LaMa 按路线图后移。
+- `services` 实现本地计算 Port，包括 ONNX 检测与 OCR、清除和排版 Adapter；文字测量与最终栅格化委托给共享 `rendering` 层。V0.1 只接入一个 Manga OCR ONNX 实现与基础纯色清除；OpenCV 和 LaMa 按路线图后移。
 - `data` 实现目录型项目仓储、用户级术语 SQLite、V0.3 项目任务/TM SQLite，以及按版本开放的图片文件夹、CBZ、PDF 等导入器。
 - `network` 在 V0.1 只实现通用 OpenAI-compatible Chat Completions 适配器；Provider 专属 SDK 和其他协议适配器属于后续能力。
 
@@ -254,7 +258,7 @@ V0.3 的跨页上下文仍以单页为提交和输出单位：当前页完整 Re
 
 按版本分三级实现：
 
-1. V0.1：纯色或近似纯色背景填充。
+1. V0.1：用户显式选择颜色与透明度的纯色背景填充，不猜测近似主色。
 2. V0.2：使用 OpenCV Telea/Navier-Stokes 处理普通复杂背景。
 3. V0.3：使用固定的漫画 LaMa ONNX 候选处理高级复杂背景，只交付 CPU 推理，并保留 OpenCV 和人工清除层回退。
 
@@ -262,7 +266,7 @@ V0.3 的跨页上下文仍以单页为提交和输出单位：当前页完整 Re
 
 ### 6.5 排版与渲染
 
-`ITextLayouter` 根据文字、可用区域、方向、字体和边距产生 `TextLayout`。自动字号可通过二分搜索寻找不溢出的最大字号。
+`ITextLayouter` 根据文字、可用区域、方向、字体和边距产生 resolved `TextLayout`。`manga_rendering` 中的 `TextLayoutEngine` 是测量与绘制的唯一实现；`QtTextLayouter`、画布和 Exporter 都调用它。自动字号通过二分搜索寻找不溢出的最大字号。
 
 页面采用非破坏性图层：
 
@@ -326,7 +330,9 @@ GUI Thread 只负责 Widget、ViewModel、Scene、`QPixmap` 和轻量 State 渲�
 - ONNX 检测和 OCR。
 - 网络翻译。
 - Inpainting。
-- 全页排版、渲染和导出。
+- 全页排版、图层栅格化和导出。
+
+画布 `paint()` 只合成已准备好的 `QPixmap` 或轻量 glyph 缓存；不得在绘制热路径中执行重新排版。`QImage` 可在后台构建，`QPixmap`、Widget、Scene 和 ViewModel 只能在 GUI Thread 创建或修改。
 
 V0.1 采用有界 `QThreadPool + QRunnable` 任务执行器，配合标准 `std::stop_token` 取消令牌、`QFuture/QPromise` 进度通道和请求 generation。`QFuture/QPromise` 属 QtCore，不引入 `QtConcurrent`；禁止每页创建一个无管理线程。
 

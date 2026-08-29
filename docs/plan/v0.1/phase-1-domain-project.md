@@ -1,6 +1,7 @@
 # P1：Domain 与项目格式
 
 > 状态：Complete
+> P5 前置修订：Pending（排版样式与 schema v2）
 > 前置阶段：P0
 > 输出：可独立测试的领域模型、业务不变量和 V0.1 项目 Schema
 
@@ -33,6 +34,12 @@
 - [x] 定义 Dirty、人工修改来源和异步输入版本字段。
 - [x] 定义未知新版本拒绝、结构校验和语义校验错误。
 
+### P5 前置排版契约修订
+
+- [ ] 扩展 `TextLayout`，加入字重、字距、文字色、描边色和描边宽度，确保 Inspector、画布预览与导出使用同一份持久数据。
+- [ ] 将 `schemaVersion` 提升到 2，并实现 `migrateV1ToV2()`；旧项目使用稳定默认值补齐新字段，不静默猜测用户样式。
+- [ ] 更新 Domain 校验、Schema、序列化往返和非法边界测试；修订完成前 P5 不实现对应 Inspector 控件。
+
 ## 测试
 
 - [x] 合法、过小、负尺寸和越界 Region。
@@ -43,6 +50,7 @@
 - [x] 文本来源状态：OCR/人工修正/手动输入的创建、序列化和优先级回退。
 - [x] Region 状态标志：各标志独立设置、组合存储和往返一致性。
 - [x] 图片替换：尺寸变化时坐标缩放精度、尺寸不匹配时拒绝加载。
+- [ ] 排版样式：字重、字距、文字色、描边色和描边宽度的合法/非法值、Schema v1 → v2 迁移及往返一致性。
 
 ## 退出条件
 
@@ -126,15 +134,23 @@ struct RectGeometry {
 
 #### `TextLayout`
 
+以下为完成“P5 前置排版契约修订”后的目标结构；当前实现仍是 schema v1 的基础字段，不能把本节视为已落地代码。
+
 ```cpp
-QString fontFamily;
+std::string fontFamily;
 double fontSizePt;
+int fontWeight;             // CSS 风格 100..900，步长 100
+double letterSpacingEm;     // 相对当前 em，范围 -0.5..2.0
+
+std::string textColorHex;   // #RRGGBB
+std::string strokeColorHex; // #RRGGBB
+double strokeWidthPx;       // 源图像像素，范围 0..32
 
 TextOrientation orientation; // Horizontal / Vertical
-Qt::Alignment alignment;
+TextAlignment alignment;
 
 double lineSpacing;          // 倍数，例如 1.0 / 1.2
-QMarginsF margins;           // 四边独立
+Margins margins;             // 源图像像素，四边独立
 
 bool wordWrap;
 bool autoFit;
@@ -145,7 +161,9 @@ double maxFontSizePt;
 double rotationDeg;
 ```
 
-行距用**倍数**，边距四边独立。
+行距用**倍数**，字距用 em 比例，边距和描边宽度使用源图像像素。Domain 不使用 `QString`、`QMarginsF`、`Qt::Alignment` 或其他 Qt 类型。
+
+默认样式固定为 `fontWeight=400`、`letterSpacingEm=0.0`、`textColorHex=#000000`、`strokeColorHex=#FFFFFF`、`strokeWidthPx=0.0`。颜色只接受 `#RRGGBB`；所有数值必须有限。描边为 0 时 `strokeColorHex` 仍保留，以便用户再次启用描边时恢复选择。
 
 ### 译文优先级
 
@@ -157,7 +175,7 @@ modelText 有值 → model
 ```
 
 ```cpp
-QString effectiveText() const;
+std::string effectiveText() const;
 ```
 
 不要"候选列表自动挑第一个"。
@@ -196,7 +214,7 @@ int orderIndex;
 - `schemaVersion` — project.json Schema 版本
 - `formatVersion` — 项目目录/资产组织格式版本
 
-迁移主要看 `schemaVersion + formatVersion`。
+迁移主要看 `schemaVersion + formatVersion`。当前实现仍为 schema v1；P5 前置补丁落地后 current schema 才提升为 2。Schema v1 → v2 只为 `TextLayout` 补齐上述五个稳定默认字段，不改资产目录或 `formatVersion`。
 
 #### 资产命名
 

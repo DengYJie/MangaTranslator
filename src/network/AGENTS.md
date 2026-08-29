@@ -8,6 +8,7 @@
 
 - Keep provider selection, endpoint, model name, timeout, and capabilities in validated configuration.
 - Credentials come from an approved secret store or runtime environment, never source files, project documents, logs, screenshots, or test fixtures.
+- A credential status query reports configured/missing/unavailable without reading or returning the secret blob. Only the network adapter reads a key for immediate request authorization.
 - Map domain translation requests to provider messages in one adapter and parse responses into typed results.
 - Prefer structured outputs with schema validation. Do not trust model-produced JSON, markup, indices, or region IDs without validation.
 - Preserve region identity and ordering; reject ambiguous mappings instead of attaching text to the wrong bubble.
