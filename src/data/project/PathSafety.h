@@ -13,6 +13,11 @@ namespace manga::data {
 /// Returns an empty string when the path escapes the root or the target does not exist.
 [[nodiscard]] QString resolveInsideCanonicalRoot(const QString& canonicalRoot, const QString& relativePath);
 
+/// Fully resolves a path through symlinks, junctions, and reparse points. Returns an empty
+/// string when the path cannot be resolved. QFileInfo::canonicalFilePath does not resolve
+/// NTFS junctions, so containment checks must use this function.
+[[nodiscard]] QString canonicalPathResolved(const QString& path);
+
 /// Returns the canonical filesystem path of an existing directory, or an empty string when the
 /// path does not exist or is not a directory.
 [[nodiscard]] QString canonicalDirectoryPath(const QString& absolutePath);
