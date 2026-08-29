@@ -134,6 +134,7 @@ workerCount = clamp(cpuCount - 1, 1, 4)
 - `hardware_concurrency() == 0` 按 1 处理，先转为有符号值再减一，禁止无符号下溢。V0.1 不向用户暴露线程数。
 - Scheduler 维护两个显式 FIFO 队列：`Interactive` 为当前页用户触发任务，`Background` 为预计算任务；每取满 8 个 Interactive 后若 Background 非空，必须取 1 个 Background，防止永久饥饿。
 - 等待队列满时不阻塞调用线程，立即返回 `inference.queue_full`、`RecoveryAction::Retry`、`retryable=true`。已进入运行态的任务不因新任务被抢占。
+- **批量任务排队规则**：页级批量（如 500 页项目的批量 OCR/清除/缩略图）必须提交到 `Background` 队列，由调用方自行分批（每批不超过队列容量的一半），并把 `queue_full` 视为退避信号按批重试；不得把整批一次性压入 `Interactive`。V0.1 的性能门控（P5 的 500 页目标）以该规则为前提。
 - `QRunnable` 包装器按固定顺序执行：`promise.start()` → 运行前检查 stopToken → 调用工作函数 → 运行后检查 stopToken → `addResult()` → `finish()`。每条异常路径也必须恰好 `finish()` 一次。
 - `std::bad_alloc` 映射 `inference.oom`；已知后端异常映射对应稳定错误；其他 `std::exception` 映射当前 stage 的 `*.failed` 并只保留脱敏诊断；未知异常映射 `internal.unexpected_exception`。异常不得越过 `QRunnable::run()`。
 - 取消等待任务时从队列移除并完成为 `cancelled.user_requested`；运行中任务在有意义的边界合作式检查。关闭执行器先拒绝新任务，再取消队列，最后等待运行任务释放其 `OperationContext.lifetime`。
@@ -394,7 +395,7 @@ public:
 - Windows 没有 `CRED_PERSIST_CURRENT_USER` 常量。V0.1 使用 `CRED_PERSIST_LOCAL_MACHINE`，表示该用户在本机后续登录会话仍可读取；不使用 Enterprise roaming。
 - 写入调用 `CredWriteW(..., 0)`，同 TargetName 更新为替换；读取使用 `CredReadW`，删除使用 `CredDeleteW`，链接 `Advapi32`。每次成功 `CredReadW` 必须用 RAII 配对 `CredFree`。
 - key 以原始 UTF-8 bytes 保存，不含末尾 NUL；拒绝空 key、超过 Win32 credential blob 限制的 key 和含 NUL 的 key。UI 输入转入 `SecretBytes` 后尽快清空临时编辑缓冲。
-- `SecretBytes` 使用 move-only 容器，析构与 move assignment 前用 `SecureZeroMemory` 覆写容量范围。Qt/WinHTTP 内部仍可能产生不可控副本，因此文档只承诺“减少 secret 生命周期与显式副本”，不作无法证明的全进程零残留承诺。
+- `SecretBytes` 使用 move-only 容器，析构与 move assignment 前覆写持有缓冲区的全部字节（volatile 写入或平台等价 API，Windows 上可用 `SecureZeroMemory`）。`bytes()` 返回的引用把明文交给调用方，消费方（如 Translator 拼 Authorization）必须即用即弃，不得保存或传播该引用。Qt/WinHTTP 内部仍可能产生不可控副本，因此文档只承诺“减少 secret 生命周期与显式副本”，不作无法证明的全进程零残留承诺。
 - `ERROR_NOT_FOUND` → `network.credentials_missing + Reauthenticate`；`ERROR_NO_SUCH_LOGON_SESSION` → `network.credentials_unavailable + OpenSettings`；`ERROR_ACCESS_DENIED` → `network.credentials_access_denied + OpenSettings`；其他错误 → `network.credentials_failed`，diagnostic 只含数值 Win32 error。
 - key 不进入 QSettings、project.json、日志、崩溃注释、测试 fixture 或截图。修改/删除 key 不需要重启；下一次请求重新读取，已经发出的请求不更换 Authorization。
 
@@ -489,20 +490,19 @@ Qt 6.11 的 `QTextLayout` 提供水平行、glyph run 和低层绘制能力，�
 
 #### 永不覆盖与原子提交
 
-候选名依次为：
+候选名依次为（示意，`…` 表示 `_003` 起按同一规则递增；实际受下方冲突重试上限约束）：
 
 ```text
 page_0001_translated.png
 page_0001_translated_001.png
 page_0001_translated_002.png
-...
-page_0001_translated_999999.png
+…
 ```
 
 - `outputStem` 必须匹配 `[A-Za-z0-9][A-Za-z0-9._-]{0,127}` 且不以点结尾；extension 由 `ExportFormat` 决定，调用方不能注入路径段。
 - 在 outputDir 获取短持有 `.mangatranslator-export.lock`，仅覆盖“选名到 rename”区间；锁失败为 `export.output_locked`。
 - Qt 6.11 的 `QSaveFile` 不支持 `NewOnly`，不能单独同时保证“原子替换”和“永不覆盖”。Exporter 使用同目录 `QTemporaryFile` 写入、flush、关闭，再调用不会覆盖既有目标的 `QFile::rename(temp, candidate)`。
-- rename 因候选在并发中出现而失败时，删除 temp、选择下一个序号并重新编码，最多重试 10 个冲突；其他失败为 `export.commit_failed`。同目录 rename 保证目标只在完整文件就绪后出现。
+- rename 因候选在并发中出现而失败时，删除 temp、选择下一个序号并重新编码，最多重试 10 个冲突；序号用尽或非 rename 失败为 `export.commit_failed`，`export.name_exhausted` 是锁内候选扫描穷尽时的防御性分支（正常情况下被 10 次上限先触发）。同目录 rename 保证目标只在完整文件就绪后出现。
 - 临时文件名含 operationId 且后缀 `.tmp`；成功后不存在 temp，失败/取消用 RAII 删除。`setAutoRemove(true)` 不得在成功 rename 后误删目标。
 - 每页提交独立；一页失败不删除此前成功页。每页编码前后检查 stopToken，取消时返回已成功 pages 加当前/剩余页的 Cancelled failure，不回滚用户已经看见的导出文件。
 
@@ -674,6 +674,7 @@ services 或 data 的 export capability:
 ```
 
 - ONNX Runtime 以 pinned vcpkg 依赖或固定包进入 `manga_services`，不泄漏 public header；`Advapi32` 只在 Windows credential target 私有链接。
+- **依赖与 CI 引入时机**：pinned vcpkg 依赖（`vcpkg.json` 增加 `builtin-baseline` + `onnxruntime`）与首个消费方 `OnnxMangaOcrEngine` 在同一变更中落地；CI 的 `p4-model` job（模型缓存 + `MANGA_OCR_MODEL_DIR`）与模型包发布（转换产物 + manifest hash）在 P4 收尾、退出条件验收前完成。不在无消费代码时提前引入，避免每次 configure 均触发 ONNX Runtime 构建且模型包尚不存在。
 - `manga_network` 依赖 Qt Core/Network 与 Application；不得依赖 UI、Data 或 Domain 聚合实现。
 - Exporter 的文件系统职责可放独立 `manga_export` target，或在 `manga_data` 中实现 `IComicExporter`；不允许为了复用文件工具让 `services → data`。
 
