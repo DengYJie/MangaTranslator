@@ -14,9 +14,17 @@
 ### 任务执行
 
 - [x] 完成原 P4 DTO、基础 Credential/Derived Asset Port 与结果采用契约补丁。
-- [ ] 完成 P5 发现的后续修订：分范围 generation、非明文凭据状态、Clear prepare/同步 Apply 两阶段协议，并同步 DTO、Fake 和契约测试。
-- [ ] 建立有界 `QThreadPool + QRunnable` 执行器。
-- [x] 实现合作式取消、进度回调和请求 generation；适配器通过 `QPromise` 完成 `QFuture`，Port 接口不感知 GUI 线程。结果与进度的 GUI 线程投递由 P5 ViewModel 负责。
+- [x] 完成 P5 发现的后续修订：分范围 generation、非明文凭据状态、Clear prepare/同步 Apply 两阶段协议，并同步 DTO、Fake 和契约测试。（generation 已拆为 `viewGeneration`/`projectSessionGeneration`，`ICredentialStore.hasApiKey` 不返回明文，Prepare/Apply 双阶段与 `ApplyResultUseCaseTest` 已落地，P2 文档与端口清单已同步）
+- [x] `BoundedTaskExecutor` implementation: bounded queues, Interactive/Background 8:1 anti-starvation, exception mapping.
+- [x] `BoundedTaskExecutor` safety: cancel/dequeue, cancel/timer, and shutdown concurrent execution coverage.
+- [x] `BoundedTaskExecutor` active cancellation: removes tasks from the queue immediately without awaiting worker availability.
+- [x] `OpenAiCompatibleTranslator`: lifetime-safe Job captures, thread-safe network isolation via `QtHttpTransport`.
+- [x] `QtHttpTransport` safety: actively tracks in-flight replies and actively aborts them on application shutdown.
+- [x] `OpenAiCompatibleTranslator` retry backoff: physical cancellable QTimer prevents event-loop hang on user cancellation.
+- [x] `OpenAiCompatibleTranslator` request lifecycle: operation deadline strictly curtails consecutive retries and bounds total time.
+- [x] Adapter progress contract: Progress delivery verified to bypass 50ms throttles, guaranteeing final states like 1/1 report.
+- [x] `PrepareClearResultUseCase` implicitly captured state removed, leaving purely safe localized asynchronous capture.
+- [x] `DerivedAssetStore` immutable reuse logic strictly checks dimensions and actual pixel `QByteArrayView` hashing rather than filename matching alone.
 - [x] 输入使用不可变快照；Worker 不访问 QWidget、QPixmap 或 Scene。
 - [ ] 切页只拒绝当前视图加载/预览的过期结果；项目级 OCR、翻译、清除、排版和导出继续执行。关闭/切换项目或应用退出才使项目会话结果过期。
 
@@ -30,19 +38,19 @@
 
 ### 翻译与凭据
 
-- [ ] 实现 OpenAI-compatible Chat Completions 非流式适配器。
-- [ ] 增加含非明文 `hasApiKey` 状态查询的 `ICredentialStore` Port、Windows Credential Manager Adapter 和内存 Fake。
-- [ ] 配置 endpoint、model、timeout 和非敏感生成参数。
-- [ ] 使用 Windows Credential Manager（`CredWriteW`/`CredReadW`）保存和读取 API key；密钥不进入 QSettings、项目文件、日志或错误信息。
-- [ ] 实现结构化请求/响应、超时、认证、限流、有限重试和取消。
-- [ ] 取消后停止等待；明确不能保证服务端停止执行或计费。
-- [ ] 默认日志不记录密钥、完整漫画文本或完整远程响应。
+- [x] 实现 OpenAI-compatible Chat Completions 非流式适配器。
+- [x] 增加含非明文 `hasApiKey` 状态查询的 `ICredentialStore` Port、Windows Credential Manager Adapter 和内存 Fake。
+- [x] 配置 endpoint、model、timeout 和非敏感生成参数。
+- [x] 使用 Windows Credential Manager（`CredWriteW`/`CredReadW`）保存和读取 API key；密钥不进入 QSettings、项目文件、日志或错误信息。
+- [x] 实现结构化请求/响应、超时、认证、限流、有限重试和取消。
+- [x] 取消后停止等待；明确不能保证服务端停止执行或计费。
+- [x] 默认日志不记录密钥、完整漫画文本或完整远程响应。
 
 ### 清除与排版
 
-- [ ] 实现 `ClearSettings.colorHex` 驱动的纯色背景填充并输出独立清除 patch。
-- [ ] 增加派生图层原子提交 Port，并以 prepare 资产 + 同步 Domain 命令闭合清除结果 Apply、回滚和 Undo 边界。
-- [ ] 无效 Region 或失败时保留现有图层和源图。
+- [x] 实现 `ClearSettings.colorHex` 驱动的纯色背景填充并输出独立清除 patch。（`SolidColorInpainter` 在 CPU 执行器上运行；`colorHex` 严格解析 `#RRGGBB`，不接受空白、短写或命名色；patch 为 RGBA8/straight alpha/sRGB，`affectedBounds` 与 patch 尺寸一致）
+- [x] 增加派生图层原子提交 Port，并以 prepare 资产 + 同步 Domain 命令闭合清除结果 Apply、回滚和 Undo 边界。（`IDerivedAssetStore` + `FileSystemDerivedAssetStore` 已实现并按 `assets/derived/<page-id>/<kind>/v1/<sha256>.png` 内容寻址提交；Prepare/Apply UseCase 与契约测试已覆盖回滚，GUI 线程上的 `ClearResultCommand` 由 P5 负责 push）
+- [x] 无效 Region 或失败时保留现有图层和源图。（Adapter 只返回 patch，不写文件、不读 Domain；派生资产同名内容复用、异名永不覆盖，提交失败时 Domain 与旧引用保持不变）
 - [ ] 建立只依赖 Domain 与 Qt Core/Gui 的 `manga_rendering`，支持横排、竖排、换行、对齐、字重、字距、颜色、描边、行距和边距，并由排版 Adapter、UI 与 Exporter 共享。
 - [ ] 使用二分适配选择可用字号，并报告溢出。
 - [ ] 提供字体回退和缺字警告；不自动改写译文。
@@ -58,11 +66,11 @@
 
 - [ ] 任务成功、取消、View 销毁、项目关闭和迟到结果。
 - [ ] 固定 OCR 模型元数据、参考输入和结果容差。
-- [ ] 翻译成功、协议错误、认证、限流、超时和重试上限。
-- [ ] 日志、错误和设置中不存在密钥。
-- [ ] 清除层非破坏性、无效输入和失败回退。
+- [x] 翻译成功、协议错误、认证、限流、超时和重试上限。（`OpenAiCompatibleTranslatorTest` 与 `RetryPolicyTest` 已覆盖 strict/JSON mode 成功、refusal/截断/过滤、缺少/非法 JSON、重复 ID、限流与指数退避重试、非 2xx 不重试、取消与立即终止退避、超时与超界响应拒绝）
+- [x] 日志、错误和设置中不存在密钥。（`WindowsCredentialStoreTest` 覆盖 Windows Credential Manager 读写删、非明文状态查询、空/含 NUL 拒绝；`OpenAiCompatibleTranslatorTest` 验证 key 仅以 Bearer Authorization 头发送且不进 body）
+- [x] 清除层非破坏性、无效输入和失败回退。（`SolidColorInpainterTest` 覆盖取整、2×2 下限、非法颜色/透明度、非有限矩形与取消；`ApplyResultUseCaseTest` 覆盖提交失败与 patch 尺寸不符时 Domain 不变）
 - [ ] 横排/竖排、长文本、溢出、字体回退和缺字。
-- [ ] 派生资产内容寻址、孤儿清理边界和 Domain Apply 失败。
+- [ ] 派生资产孤儿清理边界。（内容寻址复用与 Domain Apply 失败已由 `FileSystemDerivedAssetStoreTest` 和 `ApplyResultUseCaseTest` 覆盖；项目关闭后的孤儿清理尚未实现）
 - [ ] PNG/JPEG 合成、编码、文件冲突、逐页失败和无临时文件残留。
 
 ## 退出条件
@@ -272,7 +280,7 @@ temperature             0.0..2.0，默认 0.2
 
 - 配置进入应用设置，API key 只进 Credential Store。endpoint 默认必须为 HTTPS；测试可显式允许 loopback HTTP，生产配置禁止明文远程 HTTP、URL user-info 和 fragment。
 - `structuredOutputMode` 是 Provider capability，不通过“先发 strict 请求，失败后再重发”探测，避免重复付费。OpenAI 官方 Provider 使用 `JsonSchemaStrict`；兼容服务若仅支持 JSON mode 由用户或 Provider preset 选择 `JsonObject`。
-- 一个 `OpenAiCompatibleTranslator` 实例绑定一个 provider 配置；每次请求开始时读取当前 key，因此换 key、model 或 endpoint 不需重启。
+- 一个 `OpenAiCompatibleTranslator` 实例绑定一个 ProviderConfig 快照。API key 每次请求重新读取，因此修改 key 不需要重建实例。model、endpoint 或 provider capability 变化时，由 ApplicationContext/Provider factory 重建对应 Translator。
 - 网络线程持有唯一 `QNetworkAccessManager`。Adapter 通过 queued invocation 在该线程创建 reply；timeout、stop callback 和 `QNetworkReply::abort()` 也在该线程执行。reply 完成后复制最多 2 MiB 响应体，销毁 reply，再在同线程解析为不可变 DTO。
 
 #### Prompt v1
