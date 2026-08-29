@@ -15,6 +15,7 @@
 #include <QFileInfo>
 #include <QFuture>
 #include <QImageReader>
+#include <QSet>
 #include <QtTest/QtTest>
 
 #include <algorithm>
@@ -385,11 +386,30 @@ void FileSystemComicImporterTest::concurrentImportsSerialize() {
         {});
     first.waitForFinished();
     second.waitForFinished();
-    QVERIFY(first.result().has_value());
-    QVERIFY(second.result().has_value());
-    // The coordinator serializes the requests, so asset numbers never collide.
-    QVERIFY(QFileInfo::exists(m_projectRoot + QStringLiteral("/assets/original/page_0001.png")));
-    QVERIFY(QFileInfo::exists(m_projectRoot + QStringLiteral("/assets/original/page_0002.jpg")));
+    const auto firstResult = first.result();
+    const auto secondResult = second.result();
+    QVERIFY(firstResult.has_value());
+    QVERIFY(secondResult.has_value());
+    QCOMPARE(firstResult->importedPages.size(), 1);
+    QCOMPARE(secondResult->importedPages.size(), 1);
+
+    const QSet<QString> assetPaths{
+        QString::fromStdString(firstResult->importedPages.front().page.originalAssetPath()),
+        QString::fromStdString(secondResult->importedPages.front().page.originalAssetPath()),
+    };
+    const QSet<QString> firstRequestWon{
+        QStringLiteral("assets/original/page_0001.png"),
+        QStringLiteral("assets/original/page_0002.jpg"),
+    };
+    const QSet<QString> secondRequestWon{
+        QStringLiteral("assets/original/page_0002.png"),
+        QStringLiteral("assets/original/page_0001.jpg"),
+    };
+    // Serialization guarantees unique consecutive numbers, not thread scheduling order.
+    QVERIFY(assetPaths == firstRequestWon || assetPaths == secondRequestWon);
+    for (const QString& assetPath : assetPaths) {
+        QVERIFY(QFileInfo::exists(m_projectRoot + QLatin1Char('/') + assetPath));
+    }
 }
 
 void FileSystemComicImporterTest::discardRemovesAssets() {
