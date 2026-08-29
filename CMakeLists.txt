@@ -1,4 +1,4 @@
-﻿cmake_minimum_required(VERSION 3.28)
+cmake_minimum_required(VERSION 3.28)
 
 project(MangaTranslator
     VERSION 0.1.0
@@ -111,6 +111,7 @@ endfunction()
 add_subdirectory(src/core)
 add_subdirectory(src/domain)
 add_subdirectory(src/application)
+add_subdirectory(src/rendering)
 add_subdirectory(src/services)
 add_subdirectory(src/data)
 add_subdirectory(src/network)

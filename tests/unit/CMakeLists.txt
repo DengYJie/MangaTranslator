@@ -1,6 +1,7 @@
 add_subdirectory(domain)
 add_subdirectory(data)
 add_subdirectory(application)
+add_subdirectory(rendering)
 add_subdirectory(services)
 add_subdirectory(network)
 add_subdirectory(ui)

@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "description": "Shift offsets for punctuation in vertical (tate-gaki) text layout. Shift is relative to em box size (e.g. 0.5 means half the em size).",
+  "offsets": {
+    "、": { "x": 0.6, "y": -0.6 },
+    "。": { "x": 0.6, "y": -0.6 },
+    ",": { "x": 0.6, "y": -0.6 },
+    ".": { "x": 0.6, "y": -0.6 },
+    "）": { "x": 0.5, "y": -0.5 },
+    "」": { "x": 0.5, "y": -0.5 },
+    "』": { "x": 0.5, "y": -0.5 },
+    "】": { "x": 0.5, "y": -0.5 },
+    "〕": { "x": 0.5, "y": -0.5 },
+    "》": { "x": 0.5, "y": -0.5 },
+    "＞": { "x": 0.5, "y": -0.5 },
+    "]": { "x": 0.5, "y": -0.5 },
+    "}": { "x": 0.5, "y": -0.5 }
+  }
+}
