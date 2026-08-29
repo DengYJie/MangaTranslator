@@ -4,7 +4,13 @@
 #include "data/project/ProjectIoCoordinator.h"
 
 #include <QFuture>
+#include <QMutex>
 #include <QPromise>
+#include <QSet>
+
+#include <functional>
+#include <map>
+#include <string>
 
 namespace manga::data {
 
@@ -14,13 +20,19 @@ namespace manga::data {
 /// highest existing number. All request files run inside one coordinator write section.
 class FileSystemComicImporter final : public application::IComicImporter {
 public:
-    explicit FileSystemComicImporter(ProjectIoCoordinator* coordinator);
+    /// Observes committed assets while the project write ticket is held.
+    using CommitObserver = std::function<void(int committedAssetCount)>;
+
+    explicit FileSystemComicImporter(ProjectIoCoordinator* coordinator, CommitObserver commitObserver = {});
 
     [[nodiscard]] QFuture<application::Result<application::ImportImagesResult>>
     importImages(application::ImportImagesRequest request, application::OperationContext context) override;
     [[nodiscard]] QFuture<application::Result<void>>
     discardImportedAssets(application::DiscardImportedAssetsRequest request,
                           application::OperationContext context) override;
+    [[nodiscard]] QFuture<application::Result<void>>
+    acknowledgeImportedAssets(application::AcknowledgeImportedAssetsRequest request,
+                              application::OperationContext context) override;
 
 private:
     [[nodiscard]] application::Result<application::ImportImagesResult>
@@ -29,6 +41,15 @@ private:
                          QPromise<application::Result<application::ImportImagesResult>>& promise);
 
     ProjectIoCoordinator* m_coordinator;
+    CommitObserver m_commitObserver;
+    // Acknowledgement or complete discard consumes the pending batch capability.
+    struct PendingBatch {
+        domain::ProjectId projectId;
+        QString canonicalRoot;
+        QSet<QString> assetPaths;
+    };
+    QMutex m_batchesMutex;
+    std::map<std::string, PendingBatch> m_pendingBatches;
 };
 
 } // namespace manga::data

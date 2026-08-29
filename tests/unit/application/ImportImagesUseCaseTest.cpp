@@ -123,6 +123,7 @@ void ImportImagesUseCaseTest::testApplyImportResultAddsPages() {
     request.projectId = project.id();
     request.generation = 3;
     request.currentGeneration = 3;
+    request.result.batchId = OperationId::generate();
     const auto firstId = PageId::generate();
     const auto secondId = PageId::generate();
     request.result.importedPages.append(
@@ -149,6 +150,7 @@ void ImportImagesUseCaseTest::testApplyImportResultRejectsStaleGeneration() {
     request.projectId = project.id();
     request.generation = 1;
     request.currentGeneration = 2;
+    request.result.batchId = OperationId::generate();
     request.result.importedPages.append(
         {ComicPage(PageId::generate(), "assets/original/page_0001.png", {100, 100}), "page.png", {}});
 
@@ -167,6 +169,7 @@ void ImportImagesUseCaseTest::testApplyImportResultRollsBackInvalidBatch() {
     request.projectId = project.id();
     request.generation = 1;
     request.currentGeneration = 1;
+    request.result.batchId = OperationId::generate();
     const auto duplicateId = PageId::generate();
     request.result.importedPages.append(
         {ComicPage(duplicateId, "assets/original/page_0001.png", {100, 100}), "first.png", {}});
@@ -187,6 +190,7 @@ void ImportImagesUseCaseTest::testDiscardImportedAssetsValidatesAndDispatches() 
     DiscardImportedAssetsRequest request;
     request.projectId = ProjectId::generate();
     request.projectRoot = "C:/project";
+    request.batchId = OperationId::generate();
     request.assetPaths = {"assets/original/page_0001.png"};
 
     const auto result = useCase.execute(request, {}).result();
@@ -200,4 +204,19 @@ void ImportImagesUseCaseTest::testDiscardImportedAssetsValidatesAndDispatches() 
     QVERIFY(!invalidResult.has_value());
     QCOMPARE(invalidResult.error().code, QString("input.invalid_import_cleanup"));
     QCOMPARE(importer.discardCallCount, 1);
+}
+
+void ImportImagesUseCaseTest::testAcknowledgeImportedAssetsValidatesAndDispatches() {
+    FakeComicImporter importer;
+    AcknowledgeImportedAssetsUseCase useCase(&importer);
+    AcknowledgeImportedAssetsRequest request;
+    request.projectId = ProjectId::generate();
+    request.projectRoot = "C:/project";
+    request.batchId = OperationId::generate();
+
+    const auto result = useCase.execute(request, {}).result();
+
+    QVERIFY(result.has_value());
+    QCOMPARE(importer.acknowledgeCallCount, 1);
+    QCOMPARE(importer.lastAcknowledgeRequest.batchId, request.batchId);
 }

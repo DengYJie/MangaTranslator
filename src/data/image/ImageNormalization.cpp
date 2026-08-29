@@ -95,11 +95,12 @@ PngScan scanPngChunks(const QByteArray& data) {
     PngScan scan;
     qsizetype offset = 8; // signature
     while (offset + 8 <= data.size()) {
-        const qsizetype chunkLength =
-            (static_cast<uchar>(data[offset]) << 24) | (static_cast<uchar>(data[offset + 1]) << 16) |
-            (static_cast<uchar>(data[offset + 2]) << 8) | static_cast<uchar>(data[offset + 3]);
+        const quint32 chunkLength = (static_cast<quint32>(static_cast<uchar>(data[offset])) << 24) |
+                                    (static_cast<quint32>(static_cast<uchar>(data[offset + 1])) << 16) |
+                                    (static_cast<quint32>(static_cast<uchar>(data[offset + 2])) << 8) |
+                                    static_cast<quint32>(static_cast<uchar>(data[offset + 3]));
         const QByteArray type = data.mid(offset + 4, 4);
-        if (chunkLength < 0 || offset + 12 + chunkLength > data.size()) {
+        if (static_cast<quint64>(offset) + 12 + chunkLength > static_cast<quint64>(data.size())) {
             break;
         }
         if (type == "iCCP") {
@@ -124,10 +125,11 @@ WebpScan scanWebpChunks(const QByteArray& data) {
     qsizetype offset = 12; // RIFF header + WEBP tag
     while (offset + 8 <= data.size()) {
         const QByteArray type = data.mid(offset, 4);
-        const qsizetype chunkLength =
-            static_cast<uchar>(data[offset + 4]) | (static_cast<uchar>(data[offset + 5]) << 8) |
-            (static_cast<uchar>(data[offset + 6]) << 16) | (static_cast<uchar>(data[offset + 7]) << 24);
-        if (chunkLength < 0 || offset + 8 + chunkLength > data.size()) {
+        const quint32 chunkLength = static_cast<quint32>(static_cast<uchar>(data[offset + 4])) |
+                                    (static_cast<quint32>(static_cast<uchar>(data[offset + 5])) << 8) |
+                                    (static_cast<quint32>(static_cast<uchar>(data[offset + 6])) << 16) |
+                                    (static_cast<quint32>(static_cast<uchar>(data[offset + 7])) << 24);
+        if (static_cast<quint64>(offset) + 8 + chunkLength > static_cast<quint64>(data.size())) {
             break;
         }
         if (type == "ICCP") {

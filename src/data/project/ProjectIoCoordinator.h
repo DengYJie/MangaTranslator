@@ -1,5 +1,7 @@
 #pragma once
 
+#include "domain/model/Uuid.h"
+
 #include <QMutex>
 #include <QString>
 #include <QWaitCondition>
@@ -21,6 +23,8 @@ private:
 
 public:
     enum class AcquireFailure {
+        NotOpen,
+        ProjectMismatch,
         RootClosing,
     };
 
@@ -65,8 +69,16 @@ public:
     /// Blocks until other write operations on the root finish and rejects when the root is
     /// closing or closed.
     [[nodiscard]] std::expected<WriteTicket, AcquireFailure> beginWrite(const QString& canonicalRoot);
-    /// Rejects when the root is closing or closed; unknown roots are registered on demand.
-    [[nodiscard]] std::optional<SessionLease> acquireLease(const QString& canonicalRoot);
+    /// Acquires a write ticket only when projectId is bound to canonicalRoot by the repository.
+    [[nodiscard]] std::expected<WriteTicket, AcquireFailure> beginProjectWrite(const domain::ProjectId& projectId,
+                                                                               const QString& canonicalRoot);
+    /// Acquires a read lease only when projectId is bound to canonicalRoot by the repository.
+    [[nodiscard]] std::expected<SessionLease, AcquireFailure> acquireProjectLease(const domain::ProjectId& projectId,
+                                                                                  const QString& canonicalRoot);
+    /// Opens asset access for a repository session after project validation succeeds.
+    [[nodiscard]] bool bindProject(const domain::ProjectId& projectId, const QString& canonicalRoot);
+    /// Stops new asset access before a session moves away from a root.
+    void unbindProject(const QString& canonicalRoot);
     /// Marks the root closing, waits for active leases, and returns a ticket that releases the
     /// write lock; returns nullopt when the root has no runtime state.
     [[nodiscard]] std::optional<WriteTicket> beginClose(const QString& canonicalRoot);
@@ -79,6 +91,9 @@ private:
         QMutex stateMutex;
         int leases{0};
         bool closed{false};
+        // Asset ports acquire tickets only while this binding matches their request.
+        bool projectBound{false};
+        domain::ProjectId projectId;
         QWaitCondition noLeases;
     };
 

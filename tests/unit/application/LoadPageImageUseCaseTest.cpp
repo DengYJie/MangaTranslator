@@ -19,6 +19,7 @@ void LoadPageImageUseCaseTest::testSuccessfulLoad() {
     req.projectRoot = "C:/project";
     req.pageId = PageId::generate();
     req.assetPath = "page_01.png";
+    req.expectedSize = {100, 100};
 
     loader.nextImage = QImage(100, 100, QImage::Format_ARGB32);
 
@@ -57,6 +58,7 @@ void LoadPageImageUseCaseTest::testLoaderFailurePropagates() {
     request.projectRoot = "C:/project";
     request.pageId = PageId::generate();
     request.assetPath = "page.png";
+    request.expectedSize = {100, 100};
 
     const auto result = useCase.execute(request, {}).result();
 
@@ -73,6 +75,7 @@ void LoadPageImageUseCaseTest::testPreCancelledLoadRejected() {
     request.projectRoot = "C:/project";
     request.pageId = PageId::generate();
     request.assetPath = "page.png";
+    request.expectedSize = {100, 100};
     std::stop_source stopSource;
     stopSource.request_stop();
     OperationContext context;

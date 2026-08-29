@@ -17,8 +17,10 @@ public:
     bool deferred{false};
     int callCount{0};
     int discardCallCount{0};
+    int acknowledgeCallCount{0};
     ImportImagesRequest lastRequest;
     DiscardImportedAssetsRequest lastDiscardRequest;
+    AcknowledgeImportedAssetsRequest lastAcknowledgeRequest;
 
     QFuture<Result<ImportImagesResult>> importImages(ImportImagesRequest request, OperationContext context) override {
         ++callCount;
@@ -41,6 +43,24 @@ public:
         if (context.stopToken.stop_requested()) {
             promise.addResult(std::unexpected(
                 makeApplicationError(ErrorCategory::Cancelled, "cancelled.import_cleanup", "Cleanup was cancelled")));
+        } else if (shouldFail) {
+            promise.addResult(std::unexpected(nextError));
+        } else {
+            promise.addResult({});
+        }
+        promise.finish();
+        return future;
+    }
+
+    QFuture<Result<void>> acknowledgeImportedAssets(AcknowledgeImportedAssetsRequest request,
+                                                    OperationContext context) override {
+        ++acknowledgeCallCount;
+        lastAcknowledgeRequest = std::move(request);
+        QPromise<Result<void>> promise;
+        auto future = promise.future();
+        if (context.stopToken.stop_requested()) {
+            promise.addResult(std::unexpected(makeApplicationError(
+                ErrorCategory::Cancelled, "cancelled.import_cleanup", "Acknowledgement was cancelled")));
         } else if (shouldFail) {
             promise.addResult(std::unexpected(nextError));
         } else {

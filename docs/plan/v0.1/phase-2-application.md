@@ -262,15 +262,16 @@ struct OcrResponse {
 
 ```text
 IProjectRepository:
-  CreateProjectRequest / OpenProjectRequest / SaveProjectRequest
-  SaveAsProjectRequest / CloseProjectRequest
+  CreateProjectRequest / OpenProjectRequest / SaveProjectRequest / SaveProjectResult
+  SaveAsProjectRequest / SaveAsProjectResult / CloseProjectRequest
   ProjectDescriptor / OpenProjectResult (含 RecoverySource)
 
 IComicImporter:
-  ImportImagesRequest / ImportedPage / ImportFailure / ImportImagesResult
+  ImportImagesRequest / ImportedPage / ImportFailure / ImportImagesResult (含 batchId)
+  DiscardImportedAssetsRequest / AcknowledgeImportedAssetsRequest
 
 IPageImageLoader:
-  LoadPageImageRequest → Result<QImage>
+  LoadPageImageRequest (含 expectedSize) → Result<QImage>
 ```
 
 > 保存事务、文件锁、恢复优先级、资产规范化等 Adapter 级语义详见 P3 设计规格参考。
@@ -475,7 +476,7 @@ export/
 Domain 快照 → serialize → 校验 → 同文件系统临时文件 → 原子替换（保留 .bak）
 ```
 
-任一步失败保持旧 `project.json` 不变；成功后 `dirty = false`，但不清空 UndoStack。
+任一步失败保持旧 `project.json` 不变。成功后 Repository 返回实际落盘快照的 `savedRevision`；aggregate owner 仅在当前 revision 仍与其相等时调用 `markCleanIfRevision(savedRevision)`，因此保存期间产生的新修改仍保持 Dirty。保存不清空 UndoStack。
 
 ### 结果采用与 Undo 边界
 

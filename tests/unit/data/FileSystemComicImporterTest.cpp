@@ -15,7 +15,6 @@
 #include <QFileInfo>
 #include <QFuture>
 #include <QImageReader>
-#include <QThread>
 #include <QtTest/QtTest>
 
 #include <algorithm>
@@ -138,12 +137,14 @@ application::ApplicationError FileSystemComicImporterTest::importError(const QVe
     return result.error();
 }
 
-std::optional<QImage> FileSystemComicImporterTest::loadPageImage(const QString& assetPath) {
+std::optional<QImage> FileSystemComicImporterTest::loadPageImage(const QString& assetPath,
+                                                                 domain::ImageSize expectedSize) {
     application::LoadPageImageRequest request;
     request.projectId = m_projectDescriptor.id;
     request.projectRoot = m_projectRoot;
     request.pageId = PageId::generate();
     request.assetPath = assetPath;
+    request.expectedSize = expectedSize;
     auto result = await(m_loader->loadPageImage(std::move(request), {}));
     if (!result) {
         qWarning() << "loadPageImage failed:" << result.error().code;
@@ -230,7 +231,7 @@ void FileSystemComicImporterTest::exifOrientationApplied() {
     QVERIFY(result.has_value() && result->importedPages.size() == 1);
     // The 2x1 source carries EXIF orientation 6; the normalized work image is 1x2.
     QVERIFY((result->importedPages.front().page.imageSize() == domain::ImageSize{1, 2}));
-    const auto image = loadPageImage(QStringLiteral("assets/original/page_0001.jpg"));
+    const auto image = loadPageImage(QStringLiteral("assets/original/page_0001.jpg"), {1, 2});
     QVERIFY(image.has_value());
     QCOMPARE(image->size(), QSize(1, 2));
 }
@@ -269,7 +270,7 @@ void FileSystemComicImporterTest::specialFormatsDecode() {
 void FileSystemComicImporterTest::transparentPngKeepsAlpha() {
     const auto result = import({fixture(QStringLiteral("transparent.png"))});
     QVERIFY(result.has_value() && result->importedPages.size() == 1);
-    const auto image = loadPageImage(QStringLiteral("assets/original/page_0001.png"));
+    const auto image = loadPageImage(QStringLiteral("assets/original/page_0001.png"), {2, 2});
     QVERIFY(image.has_value());
     QCOMPARE(image->format(), QImage::Format_RGBA8888);
     QCOMPARE(image->colorSpace(), QColorSpace(QColorSpace::SRgb));
@@ -327,7 +328,7 @@ void FileSystemComicImporterTest::cancelledMidImportRollsBackCommittedAssets() {
     const QByteArray bytes = sample.readAll();
     sample.close();
 
-    constexpr int kFileCount = 60;
+    constexpr int kFileCount = 3;
     QVector<QString> paths;
     for (int i = 0; i < kFileCount; ++i) {
         const QString name = QStringLiteral("bulk_%1.png").arg(i, 2, 10, QLatin1Char('0'));
@@ -339,6 +340,11 @@ void FileSystemComicImporterTest::cancelledMidImportRollsBackCommittedAssets() {
     }
 
     std::stop_source stopSource;
+    m_importer = std::make_unique<FileSystemComicImporter>(m_coordinator.get(), [&stopSource](int committedCount) {
+        if (committedCount == 1) {
+            stopSource.request_stop();
+        }
+    });
     application::OperationContext context;
     context.stopToken = stopSource.get_token();
     application::ImportImagesRequest request;
@@ -346,22 +352,10 @@ void FileSystemComicImporterTest::cancelledMidImportRollsBackCommittedAssets() {
     request.projectRoot = m_projectRoot;
     request.filePaths = paths;
     auto future = m_importer->importImages(std::move(request), context);
-
-    // Poll progressValue instead of a QFutureWatcher: its progress signals are queued on
-    // this thread and are not delivered without a running event loop.
-    while (!future.isFinished()) {
-        if (future.progressValue() >= 1) {
-            stopSource.request_stop();
-            break;
-        }
-        QThread::msleep(1);
-    }
     future.waitForFinished();
 
     auto result = future.result();
-    if (result.has_value()) {
-        QSKIP("import finished before the cancellation request was observed");
-    }
+    QVERIFY(!result.has_value());
     QVERIFY(result.error().isCancelled());
     // Every asset committed by this request was rolled back, and the staging tree is gone.
     QCOMPARE(
@@ -407,6 +401,7 @@ void FileSystemComicImporterTest::discardRemovesAssets() {
     application::DiscardImportedAssetsRequest request;
     request.projectId = m_projectDescriptor.id;
     request.projectRoot = m_projectRoot;
+    request.batchId = imported->batchId;
     request.assetPaths = {assetPath};
     expectNoError([&] {
         auto result = await(m_importer->discardImportedAssets(request, {}));
@@ -414,17 +409,61 @@ void FileSystemComicImporterTest::discardRemovesAssets() {
     }());
     QVERIFY(!QFileInfo::exists(m_projectRoot + QStringLiteral("/") + assetPath));
 
-    // Discarding is idempotent for missing files and rejects paths outside assets/original.
+    // A consumed batch capability cannot be reused, and paths outside assets/original fail.
     auto secondDiscard = await(m_importer->discardImportedAssets(request, {}));
-    QVERIFY(secondDiscard.has_value());
+    QVERIFY(!secondDiscard.has_value());
+    QCOMPARE(secondDiscard.error().code, QStringLiteral("input.invalid_import_cleanup"));
 
     application::DiscardImportedAssetsRequest escapeRequest;
     escapeRequest.projectId = m_projectDescriptor.id;
     escapeRequest.projectRoot = m_projectRoot;
+    escapeRequest.batchId = application::OperationId::generate();
     escapeRequest.assetPaths = {QStringLiteral("assets/derived/evil.png")};
     auto rejected = await(m_importer->discardImportedAssets(escapeRequest, {}));
     QVERIFY(!rejected.has_value());
     QCOMPARE(rejected.error().code, QStringLiteral("input.invalid_import_cleanup"));
+}
+
+void FileSystemComicImporterTest::acknowledgedBatchCannotDeleteAdoptedAsset() {
+    auto imported = import({fixture(QStringLiteral("sample.png"))});
+    QVERIFY(imported.has_value() && imported->importedPages.size() == 1);
+    const QString assetPath = QString::fromStdString(imported->importedPages.front().page.originalAssetPath());
+
+    application::AcknowledgeImportedAssetsRequest acknowledge;
+    acknowledge.projectId = m_projectDescriptor.id;
+    acknowledge.projectRoot = m_projectRoot;
+    acknowledge.batchId = imported->batchId;
+    QVERIFY(await(m_importer->acknowledgeImportedAssets(acknowledge, {})).has_value());
+
+    application::DiscardImportedAssetsRequest discard;
+    discard.projectId = m_projectDescriptor.id;
+    discard.projectRoot = m_projectRoot;
+    discard.batchId = imported->batchId;
+    discard.assetPaths = {assetPath};
+    const auto result = await(m_importer->discardImportedAssets(discard, {}));
+
+    QVERIFY(!result.has_value());
+    QCOMPARE(result.error().code, QStringLiteral("input.invalid_import_cleanup"));
+    QVERIFY(QFileInfo::exists(m_projectRoot + QLatin1Char('/') + assetPath));
+}
+
+void FileSystemComicImporterTest::projectSessionBindingRejectsMismatchedAndClosedRequests() {
+    application::ImportImagesRequest mismatched;
+    mismatched.projectId = domain::ProjectId::generate();
+    mismatched.projectRoot = m_projectRoot;
+    mismatched.filePaths = {fixture(QStringLiteral("sample.png"))};
+    auto mismatchResult = await(m_importer->importImages(mismatched, {}));
+    QVERIFY(!mismatchResult.has_value());
+    QCOMPARE(mismatchResult.error().code, QStringLiteral("project.not_open"));
+
+    application::CloseProjectRequest close;
+    close.projectId = m_projectDescriptor.id;
+    QVERIFY(await(m_repository->closeProject(close, {})).has_value());
+
+    mismatched.projectId = m_projectDescriptor.id;
+    auto closedResult = await(m_importer->importImages(mismatched, {}));
+    QVERIFY(!closedResult.has_value());
+    QCOMPARE(closedResult.error().code, QStringLiteral("project.not_open"));
 }
 
 void FileSystemComicImporterTest::loaderRoundTripMatchesImport() {
@@ -437,6 +476,7 @@ void FileSystemComicImporterTest::loaderRoundTripMatchesImport() {
     request.projectRoot = m_projectRoot;
     request.pageId = page.id();
     request.assetPath = QString::fromStdString(page.originalAssetPath());
+    request.expectedSize = page.imageSize();
     auto image = await(m_loader->loadPageImage(std::move(request), {}));
     QVERIFY(image.has_value());
     QCOMPARE(image->format(), QImage::Format_RGBA8888);
@@ -449,6 +489,7 @@ void FileSystemComicImporterTest::loaderRejectsMissingAndEscape() {
     missing.projectRoot = m_projectRoot;
     missing.pageId = PageId::generate();
     missing.assetPath = QStringLiteral("assets/original/does-not-exist.png");
+    missing.expectedSize = {3, 2};
     auto missingResult = await(m_loader->loadPageImage(std::move(missing), {}));
     QVERIFY(!missingResult.has_value());
     QCOMPARE(missingResult.error().code, QStringLiteral("persistence.not_found"));
@@ -458,9 +499,27 @@ void FileSystemComicImporterTest::loaderRejectsMissingAndEscape() {
     escape.projectRoot = m_projectRoot;
     escape.pageId = PageId::generate();
     escape.assetPath = QStringLiteral("../outside.png");
+    escape.expectedSize = {3, 2};
     auto escapeResult = await(m_loader->loadPageImage(std::move(escape), {}));
     QVERIFY(!escapeResult.has_value());
     QCOMPARE(escapeResult.error().code, QStringLiteral("input.invalid_image_request"));
+}
+
+void FileSystemComicImporterTest::loaderRejectsDimensionMismatch() {
+    auto imported = import({fixture(QStringLiteral("sample.png"))});
+    QVERIFY(imported.has_value() && imported->importedPages.size() == 1);
+    const auto& page = imported->importedPages.front().page;
+
+    application::LoadPageImageRequest request;
+    request.projectId = m_projectDescriptor.id;
+    request.projectRoot = m_projectRoot;
+    request.pageId = page.id();
+    request.assetPath = QString::fromStdString(page.originalAssetPath());
+    request.expectedSize = {page.imageSize().width + 1, page.imageSize().height};
+    auto result = await(m_loader->loadPageImage(request, {}));
+
+    QVERIFY(!result.has_value());
+    QCOMPARE(result.error().code, QStringLiteral("project.image_dimension_mismatch"));
 }
 
 void FileSystemComicImporterTest::sourceFileUnchangedAfterImportAndSave() {
@@ -486,7 +545,6 @@ void FileSystemComicImporterTest::sourceFileUnchangedAfterImportAndSave() {
     QVERIFY(project.addPage(imported->importedPages.front().page));
     application::SaveProjectRequest saveRequest;
     saveRequest.project = project;
-    saveRequest.savedRevision = project.revision();
     QVERIFY(await(m_repository->saveProject(std::move(saveRequest), {})).has_value());
 
     QFile afterFile(source);

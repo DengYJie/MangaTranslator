@@ -15,6 +15,8 @@ public:
     virtual QFuture<Result<ImportImagesResult>> importImages(ImportImagesRequest request, OperationContext context) = 0;
     virtual QFuture<Result<void>> discardImportedAssets(DiscardImportedAssetsRequest request,
                                                         OperationContext context) = 0;
+    virtual QFuture<Result<void>> acknowledgeImportedAssets(AcknowledgeImportedAssetsRequest request,
+                                                            OperationContext context) = 0;
 };
 
 } // namespace manga::application

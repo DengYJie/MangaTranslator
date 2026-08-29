@@ -64,12 +64,13 @@ public:
         return makeFuture(nextOpenResult, context);
     }
 
-    QFuture<Result<void>> saveProject(SaveProjectRequest, OperationContext context) override {
-        return makeVoidFuture(context);
+    QFuture<Result<SaveProjectResult>> saveProject(SaveProjectRequest request, OperationContext context) override {
+        return makeFuture(SaveProjectResult{request.project.revision()}, context);
     }
 
-    QFuture<Result<ProjectDescriptor>> saveProjectAs(SaveAsProjectRequest, OperationContext context) override {
-        return makeFuture(nextDescriptor, context);
+    QFuture<Result<SaveAsProjectResult>> saveProjectAs(SaveAsProjectRequest request,
+                                                       OperationContext context) override {
+        return makeFuture(SaveAsProjectResult{nextDescriptor, request.project.revision()}, context);
     }
 
     QFuture<Result<void>> closeProject(CloseProjectRequest, OperationContext context) override {

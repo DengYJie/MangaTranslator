@@ -49,14 +49,14 @@
 - [x] Unicode/NFKC、自然排序、同请求重复拒绝和后续重复导入。
 - [x] 损坏、伪装扩展名、高位深、ICC、EXIF 和透明图片。
 - [x] 测试夹具使用手工构造的最小二进制基线文件（EXIF JPEG、ICC PNG、16-bit PNG、动画 WEBP、CMYK JPEG、伪装扩展名），每个几百字节；QImage 无法生成带元数据的样本。（基线由 `tests/unit/data/fixtures/generate_fixtures.py` 用 Pillow 生成后检入）
-- [x] 源图哈希在导入、保存、编辑和导出后保持不变。
+- [x] 源图哈希在导入和保存后保持不变。
 - [x] 第二实例打开同一项目被 `persistence.locked` 拒绝；崩溃残留锁可被识别清除。
 - [x] 部分导入失败：成功页面保持确定性顺序，失败项逐条携带原因。
 - [x] 重复导入相同文件始终生成新 Page 与新资产，不触碰已有 Region。
 - [x] 页面图像加载与导入使用同一规范化输出（EXIF、ICC、RGBA8）。
 - [x] SaveAs 完整切换后旧目录原样保留。
 - [x] 保存期间继续编辑时，旧保存结果不清除新修改的 Dirty 状态。
-- [x] save/import/saveAs/close 并发请求按项目串行，资产序号不冲突。
+- [x] save/import/saveAs/close 写操作按项目串行，close 等待页面加载租约，资产序号不冲突。
 - [x] 绝对路径、`..`、符号链接、junction/reparse point 和项目根逃逸均被拒绝。（包含性校验经 `std::filesystem::weakly_canonical` 解析重解析点，junction 逃逸有专项测试）
 - [x] 导入在预检、暂存复制、解码和文件间检查取消；取消后的清理范围可验证。（文件间取消经进度回调触发，验证已提交资产全部回滚）
 - [x] warning 可到达 Application DTO；错误码、RecoveryAction 和 diagnostic 不泄露本机路径或用户内容。
@@ -68,7 +68,9 @@
 - 任何保存错误都不破坏最后一次有效项目与源图。
 - 导入部分失败有完整汇总，成功页面仍保持确定性顺序。
 
-以上条件由 `manga_tests_data`（序列化、仓储、导入/加载共 71 个用例）验证通过。
+以上条件由 `manga_tests_domain`、`manga_tests_application` 与 `manga_tests_data` 的对应用例验证。
+
+> 后续验收提示：编辑和导出完成后仍需在 P6/P7 端到端验收中复核源图哈希；这不是 P3 的实现任务。
 
 ## 注意事项
 
@@ -84,8 +86,8 @@
 virtual QFuture<Result<ProjectDescriptor>> createProject(CreateProjectRequest, OperationContext) = 0;
 virtual QFuture<Result<OpenProjectResult>> openProject(OpenProjectRequest, OperationContext) = 0;
 virtual QFuture<Result<OpenProjectResult>> recoverProject(OpenProjectRequest, OperationContext) = 0;
-virtual QFuture<Result<void>> saveProject(SaveProjectRequest, OperationContext) = 0;
-virtual QFuture<Result<ProjectDescriptor>> saveProjectAs(SaveAsProjectRequest, OperationContext) = 0;
+virtual QFuture<Result<SaveProjectResult>> saveProject(SaveProjectRequest, OperationContext) = 0;
+virtual QFuture<Result<SaveAsProjectResult>> saveProjectAs(SaveAsProjectRequest, OperationContext) = 0;
 virtual QFuture<Result<void>> closeProject(CloseProjectRequest, OperationContext) = 0;
 ```
 
@@ -101,16 +103,26 @@ struct OpenProjectResult {
     RecoverySource recoverySource;   // Current / Backup
     QVector<ProjectWarning> warnings;
 };
+
+struct SaveProjectResult {
+    quint64 savedRevision;
+};
+
+struct SaveAsProjectResult {
+    ProjectDescriptor descriptor;
+    quint64 savedRevision;
+};
 ```
 
 - `openProject` 只读 `project.json`（current）；损坏即返回 `persistence.recovery_failed`，不自动回退。
 - `recoverProject` 读 `.bak` 并标记 `RecoverySource::Backup`；由 UI 在收到 `persistence.recovery_failed` 后显式调用。
 - `createProject`：目标目录必须为空或不存在；已有 `project.json` 或非空目录返回 `persistence.target_not_empty`。
 - `closeProject()` 只释放锁、文件句柄和 Repository 运行时资源；不修改 Domain，不写盘。
+- `CloseProjectRequest` 通常携带 `ProjectId`；打开损坏项目后放弃恢复时可改用运行期绝对 `projectRoot` 关闭 recovery-pending 会话，避免锁无法释放。
 - 恢复来源为 `Backup` 时项目只加载进内存，并通过 `recoverySource` 和 `warnings` 通知 UI；不自动覆盖 `project.json`。
 - `ProjectWarning` 只携带稳定 code、安全摘要和项目内相对路径；不得包含绝对本机路径或用户文本。
 - Repository 按 `ProjectId` 持有运行期 `ProjectDescriptor`、锁和规范化根目录；未知或已关闭的 ProjectId 返回 `project.not_open`。
-- 调用保存前捕获 `savedRevision = request.project.revision()`；成功后仅调用 `currentProject.markCleanIfRevision(savedRevision)`。旧快照保存成功不得清除之后产生的新 Dirty 修改，也不清空 Undo 历史。
+- Repository 在写盘前从请求快照捕获 revision，并通过 `SaveProjectResult`/`SaveAsProjectResult.savedRevision` 返回实际写入的 revision；aggregate owner 只用该返回值调用 `currentProject.markCleanIfRevision(savedRevision)`。旧快照保存成功不得清除之后产生的新 Dirty 修改，也不清空 Undo 历史。
 
 错误映射（data 层内部类型进入 Port 前完成）：
 
@@ -134,6 +146,7 @@ project.invalid_semantic
 project.unsupported_schema_version
 project.unsupported_format_version
 project.missing_asset
+project.image_dimension_mismatch
 project.not_open
 
 persistence.not_found
@@ -211,6 +224,7 @@ newPath 必须为空目录或不存在；非空返回 persistence.target_not_emp
 ### 进程内并发与会话生命周期
 
 - `data` 内部使用由 `ApplicationContext` 注入给 Repository、Importer 和 Loader 的项目 I/O 协调器；它不是全局单例，也不进入 Application Port。
+- Repository 在完整验证成功后显式绑定 `ProjectId → canonical root`；Importer、Loader 和清理操作只能取得已绑定会话的票据，未知、路径不匹配、恢复中或已关闭的项目返回 `project.not_open`。
 - create/save/saveAs/import/close 按 canonical 项目根串行；页面加载可并发读取，但必须持有会话租约，close 等待现有租约释放且不接受新操作。
 - 资产序号扫描与最终存在性检查位于同一写临界区；即使发生意外冲突也继续取下一个序号，绝不覆盖。
 - `QLockFile` 负责进程间互斥，项目 I/O 协调器负责同一进程内互斥；两者不可互相替代。
@@ -276,6 +290,7 @@ struct ImportFailure {
 };
 
 struct ImportImagesResult {
+    OperationId batchId;                 // 本次未采用资产的能力令牌
     QVector<ImportedPage> importedPages;
     QVector<ImportFailure> failures;   // 按输入顺序排列
 };
@@ -283,7 +298,14 @@ struct ImportImagesResult {
 struct DiscardImportedAssetsRequest {
     ProjectId projectId;
     QString projectRoot;
+    OperationId batchId;
     QVector<QString> assetPaths;       // 仅允许 assets/original/ 下本次返回的精确路径
+};
+
+struct AcknowledgeImportedAssetsRequest {
+    ProjectId projectId;
+    QString projectRoot;
+    OperationId batchId;
 };
 ```
 
@@ -293,7 +315,8 @@ struct DiscardImportedAssetsRequest {
 - 资产命名沿用 P1 冻结的 `page_NNNN.<ext>` 导入序号命名：序号通过扫描 `assets/original/` 现有最大序号 +1 确定（不加 Schema 字段），存在性检查防冲突；名称在导入时分配，永不随页面重排改变。
 - 文件级失败在提交最终资产前删除 staging；成功页由 `ApplyImportResultUseCase` 使用项目快照原子加入 Domain，`ComicProject::addPage` 从当前页面数开始重新分配连续 orderIndex。
 - 请求取消时回滚本次请求已提交但尚未 Apply 的全部资产并返回 `Cancelled`，不返回部分成功；清理仅针对内存中记录的精确生成路径。
-- Apply 因项目/generation 变化或协议错误被拒绝时，调用 `DiscardImportedAssetsUseCase`；Adapter 再次校验 canonical 包含关系和 `assets/original/` 前缀后删除这些未采用资产。
+- Apply 因项目/generation 变化或协议错误被拒绝时，调用 `DiscardImportedAssetsUseCase`；Adapter 同时校验 canonical 包含关系、`assets/original/` 前缀、批次能力令牌及该批次实际生成的精确路径。
+- Apply 成功后调用 `AcknowledgeImportedAssetsUseCase` 消费批次能力令牌；已采用资产随后不能再通过清理接口删除。
 - warning 随对应 `ImportedPage` 返回；failure 与 warning 都保持输入顺序，不把绝对路径或完整用户内容写入 safeMessage/diagnostic。
 
 ### 页面图像加载
@@ -306,6 +329,7 @@ struct LoadPageImageRequest {
     QString projectRoot;    // 运行期绝对路径，不持久化
     PageId pageId;
     QString assetPath;    // 项目根相对路径
+    ImageSize expectedSize;
 };
 
 virtual QFuture<Result<QImage>> loadPageImage(LoadPageImageRequest, OperationContext) = 0;
@@ -315,7 +339,8 @@ virtual QFuture<Result<QImage>> loadPageImage(LoadPageImageRequest, OperationCon
 - `QImage` 在工作线程构建；`QPixmap` 与 Scene 只在 GUI 线程创建。
 - 加载器不保证持久缓存；缓存属于可选实现优化，不进入 P3 契约。
 - Loader 使用与 Importer 完全相同的 header 预检、单次 EXIF、ICC 和最终格式函数；不得维护第二套规范化实现。
-- `projectRoot` 和 `assetPath` 经 canonical 包含性校验后才能打开；PageId 用于结果身份校验，不用于拼接文件名。
+- `projectRoot` 和 `assetPath` 经会话绑定及 canonical 包含性校验后才能打开；PageId 用于结果身份校验，不用于拼接文件名。
+- 规范化图像尺寸必须等于 `expectedSize`，否则返回 `project.image_dimension_mismatch`。
 - 文件不存在、不可读、内容损坏、尺寸与 Domain `imageSize` 不一致分别映射稳定错误码；缺失原图不可用派生资产替代。
 - 解码前后检查 `stopToken`；已开始的单次 Qt 解码不能强制中止时，完成后丢弃图像并返回 `Cancelled`。
 

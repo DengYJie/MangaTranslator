@@ -19,6 +19,8 @@ struct RepositorySession;
 /// result means "unknown" and never blocks. Production uses QStorageInfo; tests inject
 /// probes that simulate a full disk.
 using DiskSpaceProbe = std::function<qint64(const QString& projectRoot)>;
+/// Allows a commit only when the probe accepts the staged relative path.
+using SaveAsCommitProbe = std::function<bool(const QString& relativePath, int commitIndex)>;
 
 /// Filesystem-backed project repository using the directory layout project.json plus
 /// assets/original and assets/derived. Saves are atomic QSaveFile commits guarded by a
@@ -30,6 +32,7 @@ public:
     ~FileSystemProjectRepository() override;
 
     void setDiskSpaceProbe(DiskSpaceProbe probe);
+    void setSaveAsCommitProbe(SaveAsCommitProbe probe);
 
     [[nodiscard]] QFuture<application::Result<application::ProjectDescriptor>>
     createProject(application::CreateProjectRequest request, application::OperationContext context) override;
@@ -37,9 +40,9 @@ public:
     openProject(application::OpenProjectRequest request, application::OperationContext context) override;
     [[nodiscard]] QFuture<application::Result<application::OpenProjectResult>>
     recoverProject(application::OpenProjectRequest request, application::OperationContext context) override;
-    [[nodiscard]] QFuture<application::Result<void>> saveProject(application::SaveProjectRequest request,
-                                                                 application::OperationContext context) override;
-    [[nodiscard]] QFuture<application::Result<application::ProjectDescriptor>>
+    [[nodiscard]] QFuture<application::Result<application::SaveProjectResult>>
+    saveProject(application::SaveProjectRequest request, application::OperationContext context) override;
+    [[nodiscard]] QFuture<application::Result<application::SaveAsProjectResult>>
     saveProjectAs(application::SaveAsProjectRequest request, application::OperationContext context) override;
     [[nodiscard]] QFuture<application::Result<void>> closeProject(application::CloseProjectRequest request,
                                                                   application::OperationContext context) override;
@@ -53,6 +56,7 @@ private:
 
     ProjectIoCoordinator* m_coordinator;
     DiskSpaceProbe m_probe;
+    SaveAsCommitProbe m_saveAsCommitProbe;
     QMutex m_mutex;
     std::map<QString, std::shared_ptr<RepositorySession>> m_sessions;
 };

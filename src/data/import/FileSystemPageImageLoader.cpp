@@ -25,11 +25,12 @@ QFuture<application::Result<QImage>> FileSystemPageImageLoader::loadPageImage(ap
         if (canonicalRoot.isEmpty()) {
             return std::unexpected(fileNotFoundError());
         }
-        auto lease = m_coordinator->acquireLease(canonicalRoot);
+        auto lease = m_coordinator->acquireProjectLease(request.projectId, canonicalRoot);
         if (!lease) {
-            return std::unexpected(application::makeApplicationError(application::ErrorCategory::Persistence,
-                                                                     QStringLiteral("persistence.locked"),
-                                                                     QStringLiteral("The project session is closing")));
+            return std::unexpected(
+                application::makeApplicationError(application::ErrorCategory::Project,
+                                                  QStringLiteral("project.not_open"),
+                                                  QStringLiteral("The project session is not open")));
         }
 
         const QString assetPath = QDir::fromNativeSeparators(request.assetPath.trimmed());
@@ -70,6 +71,13 @@ QFuture<application::Result<QImage>> FileSystemPageImageLoader::loadPageImage(ap
             return std::unexpected(application::makeApplicationError(application::ErrorCategory::Cancelled,
                                                                      QStringLiteral("cancelled.decode"),
                                                                      QStringLiteral("Image loading was cancelled")));
+        }
+        if (normalized->image.width() != request.expectedSize.width ||
+            normalized->image.height() != request.expectedSize.height) {
+            return std::unexpected(application::makeApplicationError(
+                application::ErrorCategory::Project,
+                QStringLiteral("project.image_dimension_mismatch"),
+                QStringLiteral("The page image dimensions do not match the project")));
         }
         return normalized->image;
     });

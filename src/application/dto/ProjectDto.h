@@ -49,17 +49,27 @@ struct CreateProjectRequest {
 
 struct SaveProjectRequest {
     domain::ComicProject project;
+};
+
+// Identifies the exact aggregate snapshot committed by the repository.
+struct SaveProjectResult {
     quint64 savedRevision{0};
 };
 
 struct SaveAsProjectRequest {
     domain::ComicProject project;
     QString newPath;
+};
+
+struct SaveAsProjectResult {
+    ProjectDescriptor descriptor;
     quint64 savedRevision{0};
 };
 
 struct CloseProjectRequest {
     domain::ProjectId projectId;
+    // Recovery failures can own a root lock before a valid project identifier is available.
+    QString projectRoot;
 };
 
 } // namespace manga::application

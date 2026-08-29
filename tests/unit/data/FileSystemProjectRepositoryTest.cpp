@@ -3,6 +3,7 @@
 #include "data/project/FileSystemProjectRepository.h"
 #include "data/project/PathSafety.h"
 #include "data/project/ProjectIoCoordinator.h"
+#include "data/project/ProjectSerializer.h"
 #include "domain/model/ComicPage.h"
 #include "domain/model/ComicProject.h"
 
@@ -116,7 +117,6 @@ application::ApplicationError FileSystemProjectRepositoryTest::openProjectError(
 application::ApplicationError FileSystemProjectRepositoryTest::saveProject(const ComicProject& project) {
     application::SaveProjectRequest request;
     request.project = project;
-    request.savedRevision = project.revision();
     auto result = await(m_repository->saveProject(std::move(request), {}));
     if (!result) {
         return result.error();
@@ -129,12 +129,11 @@ application::ApplicationError FileSystemProjectRepositoryTest::saveProjectAs(con
     application::SaveAsProjectRequest request;
     request.project = project;
     request.newPath = newPath;
-    request.savedRevision = project.revision();
     auto result = await(m_repository->saveProjectAs(std::move(request), {}));
     if (!result) {
         return result.error();
     }
-    m_saveAsDescriptor = *result;
+    m_saveAsDescriptor = result->descriptor;
     return {};
 }
 
@@ -192,8 +191,12 @@ void FileSystemProjectRepositoryTest::saveReopenRoundTripPreservesEdits() {
     QVERIFY(project.isDirty());
 
     const quint64 revision = project.revision();
-    expectNoError(saveProject(project));
-    QVERIFY(project.markCleanIfRevision(revision));
+    application::SaveProjectRequest saveRequest;
+    saveRequest.project = project;
+    const auto saveResult = await(m_repository->saveProject(saveRequest, {}));
+    QVERIFY(saveResult.has_value());
+    QCOMPARE(saveResult->savedRevision, revision);
+    QVERIFY(project.markCleanIfRevision(saveResult->savedRevision));
     QVERIFY(!project.isDirty());
     expectNoError(closeProject(project));
 
@@ -321,9 +324,10 @@ void FileSystemProjectRepositoryTest::missingOriginalAssetRejectsOpen() {
     auto opened = openProject(root);
     QVERIFY(opened.has_value());
     ComicProject& project = opened->project;
-    QVERIFY(addAssetPage(project, root, false));
+    QVERIFY(addAssetPage(project, root, true));
     expectNoError(saveProject(project));
     expectNoError(closeProject(project));
+    QVERIFY(QFile::remove(root + QStringLiteral("/assets/original/page_0001.png")));
 
     expectError(openProjectError(root), QStringLiteral("project.missing_asset"));
 }
@@ -336,8 +340,11 @@ void FileSystemProjectRepositoryTest::pathEscapeAssetRejectsOpen() {
     ComicProject& project = opened->project;
     ComicPage page(PageId::generate(), std::string("../evil.png"), ImageSize{3, 2}, 0);
     QVERIFY(project.addPage(page));
-    expectNoError(saveProject(project));
     expectNoError(closeProject(project));
+    QFile projectJson(root + QStringLiteral("/project.json"));
+    QVERIFY(projectJson.open(QIODevice::WriteOnly | QIODevice::Truncate));
+    QCOMPARE(projectJson.write(ProjectSerializer::serialize(project)), ProjectSerializer::serialize(project).size());
+    projectJson.close();
 
     expectError(openProjectError(root), QStringLiteral("project.invalid_semantic"));
 }
@@ -350,8 +357,12 @@ void FileSystemProjectRepositoryTest::absolutePathAssetRejectsOpen() {
     ComicProject& project = opened->project;
     ComicPage page(PageId::generate(), std::string("C:/evil.png"), ImageSize{3, 2}, 0);
     QVERIFY(project.addPage(page));
-    expectNoError(saveProject(project));
     expectNoError(closeProject(project));
+    QFile projectJson(root + QStringLiteral("/project.json"));
+    QVERIFY(projectJson.open(QIODevice::WriteOnly | QIODevice::Truncate));
+    const QByteArray bytes = ProjectSerializer::serialize(project);
+    QCOMPARE(projectJson.write(bytes), bytes.size());
+    projectJson.close();
 
     expectError(openProjectError(root), QStringLiteral("project.invalid_semantic"));
 }
@@ -381,6 +392,35 @@ void FileSystemProjectRepositoryTest::derivedAssetMissingProducesWarning() {
         });
     QVERIFY(warned);
     QVERIFY(reopened->project.pages().size() == 1);
+}
+
+void FileSystemProjectRepositoryTest::derivedAssetCorruptionProducesWarning() {
+    const QString root = newRoot();
+    QVERIFY(createProject(root).has_value());
+    auto opened = openProject(root);
+    QVERIFY(opened.has_value());
+    ComicProject& project = opened->project;
+    QVERIFY(addAssetPage(project, root, true));
+    const QString derivedPath = root + QStringLiteral("/assets/derived/clear_v1.png");
+    QFile derived(derivedPath);
+    QVERIFY(derived.open(QIODevice::WriteOnly));
+    derived.write("not an image");
+    derived.close();
+    ComicPage page = project.pages().front();
+    QVERIFY(project.removePage(page.id()));
+    page.setClearLayerAsset(std::string("assets/derived/clear_v1.png"));
+    QVERIFY(project.addPage(page));
+    expectNoError(saveProject(project));
+    expectNoError(closeProject(project));
+
+    auto reopened = openProject(root);
+    QVERIFY(reopened.has_value());
+    const bool warned = std::any_of(
+        reopened->warnings.cbegin(), reopened->warnings.cend(), [](const application::ProjectWarning& warning) {
+            return warning.code == QStringLiteral("project.derived_asset_invalid") &&
+                   warning.path == QStringLiteral("assets/derived/clear_v1.png");
+        });
+    QVERIFY(warned);
 }
 
 void FileSystemProjectRepositoryTest::saveAsRelocatesSessionAndKeepsOldDirectory() {
@@ -442,6 +482,55 @@ void FileSystemProjectRepositoryTest::saveAsRejectsNonEmptyTarget() {
     QVERIFY(QFileInfo::exists(oldRoot + QStringLiteral("/project.json.bak")));
 }
 
+void FileSystemProjectRepositoryTest::saveAsRejectsCurrentRootWithoutBlocking() {
+    const QString root = newRoot();
+    QVERIFY(createProject(root).has_value());
+    auto opened = openProject(root);
+    QVERIFY(opened.has_value());
+
+    application::SaveAsProjectRequest request;
+    request.project = opened->project;
+    request.newPath = root;
+    auto future = m_repository->saveProjectAs(request, {});
+    future.waitForFinished();
+    QVERIFY(future.isFinished());
+    QVERIFY(!future.result().has_value());
+    QCOMPARE(future.result().error().code, QStringLiteral("input.invalid_save_as"));
+}
+
+void FileSystemProjectRepositoryTest::saveAsCommitFailureCleansExistingEmptyTarget() {
+    const QString oldRoot = newRoot();
+    QVERIFY(createProject(oldRoot).has_value());
+    auto opened = openProject(oldRoot);
+    QVERIFY(opened.has_value());
+    QVERIFY(addAssetPage(opened->project, oldRoot, true));
+    expectNoError(saveProject(opened->project));
+
+    const QString targetRoot = newRoot();
+    QVERIFY(QDir().mkpath(targetRoot));
+    m_repository->setSaveAsCommitProbe([](const QString&, int commitIndex) { return commitIndex == 0; });
+    expectError(saveProjectAs(opened->project, targetRoot), QStringLiteral("persistence.atomic_commit_failed"));
+    m_repository->setSaveAsCommitProbe({});
+
+    QCOMPARE(QDir(targetRoot).entryList(QDir::AllEntries | QDir::NoDotAndDotDot), QStringList{});
+    opened->project.setName("Old Session Intact");
+    expectNoError(saveProject(opened->project));
+}
+
+void FileSystemProjectRepositoryTest::repeatedOpenReturnsLatestSavedSnapshot() {
+    const QString root = newRoot();
+    QVERIFY(createProject(root).has_value());
+    auto opened = openProject(root);
+    QVERIFY(opened.has_value());
+    opened->project.setName("Latest Snapshot");
+    expectNoError(saveProject(opened->project));
+
+    auto repeated = openProject(root);
+    QVERIFY(repeated.has_value());
+    expectStdString(repeated->project.name(), QStringLiteral("Latest Snapshot"));
+    QVERIFY(!repeated->project.isDirty());
+}
+
 void FileSystemProjectRepositoryTest::closeReleasesLockAndSession() {
     const QString root = newRoot();
     auto descriptor = createProject(root);
@@ -461,6 +550,72 @@ void FileSystemProjectRepositoryTest::closeReleasesLockAndSession() {
 
     // The lock was released, so the project can be opened again.
     QVERIFY(openProject(root).has_value());
+}
+
+void FileSystemProjectRepositoryTest::closeWaitsForActivePageLease() {
+    const QString root = newRoot();
+    auto descriptor = createProject(root);
+    QVERIFY(descriptor.has_value());
+    auto lease = m_coordinator->acquireProjectLease(descriptor->id, descriptor->path);
+    QVERIFY(lease.has_value());
+
+    application::CloseProjectRequest request;
+    request.projectId = descriptor->id;
+    auto future = m_repository->closeProject(request, {});
+    QTest::qWait(20);
+    QVERIFY(!future.isFinished());
+
+    lease->release();
+    future.waitForFinished();
+    QVERIFY(future.result().has_value());
+}
+
+void FileSystemProjectRepositoryTest::projectWriteOperationsSerialize() {
+    const QString root = newRoot();
+    auto descriptor = createProject(root);
+    QVERIFY(descriptor.has_value());
+    auto opened = openProject(root);
+    QVERIFY(opened.has_value());
+    opened->project.setName("Serialized Save");
+
+    auto heldTicket = m_coordinator->beginProjectWrite(descriptor->id, descriptor->path);
+    QVERIFY(heldTicket.has_value());
+    application::SaveProjectRequest request;
+    request.project = opened->project;
+    auto future = m_repository->saveProject(request, {});
+    QTest::qWait(20);
+    QVERIFY(!future.isFinished());
+
+    heldTicket->release();
+    future.waitForFinished();
+    QVERIFY(future.result().has_value());
+}
+
+void FileSystemProjectRepositoryTest::recoveryPendingSessionCanCloseByRoot() {
+    const QString root = newRoot();
+    auto descriptor = createProject(root);
+    QVERIFY(descriptor.has_value());
+    application::CloseProjectRequest closeHealthy;
+    closeHealthy.projectId = descriptor->id;
+    QVERIFY(await(m_repository->closeProject(closeHealthy, {})).has_value());
+
+    QFile current(root + QStringLiteral("/project.json"));
+    QVERIFY(current.open(QIODevice::WriteOnly | QIODevice::Truncate));
+    current.write("{ damaged");
+    current.close();
+    expectError(openProjectError(root), QStringLiteral("persistence.recovery_failed"));
+
+    application::CloseProjectRequest abandonRecovery;
+    abandonRecovery.projectRoot = root;
+    QVERIFY(await(m_repository->closeProject(abandonRecovery, {})).has_value());
+
+    ProjectIoCoordinator otherCoordinator;
+    FileSystemProjectRepository otherRepository(&otherCoordinator);
+    application::OpenProjectRequest request;
+    request.path = root;
+    const auto result = await(otherRepository.openProject(request, {}));
+    QVERIFY(!result.has_value());
+    QCOMPARE(result.error().code, QStringLiteral("persistence.recovery_failed"));
 }
 
 void FileSystemProjectRepositoryTest::saveFailsWhenDiskSpaceProbeReportsFull() {
@@ -562,8 +717,12 @@ void FileSystemProjectRepositoryTest::reparsePointEscapeRejectsOpen() {
     ComicProject& project = opened->project;
     ComicPage page(PageId::generate(), std::string("assets/jail/outside.png"), ImageSize{3, 2}, 0);
     QVERIFY(project.addPage(page));
-    expectNoError(saveProject(project));
     expectNoError(closeProject(project));
+    QFile projectJson(root + QStringLiteral("/project.json"));
+    QVERIFY(projectJson.open(QIODevice::WriteOnly | QIODevice::Truncate));
+    const QByteArray bytes = ProjectSerializer::serialize(project);
+    QCOMPARE(projectJson.write(bytes), bytes.size());
+    projectJson.close();
 
     // The canonical containment check resolves the junction and rejects the escape.
     expectError(openProjectError(root), QStringLiteral("project.invalid_semantic"));

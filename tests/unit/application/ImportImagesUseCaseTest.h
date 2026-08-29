@@ -13,4 +13,5 @@ private slots:
     void testApplyImportResultRejectsStaleGeneration();
     void testApplyImportResultRollsBackInvalidBatch();
     void testDiscardImportedAssetsValidatesAndDispatches();
+    void testAcknowledgeImportedAssetsValidatesAndDispatches();
 };

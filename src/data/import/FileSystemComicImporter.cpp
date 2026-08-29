@@ -31,10 +31,10 @@ application::ApplicationError makeCancelledError(QStringView what) {
                                              QStringLiteral("%1 was cancelled").arg(what));
 }
 
-application::ApplicationError makeLockedError() {
-    return application::makeApplicationError(application::ErrorCategory::Persistence,
-                                             QStringLiteral("persistence.locked"),
-                                             QStringLiteral("The project session is closing"));
+application::ApplicationError makeProjectNotOpenError() {
+    return application::makeApplicationError(application::ErrorCategory::Project,
+                                             QStringLiteral("project.not_open"),
+                                             QStringLiteral("The project session is not open"));
 }
 
 application::ApplicationError makeDuplicateImportError() {
@@ -118,6 +118,15 @@ SingleImportOutcome importOneFile(const ImportCandidate& candidate,
     SingleImportOutcome outcome;
     outcome.failure.path = candidate.sourcePath;
     const QString stagedPath = stagingDir + QLatin1Char('/') + QUuid::createUuid().toString(QUuid::WithoutBraces);
+    struct StagedFileCleanup {
+        QString path;
+        bool armed{true};
+        ~StagedFileCleanup() {
+            if (armed) {
+                QFile::remove(path);
+            }
+        }
+    } stagedCleanup{stagedPath};
 
     QFile source(candidate.absolutePath);
     if (!source.open(QIODevice::ReadOnly)) {
@@ -125,6 +134,7 @@ SingleImportOutcome importOneFile(const ImportCandidate& candidate,
         outcome.failure.error.diagnostic = QStringLiteral("stage:open-source");
         return outcome;
     }
+    QByteArray sourceHash;
     {
         QFile stagedFile(stagedPath);
         if (!stagedFile.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
@@ -150,13 +160,41 @@ SingleImportOutcome importOneFile(const ImportCandidate& candidate,
                 return outcome;
             }
             if (stopToken.stop_requested()) {
-                stagedFile.remove();
                 outcome.failure.error = makeCancelledError(u"Import");
                 return outcome;
             }
         }
+        sourceHash = hash.result();
     }
     source.close();
+
+    QFile stagedVerification(stagedPath);
+    if (!stagedVerification.open(QIODevice::ReadOnly)) {
+        outcome.failure.error = toPersistenceError(stagedVerification.error());
+        outcome.failure.error.diagnostic = QStringLiteral("stage:verify-open");
+        return outcome;
+    }
+    QCryptographicHash stagedHash(QCryptographicHash::Sha256);
+    while (!stagedVerification.atEnd()) {
+        const QByteArray chunk = stagedVerification.read(1 << 20);
+        if (chunk.isEmpty()) {
+            outcome.failure.error =
+                toPersistenceError(stagedVerification.error() == QFileDevice::NoError ? QFileDevice::ReadError
+                                                                                      : stagedVerification.error());
+            outcome.failure.error.diagnostic = QStringLiteral("stage:verify-read");
+            return outcome;
+        }
+        stagedHash.addData(chunk);
+    }
+    if (stagedHash.result() != sourceHash) {
+        outcome.failure.error =
+            application::makeApplicationError(application::ErrorCategory::Persistence,
+                                              QStringLiteral("persistence.atomic_commit_failed"),
+                                              QStringLiteral("The imported image failed verification"));
+        outcome.failure.error.diagnostic = QStringLiteral("stage:verify-hash");
+        return outcome;
+    }
+    stagedVerification.close();
 
     QByteArray head;
     {
@@ -169,7 +207,6 @@ SingleImportOutcome importOneFile(const ImportCandidate& candidate,
     }
     const ImageFileFormat detected = detectImageFileFormat(head);
     if (detected == ImageFileFormat::Unknown) {
-        QFile::remove(stagedPath);
         outcome.failure.error =
             application::makeApplicationError(application::ErrorCategory::Input,
                                               QStringLiteral("import.unsupported_format"),
@@ -180,7 +217,6 @@ SingleImportOutcome importOneFile(const ImportCandidate& candidate,
 
     auto normalized = loadNormalizedImage(stagedPath, stopToken);
     if (!normalized) {
-        QFile::remove(stagedPath);
         outcome.failure.error = normalized.error();
         return outcome;
     }
@@ -229,11 +265,11 @@ SingleImportOutcome importOneFile(const ImportCandidate& candidate,
                                         pageIndex);
 
     if (!QFile::rename(stagedPath, finalPath)) {
-        QFile::remove(stagedPath);
         outcome.failure.error = toPersistenceError(QFileDevice::RenameError);
         outcome.failure.error.diagnostic = QStringLiteral("stage:rename");
         return outcome;
     }
+    stagedCleanup.armed = false;
     ++nextNumber;
 
     outcome.importedPage = std::move(pageResult);
@@ -244,7 +280,8 @@ SingleImportOutcome importOneFile(const ImportCandidate& candidate,
 
 } // namespace
 
-FileSystemComicImporter::FileSystemComicImporter(ProjectIoCoordinator* coordinator) : m_coordinator(coordinator) {}
+FileSystemComicImporter::FileSystemComicImporter(ProjectIoCoordinator* coordinator, CommitObserver commitObserver)
+    : m_coordinator(coordinator), m_commitObserver(std::move(commitObserver)) {}
 
 QFuture<application::Result<application::ImportImagesResult>>
 FileSystemComicImporter::importImages(application::ImportImagesRequest request, application::OperationContext context) {
@@ -277,9 +314,9 @@ FileSystemComicImporter::importImagesBlocking(const application::ImportImagesReq
     if (canonicalRoot.isEmpty()) {
         return std::unexpected(fileNotFoundError());
     }
-    auto writeTicket = m_coordinator->beginWrite(canonicalRoot);
+    auto writeTicket = m_coordinator->beginProjectWrite(request.projectId, canonicalRoot);
     if (!writeTicket) {
-        return std::unexpected(makeLockedError());
+        return std::unexpected(makeProjectNotOpenError());
     }
 
     const auto expanded = expandSources(request.filePaths);
@@ -326,6 +363,7 @@ FileSystemComicImporter::importImagesBlocking(const application::ImportImagesReq
     }
 
     application::ImportImagesResult result;
+    result.batchId = context.operationId.isValid() ? context.operationId : application::OperationId::generate();
     QVector<QString> committedAssets;
     int pageIndex = 0;
     int completedFiles = 0;
@@ -341,7 +379,7 @@ FileSystemComicImporter::importImagesBlocking(const application::ImportImagesReq
                 for (const QString& path : committedAssets) {
                     QFile::remove(path);
                 }
-                QDir(stagingDir).removeRecursively();
+                QDir(canonicalRoot).rmdir(kAssetsStaging.toString());
                 return std::unexpected(makeCancelledError(u"Import"));
             }
             auto outcome =
@@ -350,6 +388,9 @@ FileSystemComicImporter::importImagesBlocking(const application::ImportImagesReq
                 result.importedPages.append(std::move(*outcome.importedPage));
                 committedAssets.append(outcome.committedAbsolutePath);
                 ++pageIndex;
+                if (m_commitObserver) {
+                    m_commitObserver(committedAssets.size());
+                }
             } else {
                 result.failures.append(std::move(outcome.failure));
             }
@@ -361,10 +402,20 @@ FileSystemComicImporter::importImagesBlocking(const application::ImportImagesReq
         for (const QString& path : committedAssets) {
             QFile::remove(path);
         }
-        QDir(stagingDir).removeRecursively();
+        QDir(canonicalRoot).rmdir(kAssetsStaging.toString());
         return std::unexpected(makeCancelledError(u"Import"));
     }
-    QDir(stagingDir).removeRecursively();
+    QDir(canonicalRoot).rmdir(kAssetsStaging.toString());
+    if (!result.importedPages.isEmpty()) {
+        PendingBatch batch;
+        batch.projectId = request.projectId;
+        batch.canonicalRoot = canonicalRoot;
+        for (const auto& importedPage : result.importedPages) {
+            batch.assetPaths.insert(QString::fromStdString(importedPage.page.originalAssetPath()));
+        }
+        QMutexLocker locker(&m_batchesMutex);
+        m_pendingBatches.insert_or_assign(result.batchId.toString(), std::move(batch));
+    }
     return result;
 }
 
@@ -380,13 +431,27 @@ FileSystemComicImporter::discardImportedAssets(application::DiscardImportedAsset
         if (canonicalRoot.isEmpty()) {
             return std::unexpected(fileNotFoundError());
         }
-        auto writeTicket = m_coordinator->beginWrite(canonicalRoot);
+        auto writeTicket = m_coordinator->beginProjectWrite(request.projectId, canonicalRoot);
         if (!writeTicket) {
-            return std::unexpected(makeLockedError());
+            return std::unexpected(makeProjectNotOpenError());
+        }
+        QSet<QString> allowedPaths;
+        {
+            QMutexLocker locker(&m_batchesMutex);
+            const auto it = m_pendingBatches.find(request.batchId.toString());
+            if (it == m_pendingBatches.end() || it->second.projectId != request.projectId ||
+                it->second.canonicalRoot != canonicalRoot) {
+                return std::unexpected(
+                    application::makeApplicationError(application::ErrorCategory::Input,
+                                                      QStringLiteral("input.invalid_import_cleanup"),
+                                                      QStringLiteral("The cleanup request is invalid")));
+            }
+            allowedPaths = it->second.assetPaths;
         }
         for (const QString& assetPath : request.assetPaths) {
             if (!isSafeRelativeAssetPath(assetPath) ||
-                !assetPath.startsWith(QString(kAssetsOriginal) + QLatin1Char('/'))) {
+                !assetPath.startsWith(QString(kAssetsOriginal) + QLatin1Char('/')) ||
+                !allowedPaths.contains(assetPath)) {
                 return std::unexpected(
                     application::makeApplicationError(application::ErrorCategory::Input,
                                                       QStringLiteral("input.invalid_import_cleanup"),
@@ -400,6 +465,48 @@ FileSystemComicImporter::discardImportedAssets(application::DiscardImportedAsset
                 return std::unexpected(toPersistenceError(QFileDevice::PermissionsError));
             }
         }
+        {
+            QMutexLocker locker(&m_batchesMutex);
+            auto it = m_pendingBatches.find(request.batchId.toString());
+            if (it != m_pendingBatches.end()) {
+                for (const QString& assetPath : request.assetPaths) {
+                    it->second.assetPaths.remove(assetPath);
+                }
+                if (it->second.assetPaths.isEmpty()) {
+                    m_pendingBatches.erase(it);
+                }
+            }
+        }
+        return {};
+    });
+}
+
+QFuture<application::Result<void>>
+FileSystemComicImporter::acknowledgeImportedAssets(application::AcknowledgeImportedAssetsRequest request,
+                                                   application::OperationContext context) {
+    return runDataOperation<void>([this, request = std::move(request), context]() -> application::Result<void> {
+        if (context.stopToken.stop_requested()) {
+            return std::unexpected(makeCancelledError(u"Import acknowledgement"));
+        }
+        const QString canonicalRoot =
+            canonicalDirectoryPath(QDir::cleanPath(QDir::fromNativeSeparators(request.projectRoot.trimmed())));
+        if (canonicalRoot.isEmpty()) {
+            return std::unexpected(fileNotFoundError());
+        }
+        auto writeTicket = m_coordinator->beginProjectWrite(request.projectId, canonicalRoot);
+        if (!writeTicket) {
+            return std::unexpected(makeProjectNotOpenError());
+        }
+        QMutexLocker locker(&m_batchesMutex);
+        const auto it = m_pendingBatches.find(request.batchId.toString());
+        if (it == m_pendingBatches.end() || it->second.projectId != request.projectId ||
+            it->second.canonicalRoot != canonicalRoot) {
+            return std::unexpected(
+                application::makeApplicationError(application::ErrorCategory::Input,
+                                                  QStringLiteral("input.invalid_import_cleanup"),
+                                                  QStringLiteral("The import acknowledgement is invalid")));
+        }
+        m_pendingBatches.erase(it);
         return {};
     });
 }

@@ -34,9 +34,16 @@ private slots:
     void pathEscapeAssetRejectsOpen();
     void absolutePathAssetRejectsOpen();
     void derivedAssetMissingProducesWarning();
+    void derivedAssetCorruptionProducesWarning();
     void saveAsRelocatesSessionAndKeepsOldDirectory();
     void saveAsRejectsNonEmptyTarget();
+    void saveAsRejectsCurrentRootWithoutBlocking();
+    void saveAsCommitFailureCleansExistingEmptyTarget();
+    void repeatedOpenReturnsLatestSavedSnapshot();
     void closeReleasesLockAndSession();
+    void closeWaitsForActivePageLease();
+    void projectWriteOperationsSerialize();
+    void recoveryPendingSessionCanCloseByRoot();
     void saveFailsWhenDiskSpaceProbeReportsFull();
     void saveRejectsWriteProtectedDirectory();
     void reparsePointEscapeRejectsOpen();

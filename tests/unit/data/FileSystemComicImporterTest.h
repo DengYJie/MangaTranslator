@@ -41,8 +41,11 @@ private slots:
     void cancelledMidImportRollsBackCommittedAssets();
     void concurrentImportsSerialize();
     void discardRemovesAssets();
+    void acknowledgedBatchCannotDeleteAdoptedAsset();
+    void projectSessionBindingRejectsMismatchedAndClosedRequests();
     void loaderRoundTripMatchesImport();
     void loaderRejectsMissingAndEscape();
+    void loaderRejectsDimensionMismatch();
     void sourceFileUnchangedAfterImportAndSave();
 
 private:
@@ -51,7 +54,7 @@ private:
     [[nodiscard]] bool createTestProject();
     [[nodiscard]] std::optional<manga::application::ImportImagesResult> import(const QVector<QString>& paths);
     [[nodiscard]] manga::application::ApplicationError importError(const QVector<QString>& paths);
-    [[nodiscard]] std::optional<QImage> loadPageImage(const QString& assetPath);
+    [[nodiscard]] std::optional<QImage> loadPageImage(const QString& assetPath, manga::domain::ImageSize expectedSize);
 
     QTemporaryDir m_tempDir;
     std::unique_ptr<manga::data::ProjectIoCoordinator> m_coordinator;

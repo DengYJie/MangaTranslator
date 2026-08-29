@@ -4,6 +4,8 @@
 #include "application/operation/AsyncResult.h"
 #include "application/ports/IProjectRepository.h"
 
+#include <QDir>
+
 #include <utility>
 
 namespace manga::application {
@@ -69,17 +71,18 @@ class SaveProjectUseCase {
 public:
     explicit SaveProjectUseCase(IProjectRepository* repository) : m_repository(repository) {}
 
-    [[nodiscard]] QFuture<Result<void>> execute(const SaveProjectRequest& request, const OperationContext& context) {
+    [[nodiscard]] QFuture<Result<SaveProjectResult>> execute(const SaveProjectRequest& request,
+                                                             const OperationContext& context) {
         if (m_repository == nullptr) {
-            return makeFailedFuture<void>(makeApplicationError(
+            return makeFailedFuture<SaveProjectResult>(makeApplicationError(
                 ErrorCategory::Internal, "internal.null_repository", "Project storage is unavailable"));
         }
         if (context.stopToken.stop_requested()) {
-            return makeFailedFuture<void>(
+            return makeFailedFuture<SaveProjectResult>(
                 makeApplicationError(ErrorCategory::Cancelled, "cancelled.before_start", "Operation was cancelled"));
         }
         if (!request.project.isValid()) {
-            return detail::invalidProjectRequest<void>("input.invalid_project", "Project data is invalid");
+            return detail::invalidProjectRequest<SaveProjectResult>("input.invalid_project", "Project data is invalid");
         }
         return m_repository->saveProject(request, context);
     }
@@ -92,18 +95,18 @@ class SaveProjectAsUseCase {
 public:
     explicit SaveProjectAsUseCase(IProjectRepository* repository) : m_repository(repository) {}
 
-    [[nodiscard]] QFuture<Result<ProjectDescriptor>> execute(const SaveAsProjectRequest& request,
-                                                             const OperationContext& context) {
+    [[nodiscard]] QFuture<Result<SaveAsProjectResult>> execute(const SaveAsProjectRequest& request,
+                                                               const OperationContext& context) {
         if (m_repository == nullptr) {
-            return makeFailedFuture<ProjectDescriptor>(makeApplicationError(
+            return makeFailedFuture<SaveAsProjectResult>(makeApplicationError(
                 ErrorCategory::Internal, "internal.null_repository", "Project storage is unavailable"));
         }
         if (context.stopToken.stop_requested()) {
-            return makeFailedFuture<ProjectDescriptor>(
+            return makeFailedFuture<SaveAsProjectResult>(
                 makeApplicationError(ErrorCategory::Cancelled, "cancelled.before_start", "Operation was cancelled"));
         }
         if (!request.project.isValid() || request.newPath.trimmed().isEmpty()) {
-            return detail::invalidProjectRequest<ProjectDescriptor>(
+            return detail::invalidProjectRequest<SaveAsProjectResult>(
                 "input.invalid_save_as", "Valid project data and a destination are required");
         }
         return m_repository->saveProjectAs(request, context);
@@ -126,8 +129,8 @@ public:
             return makeFailedFuture<void>(
                 makeApplicationError(ErrorCategory::Cancelled, "cancelled.before_start", "Operation was cancelled"));
         }
-        if (!request.projectId.isValid()) {
-            return detail::invalidProjectRequest<void>("input.invalid_project_id", "Project ID is invalid");
+        if (!request.projectId.isValid() && !QDir::isAbsolutePath(request.projectRoot.trimmed())) {
+            return detail::invalidProjectRequest<void>("input.invalid_project_session", "Project session is invalid");
         }
         return m_repository->closeProject(request, context);
     }

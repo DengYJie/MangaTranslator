@@ -9,11 +9,13 @@
 #include <QDir>
 #include <QDirIterator>
 #include <QFileInfo>
+#include <QImageReader>
 #include <QLockFile>
 #include <QMutexLocker>
 #include <QSaveFile>
 #include <QStorageInfo>
 
+#include <limits>
 #include <optional>
 #include <utility>
 
@@ -181,9 +183,17 @@ validateProjectAssets(const QString& canonicalRoot, const domain::ComicProject& 
                 warnings.append(warning);
                 continue;
             }
-            if (!isInsideCanonicalRoot(canonicalRoot,
-                                       canonicalPathResolved(canonicalRoot + QLatin1Char('/') + relative))) {
+            const QString resolvedLayer = canonicalPathResolved(canonicalRoot + QLatin1Char('/') + relative);
+            if (!isInsideCanonicalRoot(canonicalRoot, resolvedLayer)) {
                 return std::unexpected(makeSemanticError(u"layer assets must stay inside the project root"));
+            }
+            QImageReader reader(resolvedLayer);
+            if (!layerInfo.isReadable() || !reader.canRead()) {
+                application::ProjectWarning warning;
+                warning.code = QStringLiteral("project.derived_asset_invalid");
+                warning.safeMessage = QStringLiteral("A derived image is invalid and must be regenerated");
+                warning.path = relative;
+                warnings.append(warning);
             }
         }
     }
@@ -235,12 +245,22 @@ copyFileVerified(const QString& sourcePath, const QString& targetPath, std::stop
 // Copies every regular file below sourceDir into stagingDir preserving relative paths.
 std::optional<application::ApplicationError>
 copyTreeVerified(const QString& sourceDir, const QString& stagingDir, std::stop_token stopToken) {
+    const QString canonicalSourceDir = canonicalDirectoryPath(sourceDir);
+    if (canonicalSourceDir.isEmpty()) {
+        return fileNotFoundError();
+    }
     QDirIterator iterator(sourceDir, QDir::Files | QDir::NoDotAndDotDot, QDirIterator::Subdirectories);
     while (iterator.hasNext()) {
         if (stopToken.stop_requested()) {
             return makeCancelledError(u"Project copy");
         }
         const QString sourcePath = iterator.next();
+        const QString resolvedSource = canonicalPathResolved(sourcePath);
+        if (resolvedSource.isEmpty() || !isInsideCanonicalRoot(canonicalSourceDir, resolvedSource)) {
+            return application::makeApplicationError(application::ErrorCategory::Project,
+                                                     QStringLiteral("project.invalid_semantic"),
+                                                     QStringLiteral("A project asset path is invalid"));
+        }
         const QString relative = QStringView{sourcePath}.mid(sourceDir.size() + 1).toString();
         const QString targetPath = stagingDir + QLatin1Char('/') + relative;
         QFileInfo(targetPath).dir().mkpath(QStringLiteral("."));
@@ -249,6 +269,28 @@ copyTreeVerified(const QString& sourceDir, const QString& stagingDir, std::stop_
         }
     }
     return std::nullopt;
+}
+
+qint64 treeSize(const QString& sourceDir) {
+    qint64 total = 0;
+    QDirIterator iterator(sourceDir, QDir::Files | QDir::NoDotAndDotDot, QDirIterator::Subdirectories);
+    while (iterator.hasNext()) {
+        iterator.next();
+        const qint64 size = iterator.fileInfo().size();
+        if (size > std::numeric_limits<qint64>::max() - total) {
+            return std::numeric_limits<qint64>::max();
+        }
+        total += size;
+    }
+    return total;
+}
+
+bool sameRootPath(const QString& lhs, const QString& rhs) {
+#ifdef Q_OS_WIN
+    return QString::compare(QDir::cleanPath(lhs), QDir::cleanPath(rhs), Qt::CaseInsensitive) == 0;
+#else
+    return QDir::cleanPath(lhs) == QDir::cleanPath(rhs);
+#endif
 }
 
 // Removes the staging tree and a target directory that this operation created; pre-existing
@@ -284,6 +326,10 @@ FileSystemProjectRepository::~FileSystemProjectRepository() = default;
 
 void FileSystemProjectRepository::setDiskSpaceProbe(DiskSpaceProbe probe) {
     m_probe = std::move(probe);
+}
+
+void FileSystemProjectRepository::setSaveAsCommitProbe(SaveAsCommitProbe probe) {
+    m_saveAsCommitProbe = std::move(probe);
 }
 
 bool FileSystemProjectRepository::hasDiskSpace(const QString& root, qint64 requiredBytes) const {
@@ -374,23 +420,39 @@ FileSystemProjectRepository::createProject(application::CreateProjectRequest req
             project.markClean();
 
             const QString projectJsonPath = canonicalRoot + QLatin1Char('/') + kProjectFileName;
+            const QString originalPath = canonicalRoot + QLatin1Char('/') + kAssetsOriginal;
+            const QString derivedPath = canonicalRoot + QLatin1Char('/') + kAssetsDerived;
+            const bool originalExisted = QFileInfo::exists(originalPath);
+            const bool derivedExisted = QFileInfo::exists(derivedPath);
+            const auto cleanupLayout = [&] {
+                if (createdDirectory) {
+                    QDir(cleaned).removeRecursively();
+                    return;
+                }
+                if (!derivedExisted) {
+                    QDir(canonicalRoot).rmdir(kAssetsDerived.toString());
+                }
+                if (!originalExisted) {
+                    QDir(canonicalRoot).rmdir(kAssetsOriginal.toString());
+                }
+                QDir(canonicalRoot).rmdir(QStringLiteral("assets"));
+            };
+            if (!QDir().mkpath(originalPath) || !QDir().mkpath(derivedPath)) {
+                lock.reset();
+                cleanupLayout();
+                return std::unexpected(toPersistenceError(QFileDevice::PermissionsError));
+            }
             const QByteArray initialBytes = ProjectSerializer::serialize(project);
             if (!hasDiskSpace(canonicalRoot, initialBytes.size() + kWriteMarginBytes)) {
                 lock.reset();
-                if (createdDirectory) {
-                    QDir(cleaned).removeRecursively();
-                }
+                cleanupLayout();
                 return std::unexpected(makeDiskFullError());
             }
             if (auto writeError = writeFileSync(projectJsonPath, initialBytes)) {
                 lock.reset();
-                if (createdDirectory) {
-                    QDir(cleaned).removeRecursively();
-                }
+                cleanupLayout();
                 return std::unexpected(*writeError);
             }
-            QDir(canonicalRoot).mkpath(kAssetsOriginal.toString());
-            QDir(canonicalRoot).mkpath(kAssetsDerived.toString());
 
             auto session = std::make_shared<RepositorySession>();
             session->descriptor.id = project.id();
@@ -404,6 +466,11 @@ FileSystemProjectRepository::createProject(application::CreateProjectRequest req
                 session->hasFingerprint = true;
             }
             registerSession(session);
+            if (!m_coordinator->bindProject(session->descriptor.id, canonicalRoot)) {
+                forgetSession(canonicalRoot);
+                session->lock.reset();
+                return std::unexpected(makeLockedError());
+            }
 
             return session->descriptor;
         });
@@ -434,7 +501,15 @@ FileSystemProjectRepository::openProject(application::OpenProjectRequest request
                 }
                 application::OpenProjectResult result;
                 result.project = *existing->project;
-                result.recoverySource = application::RecoverySource::Current;
+                result.recoverySource = existing->recoveredFromBackup ? application::RecoverySource::Backup
+                                                                      : application::RecoverySource::Current;
+                if (existing->recoveredFromBackup) {
+                    application::ProjectWarning warning;
+                    warning.code = QStringLiteral("project.recovered_from_backup");
+                    warning.safeMessage = QStringLiteral("Project data was restored from the backup file");
+                    warning.path = QString(kProjectFileName) + kBackupSuffix;
+                    result.warnings.append(warning);
+                }
                 return result;
             }
             auto lock = std::make_unique<QLockFile>(canonicalRoot + QLatin1Char('/') + kLockFileName);
@@ -477,6 +552,11 @@ FileSystemProjectRepository::openProject(application::OpenProjectRequest request
                 session->hasFingerprint = true;
             }
             registerSession(session);
+            if (!m_coordinator->bindProject(session->descriptor.id, canonicalRoot)) {
+                forgetSession(canonicalRoot);
+                session->lock.reset();
+                return std::unexpected(makeLockedError());
+            }
 
             application::OpenProjectResult result;
             result.project = std::move(*loaded);
@@ -542,6 +622,9 @@ FileSystemProjectRepository::recoverProject(application::OpenProjectRequest requ
             session->descriptor.name = QString::fromStdString(loaded->name());
             session->descriptor.path = canonicalRoot;
             session->project = *loaded;
+            if (!m_coordinator->bindProject(session->descriptor.id, canonicalRoot)) {
+                return std::unexpected(makeLockedError());
+            }
 
             application::OpenProjectResult result;
             result.project = std::move(*loaded);
@@ -556,101 +639,100 @@ FileSystemProjectRepository::recoverProject(application::OpenProjectRequest requ
         });
 }
 
-QFuture<application::Result<void>> FileSystemProjectRepository::saveProject(application::SaveProjectRequest request,
-                                                                            application::OperationContext context) {
-    // savedRevision is consumed by the aggregate owner, which calls markCleanIfRevision when
-    // this future completes; the repository never marks the live aggregate clean, so a stale
-    // save completion cannot clear edits made during the save.
-    return runDataOperation<void>([this, request = std::move(request), context]() -> application::Result<void> {
-        if (context.stopToken.stop_requested()) {
-            return std::unexpected(makeCancelledError(u"Project save"));
-        }
-        auto session = findSession(request.project.id());
-        if (session == nullptr || session->recoveryPending) {
-            return std::unexpected(
-                application::makeApplicationError(application::ErrorCategory::Project,
-                                                  QStringLiteral("project.not_open"),
-                                                  QStringLiteral("The project session is not open")));
-        }
-        auto writeTicket = m_coordinator->beginWrite(session->canonicalRoot);
-        if (!writeTicket) {
-            return std::unexpected(makeLockedError());
-        }
-
-        const QByteArray bytes = ProjectSerializer::serialize(request.project);
-        auto validated = ProjectSerializer::deserialize(bytes);
-        if (!validated) {
-            return std::unexpected(toApplicationError(validated.error()));
-        }
-        // Last cancellation checkpoint; the transaction below ignores stopToken so an
-        // interrupted save never leaves a half-written project.
-        if (context.stopToken.stop_requested()) {
-            return std::unexpected(makeCancelledError(u"Project save"));
-        }
-
-        const QString canonicalRoot = session->canonicalRoot;
-        const QString projectJsonPath = canonicalRoot + QLatin1Char('/') + kProjectFileName;
-        if (!QFileInfo(canonicalRoot).isWritable()) {
-            return std::unexpected(
-                application::makeApplicationError(application::ErrorCategory::Persistence,
-                                                  QStringLiteral("persistence.read_only"),
-                                                  QStringLiteral("The project directory is read-only")));
-        }
-        if (!hasDiskSpace(canonicalRoot, bytes.size() + kWriteMarginBytes)) {
-            return std::unexpected(makeDiskFullError());
-        }
-
-        if (!session->recoveredFromBackup) {
-            auto currentBytes = readFileBytes(projectJsonPath);
-            if (!currentBytes) {
-                return std::unexpected(makeSaveConflictError());
+QFuture<application::Result<application::SaveProjectResult>>
+FileSystemProjectRepository::saveProject(application::SaveProjectRequest request,
+                                         application::OperationContext context) {
+    return runDataOperation<application::SaveProjectResult>(
+        [this, request = std::move(request), context]() -> application::Result<application::SaveProjectResult> {
+            if (context.stopToken.stop_requested()) {
+                return std::unexpected(makeCancelledError(u"Project save"));
             }
-            if (session->hasFingerprint) {
-                const QFileInfo info(projectJsonPath);
-                if (info.size() != session->projectJsonFingerprint.size ||
-                    info.lastModified().toMSecsSinceEpoch() != session->projectJsonFingerprint.modifiedMsecs) {
-                    auto current = fingerprintFile(projectJsonPath);
-                    if (!current || current->sha256 != session->projectJsonFingerprint.sha256) {
-                        return std::unexpected(makeSaveConflictError());
+            auto session = findSession(request.project.id());
+            if (session == nullptr || session->recoveryPending) {
+                return std::unexpected(
+                    application::makeApplicationError(application::ErrorCategory::Project,
+                                                      QStringLiteral("project.not_open"),
+                                                      QStringLiteral("The project session is not open")));
+            }
+            auto writeTicket = m_coordinator->beginWrite(session->canonicalRoot);
+            if (!writeTicket) {
+                return std::unexpected(makeLockedError());
+            }
+
+            const QByteArray bytes = ProjectSerializer::serialize(request.project);
+            auto validated = ProjectSerializer::deserialize(bytes);
+            if (!validated) {
+                return std::unexpected(toApplicationError(validated.error()));
+            }
+            auto assets = validateProjectAssets(session->canonicalRoot, request.project);
+            if (!assets) {
+                return std::unexpected(assets.error());
+            }
+            // Last cancellation checkpoint; the transaction below ignores stopToken so an
+            // interrupted save never leaves a half-written project.
+            if (context.stopToken.stop_requested()) {
+                return std::unexpected(makeCancelledError(u"Project save"));
+            }
+
+            const QString canonicalRoot = session->canonicalRoot;
+            const QString projectJsonPath = canonicalRoot + QLatin1Char('/') + kProjectFileName;
+            if (!QFileInfo(canonicalRoot).isWritable()) {
+                return std::unexpected(
+                    application::makeApplicationError(application::ErrorCategory::Persistence,
+                                                      QStringLiteral("persistence.read_only"),
+                                                      QStringLiteral("The project directory is read-only")));
+            }
+            if (!hasDiskSpace(canonicalRoot, bytes.size() + kWriteMarginBytes)) {
+                return std::unexpected(makeDiskFullError());
+            }
+
+            if (!session->recoveredFromBackup) {
+                auto currentBytes = readFileBytes(projectJsonPath);
+                if (!currentBytes) {
+                    return std::unexpected(makeSaveConflictError());
+                }
+                if (session->hasFingerprint && QCryptographicHash::hash(*currentBytes, QCryptographicHash::Sha256) !=
+                                                   session->projectJsonFingerprint.sha256) {
+                    return std::unexpected(makeSaveConflictError());
+                }
+                // Rotate the single-generation backup only when the current file is complete and
+                // valid; a damaged current file must never overwrite the only good copy. Because
+                // rotation runs first, a write-protected directory surfaces here as
+                // persistence.backup_failed and the old .bak is preserved.
+                auto currentValid = ProjectSerializer::deserialize(*currentBytes);
+                if (currentValid) {
+                    if (auto backupError = writeFileSync(projectJsonPath + kBackupSuffix, *currentBytes)) {
+                        auto error =
+                            application::makeApplicationError(application::ErrorCategory::Persistence,
+                                                              QStringLiteral("persistence.backup_failed"),
+                                                              QStringLiteral("The backup copy could not be written"));
+                        error.diagnostic = backupError->diagnostic;
+                        return std::unexpected(error);
                     }
                 }
             }
-            // Rotate the single-generation backup only when the current file is complete and
-            // valid; a damaged current file must never overwrite the only good copy. Because
-            // rotation runs first, a write-protected directory surfaces here as
-            // persistence.backup_failed and the old .bak is preserved.
-            auto currentValid = ProjectSerializer::deserialize(*currentBytes);
-            if (currentValid) {
-                if (auto backupError = writeFileSync(projectJsonPath + kBackupSuffix, *currentBytes)) {
-                    auto error =
-                        application::makeApplicationError(application::ErrorCategory::Persistence,
-                                                          QStringLiteral("persistence.backup_failed"),
-                                                          QStringLiteral("The backup copy could not be written"));
-                    error.diagnostic = backupError->diagnostic;
-                    return std::unexpected(error);
-                }
+
+            if (auto writeError = writeFileSync(projectJsonPath, bytes)) {
+                return std::unexpected(*writeError);
             }
-        }
 
-        if (auto writeError = writeFileSync(projectJsonPath, bytes)) {
-            return std::unexpected(*writeError);
-        }
-
-        if (auto fingerprint = fingerprintFile(projectJsonPath)) {
-            session->projectJsonFingerprint = *fingerprint;
-            session->hasFingerprint = true;
-        }
-        session->recoveredFromBackup = false;
-        session->descriptor.name = QString::fromStdString(request.project.name());
-        return {};
-    });
+            if (auto fingerprint = fingerprintFile(projectJsonPath)) {
+                session->projectJsonFingerprint = *fingerprint;
+                session->hasFingerprint = true;
+            }
+            session->recoveredFromBackup = false;
+            session->descriptor.name = QString::fromStdString(request.project.name());
+            session->project = request.project;
+            session->project->markClean();
+            return application::SaveProjectResult{request.project.revision()};
+        });
 }
 
-QFuture<application::Result<application::ProjectDescriptor>>
+QFuture<application::Result<application::SaveAsProjectResult>>
 FileSystemProjectRepository::saveProjectAs(application::SaveAsProjectRequest request,
                                            application::OperationContext context) {
-    return runDataOperation<application::ProjectDescriptor>(
-        [this, request = std::move(request), context]() -> application::Result<application::ProjectDescriptor> {
+    return runDataOperation<application::SaveAsProjectResult>(
+        [this, request = std::move(request), context]() -> application::Result<application::SaveAsProjectResult> {
             if (context.stopToken.stop_requested()) {
                 return std::unexpected(makeCancelledError(u"Project save as"));
             }
@@ -669,6 +751,22 @@ FileSystemProjectRepository::saveProjectAs(application::SaveAsProjectRequest req
                                                       QStringLiteral("input.invalid_save_as"),
                                                       QStringLiteral("The destination path is invalid")));
             }
+            const QFileInfo newInfo(newCleaned);
+            QString newCoordinatorRoot;
+            if (newInfo.exists()) {
+                newCoordinatorRoot = canonicalDirectoryPath(newCleaned);
+                if (newCoordinatorRoot.isEmpty()) {
+                    return std::unexpected(makeTargetNotEmptyError());
+                }
+            } else {
+                newCoordinatorRoot = QDir::cleanPath(newInfo.absoluteFilePath());
+            }
+            if (sameRootPath(oldRoot, newCoordinatorRoot)) {
+                return std::unexpected(
+                    application::makeApplicationError(application::ErrorCategory::Input,
+                                                      QStringLiteral("input.invalid_save_as"),
+                                                      QStringLiteral("The destination must differ from the project")));
+            }
             // Serialize and validate first; the copy transaction below is cancelable per file.
             const QByteArray bytes = ProjectSerializer::serialize(request.project);
             auto validated = ProjectSerializer::deserialize(bytes);
@@ -678,8 +776,8 @@ FileSystemProjectRepository::saveProjectAs(application::SaveAsProjectRequest req
 
             // Acquire write serialization for both roots in deterministic order so concurrent
             // saveAs operations cannot deadlock.
-            const QString first = std::min(oldRoot, newCleaned);
-            const QString second = std::max(oldRoot, newCleaned);
+            const QString first = std::min(oldRoot, newCoordinatorRoot);
+            const QString second = std::max(oldRoot, newCoordinatorRoot);
             auto firstTicket = m_coordinator->beginWrite(first);
             if (!firstTicket) {
                 return std::unexpected(makeLockedError());
@@ -690,7 +788,6 @@ FileSystemProjectRepository::saveProjectAs(application::SaveAsProjectRequest req
             }
 
             bool createdDirectory = false;
-            const QFileInfo newInfo(newCleaned);
             if (newInfo.exists()) {
                 if (!newInfo.isDir() || !QDir(newCleaned).isEmpty()) {
                     return std::unexpected(makeTargetNotEmptyError());
@@ -715,14 +812,23 @@ FileSystemProjectRepository::saveProjectAs(application::SaveAsProjectRequest req
             struct FailedTargetCleanup {
                 QString stagingRoot;
                 QString targetRoot;
+                QVector<QString> committedFiles;
                 bool createdDirectory = false;
                 bool armed = true;
                 ~FailedTargetCleanup() {
                     if (armed) {
+                        for (auto it = committedFiles.crbegin(); it != committedFiles.crend(); ++it) {
+                            QFile::remove(*it);
+                        }
                         removeCreatedTarget(stagingRoot, targetRoot, createdDirectory);
+                        if (!createdDirectory) {
+                            QDir(targetRoot).rmdir(QStringLiteral("assets/original"));
+                            QDir(targetRoot).rmdir(QStringLiteral("assets/derived"));
+                            QDir(targetRoot).rmdir(QStringLiteral("assets"));
+                        }
                     }
                 }
-            } cleanup{canonicalNew + QLatin1Char('/') + kStagingDirName, newCleaned, createdDirectory, true};
+            } cleanup{canonicalNew + QLatin1Char('/') + kStagingDirName, newCleaned, {}, createdDirectory, true};
 
             if (findSessionByRoot(canonicalNew) != nullptr) {
                 return std::unexpected(makeLockedError());
@@ -737,7 +843,16 @@ FileSystemProjectRepository::saveProjectAs(application::SaveAsProjectRequest req
             }
 
             const QString stagingRoot = canonicalNew + QLatin1Char('/') + kStagingDirName;
-            if (!hasDiskSpace(canonicalNew, bytes.size() + kWriteMarginBytes)) {
+            qint64 requiredBytes = bytes.size() + kWriteMarginBytes;
+            for (const QLatin1String assetDir : {kAssetsOriginal, kAssetsDerived}) {
+                const qint64 assetBytes = treeSize(oldRoot + QLatin1Char('/') + assetDir);
+                if (assetBytes > std::numeric_limits<qint64>::max() - requiredBytes) {
+                    requiredBytes = std::numeric_limits<qint64>::max();
+                    break;
+                }
+                requiredBytes += assetBytes;
+            }
+            if (!hasDiskSpace(canonicalNew, requiredBytes)) {
                 return std::unexpected(makeDiskFullError());
             }
             if (!QDir().mkpath(stagingRoot)) {
@@ -756,22 +871,53 @@ FileSystemProjectRepository::saveProjectAs(application::SaveAsProjectRequest req
                     return std::unexpected(*copyError);
                 }
             }
+            QDir(stagingRoot).mkpath(kAssetsOriginal.toString());
+            QDir(stagingRoot).mkpath(kAssetsDerived.toString());
+            const QString canonicalStaging = canonicalDirectoryPath(stagingRoot);
+            auto stagedAssets = validateProjectAssets(canonicalStaging, request.project);
+            if (!stagedAssets) {
+                return std::unexpected(stagedAssets.error());
+            }
 
             // Commit: move the verified staged files into the empty target root; this is the
             // only non-cancelable step besides the session switch.
             const QString newJsonPath = canonicalNew + QLatin1Char('/') + kProjectFileName;
+            QVector<QString> stagedPaths;
             QDirIterator staged(stagingRoot, QDir::Files | QDir::NoDotAndDotDot, QDirIterator::Subdirectories);
             while (staged.hasNext()) {
-                const QString stagedPath = staged.next();
+                stagedPaths.append(staged.next());
+            }
+            std::stable_sort(
+                stagedPaths.begin(), stagedPaths.end(), [stagingRoot](const QString& lhs, const QString& rhs) {
+                    const bool lhsIsProject = lhs == stagingRoot + QLatin1Char('/') + kProjectFileName;
+                    const bool rhsIsProject = rhs == stagingRoot + QLatin1Char('/') + kProjectFileName;
+                    return lhsIsProject != rhsIsProject ? !lhsIsProject : lhs < rhs;
+                });
+            int commitIndex = 0;
+            for (const QString& stagedPath : stagedPaths) {
                 const QString relative = QStringView{stagedPath}.mid(stagingRoot.size() + 1).toString();
+                if (m_saveAsCommitProbe && !m_saveAsCommitProbe(relative, commitIndex)) {
+                    return std::unexpected(
+                        application::makeApplicationError(application::ErrorCategory::Persistence,
+                                                          QStringLiteral("persistence.atomic_commit_failed"),
+                                                          QStringLiteral("The project copy could not be committed")));
+                }
                 const QString targetPath = canonicalNew + QLatin1Char('/') + relative;
                 QFileInfo(targetPath).dir().mkpath(QStringLiteral("."));
                 if (!QFile::rename(stagedPath, targetPath)) {
                     return std::unexpected(toPersistenceError(QFileDevice::RenameError));
                 }
+                cleanup.committedFiles.append(targetPath);
+                ++commitIndex;
+            }
+            if (!QDir().mkpath(canonicalNew + QLatin1Char('/') + kAssetsOriginal) ||
+                !QDir().mkpath(canonicalNew + QLatin1Char('/') + kAssetsDerived)) {
+                return std::unexpected(toPersistenceError(QFileDevice::PermissionsError));
+            }
+            if (!m_coordinator->bindProject(session->descriptor.id, canonicalNew)) {
+                return std::unexpected(makeLockedError());
             }
             QDir(stagingRoot).removeRecursively();
-            cleanup.armed = false;
 
             {
                 QMutexLocker locker(&m_mutex);
@@ -789,8 +935,17 @@ FileSystemProjectRepository::saveProjectAs(application::SaveAsProjectRequest req
                 session->hasFingerprint = true;
             }
             session->recoveredFromBackup = false;
+            session->project = request.project;
+            session->project->markClean();
+            m_coordinator->unbindProject(oldRoot);
+            if (sameRootPath(first, oldRoot)) {
+                firstTicket->release();
+            } else {
+                secondTicket->release();
+            }
             m_coordinator->discardRoot(oldRoot);
-            return session->descriptor;
+            cleanup.armed = false;
+            return application::SaveAsProjectResult{session->descriptor, request.project.revision()};
         });
 }
 
@@ -800,7 +955,16 @@ QFuture<application::Result<void>> FileSystemProjectRepository::closeProject(app
         if (context.stopToken.stop_requested()) {
             return std::unexpected(makeCancelledError(u"Project close"));
         }
-        auto session = findSession(request.projectId);
+        std::shared_ptr<RepositorySession> session;
+        if (request.projectId.isValid()) {
+            session = findSession(request.projectId);
+        } else {
+            const QString canonicalRoot =
+                canonicalDirectoryPath(QDir::cleanPath(QDir::fromNativeSeparators(request.projectRoot.trimmed())));
+            if (!canonicalRoot.isEmpty()) {
+                session = findSessionByRoot(canonicalRoot);
+            }
+        }
         if (session == nullptr) {
             return std::unexpected(
                 application::makeApplicationError(application::ErrorCategory::Project,
@@ -809,10 +973,17 @@ QFuture<application::Result<void>> FileSystemProjectRepository::closeProject(app
         }
         const QString canonicalRoot = session->canonicalRoot;
         auto closeTicket = m_coordinator->beginClose(canonicalRoot);
+        if (!closeTicket) {
+            return std::unexpected(
+                application::makeApplicationError(application::ErrorCategory::Project,
+                                                  QStringLiteral("project.not_open"),
+                                                  QStringLiteral("The project session is not open")));
+        }
         // Releasing the lock file and dropping runtime state only; no file writes and no
         // domain mutation.
         session->lock.reset();
         forgetSession(canonicalRoot);
+        closeTicket->release();
         m_coordinator->discardRoot(canonicalRoot);
         return {};
     });

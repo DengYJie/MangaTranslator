@@ -16,9 +16,9 @@ public:
                                                              OperationContext context) = 0;
     virtual QFuture<Result<OpenProjectResult>> openProject(OpenProjectRequest request, OperationContext context) = 0;
     virtual QFuture<Result<OpenProjectResult>> recoverProject(OpenProjectRequest request, OperationContext context) = 0;
-    virtual QFuture<Result<void>> saveProject(SaveProjectRequest request, OperationContext context) = 0;
-    virtual QFuture<Result<ProjectDescriptor>> saveProjectAs(SaveAsProjectRequest request,
-                                                             OperationContext context) = 0;
+    virtual QFuture<Result<SaveProjectResult>> saveProject(SaveProjectRequest request, OperationContext context) = 0;
+    virtual QFuture<Result<SaveAsProjectResult>> saveProjectAs(SaveAsProjectRequest request,
+                                                               OperationContext context) = 0;
     virtual QFuture<Result<void>> closeProject(CloseProjectRequest request, OperationContext context) = 0;
 };
 

@@ -154,7 +154,7 @@ public:
                 ErrorCategory::Cancelled, "cancelled.before_start", "Image loading was cancelled"));
         }
         if (!request.projectId.isValid() || !QDir::isAbsolutePath(request.projectRoot.trimmed()) ||
-            !request.pageId.isValid() || request.assetPath.trimmed().isEmpty()) {
+            !request.pageId.isValid() || request.assetPath.trimmed().isEmpty() || !request.expectedSize.isValid()) {
             return makeFailedFuture<QImage>(makeApplicationError(
                 ErrorCategory::Input, "input.invalid_image_request", "Page image request is invalid"));
         }
@@ -183,6 +183,10 @@ public:
         if (request.generation != request.currentGeneration) {
             return std::unexpected(
                 makeApplicationError(ErrorCategory::Cancelled, "cancelled.stale_generation", "Import result is stale"));
+        }
+        if (!request.result.importedPages.isEmpty() && !request.result.batchId.isValid()) {
+            return std::unexpected(makeApplicationError(
+                ErrorCategory::Protocol, "protocol.invalid_import_result", "Imported asset batch is invalid"));
         }
 
         const auto snapshot = *m_project;
@@ -214,7 +218,7 @@ public:
                 ErrorCategory::Internal, "internal.null_importer", "Image importer is unavailable"));
         }
         if (!request.projectId.isValid() || !QDir::isAbsolutePath(request.projectRoot.trimmed()) ||
-            request.assetPaths.isEmpty()) {
+            !request.batchId.isValid() || request.assetPaths.isEmpty()) {
             return makeFailedFuture<void>(makeApplicationError(
                 ErrorCategory::Input, "input.invalid_import_cleanup", "Import cleanup request is invalid"));
         }
@@ -233,6 +237,30 @@ public:
             assetPaths.insert(comparisonKey);
         }
         return m_importer->discardImportedAssets(std::move(normalizedRequest), context);
+    }
+
+private:
+    IComicImporter* m_importer;
+};
+
+class AcknowledgeImportedAssetsUseCase {
+public:
+    explicit AcknowledgeImportedAssetsUseCase(IComicImporter* importer) : m_importer(importer) {}
+
+    [[nodiscard]] QFuture<Result<void>> execute(const AcknowledgeImportedAssetsRequest& request,
+                                                const OperationContext& context) {
+        if (m_importer == nullptr) {
+            return makeFailedFuture<void>(makeApplicationError(
+                ErrorCategory::Internal, "internal.null_importer", "Image importer is unavailable"));
+        }
+        if (!request.projectId.isValid() || !QDir::isAbsolutePath(request.projectRoot.trimmed()) ||
+            !request.batchId.isValid()) {
+            return makeFailedFuture<void>(makeApplicationError(
+                ErrorCategory::Input, "input.invalid_import_cleanup", "Import acknowledgement is invalid"));
+        }
+        auto normalizedRequest = request;
+        normalizedRequest.projectRoot = normalizedRequest.projectRoot.trimmed();
+        return m_importer->acknowledgeImportedAssets(std::move(normalizedRequest), context);
     }
 
 private:
