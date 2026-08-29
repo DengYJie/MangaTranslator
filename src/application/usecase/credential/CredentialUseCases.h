@@ -33,14 +33,14 @@ public:
                                                         QStringLiteral("Provider ID is required")));
         }
 
-        auto result = m_store->readApiKey(request.providerId.trimmed());
+        // The status query never reads or copies the secret blob.
+        auto result = m_store->hasApiKey(request.providerId.trimmed());
         if (!result) {
-            // Assume any read error means it's not available/readable, or specifically not found.
-            // We just return false so the UI knows there is no valid credential.
+            // A status failure is reported as not configured; the UI offers setup.
             return CredentialStatusResult{false};
         }
 
-        return CredentialStatusResult{!result->isEmpty()};
+        return CredentialStatusResult{*result};
     }
 
 private:

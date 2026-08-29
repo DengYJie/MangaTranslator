@@ -6,7 +6,13 @@ using namespace manga::application;
 
 class MockCredentialStore : public ICredentialStore {
 public:
+    Result<bool> hasApiKey(const QString& providerId) override {
+        ++hasCount;
+        return store.contains(providerId);
+    }
+
     Result<SecretBytes> readApiKey(const QString& providerId) override {
+        ++readCount;
         if (!store.contains(providerId)) {
             return std::unexpected(makeApplicationError(
                 ErrorCategory::Internal, QStringLiteral("credential.not_found"), QStringLiteral("Not found")));
@@ -27,6 +33,9 @@ public:
         return {};
     }
 
+    int hasCount{0};
+    int readCount{0};
+
     QHash<QString, QByteArray> store;
 };
 
@@ -46,6 +55,10 @@ void CredentialUseCasesTest::testCheckCredentialStatus() {
     res = useCase.execute(req);
     QVERIFY(res.has_value());
     QVERIFY(res->hasCredential);
+
+    // A status query must never read the secret blob.
+    QCOMPARE(store.hasCount, 2);
+    QCOMPARE(store.readCount, 0);
 }
 
 void CredentialUseCasesTest::testSetCredential() {

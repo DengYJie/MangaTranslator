@@ -69,6 +69,9 @@ class ICredentialStore {
 public:
     virtual ~ICredentialStore() = default;
 
+    /// Reports whether a credential exists without reading or copying the secret blob. The
+    /// settings surface shows this status; only the network adapter reads the key itself.
+    [[nodiscard]] virtual Result<bool> hasApiKey(const QString& providerId) = 0;
     [[nodiscard]] virtual Result<SecretBytes> readApiKey(const QString& providerId) = 0;
     [[nodiscard]] virtual Result<void> writeApiKey(const QString& providerId, SecretBytes key) = 0;
     [[nodiscard]] virtual Result<void> deleteApiKey(const QString& providerId) = 0;

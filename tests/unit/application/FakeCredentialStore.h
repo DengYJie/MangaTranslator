@@ -13,6 +13,15 @@ public:
     int readCount{0};
     int writeCount{0};
     int deleteCount{0};
+    int hasCount{0};
+
+    [[nodiscard]] Result<bool> hasApiKey(const QString& providerId) override {
+        ++hasCount;
+        if (shouldFail) {
+            return std::unexpected(nextError);
+        }
+        return m_keys.contains(providerId);
+    }
 
     [[nodiscard]] Result<SecretBytes> readApiKey(const QString& providerId) override {
         ++readCount;
