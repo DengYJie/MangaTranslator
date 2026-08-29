@@ -1,6 +1,7 @@
 #include "BaberuOcrIntegrationTest.h"
 #include "BaberuOcrTest.h"
 #include "BoundedTaskExecutorTest.h"
+#include "QtTextLayouterTest.h"
 #include "SolidColorInpainterTest.h"
 
 #include <QCoreApplication>
@@ -38,6 +39,10 @@ int main(int argc, char* argv[]) {
     {
         SolidColorInpainterTest suite;
         runSuite("SolidColorInpainterTest", &suite);
+    }
+    {
+        QtTextLayouterTest suite;
+        runSuite("QtTextLayouterTest", &suite);
     }
 
     return status;
