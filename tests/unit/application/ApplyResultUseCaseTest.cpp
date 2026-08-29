@@ -1,11 +1,16 @@
 #include "ApplyResultUseCaseTest.h"
 
+#include "FakeDerivedAssetStore.h"
+#include "application/usecase/apply/ApplyUseCases.h"
 #include "application/usecase/text/TextUseCases.h"
 #include "domain/model/ComicProject.h"
 
+#include <QImage>
+#include <QSize>
 #include <QtTest/QtTest>
 
 using namespace manga::application;
+using namespace manga::application::test;
 using namespace manga::domain;
 
 class ApplyResultUseCaseTest::Private {
@@ -331,4 +336,162 @@ void ApplyResultUseCaseTest::testApplyTranslationRejectsStaleAndManualTargets() 
     QCOMPARE(manualResult->failures.front().code, QString("input.manual_override"));
     QCOMPARE(d->project->findPage(d->pageId)->findRegion(d->regionId)->translation().effectiveText(),
              std::string("Manual"));
+}
+
+void ApplyResultUseCaseTest::testApplyClearSuccess() {
+    FakeDerivedAssetStore store;
+    store.nextRelativePath = "assets/derived/clear-test/cleaning/v1/aaaa.png";
+    ApplyClearResultUseCase useCase(d->project, &store);
+
+    ApplyClearResultRequest req;
+    req.projectId = d->project->id();
+    req.pageId = d->pageId;
+    req.expectedRegionId = d->regionId;
+    req.pageSize = QSize(800, 600);
+    req.projectRoot = QStringLiteral("unused");
+    req.generation = 1;
+    req.currentGeneration = 1;
+    req.expectedRevision = 10;
+    req.result.regionId = d->regionId;
+    req.result.affectedBounds = RectGeometry(10, 10, 100, 50);
+    QImage patch(100, 50, QImage::Format_RGBA8888);
+    patch.fill(0xFFFFFFFF);
+    req.result.patch = patch;
+
+    const auto future = useCase.execute(req);
+
+    QVERIFY(future.isFinished());
+    const auto result = future.result();
+    QVERIFY(result.has_value());
+    QCOMPARE(*result, store.nextRelativePath);
+    QCOMPARE(store.commitCount, 1);
+    QCOMPARE(store.lastCommitRequest.layer.size(), QSize(800, 600));
+
+    const auto* page = d->project->findPage(d->pageId);
+    QCOMPARE(QString::fromStdString(*page->clearLayerAsset()), store.nextRelativePath);
+    QVERIFY(page->findRegion(d->regionId)->isCleared());
+    QVERIFY(d->project->isDirty());
+    // The isCleared flag is not a content change: contentRevision stays at 10.
+    QCOMPARE(page->findRegion(d->regionId)->contentRevision(), 10u);
+}
+
+void ApplyResultUseCaseTest::testApplyClearRejectsStaleRevision() {
+    FakeDerivedAssetStore store;
+    ApplyClearResultUseCase useCase(d->project, &store);
+
+    ApplyClearResultRequest req;
+    req.projectId = d->project->id();
+    req.pageId = d->pageId;
+    req.expectedRegionId = d->regionId;
+    req.pageSize = QSize(800, 600);
+    req.projectRoot = QStringLiteral("unused");
+    req.generation = 1;
+    req.currentGeneration = 1;
+    req.expectedRevision = 9;
+    req.result.regionId = d->regionId;
+    req.result.affectedBounds = RectGeometry(10, 10, 100, 50);
+    req.result.patch = QImage(100, 50, QImage::Format_RGBA8888);
+
+    const auto future = useCase.execute(req);
+
+    QVERIFY(future.isFinished());
+    QVERIFY(!future.result().has_value());
+    QCOMPARE(future.result().error().code, QString("input.stale_revision"));
+    QCOMPARE(store.commitCount, 0);
+}
+
+void ApplyResultUseCaseTest::testApplyClearPropagatesCommitFailure() {
+    FakeDerivedAssetStore store;
+    store.shouldFailCommit = true;
+    store.nextError = makeApplicationError(ErrorCategory::Persistence, "clear.layer_commit_failed", "Commit failed");
+    ApplyClearResultUseCase useCase(d->project, &store);
+
+    ApplyClearResultRequest req;
+    req.projectId = d->project->id();
+    req.pageId = d->pageId;
+    req.expectedRegionId = d->regionId;
+    req.pageSize = QSize(800, 600);
+    req.projectRoot = QStringLiteral("unused");
+    req.generation = 1;
+    req.currentGeneration = 1;
+    req.expectedRevision = 10;
+    req.result.regionId = d->regionId;
+    req.result.affectedBounds = RectGeometry(10, 10, 100, 50);
+    req.result.patch = QImage(100, 50, QImage::Format_RGBA8888);
+
+    const auto future = useCase.execute(req);
+
+    QVERIFY(future.isFinished());
+    QVERIFY(!future.result().has_value());
+    QCOMPARE(future.result().error().code, QString("clear.layer_commit_failed"));
+    // The Domain is untouched: no layer reference and no cleared flag.
+    QVERIFY(!d->project->findPage(d->pageId)->clearLayerAsset().has_value());
+    QVERIFY(!d->project->findPage(d->pageId)->findRegion(d->regionId)->isCleared());
+}
+
+void ApplyResultUseCaseTest::testApplyClearRejectsPatchBoundsMismatch() {
+    FakeDerivedAssetStore store;
+    ApplyClearResultUseCase useCase(d->project, &store);
+
+    ApplyClearResultRequest req;
+    req.projectId = d->project->id();
+    req.pageId = d->pageId;
+    req.expectedRegionId = d->regionId;
+    req.pageSize = QSize(800, 600);
+    req.projectRoot = QStringLiteral("unused");
+    req.generation = 1;
+    req.currentGeneration = 1;
+    req.expectedRevision = 10;
+    req.result.regionId = d->regionId;
+    req.result.affectedBounds = RectGeometry(10, 10, 100, 50);
+    req.result.patch = QImage(64, 64, QImage::Format_RGBA8888);
+
+    const auto future = useCase.execute(req);
+
+    QVERIFY(future.isFinished());
+    QVERIFY(!future.result().has_value());
+    QCOMPARE(future.result().error().code, QString("protocol.invalid_clear_result"));
+    QCOMPARE(store.commitCount, 0);
+}
+
+void ApplyResultUseCaseTest::testApplyLayoutSuccess() {
+    ApplyLayoutResultUseCase useCase(d->project);
+
+    ApplyLayoutResultRequest req;
+    req.projectId = d->project->id();
+    req.pageId = d->pageId;
+    req.expectedRegionId = d->regionId;
+    req.generation = 1;
+    req.currentGeneration = 1;
+    req.expectedRevision = 10;
+    req.result.regionId = d->regionId;
+    req.result.resolvedLayout.fontFamily = "Golden Font";
+    req.result.resolvedLayout.fontSizePt = 14.0;
+
+    const auto result = useCase.execute(req);
+
+    QVERIFY(result.has_value());
+    const auto* region = d->project->findPage(d->pageId)->findRegion(d->regionId);
+    QCOMPARE(QString::fromStdString(region->layout().fontFamily), QString("Golden Font"));
+    QVERIFY(region->contentRevision() == 11u);
+}
+
+void ApplyResultUseCaseTest::testApplyLayoutRejectsStaleGeneration() {
+    ApplyLayoutResultUseCase useCase(d->project);
+
+    ApplyLayoutResultRequest req;
+    req.projectId = d->project->id();
+    req.pageId = d->pageId;
+    req.expectedRegionId = d->regionId;
+    req.generation = 1;
+    req.currentGeneration = 2;
+    req.expectedRevision = 10;
+    req.result.regionId = d->regionId;
+    req.result.resolvedLayout.fontSizePt = 14.0;
+
+    const auto result = useCase.execute(req);
+
+    QVERIFY(!result.has_value());
+    QCOMPARE(result.error().category, ErrorCategory::Cancelled);
+    QCOMPARE(result.error().code, QString("cancelled.stale_generation"));
 }

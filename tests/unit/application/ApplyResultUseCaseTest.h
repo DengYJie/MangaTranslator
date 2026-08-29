@@ -24,6 +24,13 @@ private slots:
     void testApplyTranslationFailsOnStaleGeneration();
     void testApplyTranslationRejectsStaleAndManualTargets();
 
+    void testApplyClearSuccess();
+    void testApplyClearRejectsStaleRevision();
+    void testApplyClearPropagatesCommitFailure();
+    void testApplyClearRejectsPatchBoundsMismatch();
+    void testApplyLayoutSuccess();
+    void testApplyLayoutRejectsStaleGeneration();
+
 private:
     class Private;
     Private* d;
