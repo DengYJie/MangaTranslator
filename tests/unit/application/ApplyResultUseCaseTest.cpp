@@ -341,9 +341,9 @@ void ApplyResultUseCaseTest::testApplyTranslationRejectsStaleAndManualTargets() 
 void ApplyResultUseCaseTest::testApplyClearSuccess() {
     FakeDerivedAssetStore store;
     store.nextRelativePath = "assets/derived/clear-test/cleaning/v1/aaaa.png";
-    ApplyClearResultUseCase useCase(d->project, &store);
+    PrepareClearResultUseCase useCase(d->project, &store);
 
-    ApplyClearResultRequest req;
+    PrepareClearResultRequest req;
     req.projectId = d->project->id();
     req.pageId = d->pageId;
     req.expectedRegionId = d->regionId;
@@ -363,9 +363,23 @@ void ApplyResultUseCaseTest::testApplyClearSuccess() {
     QVERIFY(future.isFinished());
     const auto result = future.result();
     QVERIFY(result.has_value());
-    QCOMPARE(*result, store.nextRelativePath);
+    QCOMPARE(result->relativePath, store.nextRelativePath);
     QCOMPARE(store.commitCount, 1);
     QCOMPARE(store.lastCommitRequest.layer.size(), QSize(800, 600));
+
+    // Phase 2: Apply
+    ApplyPreparedClearChangeUseCase applyUseCase(d->project);
+    ApplyPreparedClearChangeRequest applyReq;
+    applyReq.projectId = req.projectId;
+    applyReq.pageId = req.pageId;
+    applyReq.expectedRegionId = req.expectedRegionId;
+    applyReq.relativePath = result->relativePath;
+    applyReq.generation = req.generation;
+    applyReq.currentGeneration = req.currentGeneration;
+    applyReq.expectedRevision = req.expectedRevision;
+
+    const auto applyResult = applyUseCase.execute(applyReq);
+    QVERIFY(applyResult.has_value());
 
     const auto* page = d->project->findPage(d->pageId);
     QCOMPARE(QString::fromStdString(*page->clearLayerAsset()), store.nextRelativePath);
@@ -377,9 +391,9 @@ void ApplyResultUseCaseTest::testApplyClearSuccess() {
 
 void ApplyResultUseCaseTest::testApplyClearRejectsStaleRevision() {
     FakeDerivedAssetStore store;
-    ApplyClearResultUseCase useCase(d->project, &store);
+    PrepareClearResultUseCase useCase(d->project, &store);
 
-    ApplyClearResultRequest req;
+    PrepareClearResultRequest req;
     req.projectId = d->project->id();
     req.pageId = d->pageId;
     req.expectedRegionId = d->regionId;
@@ -404,9 +418,9 @@ void ApplyResultUseCaseTest::testApplyClearPropagatesCommitFailure() {
     FakeDerivedAssetStore store;
     store.shouldFailCommit = true;
     store.nextError = makeApplicationError(ErrorCategory::Persistence, "clear.layer_commit_failed", "Commit failed");
-    ApplyClearResultUseCase useCase(d->project, &store);
+    PrepareClearResultUseCase useCase(d->project, &store);
 
-    ApplyClearResultRequest req;
+    PrepareClearResultRequest req;
     req.projectId = d->project->id();
     req.pageId = d->pageId;
     req.expectedRegionId = d->regionId;
@@ -431,9 +445,9 @@ void ApplyResultUseCaseTest::testApplyClearPropagatesCommitFailure() {
 
 void ApplyResultUseCaseTest::testApplyClearRejectsPatchBoundsMismatch() {
     FakeDerivedAssetStore store;
-    ApplyClearResultUseCase useCase(d->project, &store);
+    PrepareClearResultUseCase useCase(d->project, &store);
 
-    ApplyClearResultRequest req;
+    PrepareClearResultRequest req;
     req.projectId = d->project->id();
     req.pageId = d->pageId;
     req.expectedRegionId = d->regionId;

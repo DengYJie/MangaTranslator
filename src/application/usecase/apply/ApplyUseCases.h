@@ -26,7 +26,7 @@ namespace detail {
 
 } // namespace detail
 
-struct ApplyClearResultRequest {
+struct PrepareClearResultRequest {
     domain::ProjectId projectId;
     domain::PageId pageId;
     domain::RegionId expectedRegionId;
@@ -38,63 +38,59 @@ struct ApplyClearResultRequest {
     quint64 expectedRevision{0}; // region contentRevision captured when the clear was requested
 };
 
-struct ApplyLayoutResultRequest {
+struct PreparedClearChange {
     domain::ProjectId projectId;
     domain::PageId pageId;
-    domain::RegionId expectedRegionId;
-    LayoutResponse result;
-    quint64 generation{0};
-    quint64 currentGeneration{0};
-    quint64 expectedRevision{0};
+    domain::RegionId regionId;
+    QString relativePath;
 };
 
-/// Adopts a clear patch: composites it onto the current page clear layer, commits the result
-/// through the derived asset store, and only then updates the Domain. Any failure leaves the
-/// old layer reference and source image untouched; a Domain rejection after a successful
-/// commit may leave one unreferenced content-addressed file.
-class ApplyClearResultUseCase {
+/// Prepares a clear patch by compositing it onto the current page clear layer, and committing
+/// the result through the derived asset store. It does NOT update the Domain.
+/// Any failure leaves the old layer reference and source image untouched.
+class PrepareClearResultUseCase {
 public:
-    ApplyClearResultUseCase(domain::ComicProject* project, IDerivedAssetStore* store)
+    PrepareClearResultUseCase(domain::ComicProject* project, IDerivedAssetStore* store)
         : m_project(project), m_store(store) {}
 
-    [[nodiscard]] QFuture<Result<QString>> execute(const ApplyClearResultRequest& request) {
+    [[nodiscard]] QFuture<Result<PreparedClearChange>> execute(const PrepareClearResultRequest& request) {
         if (m_project == nullptr || m_store == nullptr) {
-            return makeFailedFuture<QString>(detail::applyError(
+            return makeFailedFuture<PreparedClearChange>(detail::applyError(
                 ErrorCategory::Internal, "internal.null_apply_dependency", "Apply dependency is unavailable"));
         }
         if (m_project->id() != request.projectId) {
-            return makeFailedFuture<QString>(
+            return makeFailedFuture<PreparedClearChange>(
                 detail::applyError(ErrorCategory::Project, "project.mismatch", "Project changed"));
         }
         if (request.generation != request.currentGeneration) {
-            return makeFailedFuture<QString>(
+            return makeFailedFuture<PreparedClearChange>(
                 detail::applyError(ErrorCategory::Cancelled, "cancelled.stale_generation", "Clear result is stale"));
         }
         if (!request.expectedRegionId.isValid() || request.result.regionId != request.expectedRegionId) {
-            return makeFailedFuture<QString>(detail::applyError(
+            return makeFailedFuture<PreparedClearChange>(detail::applyError(
                 ErrorCategory::Protocol, "protocol.region_mismatch", "Clear response region does not match request"));
         }
         const auto* page = m_project->findPage(request.pageId);
         if (page == nullptr) {
-            return makeFailedFuture<QString>(
+            return makeFailedFuture<PreparedClearChange>(
                 detail::applyError(ErrorCategory::Project, "project.page_not_found", "Page was not found"));
         }
         const auto* region = page->findRegion(request.expectedRegionId);
         if (region == nullptr) {
-            return makeFailedFuture<QString>(
+            return makeFailedFuture<PreparedClearChange>(
                 detail::applyError(ErrorCategory::Input, "input.region_not_found", "Region was not found"));
         }
         if (region->contentRevision() != request.expectedRevision) {
-            return makeFailedFuture<QString>(
+            return makeFailedFuture<PreparedClearChange>(
                 detail::applyError(ErrorCategory::Input, "input.stale_revision", "Region content changed"));
         }
         if (region->isLocked()) {
-            return makeFailedFuture<QString>(
+            return makeFailedFuture<PreparedClearChange>(
                 detail::applyError(ErrorCategory::Input, "input.manual_override", "Region is under manual control"));
         }
         if (request.pageSize.isEmpty() || request.result.patch.isNull() ||
             request.result.patch.format() != QImage::Format_RGBA8888 || !request.result.affectedBounds.isValid()) {
-            return makeFailedFuture<QString>(detail::applyError(
+            return makeFailedFuture<PreparedClearChange>(detail::applyError(
                 ErrorCategory::Protocol, "protocol.invalid_clear_result", "Clear result is invalid"));
         }
 
@@ -104,9 +100,10 @@ public:
         const int height = qCeil(request.result.affectedBounds.y + request.result.affectedBounds.height) - top;
         if (width != request.result.patch.width() || height != request.result.patch.height() || left < 0 || top < 0 ||
             left + width > request.pageSize.width() || top + height > request.pageSize.height()) {
-            return makeFailedFuture<QString>(detail::applyError(ErrorCategory::Protocol,
-                                                                "protocol.invalid_clear_result",
-                                                                "Clear patch does not match the affected bounds"));
+            return makeFailedFuture<PreparedClearChange>(
+                detail::applyError(ErrorCategory::Protocol,
+                                   "protocol.invalid_clear_result",
+                                   "Clear patch does not match the affected bounds"));
         }
 
         const QString relativePath =
@@ -114,7 +111,7 @@ public:
 
         // Manual promise chaining: Qt does not unwrap nested QFuture returns in then(), and
         // each failure path must finish the promise exactly once.
-        auto promise = std::make_shared<QPromise<Result<QString>>>();
+        auto promise = std::make_shared<QPromise<Result<PreparedClearChange>>>();
         promise->start();
         auto future = promise->future();
 
@@ -161,23 +158,15 @@ public:
             commitRequest.layerKind = DerivedLayerKind::Clear;
             commitRequest.layer = *current;
             m_store->commitDerivedLayer(std::move(commitRequest), {})
-                .then([this, request, promise](Result<CommitDerivedLayerResponse> committed) {
+                .then([request, promise](Result<CommitDerivedLayerResponse> committed) {
                     if (!committed) {
                         promise->addResult(std::unexpected(committed.error()));
                         promise->finish();
                         return;
                     }
-                    const auto applied = m_project->applyClearResultOnPage(
-                        request.pageId, request.expectedRegionId, committed->relativePath.toStdString());
-                    if (!applied) {
-                        // The committed file stays as an unreferenced orphan; the previous
-                        // layer reference and its file remain intact.
-                        promise->addResult(std::unexpected(detail::applyError(
-                            ErrorCategory::Input, "input.edit_rejected", "Clear result could not be applied")));
-                        promise->finish();
-                        return;
-                    }
-                    promise->addResult(committed->relativePath);
+                    PreparedClearChange change{
+                        request.projectId, request.pageId, request.expectedRegionId, committed->relativePath};
+                    promise->addResult(change);
                     promise->finish();
                 });
         });
@@ -187,6 +176,73 @@ public:
 private:
     domain::ComicProject* m_project;
     IDerivedAssetStore* m_store;
+};
+
+struct ApplyPreparedClearChangeRequest {
+    domain::ProjectId projectId;
+    domain::PageId pageId;
+    domain::RegionId expectedRegionId;
+    QString relativePath;
+    quint64 generation{0};
+    quint64 currentGeneration{0};
+    quint64 expectedRevision{0};
+};
+
+/// Adopts a prepared clear change into the Domain synchronously.
+class ApplyPreparedClearChangeUseCase {
+public:
+    explicit ApplyPreparedClearChangeUseCase(domain::ComicProject* project) : m_project(project) {}
+
+    [[nodiscard]] Result<void> execute(const ApplyPreparedClearChangeRequest& request) {
+        if (m_project == nullptr) {
+            return std::unexpected(
+                detail::applyError(ErrorCategory::Internal, "internal.null_project", "Project is unavailable"));
+        }
+        if (m_project->id() != request.projectId) {
+            return std::unexpected(detail::applyError(ErrorCategory::Project, "project.mismatch", "Project changed"));
+        }
+        if (request.generation != request.currentGeneration) {
+            return std::unexpected(
+                detail::applyError(ErrorCategory::Cancelled, "cancelled.stale_generation", "Clear result is stale"));
+        }
+        if (!request.expectedRegionId.isValid()) {
+            return std::unexpected(detail::applyError(
+                ErrorCategory::Protocol, "protocol.region_mismatch", "Clear response region is invalid"));
+        }
+        const auto* page = m_project->findPage(request.pageId);
+        if (page == nullptr) {
+            return std::unexpected(
+                detail::applyError(ErrorCategory::Project, "project.page_not_found", "Page was not found"));
+        }
+        const auto* region = page->findRegion(request.expectedRegionId);
+        if (region == nullptr) {
+            return std::unexpected(
+                detail::applyError(ErrorCategory::Input, "input.region_not_found", "Region was not found"));
+        }
+        if (region->contentRevision() != request.expectedRevision) {
+            return std::unexpected(
+                detail::applyError(ErrorCategory::Input, "input.stale_revision", "Region content changed"));
+        }
+        if (region->isLocked()) {
+            return std::unexpected(
+                detail::applyError(ErrorCategory::Input, "input.manual_override", "Region is under manual control"));
+        }
+        if (request.relativePath.isEmpty()) {
+            return std::unexpected(detail::applyError(
+                ErrorCategory::Protocol, "protocol.invalid_clear_result", "Clear change has empty path"));
+        }
+
+        const auto applied = m_project->applyClearResultOnPage(
+            request.pageId, request.expectedRegionId, request.relativePath.toStdString());
+        if (!applied) {
+            return std::unexpected(
+                detail::applyError(ErrorCategory::Input, "input.edit_rejected", "Clear result could not be applied"));
+        }
+        return {};
+    }
+
+private:
+    domain::ComicProject* m_project;
 };
 
 /// Adopts a resolved layout through the atomic region edit path; contentRevision increments

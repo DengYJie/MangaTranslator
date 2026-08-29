@@ -27,6 +27,8 @@ qt_add_executable(manga_tests_application
     TaskProgressTest.h
     CredentialUseCasesTest.cpp
     CredentialUseCasesTest.h
+    ThumbnailUseCasesTest.cpp
+    ThumbnailUseCasesTest.h
 )
 manga_apply_project_options(manga_tests_application)
 set_target_properties(manga_tests_application PROPERTIES AUTOMOC ON WIN32_EXECUTABLE FALSE)

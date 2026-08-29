@@ -11,6 +11,7 @@
 #include "RegionUseCasesTest.h"
 #include "TaskProgressTest.h"
 #include "TextUseCasesTest.h"
+#include "ThumbnailUseCasesTest.h"
 #include "TranslatePageUseCaseTest.h"
 
 #include <QCoreApplication>
@@ -87,6 +88,10 @@ int main(int argc, char* argv[]) {
     {
         CredentialUseCasesTest suite;
         runSuite("CredentialUseCasesTest", &suite);
+    }
+    {
+        ThumbnailUseCasesTest suite;
+        runSuite("ThumbnailUseCasesTest", &suite);
     }
 
     return status;
