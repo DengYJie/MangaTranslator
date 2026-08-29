@@ -12,7 +12,7 @@
 
 ### 工程结构
 
-- [x] 创建根 `CMakeLists.txt`、`CMakePresets.json` 和 `vcpkg.json`。
+- [x] 创建根 `CMakeLists.txt` 和 `CMakePresets.json`。
 - [x] 建立 `src/app`、`core`、`domain`、`application`、`services`、`data`、`network`、`ui` 的目标入口。
 - [x] 建立 `manga_domain`、`manga_application`、`manga_services`、`manga_data`、`manga_network`、`manga_ui` 和应用可执行目标。
 - [x] 只在需要的 Target 开启 `AUTOMOC`、`AUTORCC`、`AUTOUIC`。
@@ -23,7 +23,6 @@
 - [x] 要求 C++23、关闭编译器扩展，并配置 MSVC 2022 x64。
 - [x] 使用 Qt 6.11 imported targets，不写死 Qt 安装路径。
 - [x] 通过 `FluentQt::FluentQt` 和公开 C++ API 链接 FluentQt。
-- [x] 固定 vcpkg baseline；普通离线重建不得重新下载不受控依赖。
 - [x] 项目 Target 启用 `/W4`、`/permissive-`，隔离第三方警告。
 - [x] 提供 Debug、Release、Test Preset，并确保名称与文档一致。
 
@@ -46,7 +45,7 @@
 - Debug 和 Test 构建均通过 6 个 CTest：Domain、Application、UI、Contract、Integration 和应用 offscreen 启动测试。
 - Release Preset 可完成配置和构建，且不要求 `Qt6::Test`。
 - Domain 测试仅链接 `manga_domain` 和 C++ 标准库；Application 测试不链接 UI。
-- CI 直接响应源事件，不使用 `workflow_run` 串联；Qt、vcpkg、FluentQt 和 GitHub Actions 均使用固定版本或提交。
+- CI 直接响应源事件，不使用 `workflow_run` 串联；Qt、ONNX Runtime、FluentQt 和 GitHub Actions 均使用固定版本或提交。
 - CI 首次运行将在相关改动推送到 GitHub 后验证，分支保护应要求 `Windows Test` 和 `Windows Release` 两个检查。
 
 ## 退出条件

@@ -382,7 +382,7 @@ State 保存可恢复状态；一次性提示使用 Signal。日志保留操作�
 - C++ 标准固定为 C++23，Qt 固定为 6.11 系列兼容配置。
 - 使用 target-based CMake 和导入目标 `Qt6::*`、`FluentQt::FluentQt`。
 - V0.1 仅支持 MSVC 2022 x64，最低系统建议为 Windows 10 22H2；CI 使用 GitHub Actions `windows-2022`。
-- 使用锁定 baseline 的 vcpkg manifest；Qt 通过可配置 CMake 路径提供，不使用无版本约束的 `FetchContent`。
+- 采用自动下载预编译依赖机制，不再依赖 vcpkg 或系统全局包；Qt 通过可配置 CMake 路径提供。
 - 预设命名为 `windows-msvc-debug`、`windows-msvc-release` 和 `windows-msvc-test`。
 - 主要目标至少拆分为 `manga_domain`、`manga_application`、`manga_data`、`manga_services`、`manga_network`、`manga_ui` 和应用程序，避免 Domain/Application 测试链接完整 UI。
 - MSVC 使用 `/W4` 和 `/permissive-`；第三方警告不提升为生产代码错误。

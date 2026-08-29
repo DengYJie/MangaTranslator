@@ -96,7 +96,7 @@ ProjectName/
 
 ### 3.2 依赖管理
 
-- 使用 vcpkg manifest，并锁定 builtin baseline。
+- 抛弃 vcpkg，通过 CMake 自定义 Find 模块进行自动预编译二进制拉取，显著缩小磁盘占用与下载时间。
 - Qt 6.11 通过 CMake 配置路径或工具链配置提供，不写死开发者目录。
 - FluentQt 通过其 CMake package 与 `FluentQt::FluentQt` 使用。
 - 第三方依赖不得使用无版本约束的 FetchContent。

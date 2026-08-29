@@ -711,8 +711,8 @@ services 或 data 的 export capability:
   FileSystemComicExporter；必须只依赖 Application DTO 和 Qt Core/Gui
 ```
 
-- ONNX Runtime 以 pinned vcpkg 依赖或固定包进入 `manga_services`，不泄漏 public header；`Advapi32` 只在 Windows credential target 私有链接。
-- **依赖与 CI 引入时机**：pinned vcpkg 依赖（`vcpkg.json` 增加 `builtin-baseline` + `onnxruntime`）与首个消费方 `OnnxMangaOcrEngine` 在同一变更中落地；CI 的 `p4-model` job（模型缓存 + `MANGA_OCR_MODEL_DIR`）与模型包发布（转换产物 + manifest hash）在 P4 收尾、退出条件验收前完成。不在无消费代码时提前引入，避免每次 configure 均触发 ONNX Runtime 构建且模型包尚不存在。
+- ONNX Runtime 以自动下载的预编译包形式进入 `manga_services`，不泄漏 public header；`Advapi32` 只在 Windows credential target 私有链接。
+- **依赖与 CI 引入时机**：ONNX Runtime 预编译包的自动下载与首个消费方 `OnnxMangaOcrEngine` 在同一变更中落地；CI 的 `p4-model` job（模型缓存 + `MANGA_OCR_MODEL_DIR`）与模型包发布（转换产物 + manifest hash）在 P4 收尾、退出条件验收前完成。不在无消费代码时提前引入，避免每次 configure 均触发下载且模型包尚不存在。
 - `manga_network` 依赖 Qt Core/Network 与 Application；不得依赖 UI、Data 或 Domain 聚合实现。
 - Exporter 的文件系统职责可放独立 `manga_export` target，或在 `manga_data` 中实现 `IComicExporter`；不允许为了复用文件工具让 `services → data`。
 
