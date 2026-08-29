@@ -121,8 +121,8 @@ void ImportImagesUseCaseTest::testApplyImportResultAddsPages() {
     ApplyImportResultUseCase useCase(&project);
     ApplyImportResultRequest request;
     request.projectId = project.id();
-    request.generation = 3;
-    request.currentGeneration = 3;
+    request.sessionGeneration = 3;
+    request.currentSessionGeneration = 3;
     request.result.batchId = OperationId::generate();
     const auto firstId = PageId::generate();
     const auto secondId = PageId::generate();
@@ -148,8 +148,8 @@ void ImportImagesUseCaseTest::testApplyImportResultRejectsStaleGeneration() {
     ApplyImportResultUseCase useCase(&project);
     ApplyImportResultRequest request;
     request.projectId = project.id();
-    request.generation = 1;
-    request.currentGeneration = 2;
+    request.sessionGeneration = 1;
+    request.currentSessionGeneration = 2;
     request.result.batchId = OperationId::generate();
     request.result.importedPages.append(
         {ComicPage(PageId::generate(), "assets/original/page_0001.png", {100, 100}), "page.png", {}});
@@ -167,8 +167,8 @@ void ImportImagesUseCaseTest::testApplyImportResultRollsBackInvalidBatch() {
     ApplyImportResultUseCase useCase(&project);
     ApplyImportResultRequest request;
     request.projectId = project.id();
-    request.generation = 1;
-    request.currentGeneration = 1;
+    request.sessionGeneration = 1;
+    request.currentSessionGeneration = 1;
     request.result.batchId = OperationId::generate();
     const auto duplicateId = PageId::generate();
     request.result.importedPages.append(

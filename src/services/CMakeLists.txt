@@ -1,5 +1,6 @@
 add_library(manga_services STATIC
     execution/BoundedTaskExecutor.cpp
+    inpaint/SolidColorInpainter.cpp
     services.cpp
 )
 manga_apply_project_options(manga_services)

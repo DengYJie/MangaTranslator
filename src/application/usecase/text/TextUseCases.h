@@ -33,8 +33,8 @@ struct ApplyOcrResultRequest {
     domain::PageId pageId;
     domain::RegionId expectedRegionId;
     OcrResponse result;
-    quint64 generation{0};
-    quint64 currentGeneration{0};
+    quint64 sessionGeneration{0};
+    quint64 currentSessionGeneration{0};
     quint64 expectedRevision{0};
 };
 
@@ -58,8 +58,8 @@ struct ApplyTranslationResultRequest {
     domain::ProjectId projectId;
     domain::PageId pageId;
     TranslationResponse result;
-    quint64 generation{0};
-    quint64 currentGeneration{0};
+    quint64 sessionGeneration{0};
+    quint64 currentSessionGeneration{0};
     QVector<TranslationTargetSnapshot> expectedRegions;
 };
 

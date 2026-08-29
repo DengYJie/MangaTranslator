@@ -33,8 +33,10 @@ class RecognizeRegionUseCase {
 public:
     RecognizeRegionUseCase(IOcrEngine* engine, OperationRegistry* registry) : m_engine(engine), m_registry(registry) {}
 
-    [[nodiscard]] QFuture<Result<OcrResponse>>
-    execute(const OcrRequest& request, domain::ProjectId projectId, quint64 generation, OperationId& outOperationId) {
+    [[nodiscard]] QFuture<Result<OcrResponse>> execute(const OcrRequest& request,
+                                                       domain::ProjectId projectId,
+                                                       quint64 sessionGeneration,
+                                                       OperationId& outOperationId) {
         outOperationId = {};
         if (m_engine == nullptr || m_registry == nullptr) {
             return makeFailedFuture<OcrResponse>(detail::unavailableDependency());
@@ -45,7 +47,7 @@ public:
                 detail::invalidProcessingInput("input.invalid_ocr_request", "OCR request is invalid"));
         }
 
-        const auto context = m_registry->createOperation(generation);
+        const auto context = m_registry->createOperation(sessionGeneration, 0);
         outOperationId = context.operationId;
         return m_engine->recognize(request, context);
     }
@@ -69,7 +71,7 @@ public:
     [[nodiscard]] QFuture<Result<TranslationResponse>> execute(const TranslationRequest& request,
                                                                domain::ProjectId projectId,
                                                                domain::PageId pageId,
-                                                               quint64 generation,
+                                                               quint64 sessionGeneration,
                                                                OperationId& outOperationId) {
         outOperationId = {};
         if (m_translator == nullptr || m_registry == nullptr) {
@@ -90,7 +92,7 @@ public:
             regionIds.insert(key);
         }
 
-        const auto context = m_registry->createOperation(generation);
+        const auto context = m_registry->createOperation(sessionGeneration, 0);
         outOperationId = context.operationId;
         return m_translator->translate(request, context);
     }
@@ -112,10 +114,16 @@ public:
         : m_inpainter(inpainter), m_registry(registry) {}
 
     [[nodiscard]] QFuture<Result<ClearResponse>>
-    execute(const ClearRequest& request, quint64 generation, OperationId& outOperationId) {
+    execute(const ClearRequest& request, quint64 sessionGeneration, OperationId& outOperationId) {
         outOperationId = {};
         if (m_inpainter == nullptr || m_registry == nullptr) {
             return makeFailedFuture<ClearResponse>(detail::unavailableDependency());
+        }
+        if (!request.settings.enabled) {
+            // Disabled clearing never reaches the adapter and never triggers auto color
+            // picking; the user types the replacement text manually instead.
+            return makeFailedFuture<ClearResponse>(
+                detail::invalidProcessingInput("clear.disabled", "Region clearing is disabled"));
         }
         if (!request.projectId.isValid() || !request.pageId.isValid() || !request.regionId.isValid() ||
             request.pageImage.isNull() || !request.region.isValid() || !request.settings.isValid()) {
@@ -123,7 +131,7 @@ public:
                 detail::invalidProcessingInput("input.invalid_clear_request", "Clear request is invalid"));
         }
 
-        const auto context = m_registry->createOperation(generation);
+        const auto context = m_registry->createOperation(sessionGeneration, 0);
         outOperationId = context.operationId;
         return m_inpainter->clear(request, context);
     }
@@ -146,7 +154,7 @@ public:
 
     [[nodiscard]] QFuture<Result<LayoutResponse>> execute(const LayoutRequest& request,
                                                           domain::ProjectId projectId,
-                                                          quint64 generation,
+                                                          quint64 sessionGeneration,
                                                           OperationId& outOperationId) {
         outOperationId = {};
         if (m_layouter == nullptr || m_registry == nullptr) {
@@ -159,7 +167,7 @@ public:
                 detail::invalidProcessingInput("input.invalid_layout_request", "Layout request is invalid"));
         }
 
-        const auto context = m_registry->createOperation(generation);
+        const auto context = m_registry->createOperation(sessionGeneration, 0);
         outOperationId = context.operationId;
         return m_layouter->layout(request, context);
     }

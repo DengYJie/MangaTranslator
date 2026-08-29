@@ -20,7 +20,7 @@ class OperationRegistry {
 public:
     OperationRegistry() : m_state(std::make_shared<State>()) {}
 
-    [[nodiscard]] OperationContext createOperation(quint64 generation) {
+    [[nodiscard]] OperationContext createOperation(quint64 sessionGeneration, quint64 viewGeneration) {
         InFlightOperation operation;
         operation.id = OperationId::generate();
 
@@ -32,7 +32,8 @@ public:
 
         OperationContext context;
         context.operationId = operation.id;
-        context.generation = generation;
+        context.sessionGeneration = sessionGeneration;
+        context.viewGeneration = viewGeneration;
         context.stopToken = operation.stopSource.get_token();
         context.lifetime = std::shared_ptr<void>(new char, [state = m_state, key](void* value) {
             delete static_cast<char*>(value);

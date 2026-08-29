@@ -33,8 +33,8 @@ struct PrepareClearResultRequest {
     QSize pageSize;      // normalized working image size, used for a fresh transparent layer
     QString projectRoot; // runtime absolute path, never persisted
     ClearResponse result;
-    quint64 generation{0};
-    quint64 currentGeneration{0};
+    quint64 sessionGeneration{0};
+    quint64 currentSessionGeneration{0};
     quint64 expectedRevision{0}; // region contentRevision captured when the clear was requested
 };
 
@@ -62,7 +62,7 @@ public:
             return makeFailedFuture<PreparedClearChange>(
                 detail::applyError(ErrorCategory::Project, "project.mismatch", "Project changed"));
         }
-        if (request.generation != request.currentGeneration) {
+        if (request.sessionGeneration != request.currentSessionGeneration) {
             return makeFailedFuture<PreparedClearChange>(
                 detail::applyError(ErrorCategory::Cancelled, "cancelled.stale_generation", "Clear result is stale"));
         }
@@ -178,13 +178,23 @@ private:
     IDerivedAssetStore* m_store;
 };
 
+struct ApplyLayoutResultRequest {
+    domain::ProjectId projectId;
+    domain::PageId pageId;
+    domain::RegionId expectedRegionId;
+    LayoutResponse result;
+    quint64 sessionGeneration{0};
+    quint64 currentSessionGeneration{0};
+    quint64 expectedRevision{0};
+};
+
 struct ApplyPreparedClearChangeRequest {
     domain::ProjectId projectId;
     domain::PageId pageId;
     domain::RegionId expectedRegionId;
     QString relativePath;
-    quint64 generation{0};
-    quint64 currentGeneration{0};
+    quint64 sessionGeneration{0};
+    quint64 currentSessionGeneration{0};
     quint64 expectedRevision{0};
 };
 
@@ -201,7 +211,7 @@ public:
         if (m_project->id() != request.projectId) {
             return std::unexpected(detail::applyError(ErrorCategory::Project, "project.mismatch", "Project changed"));
         }
-        if (request.generation != request.currentGeneration) {
+        if (request.sessionGeneration != request.currentSessionGeneration) {
             return std::unexpected(
                 detail::applyError(ErrorCategory::Cancelled, "cancelled.stale_generation", "Clear result is stale"));
         }
@@ -259,7 +269,7 @@ public:
         if (m_project->id() != request.projectId) {
             return std::unexpected(detail::applyError(ErrorCategory::Project, "project.mismatch", "Project changed"));
         }
-        if (request.generation != request.currentGeneration) {
+        if (request.sessionGeneration != request.currentSessionGeneration) {
             return std::unexpected(
                 detail::applyError(ErrorCategory::Cancelled, "cancelled.stale_generation", "Layout result is stale"));
         }

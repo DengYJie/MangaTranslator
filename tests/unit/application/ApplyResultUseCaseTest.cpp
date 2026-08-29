@@ -47,8 +47,8 @@ void ApplyResultUseCaseTest::testApplyOcrSuccess() {
     ApplyOcrResultRequest req;
     req.projectId = d->project->id();
     req.pageId = d->pageId;
-    req.generation = 1;
-    req.currentGeneration = 1;
+    req.sessionGeneration = 1;
+    req.currentSessionGeneration = 1;
     req.expectedRevision = 10;
     req.expectedRegionId = d->regionId;
     req.result.regionId = d->regionId;
@@ -71,8 +71,8 @@ void ApplyResultUseCaseTest::testApplyOcrFailsOnProjectMismatch() {
     ApplyOcrResultRequest req;
     req.projectId = ProjectId::generate(); // Wrong project ID
     req.pageId = d->pageId;
-    req.generation = 1;
-    req.currentGeneration = 1;
+    req.sessionGeneration = 1;
+    req.currentSessionGeneration = 1;
     req.expectedRevision = 10;
     req.expectedRegionId = d->regionId;
     req.result.regionId = d->regionId;
@@ -89,8 +89,8 @@ void ApplyResultUseCaseTest::testApplyOcrFailsOnPageMismatch() {
     ApplyOcrResultRequest req;
     req.projectId = d->project->id();
     req.pageId = PageId::generate();
-    req.generation = 1;
-    req.currentGeneration = 1;
+    req.sessionGeneration = 1;
+    req.currentSessionGeneration = 1;
     req.expectedRevision = 10;
     req.expectedRegionId = d->regionId;
     req.result.regionId = d->regionId;
@@ -113,8 +113,8 @@ void ApplyResultUseCaseTest::testApplyOcrFailsOnRegionMismatch() {
     request.result.regionId = RegionId::generate();
     request.result.text = "Wrong region";
     request.result.confidence = 0.9;
-    request.generation = 1;
-    request.currentGeneration = 1;
+    request.sessionGeneration = 1;
+    request.currentSessionGeneration = 1;
     request.expectedRevision = 10;
 
     const auto result = useCase.execute(request);
@@ -131,8 +131,8 @@ void ApplyResultUseCaseTest::testApplyOcrFailsOnStaleRevision() {
     ApplyOcrResultRequest req;
     req.projectId = d->project->id();
     req.pageId = d->pageId;
-    req.generation = 1;
-    req.currentGeneration = 1;
+    req.sessionGeneration = 1;
+    req.currentSessionGeneration = 1;
     req.expectedRevision = 9; // Stale revision (expected 10)
     req.expectedRegionId = d->regionId;
     req.result.regionId = d->regionId;
@@ -150,8 +150,8 @@ void ApplyResultUseCaseTest::testApplyOcrFailsOnStaleGeneration() {
     ApplyOcrResultRequest req;
     req.projectId = d->project->id();
     req.pageId = d->pageId;
-    req.generation = 1;
-    req.currentGeneration = 2;
+    req.sessionGeneration = 1;
+    req.currentSessionGeneration = 2;
     req.expectedRevision = 10;
     req.expectedRegionId = d->regionId;
     req.result.regionId = d->regionId;
@@ -177,8 +177,8 @@ void ApplyResultUseCaseTest::testApplyOcrFailsOnManualOverride() {
     ApplyOcrResultRequest req;
     req.projectId = d->project->id();
     req.pageId = d->pageId;
-    req.generation = 1;
-    req.currentGeneration = 1;
+    req.sessionGeneration = 1;
+    req.currentSessionGeneration = 1;
     req.expectedRevision = 11;
     req.expectedRegionId = d->regionId;
     req.result.regionId = d->regionId;
@@ -196,8 +196,8 @@ void ApplyResultUseCaseTest::testApplyTranslationSuccess() {
     ApplyTranslationResultRequest req;
     req.projectId = d->project->id();
     req.pageId = d->pageId;
-    req.generation = 1;
-    req.currentGeneration = 1;
+    req.sessionGeneration = 1;
+    req.currentSessionGeneration = 1;
     req.expectedRegions.append({d->regionId, "", 10});
 
     TranslationResponseItem item;
@@ -222,8 +222,8 @@ void ApplyResultUseCaseTest::testApplyTranslationFailsOnDuplicateId() {
     ApplyTranslationResultRequest req;
     req.projectId = d->project->id();
     req.pageId = d->pageId;
-    req.generation = 1;
-    req.currentGeneration = 1;
+    req.sessionGeneration = 1;
+    req.currentSessionGeneration = 1;
     req.expectedRegions.append({d->regionId, "", 10});
 
     TranslationResponseItem item;
@@ -246,8 +246,8 @@ void ApplyResultUseCaseTest::testApplyTranslationReportsPartialFailures() {
     ApplyTranslationResultRequest req;
     req.projectId = d->project->id();
     req.pageId = d->pageId;
-    req.generation = 3;
-    req.currentGeneration = 3;
+    req.sessionGeneration = 3;
+    req.currentSessionGeneration = 3;
     req.expectedRegions.append({d->regionId, "", 10});
     const auto missingRegionId = RegionId::generate();
     req.expectedRegions.append({missingRegionId, "missing", 0});
@@ -270,8 +270,8 @@ void ApplyResultUseCaseTest::testApplyTranslationReportsSourceMismatch() {
     ApplyTranslationResultRequest req;
     req.projectId = d->project->id();
     req.pageId = d->pageId;
-    req.generation = 1;
-    req.currentGeneration = 1;
+    req.sessionGeneration = 1;
+    req.currentSessionGeneration = 1;
     req.expectedRegions.append({d->regionId, "", 10});
     req.result.items.append({d->regionId, "changed", "Ignored", {}});
 
@@ -288,8 +288,8 @@ void ApplyResultUseCaseTest::testApplyTranslationFailsOnStaleGeneration() {
     ApplyTranslationResultRequest request;
     request.projectId = d->project->id();
     request.pageId = d->pageId;
-    request.generation = 1;
-    request.currentGeneration = 2;
+    request.sessionGeneration = 1;
+    request.currentSessionGeneration = 2;
     request.expectedRegions.append({d->regionId, "", 10});
     request.result.items.append({d->regionId, "", "Ignored", {}});
 
@@ -305,8 +305,8 @@ void ApplyResultUseCaseTest::testApplyTranslationRejectsStaleAndManualTargets() 
     ApplyTranslationResultRequest staleRequest;
     staleRequest.projectId = d->project->id();
     staleRequest.pageId = d->pageId;
-    staleRequest.generation = 1;
-    staleRequest.currentGeneration = 1;
+    staleRequest.sessionGeneration = 1;
+    staleRequest.currentSessionGeneration = 1;
     staleRequest.expectedRegions.append({d->regionId, "", 9});
     staleRequest.result.items.append({d->regionId, "", "Ignored", {}});
 
@@ -324,8 +324,8 @@ void ApplyResultUseCaseTest::testApplyTranslationRejectsStaleAndManualTargets() 
     ApplyTranslationResultRequest manualRequest;
     manualRequest.projectId = d->project->id();
     manualRequest.pageId = d->pageId;
-    manualRequest.generation = 1;
-    manualRequest.currentGeneration = 1;
+    manualRequest.sessionGeneration = 1;
+    manualRequest.currentSessionGeneration = 1;
     manualRequest.expectedRegions.append({d->regionId, "", 11});
     manualRequest.result.items.append({d->regionId, "", "Ignored", {}});
 
@@ -349,8 +349,8 @@ void ApplyResultUseCaseTest::testApplyClearSuccess() {
     req.expectedRegionId = d->regionId;
     req.pageSize = QSize(800, 600);
     req.projectRoot = QStringLiteral("unused");
-    req.generation = 1;
-    req.currentGeneration = 1;
+    req.sessionGeneration = 1;
+    req.currentSessionGeneration = 1;
     req.expectedRevision = 10;
     req.result.regionId = d->regionId;
     req.result.affectedBounds = RectGeometry(10, 10, 100, 50);
@@ -374,8 +374,8 @@ void ApplyResultUseCaseTest::testApplyClearSuccess() {
     applyReq.pageId = req.pageId;
     applyReq.expectedRegionId = req.expectedRegionId;
     applyReq.relativePath = result->relativePath;
-    applyReq.generation = req.generation;
-    applyReq.currentGeneration = req.currentGeneration;
+    applyReq.sessionGeneration = req.sessionGeneration;
+    applyReq.currentSessionGeneration = req.currentSessionGeneration;
     applyReq.expectedRevision = req.expectedRevision;
 
     const auto applyResult = applyUseCase.execute(applyReq);
@@ -399,8 +399,8 @@ void ApplyResultUseCaseTest::testApplyClearRejectsStaleRevision() {
     req.expectedRegionId = d->regionId;
     req.pageSize = QSize(800, 600);
     req.projectRoot = QStringLiteral("unused");
-    req.generation = 1;
-    req.currentGeneration = 1;
+    req.sessionGeneration = 1;
+    req.currentSessionGeneration = 1;
     req.expectedRevision = 9;
     req.result.regionId = d->regionId;
     req.result.affectedBounds = RectGeometry(10, 10, 100, 50);
@@ -426,8 +426,8 @@ void ApplyResultUseCaseTest::testApplyClearPropagatesCommitFailure() {
     req.expectedRegionId = d->regionId;
     req.pageSize = QSize(800, 600);
     req.projectRoot = QStringLiteral("unused");
-    req.generation = 1;
-    req.currentGeneration = 1;
+    req.sessionGeneration = 1;
+    req.currentSessionGeneration = 1;
     req.expectedRevision = 10;
     req.result.regionId = d->regionId;
     req.result.affectedBounds = RectGeometry(10, 10, 100, 50);
@@ -453,8 +453,8 @@ void ApplyResultUseCaseTest::testApplyClearRejectsPatchBoundsMismatch() {
     req.expectedRegionId = d->regionId;
     req.pageSize = QSize(800, 600);
     req.projectRoot = QStringLiteral("unused");
-    req.generation = 1;
-    req.currentGeneration = 1;
+    req.sessionGeneration = 1;
+    req.currentSessionGeneration = 1;
     req.expectedRevision = 10;
     req.result.regionId = d->regionId;
     req.result.affectedBounds = RectGeometry(10, 10, 100, 50);
@@ -475,8 +475,8 @@ void ApplyResultUseCaseTest::testApplyLayoutSuccess() {
     req.projectId = d->project->id();
     req.pageId = d->pageId;
     req.expectedRegionId = d->regionId;
-    req.generation = 1;
-    req.currentGeneration = 1;
+    req.sessionGeneration = 1;
+    req.currentSessionGeneration = 1;
     req.expectedRevision = 10;
     req.result.regionId = d->regionId;
     req.result.resolvedLayout.fontFamily = "Golden Font";
@@ -497,8 +497,8 @@ void ApplyResultUseCaseTest::testApplyLayoutRejectsStaleGeneration() {
     req.projectId = d->project->id();
     req.pageId = d->pageId;
     req.expectedRegionId = d->regionId;
-    req.generation = 1;
-    req.currentGeneration = 2;
+    req.sessionGeneration = 1;
+    req.currentSessionGeneration = 2;
     req.expectedRevision = 10;
     req.result.regionId = d->regionId;
     req.result.resolvedLayout.fontSizePt = 14.0;

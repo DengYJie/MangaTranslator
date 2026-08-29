@@ -97,7 +97,7 @@ Result<void> ApplyOcrResultUseCase::execute(const ApplyOcrResultRequest& request
     if (m_project->id() != request.projectId) {
         return std::unexpected(error(ErrorCategory::Project, "project.mismatch", "Project changed"));
     }
-    if (request.generation != request.currentGeneration) {
+    if (request.sessionGeneration != request.currentSessionGeneration) {
         return std::unexpected(error(ErrorCategory::Cancelled, "cancelled.stale_generation", "OCR result is stale"));
     }
     if (!request.expectedRegionId.isValid() || request.result.regionId != request.expectedRegionId) {
@@ -134,7 +134,7 @@ Result<TranslationAdoptionResult> ApplyTranslationResultUseCase::execute(const A
     if (m_project->id() != request.projectId) {
         return std::unexpected(error(ErrorCategory::Project, "project.mismatch", "Project changed"));
     }
-    if (request.generation != request.currentGeneration) {
+    if (request.sessionGeneration != request.currentSessionGeneration) {
         return std::unexpected(
             error(ErrorCategory::Cancelled, "cancelled.stale_generation", "Translation result is stale"));
     }

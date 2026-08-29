@@ -17,8 +17,8 @@ namespace manga::application {
 struct ApplyImportResultRequest {
     domain::ProjectId projectId;
     ImportImagesResult result;
-    quint64 generation{0};
-    quint64 currentGeneration{0};
+    quint64 sessionGeneration{0};
+    quint64 currentSessionGeneration{0};
 };
 
 namespace detail {
@@ -180,7 +180,7 @@ public:
         if (m_project->id() != request.projectId) {
             return std::unexpected(makeApplicationError(ErrorCategory::Project, "project.mismatch", "Project changed"));
         }
-        if (request.generation != request.currentGeneration) {
+        if (request.sessionGeneration != request.currentSessionGeneration) {
             return std::unexpected(
                 makeApplicationError(ErrorCategory::Cancelled, "cancelled.stale_generation", "Import result is stale"));
         }
