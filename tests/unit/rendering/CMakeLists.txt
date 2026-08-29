@@ -1,5 +1,9 @@
 add_executable(manga_tests_rendering
+    rendering_test_main.cpp
+    TextLayoutEngineTest.h
     TextLayoutEngineTest.cpp
+    TextRasterizerTest.h
+    TextRasterizerTest.cpp
 )
 
 manga_apply_project_options(manga_tests_rendering)
@@ -20,5 +24,6 @@ target_compile_definitions(manga_tests_rendering PRIVATE SRCDIR="${CMAKE_CURRENT
 manga_deploy_qt_runtime(manga_tests_rendering)
 add_test(NAME manga_tests_rendering COMMAND manga_tests_rendering)
 set_tests_properties(manga_tests_rendering PROPERTIES
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
     LABELS "unit;rendering"
 )

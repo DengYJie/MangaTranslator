@@ -1,0 +1,33 @@
+#include "TextLayoutEngineTest.h"
+#include "TextRasterizerTest.h"
+
+#include <QGuiApplication>
+#include <QtTest/QtTest>
+
+#include <iostream>
+
+int main(int argc, char* argv[]) {
+    QGuiApplication app(argc, argv);
+
+    int status = 0;
+
+    auto runSuite = [&](const char* name, QObject* testSuite) {
+        std::cout << "\n================ Running " << name << " ================\n" << std::flush;
+        const int res = QTest::qExec(testSuite, argc, argv);
+        if (res != 0) {
+            std::cerr << "FAILED: " << name << " exited with status " << res << "\n" << std::flush;
+            status |= res;
+        }
+    };
+
+    {
+        TextLayoutEngineTest suite;
+        runSuite("TextLayoutEngineTest", &suite);
+    }
+    {
+        TextRasterizerTest suite;
+        runSuite("TextRasterizerTest", &suite);
+    }
+
+    return status;
+}

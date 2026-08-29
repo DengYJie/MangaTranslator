@@ -1,8 +1,10 @@
 #include "BaberuOcrIntegrationTest.h"
 
+#include "services/execution/BoundedTaskExecutor.h"
 #include "services/ocr/BaberuManifest.h"
 #include "services/ocr/BaberuOcrPreprocessor.h"
 #include "services/ocr/BaberuVocab.h"
+#include "services/ocr/OnnxMangaOcrEngine.h"
 
 #include <QDir>
 #include <QFile>
@@ -11,6 +13,7 @@
 #include <QtTest/QtTest>
 
 #include <cmath>
+#include <onnxruntime_cxx_api.h>
 
 namespace manga::services::test {
 
@@ -137,6 +140,38 @@ void BaberuOcrIntegrationTest::integrationVocabLoadsCorrectly() {
     QCOMPARE(vocabResult->vocabSize(), 14630);
     // Content IDs must be non-empty
     QVERIFY(!vocabResult->contentIds().isEmpty());
+}
+
+void BaberuOcrIntegrationTest::integrationEngineRecognizesText() {
+    const QString dir = modelDir();
+    if (dir.isEmpty()) {
+        QSKIP("MANGA_OCR_MODEL_DIR not set");
+    }
+
+    Ort::Env env(ORT_LOGGING_LEVEL_WARNING, "Test");
+    BoundedTaskExecutor executor(1);
+    OnnxMangaOcrEngine engine(&env, &executor, dir);
+
+    QString path = QDir(fixtureDir()).filePath(QStringLiteral("gradient_4x3.png"));
+    if (!QFile::exists(path)) {
+        QSKIP("Fixture not found");
+    }
+    QImage img(path);
+    QVERIFY(!img.isNull());
+
+    application::OcrRequest req;
+    req.pageId = domain::PageId::generate();
+    req.regionId = domain::RegionId::generate();
+    req.image = img;
+    req.rect = domain::RectGeometry{0.0, 0.0, static_cast<double>(img.width()), static_cast<double>(img.height())};
+
+    application::OperationContext context;
+    auto future = engine.recognize(req, context);
+    future.waitForFinished();
+    auto res = future.result();
+
+    // We just verify it successfully ran inference and returned *something* without errors.
+    QVERIFY2(res.has_value(), qPrintable(res.error().safeMessage));
 }
 
 } // namespace manga::services::test

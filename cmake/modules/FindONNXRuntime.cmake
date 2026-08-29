@@ -64,21 +64,26 @@ if(NOT ONNXRuntime_INCLUDE_DIR OR NOT ONNXRuntime_LIBRARY OR (WIN32 AND NOT ONNX
         set(ONNXRUNTIME_URL "https://github.com/microsoft/onnxruntime/releases/download/v${ONNXRUNTIME_VERSION}/onnxruntime-win-x64-${ONNXRUNTIME_VERSION}.zip")
         set(ONNXRUNTIME_ARCHIVE "${ONNXRUNTIME_BASE_DIR}/onnxruntime.zip")
         set(ONNXRUNTIME_EXTRACT_DIR "${ONNXRUNTIME_BASE_DIR}/onnxruntime-win-x64-${ONNXRUNTIME_VERSION}")
+        set(ONNXRUNTIME_HASH "b372de85cedd9387a0d4386b982265e8420e5bcc2f29394317e76525b832942e")
     elseif(APPLE)
         # Simplified apple logic
         set(ONNXRUNTIME_URL "https://github.com/microsoft/onnxruntime/releases/download/v${ONNXRUNTIME_VERSION}/onnxruntime-osx-universal2-${ONNXRUNTIME_VERSION}.tgz")
         set(ONNXRUNTIME_ARCHIVE "${ONNXRUNTIME_BASE_DIR}/onnxruntime.tgz")
         set(ONNXRUNTIME_EXTRACT_DIR "${ONNXRUNTIME_BASE_DIR}/onnxruntime-osx-universal2-${ONNXRUNTIME_VERSION}")
+        set(ONNXRUNTIME_HASH "d63b2cd93c92777c211640bc7820856e9ea53246f9455102724f38e4284e1287")
     else()
         set(ONNXRUNTIME_URL "https://github.com/microsoft/onnxruntime/releases/download/v${ONNXRUNTIME_VERSION}/onnxruntime-linux-x64-${ONNXRUNTIME_VERSION}.tgz")
         set(ONNXRUNTIME_ARCHIVE "${ONNXRUNTIME_BASE_DIR}/onnxruntime.tgz")
         set(ONNXRUNTIME_EXTRACT_DIR "${ONNXRUNTIME_BASE_DIR}/onnxruntime-linux-x64-${ONNXRUNTIME_VERSION}")
+        set(ONNXRUNTIME_HASH "aa70d48b22e264b82e83f63245b51ddc9a47ae4a3a66903efaff1ba68b7b5930")
     endif()
 
     if(NOT EXISTS "${ONNXRUNTIME_EXTRACT_DIR}/include/onnxruntime_cxx_api.h")
         file(MAKE_DIRECTORY "${ONNXRUNTIME_BASE_DIR}")
         message(STATUS "Downloading ONNX Runtime from ${ONNXRUNTIME_URL} ...")
-        file(DOWNLOAD "${ONNXRUNTIME_URL}" "${ONNXRUNTIME_ARCHIVE}" SHOW_PROGRESS STATUS DL_STATUS)
+        file(DOWNLOAD "${ONNXRUNTIME_URL}" "${ONNXRUNTIME_ARCHIVE}"
+             EXPECTED_HASH SHA256=${ONNXRUNTIME_HASH}
+             SHOW_PROGRESS STATUS DL_STATUS)
 
         list(GET DL_STATUS 0 DL_ERROR)
         if(DL_ERROR)

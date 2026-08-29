@@ -17,6 +17,7 @@ private slots:
     void integrationPreprocessorMatchesPilGoldenSolidRed();
     void integrationPreprocessorMatchesPilGoldenGradient();
     void integrationVocabLoadsCorrectly();
+    void integrationEngineRecognizesText();
 };
 
 } // namespace manga::services::test

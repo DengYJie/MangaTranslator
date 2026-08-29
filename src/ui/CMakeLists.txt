@@ -11,6 +11,7 @@ add_subdirectory(manga)
 target_link_libraries(manga_ui
     PUBLIC
         manga_application
+        manga_rendering
         manga_ui_manga
         Qt6::Core
         Qt6::Gui

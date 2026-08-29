@@ -9,6 +9,9 @@ add_library(manga_data STATIC
     project/PathSafety.cpp
     project/ProjectSchemaValidator.cpp
     project/ProjectSerializer.cpp
+    settings/QSettingsAppSettingsStore.cpp
+    settings/QSettingsRecentProjectsStore.cpp
+    derived/FileSystemThumbnailStore.cpp
     DataErrorMapping.cpp
     image/ImageNormalization.cpp
 )
@@ -23,6 +26,7 @@ target_link_libraries(manga_data
     PUBLIC
         manga_domain
         manga_application
+        manga_rendering
         Qt6::Core
         Qt6::Gui
         Qt6::Sql
