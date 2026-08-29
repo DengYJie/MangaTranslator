@@ -316,10 +316,16 @@ struct LayoutRequest {
     quint64 contentRevision;
 };
 
+struct LayoutWarning {
+    QString code;        // layout.font_missing / layout.missing_glyph / layout.vertical_fallback
+    QString safeMessage;
+};
+
 struct LayoutResponse {
     RegionId regionId;
     TextLayout resolvedLayout;   // 含最终 fontSizePt
     bool overflow;
+    QVector<LayoutWarning> warnings;
 };
 
 virtual QFuture<Result<LayoutResponse>> layout(LayoutRequest, OperationContext) = 0;
@@ -328,14 +334,18 @@ virtual QFuture<Result<LayoutResponse>> layout(LayoutRequest, OperationContext) 
 - 不传整个 `TextRegion`，只传排版所需数据。
 - **排版逻辑 DPI 冻结为 96**：`fontSizePt` 在预览与导出间保持一致；若未来需要项目级 DPI 设置，再扩展 `logicalDpi` 字段来源。
 - `overflow = true` 表示文本超出 bounds，UI 据此显示警告；排版器绝不自动改写译文。
+- `warnings` 是成功结果的非阻塞告警；`layout.overflow` 由 `overflow` 表达，不同时作为失败返回。（P4 契约补丁）
 
 #### IComicExporter
 
 ```cpp
 struct ExportPageSnapshot {
     PageId pageId;
+    QString outputStem;             // 由 ExportPagesUseCase 从项目 orderIndex 生成
     QImage sourceImage;
-    std::vector<TextRegion> regions;   // Domain 容器类型
+    QImage clearLayer;              // 可空透明层
+    QImage translationLayer;        // 可空透明层
+    QImage manualOverrideLayer;     // 可空透明层
 };
 
 struct ExportRequest {
@@ -364,6 +374,7 @@ virtual QFuture<Result<ExportResponse>> exportPages(ExportRequest, OperationCont
 ```
 
 - `ExportScope`（CurrentPage/SelectedPages/AllPages）属于 `ExportPagesUseCase`，Port 只接收已解析的具体页面快照。
+- `ExportPagesUseCase` 在调用 Port 前解析并校验所有图层：source 与三个可选 layer 必须尺寸一致、RGBA8、straight alpha、sRGB；`outputStem` 匹配 `[A-Za-z0-9][A-Za-z0-9._-]{0,127}` 且不以点结尾。（P4 契约补丁）
 - 冲突策略为追加序号、永不覆盖；失败逐页携带原因，成功页不影响失败页。
 
 #### 输入快照共同规则
@@ -401,11 +412,13 @@ struct TranslationResponseItem {
 };
 
 struct TranslationResponse {
+    QString providerId;   // 本次实际使用的配置身份
     QVector<TranslationResponseItem> items;
 };
 ```
 
-- 候选 ID 合成：线上响应只有候选文本，映射层为每个候选生成响应内稳定的 ID（形如 `<regionId>-<序号>`），`provider` 填适配器标识，`confidence` 缺省；`selectedCandidateId` 的"必须存在"约束由 Domain 保证。
+- `providerId` 是本次实际使用的 Provider 配置身份；候选的 `provider` 字段取自 `TranslationResponse.providerId`，不再写死为 `"translator"`。（P4 契约补丁）
+- 候选 ID 合成：线上响应只有候选文本，映射层为每个候选生成响应内稳定的 ID（形如 `<regionId>-<序号>`），Provider 未给候选置信度时写 `0.0`，其语义为“未提供”，不得伪造为 `1.0`；`selectedCandidateId` 的"必须存在"约束由 Domain 保证。
 - 线上 JSON 形状由 P4 适配器依据技术决策 §5.1/§5.2 定义；P2 只冻结内部 DTO 与校验语义。
 - 校验规则：
   - 重复 regionId → 整次响应为协议错误，不采用任何结果。
@@ -446,6 +459,10 @@ text/
   ApplyOcrResultUseCase
   ApplyTranslationResultUseCase
 
+apply/
+  ApplyClearResultUseCase
+  ApplyLayoutResultUseCase
+
 processing/
   RecognizeRegionUseCase
   TranslatePageUseCase
@@ -458,6 +475,16 @@ export/
 
 - 不为小函数造 UseCase，也不把多阶段流水线塞进 ViewModel。
 - 后台结果采用（`ApplyOcrResultUseCase` / `ApplyTranslationResultUseCase`）是独立用户行为，与产生 suggestion 的处理 UseCase 分离。
+
+### P4 契约补丁
+
+P4 实现前对 P2 契约的小范围扩展；这些类型仍是 Application 自有类型，不引入 ONNX、HTTP 或 UI 类型。详细行为语义见 P4 设计规格参考。
+
+- `ICredentialStore`（`application/ports`）：同步窄端口，`SecretBytes` 为 move-only 零化容器，`readApiKey`/`writeApiKey`/`deleteApiKey`。
+- `IDerivedAssetStore`（`application/ports`）：仅负责读取和原子提交页面派生图层；请求携带 `ProjectId + projectRoot + PageId + layerKind + QImage`，返回项目根相对的内容寻址路径。
+- `ApplyClearResultUseCase`：合成 patch 到全页清除层 → `IDerivedAssetStore` 原子提交 → `ComicProject::applyClearResultOnPage` 原子更新 layer 引用与 `isCleared`；五项采用检查在提交前执行。
+- `ApplyLayoutResultUseCase`：通过 `applyPageRegionEdits` 原子写入 `resolvedLayout`。
+- Domain 窄操作 `ComicProject::applyClearResultOnPage(PageId, RegionId, relativeLayerPath)`：一次校验、一次 markDirty，不向应用层暴露 `ComicPage*`。
 
 ### Workflow 编排原则
 

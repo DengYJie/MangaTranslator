@@ -13,7 +13,7 @@
 
 ### 任务执行
 
-- [ ] 先完成本文件列出的 P2 契约补丁，并同步 DTO、Fake 和契约测试。
+- [x] 先完成本文件列出的 P2 契约补丁，并同步 DTO、Fake 和契约测试。（补丁清单与变更同步至 phase-2-application.md 的 P4 契约补丁小节）
 - [ ] 建立有界 `QThreadPool + QRunnable` 执行器。
 - [ ] 实现合作式取消、进度回调和请求 generation；适配器通过 `QPromise` 完成 `QFuture`，Port 接口不感知 GUI 线程。结果与进度的 GUI 线程投递由 P5 ViewModel 负责。
 - [ ] 输入使用不可变快照；Worker 不访问 QWidget、QPixmap 或 Scene。
