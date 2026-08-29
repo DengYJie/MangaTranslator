@@ -1,4 +1,4 @@
-#include "ComicProjectTest.h"
+﻿#include "ComicProjectTest.h"
 
 #include "domain/model/ComicProject.h"
 
@@ -127,11 +127,16 @@ void ComicProjectTest::testApplyClearResultOnPageSuccess() {
     QVERIFY(project.addRegionToPage(pageId, makeRegion(regionId)).has_value());
     project.markClean();
 
-    const auto result = project.applyClearResultOnPage(pageId, regionId, "assets/derived/cleaned/v1/abc.png");
+    // Shape mandated by the P4 derived asset protocol: content-addressed, page-scoped,
+    // versioned directory segment.
+    const std::string layerPath =
+        "assets/derived/" + pageId.toString() + "/cleaning/v1/" + std::string(64, 'a') + ".png";
+
+    const auto result = project.applyClearResultOnPage(pageId, regionId, layerPath);
 
     QVERIFY(result.has_value());
     const auto* page = project.findPage(pageId);
-    QCOMPARE(*page->clearLayerAsset(), std::string("assets/derived/cleaned/v1/abc.png"));
+    QCOMPARE(*page->clearLayerAsset(), layerPath);
     QVERIFY(page->findRegion(regionId)->isCleared());
     QVERIFY(project.isDirty());
 }

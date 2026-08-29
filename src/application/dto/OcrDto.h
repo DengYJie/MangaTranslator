@@ -12,7 +12,7 @@ namespace manga::application {
 struct OcrRequest {
     domain::PageId pageId;
     domain::RegionId regionId;
-    QImage image; // Decoded working image
+    QImage image; // Full-page normalized working image; the adapter crops internally.
     domain::RectGeometry rect;
     domain::LanguageCode language;
 };
