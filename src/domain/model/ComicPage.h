@@ -58,6 +58,10 @@ public:
         m_orderIndex = index;
     }
 
+    /// Atomic clear adoption for one region: stores the layer reference and marks the region
+    /// cleared. Returns false when the region does not exist.
+    bool applyClearResult(const RegionId& regionId, std::string relativeLayerPath);
+
     void setClearLayerAsset(std::optional<std::string> path) {
         m_clearLayerAsset = std::move(path);
     }

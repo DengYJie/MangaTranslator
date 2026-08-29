@@ -11,4 +11,7 @@ private slots:
     void testBatchEditRollbackRestoresRevisionAndDirty();
     void testEmptyBatchDoesNotMarkDirty();
     void testMarkCleanRejectsStaleSaveRevision();
+    void testApplyClearResultOnPageSuccess();
+    void testApplyClearResultOnPageRejectsUnknownIds();
+    void testApplyClearResultOnPageRejectsEmptyPath();
 };

@@ -165,6 +165,12 @@ public:
     [[nodiscard]] std::expected<void, ProjectEditError> applyPageRegionEdits(const PageId& pageId,
                                                                              std::span<const PageRegionEdit> edits);
 
+    /// Atomic clear adoption: sets the page clear layer reference and marks the region
+    /// cleared in one validation pass with one markDirty. The layer path must already be a
+    /// committed, project-relative content-addressed reference.
+    [[nodiscard]] std::expected<void, ProjectEditError>
+    applyClearResultOnPage(const PageId& pageId, const RegionId& regionId, std::string relativeLayerPath);
+
     // Glossary
 
     bool addGlossaryEntry(GlossaryEntry entry);

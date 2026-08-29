@@ -243,6 +243,27 @@ std::expected<void, ProjectEditError> ComicProject::applyPageRegionEdits(const P
     return {};
 }
 
+std::expected<void, ProjectEditError>
+ComicProject::applyClearResultOnPage(const PageId& pageId, const RegionId& regionId, std::string relativeLayerPath) {
+    ComicPage* page = findPageMutable(pageId);
+    if (!page) {
+        return std::unexpected(ProjectEditError{
+            .code = ProjectErrorCode::EditNotFound, .message = "Page not found", .entityId = pageId.toString()});
+    }
+    if (!page->hasRegion(regionId)) {
+        return std::unexpected(ProjectEditError{
+            .code = ProjectErrorCode::EditNotFound, .message = "Region not found", .entityId = regionId.toString()});
+    }
+    if (relativeLayerPath.empty()) {
+        return std::unexpected(
+            ProjectEditError{.code = ProjectErrorCode::EditNotFound, .message = "Clear layer path is empty"});
+    }
+
+    page->applyClearResult(regionId, std::move(relativeLayerPath));
+    markDirty();
+    return {};
+}
+
 bool ComicProject::addGlossaryEntry(GlossaryEntry entry) {
     if (!entry.isValid()) {
         return false;

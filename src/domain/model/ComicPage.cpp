@@ -170,6 +170,14 @@ bool ComicPage::setRegionIsCleared(const RegionId& regionId, bool cleared) noexc
     return true;
 }
 
+bool ComicPage::applyClearResult(const RegionId& regionId, std::string relativeLayerPath) {
+    if (!hasRegion(regionId)) {
+        return false;
+    }
+    setClearLayerAsset(std::move(relativeLayerPath));
+    return setRegionIsCleared(regionId, true);
+}
+
 void ComicPage::normalizeRegionOrder() noexcept {
     for (size_t i = 0; i < m_regions.size(); ++i) {
         m_regions[i].setOrderIndex(static_cast<int>(i));

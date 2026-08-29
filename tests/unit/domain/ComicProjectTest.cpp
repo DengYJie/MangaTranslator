@@ -118,3 +118,53 @@ void ComicProjectTest::testMarkCleanRejectsStaleSaveRevision() {
     QVERIFY(project.markCleanIfRevision(project.revision()));
     QVERIFY(!project.isDirty());
 }
+
+void ComicProjectTest::testApplyClearResultOnPageSuccess() {
+    ComicProject project("Test");
+    const PageId pageId = PageId::generate();
+    QVERIFY(project.addPage(ComicPage(pageId, "assets/original/page.png", {.width = 1000, .height = 1000})));
+    const RegionId regionId = RegionId::generate();
+    QVERIFY(project.addRegionToPage(pageId, makeRegion(regionId)).has_value());
+    project.markClean();
+
+    const auto result = project.applyClearResultOnPage(pageId, regionId, "assets/derived/cleaned/v1/abc.png");
+
+    QVERIFY(result.has_value());
+    const auto* page = project.findPage(pageId);
+    QCOMPARE(*page->clearLayerAsset(), std::string("assets/derived/cleaned/v1/abc.png"));
+    QVERIFY(page->findRegion(regionId)->isCleared());
+    QVERIFY(project.isDirty());
+}
+
+void ComicProjectTest::testApplyClearResultOnPageRejectsUnknownIds() {
+    ComicProject project("Test");
+    const PageId pageId = PageId::generate();
+    QVERIFY(project.addPage(ComicPage(pageId, "assets/original/page.png", {.width = 1000, .height = 1000})));
+    const RegionId regionId = RegionId::generate();
+    QVERIFY(project.addRegionToPage(pageId, makeRegion(regionId)).has_value());
+    project.markClean();
+
+    const auto missingPage = project.applyClearResultOnPage(PageId::generate(), regionId, "assets/derived/x.png");
+    QVERIFY(!missingPage.has_value());
+    QCOMPARE(missingPage.error().code, ProjectErrorCode::EditNotFound);
+
+    const auto missingRegion = project.applyClearResultOnPage(pageId, RegionId::generate(), "assets/derived/x.png");
+    QVERIFY(!missingRegion.has_value());
+    QCOMPARE(missingRegion.error().code, ProjectErrorCode::EditNotFound);
+    QVERIFY(!project.isDirty());
+}
+
+void ComicProjectTest::testApplyClearResultOnPageRejectsEmptyPath() {
+    ComicProject project("Test");
+    const PageId pageId = PageId::generate();
+    QVERIFY(project.addPage(ComicPage(pageId, "assets/original/page.png", {.width = 1000, .height = 1000})));
+    const RegionId regionId = RegionId::generate();
+    QVERIFY(project.addRegionToPage(pageId, makeRegion(regionId)).has_value());
+    project.markClean();
+
+    const auto result = project.applyClearResultOnPage(pageId, regionId, "");
+
+    QVERIFY(!result.has_value());
+    QVERIFY(!project.isDirty());
+    QVERIFY(!project.findPage(pageId)->clearLayerAsset().has_value());
+}
