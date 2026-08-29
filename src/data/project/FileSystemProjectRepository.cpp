@@ -12,6 +12,7 @@
 #include <QLockFile>
 #include <QMutexLocker>
 #include <QSaveFile>
+#include <QStorageInfo>
 
 #include <optional>
 #include <utility>
@@ -25,6 +26,15 @@ constexpr QLatin1String kLockFileName(".mangatranslator.lock");
 constexpr QLatin1String kAssetsOriginal("assets/original");
 constexpr QLatin1String kAssetsDerived("assets/derived");
 constexpr QLatin1String kStagingDirName(".mangatranslator-staging");
+constexpr qint64 kWriteMarginBytes = 64 * 1024;
+
+application::ApplicationError makeDiskFullError() {
+    auto error = application::makeApplicationError(application::ErrorCategory::Persistence,
+                                                   QStringLiteral("persistence.disk_full"),
+                                                   QStringLiteral("Not enough disk space for this operation"));
+    error.recovery = application::RecoveryAction::FreeDiskSpace;
+    return error;
+}
 
 application::ApplicationError makeCancelledError(QStringView what) {
     return application::makeApplicationError(application::ErrorCategory::Cancelled,
@@ -171,7 +181,8 @@ validateProjectAssets(const QString& canonicalRoot, const domain::ComicProject& 
                 warnings.append(warning);
                 continue;
             }
-            if (!isInsideCanonicalRoot(canonicalRoot, layerInfo.canonicalFilePath())) {
+            if (!isInsideCanonicalRoot(canonicalRoot,
+                                       canonicalPathResolved(canonicalRoot + QLatin1Char('/') + relative))) {
                 return std::unexpected(makeSemanticError(u"layer assets must stay inside the project root"));
             }
         }
@@ -266,10 +277,19 @@ struct RepositorySession {
     std::optional<domain::ComicProject> project;
 };
 
-FileSystemProjectRepository::FileSystemProjectRepository(ProjectIoCoordinator* coordinator)
-    : m_coordinator(coordinator) {}
+FileSystemProjectRepository::FileSystemProjectRepository(ProjectIoCoordinator* coordinator, DiskSpaceProbe probe)
+    : m_coordinator(coordinator), m_probe(std::move(probe)) {}
 
 FileSystemProjectRepository::~FileSystemProjectRepository() = default;
+
+void FileSystemProjectRepository::setDiskSpaceProbe(DiskSpaceProbe probe) {
+    m_probe = std::move(probe);
+}
+
+bool FileSystemProjectRepository::hasDiskSpace(const QString& root, qint64 requiredBytes) const {
+    const qint64 available = m_probe ? m_probe(root) : QStorageInfo(root).bytesAvailable();
+    return available < 0 || available >= requiredBytes;
+}
 
 std::shared_ptr<RepositorySession> FileSystemProjectRepository::findSession(const domain::ProjectId& projectId) {
     QMutexLocker locker(&m_mutex);
@@ -354,7 +374,15 @@ FileSystemProjectRepository::createProject(application::CreateProjectRequest req
             project.markClean();
 
             const QString projectJsonPath = canonicalRoot + QLatin1Char('/') + kProjectFileName;
-            if (auto writeError = writeFileSync(projectJsonPath, ProjectSerializer::serialize(project))) {
+            const QByteArray initialBytes = ProjectSerializer::serialize(project);
+            if (!hasDiskSpace(canonicalRoot, initialBytes.size() + kWriteMarginBytes)) {
+                lock.reset();
+                if (createdDirectory) {
+                    QDir(cleaned).removeRecursively();
+                }
+                return std::unexpected(makeDiskFullError());
+            }
+            if (auto writeError = writeFileSync(projectJsonPath, initialBytes)) {
                 lock.reset();
                 if (createdDirectory) {
                     QDir(cleaned).removeRecursively();
@@ -530,6 +558,9 @@ FileSystemProjectRepository::recoverProject(application::OpenProjectRequest requ
 
 QFuture<application::Result<void>> FileSystemProjectRepository::saveProject(application::SaveProjectRequest request,
                                                                             application::OperationContext context) {
+    // savedRevision is consumed by the aggregate owner, which calls markCleanIfRevision when
+    // this future completes; the repository never marks the live aggregate clean, so a stale
+    // save completion cannot clear edits made during the save.
     return runDataOperation<void>([this, request = std::move(request), context]() -> application::Result<void> {
         if (context.stopToken.stop_requested()) {
             return std::unexpected(makeCancelledError(u"Project save"));
@@ -565,6 +596,9 @@ QFuture<application::Result<void>> FileSystemProjectRepository::saveProject(appl
                                                   QStringLiteral("persistence.read_only"),
                                                   QStringLiteral("The project directory is read-only")));
         }
+        if (!hasDiskSpace(canonicalRoot, bytes.size() + kWriteMarginBytes)) {
+            return std::unexpected(makeDiskFullError());
+        }
 
         if (!session->recoveredFromBackup) {
             auto currentBytes = readFileBytes(projectJsonPath);
@@ -582,7 +616,9 @@ QFuture<application::Result<void>> FileSystemProjectRepository::saveProject(appl
                 }
             }
             // Rotate the single-generation backup only when the current file is complete and
-            // valid; a damaged current file must never overwrite the only good copy.
+            // valid; a damaged current file must never overwrite the only good copy. Because
+            // rotation runs first, a write-protected directory surfaces here as
+            // persistence.backup_failed and the old .bak is preserved.
             auto currentValid = ProjectSerializer::deserialize(*currentBytes);
             if (currentValid) {
                 if (auto backupError = writeFileSync(projectJsonPath + kBackupSuffix, *currentBytes)) {
@@ -701,6 +737,9 @@ FileSystemProjectRepository::saveProjectAs(application::SaveAsProjectRequest req
             }
 
             const QString stagingRoot = canonicalNew + QLatin1Char('/') + kStagingDirName;
+            if (!hasDiskSpace(canonicalNew, bytes.size() + kWriteMarginBytes)) {
+                return std::unexpected(makeDiskFullError());
+            }
             if (!QDir().mkpath(stagingRoot)) {
                 return std::unexpected(toPersistenceError(QFileDevice::PermissionsError));
             }

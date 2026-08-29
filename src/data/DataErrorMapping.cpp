@@ -37,6 +37,10 @@ application::ApplicationError toPersistenceError(QFileDevice::FileError fileErro
         case QFileDevice::PermissionsError:
             code = QStringLiteral("persistence.permission_denied");
             break;
+        case QFileDevice::ResourceError:
+            // Qt reports ENOSPC / ERROR_DISK_FULL as ResourceError.
+            code = QStringLiteral("persistence.disk_full");
+            break;
         default:
             code = QStringLiteral("persistence.io");
             break;
