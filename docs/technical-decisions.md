@@ -120,10 +120,10 @@ MSVC 生产目标启用 `/W4` 与 `/permissive-`；第三方警告不提升为�
 
 ### 4.1 OCR
 
-- V0.1 首选 Manga OCR 的 ONNX 实现，只接入一个 OCR 引擎。
+- V0.1 OCR 引擎为 **Baberu OCR**（Hugging Face `genshiai-daichi/baberu-ocr`，revision `d9cc13153e9a1cd8fdfa3b7b1cc329da2020aeae`，Apache-2.0），直接使用上游发布的 ONNX 产物（vision fp16 + decoder prefill/step int8），不自建权重转换流水线；只接入一个 OCR 引擎。上游 ONNX 产物不可用或不满足再分发条件时，备选为 manga-ocr-base 的自维护转换（原方案），人工录入主线始终可用。
 - 用户始终可以跳过 OCR，直接录入或修改原文。
-- OCR 模型由模型目录和 Manifest 管理，不进入仓库。
-- 开始实现前必须确认模型格式、许可证、语言覆盖和再分发条件；不满足条件时不得随应用发布，并以人工录入保持 V0.1 主线可用。
+- OCR 模型由模型目录和 Manifest 管理，不进入仓库；随应用分发的仅是上游 ONNX 文件与 Manifest，来源 revision 与 SHA-256 固定。
+- 开始实现前必须确认模型格式、许可证（Apache-2.0，已确认）、语言覆盖（ja/zh/en，已确认）和再分发条件；不满足条件时不得随应用发布，并以人工录入保持 V0.1 主线可用。
 
 ### 4.2 翻译 Provider
 

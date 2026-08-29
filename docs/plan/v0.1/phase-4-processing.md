@@ -21,8 +21,8 @@
 
 ### OCR
 
-- [ ] 确定一个 Manga OCR ONNX 发布物及固定 Manifest。
-- [ ] 核验模型输入输出、SHA-256、语言覆盖、许可证和分发策略。
+- [x] 确定一个 Manga OCR ONNX 发布物及固定 Manifest。（选型 **Baberu OCR**，Hugging Face `genshiai-daichi/baberu-ocr`，revision `d9cc13153e9a1cd8fdfa3b7b1cc329da2020aeae`，上游直接发布 ONNX 产物；规格见下方三小节，决策记录见 technical-decisions §4.1）
+- [ ] 核验模型输入输出、SHA-256、语言覆盖、许可证和分发策略。（许可证 Apache-2.0 与语言覆盖 ja/zh/en 已确认；输入输出张量与 SHA-256 待下载固定 revision 后核验，预处理参数从上游 `onnx_infer.py` 提取）
 - [ ] 实现 Region 裁剪、预处理、ONNX Runtime CPU 推理和文字结果映射。
 - [ ] 实现模型缺失、损坏、不兼容、内存不足和取消错误。
 - [ ] 保留无需模型的人工原文输入正式路径。
@@ -148,12 +148,12 @@ workerCount = clamp(cpuCount - 1, 1, 4)
 
 #### 上游与发布策略
 
-- V0.1 选择 `kha-white/manga-ocr-base`，固定上游 Hugging Face revision `aa6573bd10b0d446cbf622e29c3e084914df9741`，许可证为 Apache-2.0。
-- 上游发布的是 Transformers/PyTorch 权重，不是可直接加载的 ONNX 包。项目维护的转换流程从固定 revision 生成 ONNX 文件、Manifest、词表、许可证和转换器版本记录；不得把任意网上下载的同名 ONNX 当作同一模型。
+- V0.1 选择 **Baberu OCR**，固定上游 Hugging Face revision `d9cc13153e9a1cd8fdfa3b7b1cc329da2020aeae`（`genshiai-daichi/baberu-ocr`），许可证为 Apache-2.0，语言覆盖 ja/zh/en。
+- 上游直接发布 ONNX 产物，无需自建转换流水线：`onnx/vision_fp16.onnx`（无损档）、`onnx/vision_int4.onnx`（紧凑档）与 KV cache 结构的 `onnx/decoder_prefill_int8.onnx` / `onnx/decoder_step_int8.onnx`；V0.1 采用无损档（vision_fp16 + int8 解码器对）。不得把任意网上下载的同名 ONNX 当作同一模型——分发只接受命中固定 revision 产物 hash 的 manifest。
 - 模型权重、ONNX 文件不进 Git，也不默认塞进主安装包。V0.1 通过单独发布的模型包或用户选择本地模型目录安装；项目发布元数据记录受支持 manifest 的 SHA-256，自动安装只接受命中的 manifest。缺失时返回 `model.missing + LocateModel`，人工原文输入始终可用。
 - 默认目录由 `QStandardPaths::AppLocalDataLocation` 解析：`models/ocr/<id>/<version>/`。设置可选择其他目录，但项目文件只保存逻辑模型 ID，不保存开发机绝对路径。
 
-上游真实配置是 ViT encoder + Japanese BERT character decoder：输入 224×224、mean/std 均为 0.5、`decoder_start_token_id=2`、`eos_token_id=3`、`pad_token_id=0`、`max_length=300`、`num_beams=4`、`no_repeat_ngram_size=3`。上游 Python 实现先转灰度再转 RGB，并在 decode 后执行空白清理、连续点号规范化和半角英数转全角。P4 不得把它简化成“单次 argmax + 猜测 vocab”。
+上游真实配置是冻结 DINOv2 视觉编码器（后续阶段解冻）+ MLP 投影 + 6 层自研解码器（分组查询注意力、SwiGLU、RMSNorm、1D RoPE、tied embeddings），共 115M 参数；字符级词表 14,630（`tokenizer/vocab.json`，针对日文拟声词与混排不做子词切分）。解码为 greedy + `repetition_penalty=1.2` + 符号感知内容串上限，prefill/step 分图带 KV cache。P4 不得把它简化成“无惩罚的裸 argmax + 猜测 vocab”，重复惩罚与内容串上限必须按 Manifest 忠实实现；预处理参数（尺寸、通道、归一化）以固定 revision 的上游 `onnx_infer.py` 为唯一事实来源，提取后冻结进 Manifest。
 
 #### Model Manifest v1
 
@@ -162,11 +162,11 @@ workerCount = clamp(cpuCount - 1, 1, 4)
 ```json
 {
   "manifestVersion": 1,
-  "id": "kha-white-manga-ocr-base-onnx",
+  "id": "genshiai-baberu-ocr-onnx",
   "version": "1.0.0",
   "source": {
-    "repository": "kha-white/manga-ocr-base",
-    "revision": "aa6573bd10b0d446cbf622e29c3e084914df9741",
+    "repository": "genshiai-daichi/baberu-ocr",
+    "revision": "d9cc13153e9a1cd8fdfa3b7b1cc329da2020aeae",
     "license": "Apache-2.0"
   },
   "runtime": {
@@ -176,54 +176,61 @@ workerCount = clamp(cpuCount - 1, 1, 4)
   },
   "graphs": [
     {
-      "role": "encoder",
-      "file": "encoder.onnx",
+      "role": "vision",
+      "file": "vision_fp16.onnx",
       "sha256": "<64 lowercase hex>",
-      "inputs": ["pixel_values"],
-      "outputs": ["last_hidden_state"]
+      "inputs": ["<from onnx_infer.py>"],
+      "outputs": ["<from onnx_infer.py>"]
     },
     {
-      "role": "decoder",
-      "file": "decoder.onnx",
+      "role": "decoder-prefill",
+      "file": "decoder_prefill_int8.onnx",
       "sha256": "<64 lowercase hex>",
-      "inputs": ["input_ids", "encoder_hidden_states"],
-      "outputs": ["logits"]
+      "inputs": ["<from onnx_infer.py>"],
+      "outputs": ["<from onnx_infer.py>"]
+    },
+    {
+      "role": "decoder-step",
+      "file": "decoder_step_int8.onnx",
+      "sha256": "<64 lowercase hex>",
+      "inputs": ["<from onnx_infer.py>"],
+      "outputs": ["<from onnx_infer.py>"]
     }
   ],
   "tokenizer": {
-    "type": "bert-japanese-character-v2",
-    "vocabFile": "vocab.txt",
+    "type": "baberu-character-v1",
+    "vocabFile": "tokenizer/vocab.json",
     "sha256": "<64 lowercase hex>",
-    "padTokenId": 0,
-    "startTokenId": 2,
-    "eosTokenId": 3
+    "startTokenId": 0,
+    "eosTokenId": 0,
+    "padTokenId": 0
   },
   "input": {
-    "width": 224,
-    "height": 224,
+    "width": 0,
+    "height": 0,
     "layout": "NCHW",
     "color": "RGB",
-    "sourceConversion": "grayscale-to-rgb",
-    "resizeMode": "exact",
-    "resample": "bilinear"
+    "sourceConversion": "<from onnx_infer.py>",
+    "resizeMode": "<from onnx_infer.py>",
+    "resample": "<from onnx_infer.py>"
   },
   "normalization": {
-    "scale": 0.00392156862745098,
-    "mean": [0.5, 0.5, 0.5],
-    "std": [0.5, 0.5, 0.5]
+    "scale": 0.0,
+    "mean": [0.0, 0.0, 0.0],
+    "std": [0.0, 0.0, 0.0]
   },
   "generation": {
-    "maxLength": 300,
-    "beamSize": 4,
-    "lengthPenalty": 2.0,
-    "noRepeatNgramSize": 3
+    "maxLength": 0,
+    "strategy": "greedy",
+    "repetitionPenalty": 1.2,
+    "contentRunCap": "<from onnx_infer.py>"
   },
-  "postprocess": "manga-ocr-v1"
+  "postprocess": "baberu-v1"
 }
 ```
 
-- `opset`、`minimumOnnxRuntime`、图名、tensor 名和最终 SHA-256 由实际转换产物生成，禁止在产物不存在时猜值；合并图、带 KV cache 的 decoder 可以扩展 `graphs`，但同一 manifest version 的必需 role 和 tensor 语义固定。
-- 上例中的 `1.x`、`opset=0` 和尖括号 hash 是转换模板占位符，最终 Manifest Schema 明确拒绝这些值；P4 模型发布任务必须把它们替换为实际 runtime semver、正 opset 和产物 hash。
+- `opset`、`minimumOnnxRuntime`、tensor 名、尺寸、归一化参数、token ID 和最终 SHA-256 由固定 revision 的实际产物与上游 `onnx_infer.py` / `generation_config.json` 提取生成，禁止在核验前猜值（上游模型卡未成文这些参数，`onnx_infer.py` 是唯一事实来源）；带 KV cache 的 prefill/step 双图解码器按上表 `graphs` 扩展，同一 manifest version 的必需 role 与 tensor 语义固定。
+- 上例中的 `1.x`、`opset=0`、`0` 数值和尖括号 hash 是模板占位符，最终 Manifest Schema 明确拒绝这些值；P4 模型核验任务必须把它们替换为实际 runtime semver、正 opset、真实张量规格和产物 hash。
 - 相对文件名不得含 `..`、绝对路径、符号链接逃逸或重解析点逃逸；每个声明文件在 Session 创建前做长度、普通文件、可读性和 SHA-256 校验。
 - Manifest 在首次使用时校验并按目录指纹缓存。文件大小或最后修改时间改变时重新校验；设置切换模型目录时安全卸载旧 Session 后重新加载。
 - 缺 Manifest/文件为 `model.missing`；哈希不符为 `model.hash_mismatch`；Schema、opset、tensor、shape、token ID 或 tokenizer 不兼容为 `model.incompatible`。
@@ -232,21 +239,21 @@ workerCount = clamp(cpuCount - 1, 1, 4)
 
 1. `OcrRequest.image` 必须是 P2 的整页规范化工作图；Adapter 验证 `rect` 有限、至少 2×2，且与图像边界相交。
 2. 浮点 Region 转像素采用外扩：左上 `floor`，右下 `ceil`，再 clamp 到图像边界。空交集返回 `input.invalid_ocr_region`。
-3. 在 Adapter 内裁剪，不由 UseCase 预裁剪。裁剪图按 Manifest 执行灰度转 RGB、resize/crop、通道排列和归一化；禁止额外锐化、二值化或自动旋转。
+3. 在 Adapter 内裁剪，不由 UseCase 预裁剪。裁剪图按 Manifest 执行通道转换、resize/crop、通道排列和归一化（具体参数以固定 revision 的上游 `onnx_infer.py` 提取结果为准）；禁止额外锐化、二值化或自动旋转。
 4. 每个通道按 `(pixel * scale - mean[c]) / std[c]` 转 float32；输出 tensor shape 必须与 Manifest 和 Session metadata 同时一致。
-5. 预处理 Golden Test 直接比较固定像素位置和 tensor 值，容差 `1e-6`，防止 Qt 与转换脚本的 resize/rounding 漂移。
+5. 预处理 Golden Test 直接比较固定像素位置和 tensor 值，容差 `1e-6`，防止 Qt 与上游 `onnx_infer.py` 的 resize/rounding 漂移。
 
-`resizeMode` 必须跟随固定 revision 使用的 Transformers 4.15 `ViTFeatureExtractor` 行为。整数 `size=224` 会直接 resize 为 224×224，因此当前 v1 使用 `exact`，不采用附件建议中的等比补白或中心裁剪；若未来模型改用 padding，必须发布新模型 version 和 Manifest，不能静默改变 v1。
+`resizeMode` 与全部预处理参数必须跟随固定 revision 上游 `onnx_infer.py` 的实际行为；提取完成前不得实现或猜测预处理。若未来模型改用不同预处理，必须发布新模型 version 和 Manifest，不能静默改变 v1。
 
 #### Session、解码与结果
 
 - `Ort::Env` 由 composition root 共享；每个已加载模型一个长生命周期 `Ort::Session`，首次 OCR 懒加载并在设置变更或应用关闭时释放，不按请求重建。
 - V0.1 使用 CPU Execution Provider、顺序图执行、`inter_op_num_threads=1`；`intra_op_num_threads=workerCount`。OCR 并发闸门为 1，避免 Session 内线程与多个请求相互过度订阅。
 - Session 创建后逐项核对输入输出名称、dtype、rank 和静态维度。动态 batch 只允许 1；其他不符返回 `model.incompatible`。
-- 解码严格使用 Manifest 的 beam size、长度惩罚、重复 ngram 限制和 token ID；每生成一步检查 stopToken。达到 maxLength 仍无 EOS 返回 `inference.decode_limit`，不得把截断文本当成功。
-- `postprocess=manga-ocr-v1` 固定为空白移除、`…` 转三个点、连续 `・`/`.` 规范化、ASCII 英数全角化；用 UTF-8 Golden Test 锚定，禁止依赖系统 locale。
+- 解码严格使用 Manifest 的 greedy 策略、`repetitionPenalty`、内容串上限、`maxLength` 与 token ID：prefill 一次后按 step 图迭代并维护 KV cache；每生成一步检查 stopToken。达到 maxLength 仍无 EOS 返回 `inference.decode_limit`，不得把截断文本当成功。
+- `postprocess=baberu-v1` 按固定 revision 上游 `onnx_infer.py` 的文本后处理提取并冻结；用 UTF-8 Golden Test 锚定，禁止依赖系统 locale。
 - 上游没有校准的序列置信度。V0.1 `OcrResponse.confidence=0.0` 表示未提供，UI 不得显示为“0% 准确率”。
-- 成功结果必须回传原 `regionId` 且文本非空；空文本为 `inference.empty_result`。Session Run、beam decode、OOM 与取消分别映射 `inference.failed`、`inference.decode_failed`、`inference.oom`、`cancelled.user_requested`。
+- 成功结果必须回传原 `regionId` 且文本非空；空文本为 `inference.empty_result`。Session Run、解码循环、OOM 与取消分别映射 `inference.failed`、`inference.decode_failed`、`inference.oom`、`cancelled.user_requested`。
 
 ### 翻译适配器
 
@@ -622,7 +629,7 @@ Cancelled:
 
 - `tests/fixtures/ocr/preprocess/`：至少 4 张 2×2/非方形 RGBA 图，逐 tensor golden 验证 grayscale、exact resize、NCHW、bilinear 和 normalize。
 - `tests/fixtures/ocr/samples/`：8 张自制日文 PNG，覆盖横排、竖排、ふりがな、标点、英数、低对比、长文本和空白；每张有 UTF-8 expected text。图片提前生成并提交，不要求 CI 安装作者机器字体。
-- Manifest 单测用 KB 级假图和假 hash 覆盖未知字段、路径逃逸、丢文件、hash、tensor、token ID 和 runtime 版本。decoder 用 fake session 固定 logits，覆盖 beam、EOS、maxLength、重复 ngram 与取消。
+- Manifest 单测用 KB 级假图和假 hash 覆盖未知字段、路径逃逸、丢文件、hash、tensor、token ID 和 runtime 版本。decoder 用 fake session 固定 logits，覆盖 greedy 采样、repetition penalty、内容串上限、EOS、maxLength、KV cache prefill/step 接力与取消。
 - 真实模型验收使用单独缓存的固定 ONNX 模型包，目录由 `MANGA_OCR_MODEL_DIR` 提供；模型包 hash 必须等于 release manifest。普通单元测试和离线重建不下载 1GB 权重；P4 release CI 的 `p4-model` job 是退出条件，不得因“本机没有模型”静默跳过。
 - CPU 固定模型、固定图片的文本应精确一致；tensor 浮点容差 `1e-6`。性能只记录代表性基线，不用不稳定 wall-clock 阈值阻塞普通 CI。
 
@@ -680,7 +687,7 @@ services 或 data 的 export capability:
 
 ### 规范依据
 
-- [Manga OCR 上游实现](https://github.com/kha-white/manga-ocr/blob/master/manga_ocr/ocr.py) 与固定的 [manga-ocr-base 模型](https://huggingface.co/kha-white/manga-ocr-base)。固定 revision 的实际配置优先于二手文章中的 448、padding 或单步 argmax 描述。
+- [Baberu OCR 模型](https://huggingface.co/genshiai-daichi/baberu-ocr)（固定 revision `d9cc13153e9a1cd8fdfa3b7b1cc329da2020aeae`）与其上游推理脚本 `onnx_infer.py`；预处理、解码与后处理参数以该脚本为唯一事实来源，优先于模型卡的简述。备选方案 [manga-ocr](https://github.com/kha-white/manga-ocr) 仅在 Baberu 上游不可用时按 technical-decisions §4.1 重新评估。
 - [OpenAI Structured Outputs](https://developers.openai.com/api/docs/guides/structured-outputs)：Chat Completions 使用 `response_format.json_schema.strict`；JSON mode 不保证 schema；refusal 和未完整完成必须单独处理。
 - [QTextLayout 6.11](https://doc.qt.io/qt-6.11/qtextlayout.html)：低层水平行与 glyph run API、reentrant 语义，以及 paint device 对 metrics 的影响。
 - [QSaveFile 6.11](https://doc.qt.io/qt-6/qsavefile.html)：原子替换能力及不支持 `NewOnly` 的限制，因此导出采用 temp + no-overwrite rename。
