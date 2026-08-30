@@ -103,3 +103,66 @@ set_tests_properties(manga_tests_ui_main_window PROPERTIES
     LABELS "unit;ui"
     TIMEOUT 15
 )
+
+qt_add_executable(manga_tests_ui_relative_time
+    relative_time_test.cpp
+)
+manga_apply_project_options(manga_tests_ui_relative_time)
+set_target_properties(manga_tests_ui_relative_time PROPERTIES AUTOMOC ON)
+
+target_link_libraries(manga_tests_ui_relative_time
+    PRIVATE
+        manga_ui
+        Qt6::Test
+        Qt6::Widgets
+)
+
+manga_deploy_qt_runtime(manga_tests_ui_relative_time)
+add_test(NAME manga_tests_ui_relative_time COMMAND manga_tests_ui_relative_time)
+set_tests_properties(manga_tests_ui_relative_time PROPERTIES
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
+    LABELS "unit;ui"
+    TIMEOUT 15
+)
+
+qt_add_executable(manga_tests_ui_home_view_model
+    home_view_model_test.cpp
+)
+manga_apply_project_options(manga_tests_ui_home_view_model)
+set_target_properties(manga_tests_ui_home_view_model PROPERTIES AUTOMOC ON)
+
+target_link_libraries(manga_tests_ui_home_view_model
+    PRIVATE
+        manga_ui
+        Qt6::Test
+        Qt6::Widgets
+)
+
+manga_deploy_qt_runtime(manga_tests_ui_home_view_model)
+add_test(NAME manga_tests_ui_home_view_model COMMAND manga_tests_ui_home_view_model)
+set_tests_properties(manga_tests_ui_home_view_model PROPERTIES
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
+    LABELS "unit;ui"
+    TIMEOUT 15
+)
+
+qt_add_executable(manga_tests_ui_home_page
+    home_page_test.cpp
+)
+manga_apply_project_options(manga_tests_ui_home_page)
+set_target_properties(manga_tests_ui_home_page PROPERTIES AUTOMOC ON)
+
+target_link_libraries(manga_tests_ui_home_page
+    PRIVATE
+        manga_ui
+        Qt6::Test
+        Qt6::Widgets
+)
+
+manga_deploy_qt_runtime(manga_tests_ui_home_page)
+add_test(NAME manga_tests_ui_home_page COMMAND manga_tests_ui_home_page)
+set_tests_properties(manga_tests_ui_home_page PROPERTIES
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
+    LABELS "unit;ui"
+    TIMEOUT 15
+)

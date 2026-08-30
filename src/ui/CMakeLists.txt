@@ -38,6 +38,15 @@ add_library(manga_ui STATIC
     navigation/NavigationTypes.h
     navigation/NavigationWidget.cpp
     navigation/NavigationWidget.h
+    screen/home/HomePage.cpp
+    screen/home/HomePage.h
+    screen/home/HomeState.h
+    screen/home/HomeViewModel.cpp
+    screen/home/HomeViewModel.h
+    screen/home/RecentProjectsModel.cpp
+    screen/home/RecentProjectsModel.h
+    screen/home/RelativeTime.cpp
+    screen/home/RelativeTime.h
     window/MainWindow.cpp
     window/MainWindow.h
     window/NavigationWindow.cpp
