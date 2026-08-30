@@ -39,6 +39,8 @@ add_library(manga_ui STATIC
     navigation/NavigationTypes.h
     navigation/NavigationWidget.cpp
     navigation/NavigationWidget.h
+    screen/editor/EditorPage.cpp
+    screen/editor/EditorPage.h
     screen/editor/EditorState.h
     screen/editor/EditorViewModel.cpp
     screen/editor/EditorViewModel.h

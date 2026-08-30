@@ -1,0 +1,52 @@
+#pragma once
+
+#include "ui/base/BasePage.h"
+
+class QSplitter;
+
+namespace manga::ui::manga {
+class MangaCanvas;
+}
+namespace manga::ui::widget {
+class PageThumbnailList;
+}
+
+namespace manga::ui::screen::editor {
+
+class EditorViewModel;
+struct EditorState;
+struct PageImageDelivery;
+
+/// Editor skeleton page: page thumbnail pane plus the manga canvas workspace.
+/// Inspector, command bar and region editing arrive with P5-C.
+class EditorPage : public base::BasePage {
+    Q_OBJECT
+public:
+    explicit EditorPage(EditorViewModel* viewModel, QWidget* parent = nullptr);
+
+    /// Test-only observation hooks.
+    [[nodiscard]] ui::manga::MangaCanvas* canvasForTest() const {
+        return m_canvas;
+    }
+    [[nodiscard]] ui::widget::PageThumbnailList* pageListForTest() const {
+        return m_pageList;
+    }
+
+Q_SIGNALS:
+    void openProjectRequested();
+    void importPagesRequested();
+
+private:
+    void buildUi();
+    void render(const EditorState& state);
+    void handlePageImageReady(const PageImageDelivery& delivery);
+    void handlePlaceholderAction();
+
+    EditorViewModel* m_viewModel; // non-owning
+    QSplitter* m_splitter{nullptr};
+    ui::widget::PageThumbnailList* m_pageList{nullptr};
+    ui::manga::MangaCanvas* m_canvas{nullptr};
+    int m_lastPlaceholder{0}; // ui::manga::MangaCanvas::ContentState
+};
+
+} // namespace manga::ui::screen::editor

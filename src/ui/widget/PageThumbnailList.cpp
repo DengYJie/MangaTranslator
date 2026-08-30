@@ -75,7 +75,7 @@ void PageThumbnailList::requestVisibleThumbnails() {
     int lastRow = m_view->indexAt(viewportRect.bottomLeft()).row();
 
     if (firstRow < 0) {
-        return;
+        firstRow = 0;
     }
 
     if (lastRow < 0) {
@@ -86,10 +86,12 @@ void PageThumbnailList::requestVisibleThumbnails() {
     firstRow = std::max(0, firstRow - 2);
     lastRow = std::min(m_model->rowCount() - 1, lastRow + 2);
 
+    qDebug() << "firstRow=" << firstRow << " lastRow=" << lastRow << " viewport=" << viewportRect;
     bool hasLoading = false;
     for (int i = firstRow; i <= lastRow; ++i) {
         auto status = static_cast<ThumbnailStatus>(m_model->index(i).data(PageListModel::ThumbnailStatusRole).toInt());
         auto pageIdOpt = m_model->pageIdAt(i);
+        qDebug() << "i=" << i << " status=" << (int)status << " pageIdOpt=" << pageIdOpt.has_value();
         if (!pageIdOpt)
             continue;
 

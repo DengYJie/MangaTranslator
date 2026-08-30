@@ -1,5 +1,6 @@
 #pragma once
 
+#include "application/operation/AsyncResult.h"
 #include "application/ports/IPageImageLoader.h"
 #include "application/ports/IThumbnailStore.h"
 

@@ -23,16 +23,17 @@ class PageThumbnailListTest : public QObject {
 private slots:
     void initTestCase() {
         qRegisterMetaType<manga::domain::PageId>("manga::domain::PageId");
+        qRegisterMetaType<manga::domain::PageId>("::manga::domain::PageId");
     }
 
     void visibleRowsRequestThumbnailsOnlyOnce() {
         PageThumbnailList list;
+        QSignalSpy spy(&list, &PageThumbnailList::thumbnailRequested);
         QVector<PageListEntry> pages;
         for (int i = 0; i < 10; ++i)
             pages.append(makeEntry(i));
         list.model()->setPages(pages);
         list.resize(220, 400);
-        QSignalSpy spy(&list, &PageThumbnailList::thumbnailRequested);
         list.show();
         QCoreApplication::processEvents();
         // The first requestVisibleThumbnails should have happened during show/paint
@@ -68,14 +69,16 @@ private slots:
         QCOMPARE(spy.first().at(1).toBool(), true);
     }
 
-    void resetLoadingThumbnailsReturnsRowsToNotLoaded() {
+    void resetLoadingThumbnailsRetriggersVisibleRows() {
         PageThumbnailList list;
         const auto entry = makeEntry(0);
         list.model()->setPages({entry});
         list.model()->setThumbnailStatus(entry.id, ThumbnailStatus::Loading);
+        QSignalSpy spy(&list, &PageThumbnailList::thumbnailRequested);
         list.resetLoadingThumbnails();
         QCOMPARE(list.model()->index(0).data(manga::ui::widget::PageListModel::ThumbnailStatusRole).toInt(),
-                 static_cast<int>(ThumbnailStatus::NotLoaded));
+                 static_cast<int>(ThumbnailStatus::Loading));
+        QCOMPARE(spy.size(), 1);
     }
 
     void currentPageSelectionDoesNotReemitActivation() {

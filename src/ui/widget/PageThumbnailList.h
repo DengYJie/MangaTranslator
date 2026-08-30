@@ -48,8 +48,8 @@ protected:
     bool eventFilter(QObject* obj, QEvent* event) override;
 
 Q_SIGNALS:
-    void pageActivated(const manga::domain::PageId& pageId);
-    void thumbnailRequested(const manga::domain::PageId& pageId, bool force);
+    void pageActivated(const ::manga::domain::PageId& pageId);
+    void thumbnailRequested(const ::manga::domain::PageId& pageId, bool force);
 
 private:
     PageListModel* m_model{nullptr};            // owned by this

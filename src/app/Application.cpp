@@ -5,6 +5,8 @@
 #include "ui/navigation/NavigationController.h"
 #include "ui/navigation/NavigationPanel.h"
 #include "ui/navigation/NavigationTypes.h"
+#include "ui/screen/editor/EditorPage.h"
+#include "ui/screen/editor/EditorViewModel.h"
 #include "ui/screen/home/HomePage.h"
 #include "ui/screen/home/HomeViewModel.h"
 #include "ui/window/MainWindow.h"
@@ -76,6 +78,33 @@ int Application::run() {
     homeItem.iconGlyph = QStringLiteral("\uE80F");
     mainWindow->addNavigationItem(homeItem, QStringLiteral("main"));
     mainWindow->registerRoute(QStringLiteral("home"), homePage, QStringLiteral("main"));
+
+    auto* editorViewModel = new ui::screen::editor::EditorViewModel(
+        m_context->thumbnailStore(), m_context->pageImageLoader(), m_context->operationRegistry(), mainWindow);
+    auto* editorPage = new ui::screen::editor::EditorPage(editorViewModel);
+
+    ui::navigation::NavigationItemDescriptor editorItem;
+    editorItem.routeKey = QStringLiteral("editor");
+    editorItem.text = QCoreApplication::translate("Application", "编辑器");
+    editorItem.iconGlyph = QStringLiteral("\uE70F");
+    mainWindow->addNavigationItem(editorItem, QStringLiteral("main"));
+    mainWindow->registerRoute(QStringLiteral("editor"), editorPage, QStringLiteral("main"));
+
+    QObject::connect(homeViewModel,
+                     &ui::screen::home::HomeViewModel::projectOpened,
+                     editorViewModel,
+                     &ui::screen::editor::EditorViewModel::openProjectSession);
+    QObject::connect(
+        homeViewModel,
+        &ui::screen::home::HomeViewModel::projectOpened,
+        controller,
+        [controller](const application::ProjectSessionDescriptor&) { controller->navigate(QStringLiteral("editor")); });
+    QObject::connect(editorPage, &ui::screen::editor::EditorPage::openProjectRequested, controller, [controller]() {
+        controller->navigate(QStringLiteral("home"));
+    });
+    QObject::connect(editorPage, &ui::screen::editor::EditorPage::importPagesRequested, controller, [controller]() {
+        controller->navigate(QStringLiteral("import"));
+    });
 
     m_mainWindow = std::unique_ptr<ui::window::MainWindow>(mainWindow);
     controller->navigate(QStringLiteral("home"));
