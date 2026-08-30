@@ -64,6 +64,11 @@ Before using a component, verify its public C++ header/API and its Gallery sampl
 
 Prefer FluentQt controls. A raw Qt widget is allowed only when FluentQt lacks the required behavior or native integration is essential. Document the gap, encapsulate the widget, and make it fully theme-aware.
 
+### Registered porting exceptions
+
+- The ported navigation pane includes two FluentQt headers that are private by convention but install-exported as inline headers: `components/foundation/overlay/OverlayShadow.h` and `components/foundation/overlay/OverlayGeometry.h`, used for `paintLayeredShadow` and `syncInheritedThemeOverride` in `navigation/NavigationFlyout`. This is a documented exception limited to those two headers; do not extend it to other source-private headers.
+- `navigation/NavigationWidget.cpp`'s `InputModalityFilter` installs a global application event filter for keyboard/mouse modality detection. It is a deliberate keep-over from the FluentQt navigation port; do not remove it without a replacement modality source.
+
 ## Theme, tokens, and control metrics
 
 - Initialize FluentQt resources and apply the selected FluentQt theme before constructing the main window.
