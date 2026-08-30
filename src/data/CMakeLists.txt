@@ -26,7 +26,6 @@ target_link_libraries(manga_data
     PUBLIC
         manga_domain
         manga_application
-        manga_rendering
         Qt6::Core
         Qt6::Gui
         Qt6::Sql

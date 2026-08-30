@@ -470,9 +470,8 @@ void FileSystemComicExporterTest::stopAfterFirstPageReturnsPartialSuccess() {
     FileSystemComicExporter exporter;
     auto future = exporter.exportPages(request, context);
 
-    // The first page commit becomes visible as a file; cancel right after that point. The
-    // next stop check happens at the top of the loop for page 2, so page 1 must be reported
-    // as exported and the remaining pages as cancelled without any files being written.
+    // Cancellation is cooperative. Another page may finish between observing the first file
+    // and the worker's next stop check, so assert the committed prefix and cancelled suffix.
     const QString firstFile = dir.filePath(QStringLiteral("partial_0000.png"));
     const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(15);
     while (!QFileInfo::exists(firstFile)) {
@@ -486,13 +485,18 @@ void FileSystemComicExporterTest::stopAfterFirstPageReturnsPartialSuccess() {
 
     const auto result = future.result();
     QVERIFY(result.has_value());
-    QCOMPARE(result->exported.size(), 1);
-    QCOMPARE(result->exported[0].pageId, pageIds[0]);
-    QCOMPARE(result->failures.size(), 3);
-    for (int i = 0; i < 3; ++i) {
-        QCOMPARE(result->failures[i].pageId, pageIds[i + 1]);
+    QVERIFY(result->exported.size() >= 1);
+    QVERIFY(result->exported.size() < pageIds.size());
+    QCOMPARE(result->failures.size(), pageIds.size() - result->exported.size());
+    for (int i = 0; i < result->exported.size(); ++i) {
+        QCOMPARE(result->exported[i].pageId, pageIds[i]);
+    }
+    for (int i = 0; i < result->failures.size(); ++i) {
+        const int pageIndex = result->exported.size() + i;
+        QCOMPARE(result->failures[i].pageId, pageIds[pageIndex]);
         QVERIFY(result->failures[i].error.isCancelled());
-        QVERIFY(!QFileInfo::exists(dir.filePath(QStringLiteral("partial_%1.png").arg(i + 1, 4, 10, QLatin1Char('0')))));
+        QVERIFY(
+            !QFileInfo::exists(dir.filePath(QStringLiteral("partial_%1.png").arg(pageIndex, 4, 10, QLatin1Char('0')))));
     }
     assertNoExportResidue(dir, "partial cancel");
 }

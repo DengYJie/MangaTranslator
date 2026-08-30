@@ -2,7 +2,9 @@
 #include "FileSystemComicImporterTest.h"
 #include "FileSystemDerivedAssetStoreTest.h"
 #include "FileSystemProjectRepositoryTest.h"
+#include "FileSystemThumbnailStoreTest.h"
 #include "ProjectSerializerTest.h"
+#include "QSettingsStoresTest.h"
 #include "data/import/FileSystemComicImporter.h"
 #include "data/import/FileSystemPageImageLoader.h"
 #include "data/project/FileSystemProjectRepository.h"
@@ -63,6 +65,14 @@ int main(int argc, char* argv[]) {
     {
         FileSystemDerivedAssetStoreTest suite;
         runSuite("FileSystemDerivedAssetStoreTest", &suite);
+    }
+    {
+        FileSystemThumbnailStoreTest suite;
+        runSuite("FileSystemThumbnailStoreTest", &suite);
+    }
+    {
+        QSettingsStoresTest suite;
+        runSuite("QSettingsStoresTest", &suite);
     }
 
     return status;

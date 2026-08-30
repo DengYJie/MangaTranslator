@@ -5,6 +5,10 @@ qt_add_executable(manga_tests_data
     FileSystemComicImporterTest.cpp
     FileSystemDerivedAssetStoreTest.cpp
     FileSystemComicExporterTest.cpp
+    FileSystemThumbnailStoreTest.h
+    FileSystemThumbnailStoreTest.cpp
+    QSettingsStoresTest.h
+    QSettingsStoresTest.cpp
 )
 manga_apply_project_options(manga_tests_data)
 set_target_properties(manga_tests_data PROPERTIES
