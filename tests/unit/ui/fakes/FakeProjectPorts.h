@@ -45,8 +45,8 @@ public:
     QFuture<application::Result<application::ProjectDescriptor>>
     createProject(application::CreateProjectRequest request, application::OperationContext) override {
         if (failCreate) {
-            return application::makeFailedFuture<application::ProjectDescriptor>(
-                application::makeApplicationError(application::ErrorCategory::Project, "test.create_failed", "stub"));
+            return application::makeFailedFuture<application::ProjectDescriptor>(application::makeApplicationError(
+                application::ErrorCategory::Persistence, "persistence.target_not_empty", "目标目录必须为空"));
         }
         lastCreatedPath = request.path;
         return application::makeReadyFuture<application::ProjectDescriptor>(
