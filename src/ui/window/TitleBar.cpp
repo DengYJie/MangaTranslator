@@ -92,7 +92,7 @@ TitleBar::TitleBar(QWidget* parent) : fluent::windowing::TitleBar(parent) {
     m_backButton->setObjectName(QStringLiteral("fluentWindowBackButton"));
     m_backButton->setFluentStyle(fluent::basicinput::Button::Subtle);
     m_backButton->setFluentLayout(fluent::basicinput::Button::IconOnly);
-    m_backButton->setFocusPolicy(Qt::NoFocus); // Title bar buttons stay out of the Tab chain.
+    m_backButton->setFocusPolicy(Qt::TabFocus);
     m_backButton->setFocusVisual(false);
     m_backButton->installEventFilter(this);
     m_backButton->hide();
@@ -106,7 +106,7 @@ TitleBar::TitleBar(QWidget* parent) : fluent::windowing::TitleBar(parent) {
     m_paneToggleButton->setObjectName(QStringLiteral("fluentWindowPaneToggleButton"));
     m_paneToggleButton->setFluentStyle(fluent::basicinput::Button::Subtle);
     m_paneToggleButton->setFluentLayout(fluent::basicinput::Button::IconOnly);
-    m_paneToggleButton->setFocusPolicy(Qt::NoFocus); // Title bar buttons stay out of the Tab chain.
+    m_paneToggleButton->setFocusPolicy(Qt::TabFocus);
     m_paneToggleButton->setFocusVisual(false);
     m_paneToggleButton->installEventFilter(this);
     m_paneToggleButton->hide();
