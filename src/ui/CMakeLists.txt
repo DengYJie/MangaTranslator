@@ -8,7 +8,13 @@ add_library(manga_ui STATIC
     navigation/NavigationController.h
     navigation/NavigationHistory.cpp
     navigation/NavigationHistory.h
+    navigation/NavigationPanel.cpp
+    navigation/NavigationPanel.h
+    navigation/NavigationSurfaceHost.cpp
+    navigation/NavigationSurfaceHost.h
     navigation/NavigationTypes.h
+    window/MainWindow.cpp
+    window/MainWindow.h
 )
 manga_apply_project_options(manga_ui)
 set_target_properties(manga_ui PROPERTIES AUTOMOC ON)
