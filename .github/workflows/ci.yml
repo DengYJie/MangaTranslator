@@ -47,7 +47,7 @@ jobs:
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           repository: calvinhxx/Fluent-Qt
-          ref: 50ad2fa1ad263c834adfd280b2c19dfdc2278dae
+          ref: 5602f5271507972af8292c469972995401dc2e67 # v1.7.4
           path: .deps/fluentqt
           persist-credentials: false
 
@@ -124,7 +124,7 @@ jobs:
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           repository: calvinhxx/Fluent-Qt
-          ref: 50ad2fa1ad263c834adfd280b2c19dfdc2278dae
+          ref: 5602f5271507972af8292c469972995401dc2e67 # v1.7.4
           path: .deps/fluentqt
           persist-credentials: false
 

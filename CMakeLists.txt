@@ -30,7 +30,7 @@ if(NOT TARGET FluentQt::FluentQt)
 
     FetchContent_Declare(fluentqt
         GIT_REPOSITORY https://github.com/calvinhxx/Fluent-Qt.git
-        GIT_TAG 50ad2fa1ad263c834adfd280b2c19dfdc2278dae
+        GIT_TAG 5602f5271507972af8292c469972995401dc2e67 # v1.7.4
         UPDATE_DISCONNECTED TRUE
     )
     FetchContent_MakeAvailable(fluentqt)
