@@ -78,12 +78,19 @@ jobs:
         with:
           version: v0.17.0
 
+      - name: Cache ONNX Runtime
+        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
+        with:
+          path: build/${{ matrix.preset }}/_deps/onnxruntime-local
+          key: onnxruntime-${{ runner.os }}-x64-1.26.0
+
       - name: Configure
         shell: pwsh
         run: >-
           cmake --preset ${{ matrix.preset }}
           "-DFETCHCONTENT_SOURCE_DIR_FLUENTQT=$env:MANGA_FLUENTQT_ROOT"
           "-DCMAKE_CXX_COMPILER_LAUNCHER=sccache"
+          "-DMANGA_DOWNLOAD_ONNXRUNTIME=ON"
 
       - name: Build
         run: cmake --build --preset ${{ matrix.preset }} --parallel
@@ -145,92 +152,42 @@ jobs:
         with:
           version: v0.17.0
 
+      - name: Cache ONNX Runtime
+        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
+        with:
+          path: build/windows-msvc-test/_deps/onnxruntime-local
+          key: onnxruntime-${{ runner.os }}-x64-1.26.0
+
       - name: Cache OCR Model
         id: cache-ocr-model
         uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
         with:
           path: models/ocr/genshiai-baberu-ocr-onnx/1.0.0
-          key: ocr-model-v1
+          key: ocr-model-v1-d9cc13153e9a1cd8
 
       - name: Download OCR Model
         if: steps.cache-ocr-model.outputs.cache-hit != 'true'
         shell: pwsh
         run: |
-          New-Item -ItemType Directory -Path models/ocr/genshiai-baberu-ocr-onnx/1.0.0 -Force
-          # In a real workflow, this would download the HuggingFace repo via git lfs or direct URL
-          # For this CI step placeholder, we download from HF using huggingface_hub or direct curl
-          pip install huggingface_hub
-          python -c "from huggingface_hub import snapshot_download; snapshot_download(repo_id='genshiai-daichi/baberu-ocr', revision='d9cc13153e9a1cd8fdfa3b7b1cc329da2020aeae', allow_patterns=['onnx/vision_fp16.onnx', 'onnx/decoder_prefill_int8.onnx', 'onnx/decoder_step_int8.onnx', 'tokenizer/vocab.json'], local_dir='models/ocr/genshiai-baberu-ocr-onnx/1.0.0')"
-          # Synthesize a manifest.json representing the model
-          $manifest = @{
-              manifestVersion = 1
-              id = "genshiai-baberu-ocr-onnx"
-              version = "1.0.0"
-              source = @{
-                  repository = "genshiai-daichi/baberu-ocr"
-                  revision = "d9cc13153e9a1cd8fdfa3b7b1cc329da2020aeae"
-                  license = "Apache-2.0"
-              }
-              runtime = @{
-                  minimumOnnxRuntime = "1.14.0"
-                  opset = 14
-                  executionProvider = "cpu"
-              }
-              input = @{
-                  width = 224
-                  height = 224
-                  layout = "NCHW"
-                  color = "RGB"
-                  sourceConversion = "RGB"
-                  resizeMode = "stretch"
-                  resample = "bicubic"
-              }
-              normalization = @{
-                  scale = 0.003921568
-                  mean = @(0.48145466, 0.4578275, 0.40821073)
-                  std = @(0.26862954, 0.26130258, 0.27577711)
-              }
-              generation = @{
-                  maxLength = 128
-                  strategy = "greedy"
-                  repetitionPenalty = 1.2
-                  contentRunCap = 12
-              }
-              postprocess = "baberu-v1"
-              tokenizer = @{
-                  type = "baberu-character-v1"
-                  vocabFile = "tokenizer/vocab.json"
-                  sha256 = (Get-FileHash "models/ocr/genshiai-baberu-ocr-onnx/1.0.0/tokenizer/vocab.json" -Algorithm SHA256).Hash.ToLower()
-                  bosTokenId = 1
-                  eosTokenId = 2
-                  padTokenId = 0
-                  unkTokenId = 3
-              }
-              graphs = @(
-                  @{
-                      role = "vision"
-                      file = "onnx/vision_fp16.onnx"
-                      sha256 = (Get-FileHash "models/ocr/genshiai-baberu-ocr-onnx/1.0.0/onnx/vision_fp16.onnx" -Algorithm SHA256).Hash.ToLower()
-                      inputs = @("pixel_values")
-                      outputs = @("vision_embeds")
-                  },
-                  @{
-                      role = "decoder-prefill"
-                      file = "onnx/decoder_prefill_int8.onnx"
-                      sha256 = (Get-FileHash "models/ocr/genshiai-baberu-ocr-onnx/1.0.0/onnx/decoder_prefill_int8.onnx" -Algorithm SHA256).Hash.ToLower()
-                      inputs = @("vision_embeds", "input_ids")
-                      outputs = @("logits", "present_k0", "present_v0", "present_k1", "present_v1", "present_k2", "present_v2", "present_k3", "present_v3", "present_k4", "present_v4", "present_k5", "present_v5")
-                  },
-                  @{
-                      role = "decoder-step"
-                      file = "onnx/decoder_step_int8.onnx"
-                      sha256 = (Get-FileHash "models/ocr/genshiai-baberu-ocr-onnx/1.0.0/onnx/decoder_step_int8.onnx" -Algorithm SHA256).Hash.ToLower()
-                      inputs = @("input_ids", "position_ids", "past_k0", "past_v0", "past_k1", "past_v1", "past_k2", "past_v2", "past_k3", "past_v3", "past_k4", "past_v4", "past_k5", "past_v5")
-                      outputs = @("logits", "present_k0", "present_v0", "present_k1", "present_v1", "present_k2", "present_v2", "present_k3", "present_v3", "present_k4", "present_v4", "present_k5", "present_v5")
-                  }
-              )
+          $revision = "d9cc13153e9a1cd8fdfa3b7b1cc329da2020aeae"
+          $modelRoot = "models/ocr/genshiai-baberu-ocr-onnx/1.0.0"
+          $baseUrl = "https://huggingface.co/genshiai-daichi/baberu-ocr/resolve/$revision"
+          $files = @(
+            @{ Path = "onnx/vision_fp16.onnx"; Sha256 = "4ce333804846b23f1983376efe363c164d4624ecc6bd16f99a15a859d8423117" },
+            @{ Path = "onnx/decoder_prefill_int8.onnx"; Sha256 = "4f8d28d4e5e8b6c7f3a4510663aa0a9199a7eec06bcb1dc0afb3ca571494e97f" },
+            @{ Path = "onnx/decoder_step_int8.onnx"; Sha256 = "2eaf792ca70b67e55140ef0bcfbfc3c3b1e07d72ca277dcc46aae27c81f27ac8" },
+            @{ Path = "tokenizer/vocab.json"; Sha256 = "681de4eb83154a397af49e2ddae4705041b12a22e16fe00860b829e889e5f47c" },
+            @{ Path = "LICENSE"; Sha256 = "186332043e82fcfdbeb0b8e0e8d77b63d97ffa3dd9d91ccf7cef1377d8ab345b" }
+          )
+          foreach ($file in $files) {
+            $destination = Join-Path $modelRoot $file.Path
+            New-Item -ItemType Directory -Path (Split-Path $destination) -Force | Out-Null
+            curl.exe --fail --location --retry 3 --output $destination "$baseUrl/$($file.Path)"
+            if ($LASTEXITCODE -ne 0) { throw "Failed to download $($file.Path)" }
+            $actual = (Get-FileHash $destination -Algorithm SHA256).Hash.ToLowerInvariant()
+            if ($actual -ne $file.Sha256) { throw "SHA-256 mismatch for $($file.Path)" }
           }
-          $manifest | ConvertTo-Json -Depth 10 | Set-Content "models/ocr/genshiai-baberu-ocr-onnx/1.0.0/manifest.json" -Encoding UTF8
+          Copy-Item res/models/baberu-ocr-v1.json "$modelRoot/manifest.json"
 
       - name: Configure
         shell: pwsh
@@ -238,6 +195,7 @@ jobs:
           cmake --preset windows-msvc-test
           "-DFETCHCONTENT_SOURCE_DIR_FLUENTQT=$env:MANGA_FLUENTQT_ROOT"
           "-DCMAKE_CXX_COMPILER_LAUNCHER=sccache"
+          "-DMANGA_DOWNLOAD_ONNXRUNTIME=ON"
 
       - name: Build tests
         run: cmake --build --preset windows-msvc-test --target manga_tests_services --parallel
