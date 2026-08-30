@@ -35,14 +35,19 @@ EditorViewModel::~EditorViewModel() {
     if (m_operationRegistry && m_pageLoadOperation.isValid()) {
         m_operationRegistry->cancelOperation(m_pageLoadOperation);
     }
-    for (auto* watcher : m_thumbnailWatchers) {
-        watcher->disconnect();
-    }
-    qDeleteAll(m_thumbnailWatchers);
-    m_thumbnailWatchers.clear();
 }
 
 void EditorViewModel::openProjectSession(const application::ProjectSessionDescriptor& session) {
+    if (!m_thumbnailStore || !m_pageImageLoader || !m_operationRegistry) {
+        updateState([&](EditorState& s) {
+            EditorNotice notice;
+            notice.safeMessage = QStringLiteral("Internal error: ports not initialized");
+            notice.retryable = false;
+            s.notice = notice;
+        });
+        return;
+    }
+
     cancelThumbnailRequests();
     if (m_operationRegistry && m_pageLoadOperation.isValid()) {
         m_operationRegistry->cancelOperation(m_pageLoadOperation);
@@ -162,7 +167,17 @@ void EditorViewModel::retryPageLoad() {
 }
 
 void EditorViewModel::requestThumbnail(const domain::PageId& pageId, bool force) {
-    if (!m_hasSession || !findPage(pageId) || !m_thumbnailStore || !m_pageImageLoader) {
+    if (!m_thumbnailStore || !m_pageImageLoader || !m_operationRegistry) {
+        updateState([&](EditorState& s) {
+            EditorNotice notice;
+            notice.safeMessage = QStringLiteral("Internal error: ports not initialized");
+            notice.retryable = false;
+            s.notice = notice;
+        });
+        return;
+    }
+
+    if (!m_hasSession || !findPage(pageId)) {
         return;
     }
 
