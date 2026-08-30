@@ -77,6 +77,7 @@ protected:
     void keyPressEvent(QKeyEvent* event) override;
     void resizeEvent(QResizeEvent* event) override;
     void drawForeground(QPainter* painter, const QRectF& rect) override;
+    void scrollContentsBy(int dx, int dy) override;
 
 private:
     void applyZoom(double factor);

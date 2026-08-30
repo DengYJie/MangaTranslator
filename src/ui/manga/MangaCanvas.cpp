@@ -25,7 +25,7 @@ MangaCanvas::MangaCanvas(QWidget* parent) : QGraphicsView(parent) {
     setFrameShape(QFrame::NoFrame);
     setAlignment(Qt::AlignCenter);
 
-    m_placeholderAction = new fluent::basicinput::Button(this);
+    m_placeholderAction = new fluent::basicinput::Button(viewport());
     m_placeholderAction->hide();
     connect(m_placeholderAction, &fluent::basicinput::Button::clicked, this, &MangaCanvas::placeholderActionActivated);
 
@@ -255,16 +255,21 @@ void MangaCanvas::drawForeground(QPainter* painter, const QRectF& rect) {
     }
 
     if (!text.isEmpty()) {
-        // Find center above the button if button is visible
         QRectF textRect = rect;
         if (m_placeholderAction->isVisible()) {
-            QPoint buttonPos = mapToScene(m_placeholderAction->pos()).toPoint();
-            textRect.setBottom(buttonPos.y() - 16);
+            textRect.translate(0, -20);
         }
         painter->drawText(textRect, Qt::AlignCenter | Qt::TextWordWrap, text);
     }
 
     painter->restore();
+}
+
+void MangaCanvas::scrollContentsBy(int dx, int dy) {
+    QGraphicsView::scrollContentsBy(dx, dy);
+    if (m_contentState == ContentState::Image) {
+        emitViewTransform();
+    }
 }
 
 void MangaCanvas::emitViewTransform() {
