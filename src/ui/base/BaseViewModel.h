@@ -47,14 +47,15 @@ public:
     template <typename Context, typename Slot> void observe(Context* context, Slot slot) {
         Q_ASSERT_X(
             QThread::currentThread() == qApp->thread(), "BaseViewModel", "observe must be called on the GUI thread");
-        connect(static_cast<Derived*>(this),
-                &Derived::stateChanged,
-                context,
-                slot,
-                static_cast<Qt::ConnectionType>(Qt::AutoConnection | Qt::UniqueConnection));
         if constexpr (std::is_member_function_pointer_v<Slot>) {
+            connect(static_cast<Derived*>(this),
+                    &Derived::stateChanged,
+                    context,
+                    slot,
+                    static_cast<Qt::ConnectionType>(Qt::AutoConnection | Qt::UniqueConnection));
             std::invoke(slot, context, m_state);
         } else {
+            connect(static_cast<Derived*>(this), &Derived::stateChanged, context, slot, Qt::AutoConnection);
             std::invoke(slot, m_state);
         }
     }
