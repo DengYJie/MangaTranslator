@@ -25,6 +25,7 @@ private slots:
     void testApplyTranslationRejectsStaleAndManualTargets();
 
     void testApplyClearSuccess();
+    void testApplyClearSupportsUndoAndRedo();
     void testApplyClearRejectsStaleRevision();
     void testApplyClearPropagatesCommitFailure();
     void testApplyClearRejectsPatchBoundsMismatch();

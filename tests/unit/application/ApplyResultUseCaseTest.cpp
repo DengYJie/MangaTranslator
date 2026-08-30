@@ -373,10 +373,8 @@ void ApplyResultUseCaseTest::testApplyClearSuccess() {
     applyReq.projectId = req.projectId;
     applyReq.pageId = req.pageId;
     applyReq.expectedRegionId = req.expectedRegionId;
-    applyReq.beforeRef = result->beforeRef;
-    applyReq.afterRef = result->afterRef;
-    applyReq.beforeState = result->beforeState;
-    applyReq.afterState = result->afterState;
+    applyReq.targetRef = result->afterRef;
+    applyReq.targetState = result->afterState;
     applyReq.sessionGeneration = req.sessionGeneration;
     applyReq.currentSessionGeneration = req.currentSessionGeneration;
     applyReq.expectedRevision = req.expectedRevision;
@@ -390,6 +388,34 @@ void ApplyResultUseCaseTest::testApplyClearSuccess() {
     QVERIFY(d->project->isDirty());
     // The isCleared flag is not a content change: contentRevision stays at 10.
     QCOMPARE(page->findRegion(d->regionId)->contentRevision(), 10u);
+}
+
+void ApplyResultUseCaseTest::testApplyClearSupportsUndoAndRedo() {
+    ApplyPreparedClearChangeUseCase useCase(d->project);
+    ApplyPreparedClearChangeRequest request;
+    request.projectId = d->project->id();
+    request.pageId = d->pageId;
+    request.expectedRegionId = d->regionId;
+    request.sessionGeneration = 1;
+    request.currentSessionGeneration = 1;
+    request.expectedRevision = 10;
+
+    request.targetRef = QStringLiteral("assets/derived/page/cleaning/v1/result.png");
+    request.targetState = true;
+    QVERIFY(useCase.execute(request).has_value());
+    QVERIFY(d->project->findPage(d->pageId)->clearLayerAsset().has_value());
+    QVERIFY(d->project->findPage(d->pageId)->findRegion(d->regionId)->isCleared());
+
+    request.targetRef.clear();
+    request.targetState = false;
+    QVERIFY(useCase.execute(request).has_value());
+    QVERIFY(!d->project->findPage(d->pageId)->clearLayerAsset().has_value());
+    QVERIFY(!d->project->findPage(d->pageId)->findRegion(d->regionId)->isCleared());
+
+    request.targetRef = QStringLiteral("assets/derived/page/cleaning/v1/result.png");
+    request.targetState = true;
+    QVERIFY(useCase.execute(request).has_value());
+    QCOMPARE(d->project->findPage(d->pageId)->findRegion(d->regionId)->contentRevision(), 10u);
 }
 
 void ApplyResultUseCaseTest::testApplyClearRejectsStaleRevision() {

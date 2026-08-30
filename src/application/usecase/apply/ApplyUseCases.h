@@ -208,10 +208,8 @@ struct ApplyPreparedClearChangeRequest {
     domain::ProjectId projectId;
     domain::PageId pageId;
     domain::RegionId expectedRegionId;
-    QString beforeRef;
-    QString afterRef;
-    bool beforeState{false};
-    bool afterState{true};
+    QString targetRef;
+    bool targetState{false};
     quint64 sessionGeneration{0};
     quint64 currentSessionGeneration{0};
     quint64 expectedRevision{0};
@@ -256,19 +254,19 @@ public:
             return std::unexpected(
                 detail::applyError(ErrorCategory::Input, "input.manual_override", "Region is under manual control"));
         }
-        if (request.afterRef.isEmpty() && request.afterState) {
+        if (request.targetRef.isEmpty() && request.targetState) {
             return std::unexpected(detail::applyError(ErrorCategory::Protocol,
                                                       "protocol.invalid_clear_result",
                                                       "Clear change has empty path but state is cleared"));
         }
 
         std::optional<std::string> targetRef = std::nullopt;
-        if (!request.afterRef.isEmpty()) {
-            targetRef = request.afterRef.toStdString();
+        if (!request.targetRef.isEmpty()) {
+            targetRef = request.targetRef.toStdString();
         }
 
         const auto applied =
-            m_project->applyClearChangeOnPage(request.pageId, request.expectedRegionId, targetRef, request.afterState);
+            m_project->applyClearChangeOnPage(request.pageId, request.expectedRegionId, targetRef, request.targetState);
         if (!applied) {
             return std::unexpected(
                 detail::applyError(ErrorCategory::Input, "input.edit_rejected", "Clear result could not be applied"));
