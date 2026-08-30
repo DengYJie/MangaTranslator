@@ -14,20 +14,22 @@
 using namespace manga;
 
 namespace {
-application::ProjectSessionDescriptor makeSession(int pageCount) {
-    application::ProjectSessionDescriptor session;
-    session.projectId = domain::ProjectId::generate();
+application::OpenedProjectSession makeSession(int pageCount) {
+    application::OpenedProjectSession session;
+    session.project = domain::ComicProject("Demo Project");
     session.projectRootPath = QStringLiteral("D:/manga/demo");
-    session.projectName = QStringLiteral("Demo Project");
     for (int i = 0; i < pageCount; ++i) {
-        application::PageDescriptor page;
-        page.id = domain::PageId::generate();
-        page.orderIndex = i;
-        page.imageSize = domain::ImageSize{1200, 1800};
-        page.originalAssetPath = QStringLiteral("assets/original/page_%1.png").arg(1000 + i);
-        session.pages.append(page);
+        session.project.addPage(
+            domain::ComicPage(domain::PageId::generate(),
+                              QStringLiteral("assets/original/page_%1.png").arg(1000 + i).toStdString(),
+                              domain::ImageSize{1200, 1800},
+                              i));
     }
     return session;
+}
+
+domain::PageId pageAt(const application::OpenedProjectSession& session, int index) {
+    return session.project.pages().at(index).id();
 }
 } // namespace
 
@@ -96,8 +98,8 @@ private Q_SLOTS:
         const auto session = makeSession(2);
         viewModel.openProjectSession(session);
         QTRY_VERIFY_WITH_TIMEOUT(!viewModel.state().isPageLoading, 2000);
-        Q_EMIT page.pageListForTest()->pageActivated(session.pages.at(1).id);
-        QCOMPARE(viewModel.state().currentPageId, session.pages.at(1).id);
+        Q_EMIT page.pageListForTest()->pageActivated(pageAt(session, 1));
+        QCOMPARE(viewModel.state().currentPageId, pageAt(session, 1));
     }
 
     void emptyProjectShowsImportPlaceholder() {

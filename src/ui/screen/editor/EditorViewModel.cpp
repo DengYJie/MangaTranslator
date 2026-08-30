@@ -1,5 +1,6 @@
 #include "ui/screen/editor/EditorViewModel.h"
 
+#include "application/mapping/ProjectMapper.h"
 #include "application/ports/IPageImageLoader.h"
 #include "application/ports/IThumbnailStore.h"
 #include "application/usecase/import/ImportUseCases.h"
@@ -37,7 +38,7 @@ EditorViewModel::~EditorViewModel() {
     }
 }
 
-void EditorViewModel::openProjectSession(const application::ProjectSessionDescriptor& session) {
+void EditorViewModel::openProjectSession(application::OpenedProjectSession session) {
     if (!m_thumbnailStore || !m_pageImageLoader || !m_operationRegistry) {
         updateState([&](EditorState& s) {
             EditorNotice notice;
@@ -55,21 +56,23 @@ void EditorViewModel::openProjectSession(const application::ProjectSessionDescri
     }
     invalidateRequests();
 
-    m_session = session;
+    m_session = application::mapping::ProjectMapper::toSessionDescriptor(session);
+    m_session.warnings = session.warnings;
+    m_openedSession = std::move(session);
     m_hasSession = true;
     m_viewTransforms.clear();
 
-    updateState([&](EditorState& s) {
-        s.projectId = session.projectId;
-        s.projectName = session.projectName;
+    updateState([this](EditorState& s) {
+        s.projectId = m_session.projectId;
+        s.projectName = m_session.projectName;
         s.pages.clear();
-        for (const auto& pageDesc : session.pages) {
+        for (const auto& pageDesc : m_session.pages) {
             EditorPageEntry entry;
             entry.id = pageDesc.id;
             entry.orderIndex = pageDesc.orderIndex;
             entry.displayName = QFileInfo(pageDesc.originalAssetPath).fileName();
             entry.imageSize = pageDesc.imageSize;
-            entry.regionCount = 0; // Set to 0 for now
+            entry.regionCount = 0;
             s.pages.append(entry);
         }
 
@@ -97,6 +100,7 @@ void EditorViewModel::closeProjectSession() {
 
     m_hasSession = false;
     m_session = application::ProjectSessionDescriptor{};
+    m_openedSession.reset();
     m_viewTransforms.clear();
 
     const auto projGen = m_state.projectSessionGeneration + 1;

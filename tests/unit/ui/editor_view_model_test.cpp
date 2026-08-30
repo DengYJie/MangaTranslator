@@ -12,20 +12,22 @@ using manga::ui::screen::editor::PageImageDelivery;
 
 namespace {
 
-application::ProjectSessionDescriptor makeSession(int pageCount) {
-    application::ProjectSessionDescriptor session;
-    session.projectId = domain::ProjectId::generate();
+application::OpenedProjectSession makeSession(int pageCount) {
+    application::OpenedProjectSession session;
+    session.project = domain::ComicProject("Demo Project");
     session.projectRootPath = QStringLiteral("D:/manga/demo");
-    session.projectName = QStringLiteral("Demo Project");
     for (int i = 0; i < pageCount; ++i) {
-        application::PageDescriptor page;
-        page.id = domain::PageId::generate();
-        page.orderIndex = i;
-        page.imageSize = domain::ImageSize{1200, 1800};
-        page.originalAssetPath = QStringLiteral("assets/original/page_%1.png").arg(1000 + i);
-        session.pages.append(page);
+        session.project.addPage(
+            domain::ComicPage(domain::PageId::generate(),
+                              QStringLiteral("assets/original/page_%1.png").arg(1000 + i).toStdString(),
+                              domain::ImageSize{1200, 1800},
+                              i));
     }
     return session;
+}
+
+domain::PageId pageAt(const application::OpenedProjectSession& session, int index) {
+    return session.project.pages().at(index).id();
 }
 
 struct Fixture {
@@ -83,12 +85,12 @@ private slots:
         const auto session = makeSession(2);
         viewModel.openProjectSession(session);
         const quint64 generationAfterOpen = viewModel.state().viewGeneration;
-        viewModel.selectPage(session.pages.at(1).id);
+        viewModel.selectPage(pageAt(session, 1));
         QVERIFY(viewModel.state().viewGeneration > generationAfterOpen);
-        QCOMPARE(viewModel.state().currentPageId, session.pages.at(1).id);
-        f.imageLoader.completeAll(); // 旧页完成：取消后静默；新页完成：投递
+        QCOMPARE(viewModel.state().currentPageId, pageAt(session, 1));
+        f.imageLoader.completeAll();
         QTRY_VERIFY_WITH_TIMEOUT(pageSpy.size() == 1, 2000);
-        QCOMPARE(pageSpy.first().first().value<PageImageDelivery>().pageId, session.pages.at(1).id);
+        QCOMPARE(pageSpy.first().first().value<PageImageDelivery>().pageId, pageAt(session, 1));
     }
 
     void cancelledLoadCompletionIsSilent() {
@@ -97,10 +99,10 @@ private slots:
         EditorViewModel viewModel(&f.thumbnailStore, &f.imageLoader, &f.registry);
         const auto session = makeSession(2);
         viewModel.openProjectSession(session);
-        viewModel.selectPage(session.pages.at(1).id); // 取消第一页在途加载
+        viewModel.selectPage(pageAt(session, 1));
         f.imageLoader.completeAll();
         QTRY_VERIFY_WITH_TIMEOUT(!viewModel.state().isPageLoading, 2000);
-        QVERIFY(!viewModel.state().notice.has_value()); // 取消不产生错误提示
+        QVERIFY(!viewModel.state().notice.has_value());
     }
 
     void failedPageLoadShowsRetryableNoticeAndRetryReloads() {
@@ -126,19 +128,18 @@ private slots:
 
     void thumbnailConcurrencyIsCappedAtFourAndQueuePumps() {
         Fixture f;
-        f.imageLoader.deferred = true; // store miss -> generate path -> loader 在途
+        f.imageLoader.deferred = true;
         EditorViewModel viewModel(&f.thumbnailStore, &f.imageLoader, &f.registry);
         const auto session = makeSession(6);
         viewModel.openProjectSession(session);
-        f.imageLoader.completeAll(); // 让首页原图加载完成，不影响缩略图统计
+        f.imageLoader.completeAll();
         QTRY_VERIFY_WITH_TIMEOUT(!viewModel.state().isPageLoading, 2000);
 
-        for (const auto& page : session.pages) {
-            viewModel.requestThumbnail(page.id, false);
+        for (const auto& page : session.project.pages()) {
+            viewModel.requestThumbnail(page.id(), false);
         }
-        // 4 个在途（loader pending），2 个在队列
         QTRY_VERIFY_WITH_TIMEOUT(f.imageLoader.pendingCount() == 4, 2000);
-        f.imageLoader.completeAll(); // 完成一批，泵入剩余
+        f.imageLoader.completeAll();
         QTRY_VERIFY_WITH_TIMEOUT(f.imageLoader.pendingCount() == 2, 2000);
         f.imageLoader.completeAll();
         QTRY_VERIFY_WITH_TIMEOUT(f.thumbnailStore.writeCount == 6, 2000);
@@ -152,10 +153,10 @@ private slots:
         viewModel.openProjectSession(session);
         f.imageLoader.completeAll();
         QTRY_VERIFY_WITH_TIMEOUT(!viewModel.state().isPageLoading, 2000);
-        const auto pageId = session.pages.first().id;
-        viewModel.requestThumbnail(pageId, false);
-        viewModel.requestThumbnail(pageId, false); // 在途去重
-        viewModel.requestThumbnail(pageId, false); // 再试一次
+        const auto firstPageId = pageAt(session, 0);
+        viewModel.requestThumbnail(firstPageId, false);
+        viewModel.requestThumbnail(firstPageId, false);
+        viewModel.requestThumbnail(firstPageId, false);
         QTRY_VERIFY_WITH_TIMEOUT(f.imageLoader.pendingCount() == 1, 2000);
     }
 
@@ -170,14 +171,14 @@ private slots:
 
         QSignalSpy readySpy(&viewModel, &EditorViewModel::thumbnailReady);
         QSignalSpy invalidatedSpy(&viewModel, &EditorViewModel::thumbnailsInvalidated);
-        viewModel.requestThumbnail(session.pages.at(0).id, false);
-        viewModel.requestThumbnail(session.pages.at(1).id, false);
+        viewModel.requestThumbnail(pageAt(session, 0), false);
+        viewModel.requestThumbnail(pageAt(session, 1), false);
         QTRY_VERIFY_WITH_TIMEOUT(f.imageLoader.pendingCount() == 2, 2000);
-        viewModel.selectPage(session.pages.at(1).id); // bump viewGeneration
+        viewModel.selectPage(pageAt(session, 1));
         QCOMPARE(invalidatedSpy.size(), 1);
-        f.imageLoader.completeAll(); // 缩略图完成但 generation 已过 + 新页原图加载
+        f.imageLoader.completeAll();
         QTRY_VERIFY_WITH_TIMEOUT(!viewModel.state().isPageLoading, 2000);
-        QCOMPARE(readySpy.size(), 0); // 缩略图迟到结果被静默丢弃
+        QCOMPARE(readySpy.size(), 0);
     }
 
     void perPageViewTransformIsRestoredOnRevisit() {
@@ -188,9 +189,9 @@ private slots:
         QSignalSpy pageSpy(&viewModel, &EditorViewModel::pageImageReady);
         QTRY_VERIFY_WITH_TIMEOUT(!viewModel.state().isPageLoading, 2000);
         viewModel.noteViewTransform(2.5, QPointF(300.0, 450.0));
-        viewModel.selectPage(session.pages.at(1).id);
+        viewModel.selectPage(pageAt(session, 1));
         QTRY_VERIFY_WITH_TIMEOUT(!viewModel.state().isPageLoading, 2000);
-        viewModel.selectPage(session.pages.at(0).id);
+        viewModel.selectPage(pageAt(session, 0));
         QTRY_VERIFY_WITH_TIMEOUT(pageSpy.size() == 3, 2000);
         const auto delivery = pageSpy.at(2).first().value<PageImageDelivery>();
         QVERIFY(delivery.hasSavedTransform);
@@ -207,6 +208,17 @@ private slots:
         QVERIFY(!viewModel.state().projectId.isValid());
         QVERIFY(viewModel.state().pages.isEmpty());
         QVERIFY(!viewModel.state().currentPageId.isValid());
+    }
+
+    void openSessionRetainsAggregateForEditing() {
+        Fixture f;
+        EditorViewModel viewModel(&f.thumbnailStore, &f.imageLoader, &f.registry);
+        auto session = makeSession(2);
+        const quint64 initialRevision = session.project.revision();
+        viewModel.openProjectSession(std::move(session));
+        QCOMPARE(viewModel.currentProjectRevision(), initialRevision);
+        viewModel.closeProjectSession();
+        QCOMPARE(viewModel.currentProjectRevision(), quint64{0});
     }
 };
 

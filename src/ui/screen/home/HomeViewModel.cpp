@@ -1,7 +1,6 @@
 #include "ui/screen/home/HomeViewModel.h"
 
 #include "application/dto/ProjectDto.h"
-#include "application/mapping/ProjectMapper.h"
 #include "application/ports/IProjectRepository.h"
 #include "application/ports/IRecentProjectsStore.h"
 #include "application/workflow/OperationRegistry.h"
@@ -54,13 +53,15 @@ void HomeViewModel::handleOpenFinished() {
     const auto result = m_openWatcher.result();
     updateState([](HomeState& state) { state.isOpeningProject = false; });
     if (result.has_value()) {
-        const QString name = QString::fromStdString(result.value().project.name());
+        application::OpenedProjectSession session;
+        session.project = result.value().project;
+        session.projectRootPath = m_pendingOpenPath;
+        session.recoverySource = result.value().recoverySource;
+        session.warnings = result.value().warnings;
+        const QString name = QString::fromStdString(session.project.name());
         m_recentStore->addRecentProject({name, m_pendingOpenPath, QDateTime::currentMSecsSinceEpoch()});
         refresh();
         Q_EMIT toastRequested(tr("已打开项目「%1」").arg(name), false);
-        auto session =
-            application::mapping::ProjectMapper::toSessionDescriptor(result.value().project, m_pendingOpenPath);
-        session.warnings = result.value().warnings;
         Q_EMIT projectOpened(session);
     } else {
         const QString safeMessage = result.error().safeMessage;

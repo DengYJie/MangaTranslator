@@ -36,7 +36,7 @@ Q_SIGNALS:
     void stateChanged(const HomeState& state);
     void toastRequested(const QString& message, bool isError);
     void openProjectDialogRequested();
-    void projectOpened(const application::ProjectSessionDescriptor& session);
+    void projectOpened(const application::OpenedProjectSession& session);
 
 protected:
     void emitStateChanged() override {

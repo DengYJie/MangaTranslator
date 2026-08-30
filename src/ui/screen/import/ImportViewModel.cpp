@@ -1,6 +1,5 @@
 #include "ui/screen/import/ImportViewModel.h"
 
-#include "application/mapping/ProjectMapper.h"
 #include "application/ports/IComicImporter.h"
 #include "application/ports/IProjectRepository.h"
 #include "application/usecase/apply/ApplyUseCases.h"
@@ -364,9 +363,11 @@ void ImportViewModel::handleSaveFinished() {
     updateState([](ImportState& state) { state.importInProgress = false; });
     m_stage = Stage::None;
 
-    auto session = application::mapping::ProjectMapper::toSessionDescriptor(m_project, m_projectRoot);
+    application::OpenedProjectSession session;
+    session.project = m_project;
+    session.projectRootPath = m_projectRoot;
+    session.recoverySource = application::RecoverySource::Current;
 
-    // Add failures to warnings
     for (const auto& fail : m_importResult.failures) {
         application::ProjectWarning warn;
         warn.code = fail.error.code;

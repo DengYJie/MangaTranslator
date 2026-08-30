@@ -32,6 +32,10 @@ public:
         }
         return descriptor;
     }
+
+    static ProjectSessionDescriptor toSessionDescriptor(const OpenedProjectSession& session) {
+        return toSessionDescriptor(session.project, session.projectRootPath);
+    }
 };
 
 } // namespace manga::application::mapping

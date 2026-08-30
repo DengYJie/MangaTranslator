@@ -59,7 +59,7 @@ Q_SIGNALS:
     void browseFolderRequested();
     void browseLocationRequested();
     void cancelRequested();
-    void projectImported(const application::ProjectSessionDescriptor& session);
+    void projectImported(const application::OpenedProjectSession& session);
 
 protected:
     void emitStateChanged() override {

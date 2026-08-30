@@ -10,6 +10,8 @@
 #include <QHash>
 #include <QSet>
 
+#include <optional>
+
 namespace manga::application {
 class IPageImageLoader;
 class IThumbnailStore;
@@ -33,7 +35,7 @@ public:
                     QObject* parent = nullptr);
     ~EditorViewModel() override;
 
-    void openProjectSession(const application::ProjectSessionDescriptor& session);
+    void openProjectSession(application::OpenedProjectSession session);
     void closeProjectSession();
     void selectPage(const domain::PageId& pageId);
     void selectAdjacentPage(int offset);
@@ -42,6 +44,10 @@ public:
     /// Records the live canvas transform for the current page. Memory-only, no State churn.
     void noteViewTransform(double zoom, const QPointF& centerOnPage);
     void dismissNotice();
+
+    [[nodiscard]] quint64 currentProjectRevision() const noexcept {
+        return m_openedSession ? m_openedSession->project.revision() : 0;
+    }
 
 Q_SIGNALS:
     void stateChanged(const EditorState& state);
@@ -82,6 +88,7 @@ private:
     std::unique_ptr<application::LoadPageImageUseCase> m_pageLoadUseCase;
 
     application::ProjectSessionDescriptor m_session;
+    std::optional<application::OpenedProjectSession> m_openedSession;
     bool m_hasSession{false};
     QHash<QString, ViewTransform> m_viewTransforms; // key: PageId string
 

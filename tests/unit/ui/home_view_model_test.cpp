@@ -25,7 +25,7 @@ private Q_SLOTS:
     }
 
     void openSuccessAddsRecentAndEmitsProjectOpened() {
-        qRegisterMetaType<manga::application::ProjectSessionDescriptor>();
+        qRegisterMetaType<manga::application::OpenedProjectSession>();
         test::FakeRecentProjectsStore recents;
         test::FakeProjectRepository repository;
         application::OperationRegistry registry;
@@ -39,30 +39,49 @@ private Q_SLOTS:
         QCOMPARE(toastSpy.size(), 1);
         QVERIFY(!viewModel.state().isOpeningProject);
         QVERIFY(!viewModel.state().notice.has_value());
-        const auto session = openedSpy.first().first().value<manga::application::ProjectSessionDescriptor>();
-        QCOMPARE(session.projectName, QStringLiteral("Demo Project"));
+        const auto session = openedSpy.first().first().value<manga::application::OpenedProjectSession>();
+        QCOMPARE(QString::fromStdString(session.project.name()), QStringLiteral("Demo Project"));
+        QCOMPARE(session.projectRootPath, QStringLiteral("D:/manga/demo"));
+    }
+
+    void openedSessionCarriesEditableAggregate() {
+        qRegisterMetaType<manga::application::OpenedProjectSession>();
+        test::FakeRecentProjectsStore recents;
+        test::FakeProjectRepository repository;
+        repository.openPageCount = 1;
+        application::OperationRegistry registry;
+        ui::screen::home::HomeViewModel viewModel(&recents, &repository, &registry);
+        QSignalSpy spy(&viewModel, &ui::screen::home::HomeViewModel::projectOpened);
+
+        viewModel.openProjectPath(QStringLiteral("D:/manga/demo"));
+        QTRY_VERIFY_WITH_TIMEOUT(spy.size() == 1, 2000);
+        const auto session = spy.takeFirst().at(0).value<manga::application::OpenedProjectSession>();
+        QVERIFY(session.project.id().isValid());
+        QCOMPARE(session.project.pages().size(), 1);
+        QCOMPARE(session.projectRootPath, QStringLiteral("D:/manga/demo"));
     }
 
     void projectOpenedCarriesFullSessionDescriptor() {
-        qRegisterMetaType<manga::application::ProjectSessionDescriptor>();
+        qRegisterMetaType<manga::application::OpenedProjectSession>();
         test::FakeRecentProjectsStore recents;
         test::FakeProjectRepository repository;
-        repository.openPageCount = 3; // 见 FakeProjectPorts.h 修订
+        repository.openPageCount = 3;
         application::OperationRegistry registry;
         ui::screen::home::HomeViewModel viewModel(&recents, &repository, &registry);
         QSignalSpy spy(&viewModel, &manga::ui::screen::home::HomeViewModel::projectOpened);
         viewModel.openProjectPath(QStringLiteral("D:/manga/demo"));
         QTRY_VERIFY_WITH_TIMEOUT(spy.size() == 1, 2000);
-        const auto session = spy.first().first().value<manga::application::ProjectSessionDescriptor>();
-        QVERIFY(session.projectId.isValid());
+        const auto session = spy.first().first().value<manga::application::OpenedProjectSession>();
+        QVERIFY(session.project.id().isValid());
         QCOMPARE(session.projectRootPath, QStringLiteral("D:/manga/demo"));
-        QCOMPARE(session.projectName, QStringLiteral("Demo Project"));
-        QCOMPARE(session.pages.size(), 3);
+        QCOMPARE(QString::fromStdString(session.project.name()), QStringLiteral("Demo Project"));
+        QCOMPARE(session.project.pages().size(), 3);
         for (int i = 0; i < 3; ++i) {
-            QVERIFY(session.pages.at(i).id.isValid());
-            QCOMPARE(session.pages.at(i).orderIndex, i);
-            QCOMPARE(session.pages.at(i).imageSize, (manga::domain::ImageSize{1200, 1800}));
-            QVERIFY(session.pages.at(i).originalAssetPath.startsWith(QStringLiteral("assets/original/")));
+            const auto& page = session.project.pages().at(i);
+            QVERIFY(page.id().isValid());
+            QCOMPARE(page.orderIndex(), i);
+            QCOMPARE(page.imageSize(), (manga::domain::ImageSize{1200, 1800}));
+            QVERIFY(QString::fromStdString(page.originalAssetPath()).startsWith(QStringLiteral("assets/original/")));
         }
     }
 

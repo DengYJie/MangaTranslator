@@ -100,7 +100,7 @@ int Application::run() {
         homeViewModel,
         &ui::screen::home::HomeViewModel::projectOpened,
         controller,
-        [controller](const application::ProjectSessionDescriptor&) { controller->navigate(QStringLiteral("editor")); });
+        [controller](const application::OpenedProjectSession&) { controller->navigate(QStringLiteral("editor")); });
     QObject::connect(editorPage, &ui::screen::editor::EditorPage::openProjectRequested, controller, [controller]() {
         controller->navigate(QStringLiteral("home"));
     });
@@ -122,7 +122,7 @@ int Application::run() {
         importViewModel,
         &ui::screen::import_::ImportViewModel::projectImported,
         controller,
-        [controller](const application::ProjectSessionDescriptor&) { controller->navigate(QStringLiteral("editor")); });
+        [controller](const application::OpenedProjectSession&) { controller->navigate(QStringLiteral("editor")); });
     QObject::connect(importViewModel,
                      &ui::screen::import_::ImportViewModel::cancelRequested,
                      controller,

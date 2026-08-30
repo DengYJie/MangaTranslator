@@ -84,10 +84,11 @@ private slots:
         viewModel.setSaveLocation(QStringLiteral("D:/projects"));
         viewModel.submit();
         QTRY_VERIFY_WITH_TIMEOUT(importedSpy.size() == 1, 4000);
-        const auto session = importedSpy.first().first().value<application::ProjectSessionDescriptor>();
-        QCOMPARE(session.projectName, QStringLiteral("我的漫画"));
-        QCOMPARE(session.pages.size(), 3);
-        QCOMPARE(session.pages.first().originalAssetPath, QStringLiteral("assets/original/page_1000.png"));
+        const auto session = importedSpy.first().first().value<application::OpenedProjectSession>();
+        QCOMPARE(QString::fromStdString(session.project.name()), QStringLiteral("我的漫画"));
+        QCOMPARE(session.project.pages().size(), 3);
+        QCOMPARE(QString::fromStdString(session.project.pages().front().originalAssetPath()),
+                 QStringLiteral("assets/original/page_1000.png"));
         QCOMPARE(f.importer.callCount, 1);
         QCOMPARE(f.importer.acknowledgeCallCount, 1);
         QCOMPARE(f.repository.saveCallCount, 1);
@@ -141,8 +142,8 @@ private slots:
         viewModel.setSaveLocation(QStringLiteral("D:/projects"));
         viewModel.submit();
         QTRY_VERIFY_WITH_TIMEOUT(importedSpy.size() == 1, 4000);
-        const auto session = importedSpy.first().first().value<application::ProjectSessionDescriptor>();
-        QCOMPARE(session.pages.size(), 2);
+        const auto session = importedSpy.first().first().value<application::OpenedProjectSession>();
+        QCOMPARE(session.project.pages().size(), 2);
         QCOMPARE(session.warnings.size(), 1);
         QCOMPARE(session.warnings.first().code, QStringLiteral("input.decode_failed"));
     }

@@ -92,7 +92,17 @@ struct ProjectSessionDescriptor {
     QVector<ProjectWarning> warnings;
 };
 
+/// Carries the full editable ComicProject aggregate plus session metadata across
+/// the Home/Import to Editor handoff so the editor retains a mutable copy.
+struct OpenedProjectSession {
+    domain::ComicProject project;
+    QString projectRootPath;
+    RecoverySource recoverySource{RecoverySource::Current};
+    QVector<ProjectWarning> warnings;
+};
+
 } // namespace manga::application
 
 Q_DECLARE_METATYPE(manga::application::PageDescriptor)
 Q_DECLARE_METATYPE(manga::application::ProjectSessionDescriptor)
+Q_DECLARE_METATYPE(manga::application::OpenedProjectSession)
