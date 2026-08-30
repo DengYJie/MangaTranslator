@@ -81,22 +81,16 @@ void EditorPage::render(const EditorState& state) {
     m_pageList->setCurrentPageId(state.currentPageId);
 
     if (!state.projectId.isValid()) {
-        m_lastPlaceholder = static_cast<int>(ui::manga::MangaCanvas::ContentState::NoProject);
-        m_canvas->setContentState(static_cast<ui::manga::MangaCanvas::ContentState>(m_lastPlaceholder),
-                                  tr("打开或创建项目以开始编辑"),
-                                  tr("打开项目"));
+        m_lastPlaceholder = ui::manga::MangaCanvas::ContentState::NoProject;
+        m_canvas->setContentState(m_lastPlaceholder, tr("打开或创建项目以开始编辑"), tr("打开项目"));
     } else if (state.pages.isEmpty()) {
-        m_lastPlaceholder = static_cast<int>(ui::manga::MangaCanvas::ContentState::NoPage);
-        m_canvas->setContentState(static_cast<ui::manga::MangaCanvas::ContentState>(m_lastPlaceholder),
-                                  tr("项目中还没有页面"),
-                                  tr("导入页面"));
+        m_lastPlaceholder = ui::manga::MangaCanvas::ContentState::NoPage;
+        m_canvas->setContentState(m_lastPlaceholder, tr("项目中还没有页面"), tr("导入页面"));
     } else if (state.notice && state.notice->retryable) {
-        m_lastPlaceholder = static_cast<int>(ui::manga::MangaCanvas::ContentState::Error);
-        m_canvas->setContentState(static_cast<ui::manga::MangaCanvas::ContentState>(m_lastPlaceholder),
-                                  state.notice->safeMessage,
-                                  tr("重试加载"));
+        m_lastPlaceholder = ui::manga::MangaCanvas::ContentState::Error;
+        m_canvas->setContentState(m_lastPlaceholder, state.notice->safeMessage, tr("重试加载"));
     } else if (state.isPageLoading) {
-        m_lastPlaceholder = static_cast<int>(ui::manga::MangaCanvas::ContentState::Loading);
+        m_lastPlaceholder = ui::manga::MangaCanvas::ContentState::Loading;
         QString displayName;
         for (const auto& p : state.pages) {
             if (p.id == state.currentPageId) {
@@ -104,8 +98,7 @@ void EditorPage::render(const EditorState& state) {
                 break;
             }
         }
-        m_canvas->setContentState(
-            static_cast<ui::manga::MangaCanvas::ContentState>(m_lastPlaceholder), displayName, QString());
+        m_canvas->setContentState(m_lastPlaceholder, displayName, QString());
     }
     // Image state is not transitioned here, it is driven by pageImageReady signal.
 }
@@ -121,7 +114,7 @@ void EditorPage::handlePageImageReady(const PageImageDelivery& delivery) {
 }
 
 void EditorPage::handlePlaceholderAction() {
-    switch (static_cast<ui::manga::MangaCanvas::ContentState>(m_lastPlaceholder)) {
+    switch (m_lastPlaceholder) {
         case ui::manga::MangaCanvas::ContentState::NoProject:
             Q_EMIT openProjectRequested();
             break;

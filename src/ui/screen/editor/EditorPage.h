@@ -1,6 +1,7 @@
 #pragma once
 
 #include "ui/base/BasePage.h"
+#include "ui/manga/MangaCanvas.h"
 
 class QSplitter;
 
@@ -46,7 +47,7 @@ private:
     QSplitter* m_splitter{nullptr};
     ui::widget::PageThumbnailList* m_pageList{nullptr};
     ui::manga::MangaCanvas* m_canvas{nullptr};
-    int m_lastPlaceholder{0}; // ui::manga::MangaCanvas::ContentState
+    ui::manga::MangaCanvas::ContentState m_lastPlaceholder{ui::manga::MangaCanvas::ContentState::NoProject};
 };
 
 } // namespace manga::ui::screen::editor
