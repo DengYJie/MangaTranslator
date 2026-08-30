@@ -57,3 +57,6 @@
 /model-cache/
 /user-data/
 /runtime-data/
+
+# Superpowers agent workspace
+.superpowers/
