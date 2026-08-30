@@ -1,5 +1,10 @@
-add_library(manga_ui_manga STATIC manga.cpp)
+add_library(manga_ui_manga STATIC
+    CanvasZOrder.h
+    MangaCanvas.cpp
+    MangaCanvas.h
+)
 manga_apply_project_options(manga_ui_manga)
+set_target_properties(manga_ui_manga PROPERTIES AUTOMOC ON)
 
 target_include_directories(manga_ui_manga
     PUBLIC

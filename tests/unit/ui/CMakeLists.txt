@@ -166,3 +166,23 @@ set_tests_properties(manga_tests_ui_home_page PROPERTIES
     LABELS "unit;ui"
     TIMEOUT 15
 )
+qt_add_executable(manga_tests_ui_manga_canvas
+    manga_canvas_test.cpp
+)
+manga_apply_project_options(manga_tests_ui_manga_canvas)
+set_target_properties(manga_tests_ui_manga_canvas PROPERTIES AUTOMOC ON)
+
+target_link_libraries(manga_tests_ui_manga_canvas
+    PRIVATE
+        manga_ui
+        Qt6::Test
+        Qt6::Widgets
+)
+
+manga_deploy_qt_runtime(manga_tests_ui_manga_canvas)
+add_test(NAME manga_tests_ui_manga_canvas COMMAND manga_tests_ui_manga_canvas)
+set_tests_properties(manga_tests_ui_manga_canvas PROPERTIES
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
+    LABELS "unit;ui"
+    TIMEOUT 15
+)
