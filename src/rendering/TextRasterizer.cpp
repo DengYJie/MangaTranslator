@@ -1,8 +1,10 @@
 #include "rendering/TextRasterizer.h"
 
 #include <QColor>
+#include <QGlyphRun>
 #include <QPainterPath>
 #include <QPen>
+#include <QRawFont>
 #include <QTextLayout>
 
 namespace manga::rendering {
@@ -80,14 +82,22 @@ void TextRasterizer::draw(QPainter& painter, const LayoutResult& layout, double 
                 yOffset += (availH - textHeight);
                 break;
         }
-        double xOffset = layout.layoutBounds.left();
+        const double xOffset = layout.layoutBounds.left();
 
         QPainterPath path;
         for (int i = 0; i < qlayout.lineCount(); ++i) {
-            QTextLine line = qlayout.lineAt(i);
-            QString lineText = layout.originalText.mid(line.textStart(), line.textLength());
-            QPointF baseline(xOffset + line.position().x(), yOffset + line.position().y() + line.ascent());
-            path.addText(baseline, font, lineText);
+            const QTextLine line = qlayout.lineAt(i);
+            for (const QGlyphRun& run : line.glyphRuns()) {
+                const QRawFont rawFont = run.rawFont();
+                const QList<quint32> glyphIndexes = run.glyphIndexes();
+                const QList<QPointF> positions = run.positions();
+                const qsizetype glyphCount = qMin(glyphIndexes.size(), positions.size());
+                for (qsizetype glyphIndex = 0; glyphIndex < glyphCount; ++glyphIndex) {
+                    QPainterPath glyphPath = rawFont.pathForGlyph(glyphIndexes.at(glyphIndex));
+                    glyphPath.translate(QPointF(xOffset, yOffset) + positions.at(glyphIndex));
+                    path.addPath(glyphPath);
+                }
+            }
         }
 
         if (strokeWidth > 0.0) {
@@ -97,9 +107,9 @@ void TextRasterizer::draw(QPainter& painter, const LayoutResult& layout, double 
             painter.drawPath(path);
         }
 
-        painter.setPen(Qt::NoPen);
-        painter.setBrush(textColor);
-        painter.drawPath(path);
+        painter.setPen(textColor);
+        painter.setBrush(Qt::NoBrush);
+        qlayout.draw(&painter, QPointF(xOffset, yOffset));
     } else {
         // Vertical rendering with clusters
         QPainterPath path;

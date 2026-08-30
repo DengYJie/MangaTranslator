@@ -54,11 +54,13 @@ private:
     static LayoutResult layoutHorizontal(const QString& text,
                                          const domain::RectGeometry& bounds,
                                          const domain::TextLayout& constraints,
-                                         double pixelSize);
+                                         double pixelSize,
+                                         double logicalDpi);
     static LayoutResult layoutVertical(const QString& text,
                                        const domain::RectGeometry& bounds,
                                        const domain::TextLayout& constraints,
-                                       double pixelSize);
+                                       double pixelSize,
+                                       double logicalDpi);
     static void computeAutoFit(const QString& text,
                                const domain::RectGeometry& bounds,
                                const domain::TextLayout& constraints,

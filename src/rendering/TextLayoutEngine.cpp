@@ -59,12 +59,6 @@ private:
     QHash<QString, PunctuationOffset> m_offsets;
 };
 
-// Helper: bind font to 96 DPI explicitly for metrics
-void applyDpiToFont(QFont& font, double logicalDpi) {
-    // Already using pixelSize, but QFontMetricsF might use screen DPI if paint device is not provided.
-    // We will always pass a 96-DPI QImage to QTextLayout/QFontMetricsF.
-}
-
 QImage createDummyDevice(double logicalDpi) {
     QImage dummyDevice(1, 1, QImage::Format_ARGB32_Premultiplied);
     double dpm = logicalDpi * 1000.0 / 25.4;
@@ -104,9 +98,9 @@ LayoutResult TextLayoutEngine::layoutText(const QString& text,
     } else {
         double pixelSize = constraints.fontSizePt * logicalDpi / 72.0;
         if (constraints.orientation == domain::TextOrientation::Horizontal) {
-            result = layoutHorizontal(text, bounds, constraints, pixelSize);
+            result = layoutHorizontal(text, bounds, constraints, pixelSize, logicalDpi);
         } else {
-            result = layoutVertical(text, bounds, constraints, pixelSize);
+            result = layoutVertical(text, bounds, constraints, pixelSize, logicalDpi);
         }
     }
 
@@ -141,9 +135,9 @@ void TextLayoutEngine::computeAutoFit(const QString& text,
 
         LayoutResult res;
         if (constraints.orientation == domain::TextOrientation::Horizontal) {
-            res = layoutHorizontal(text, bounds, constraints, testPx);
+            res = layoutHorizontal(text, bounds, constraints, testPx, logicalDpi);
         } else {
-            res = layoutVertical(text, bounds, constraints, testPx);
+            res = layoutVertical(text, bounds, constraints, testPx, logicalDpi);
         }
         res.resolvedLayout.fontSizePt = testPt;
 
@@ -161,9 +155,9 @@ void TextLayoutEngine::computeAutoFit(const QString& text,
         // If even the minimum size overflows, return it with overflow=true
         double minPx = lowQuarter / 4.0 * logicalDpi / 72.0;
         if (constraints.orientation == domain::TextOrientation::Horizontal) {
-            outResult = layoutHorizontal(text, bounds, constraints, minPx);
+            outResult = layoutHorizontal(text, bounds, constraints, minPx, logicalDpi);
         } else {
-            outResult = layoutVertical(text, bounds, constraints, minPx);
+            outResult = layoutVertical(text, bounds, constraints, minPx, logicalDpi);
         }
         outResult.resolvedLayout.fontSizePt = lowQuarter / 4.0;
         outResult.overflow = true;
@@ -175,12 +169,13 @@ void TextLayoutEngine::computeAutoFit(const QString& text,
 LayoutResult TextLayoutEngine::layoutHorizontal(const QString& text,
                                                 const domain::RectGeometry& bounds,
                                                 const domain::TextLayout& constraints,
-                                                double pixelSize) {
+                                                double pixelSize,
+                                                double logicalDpi) {
     LayoutResult result;
     result.originalText = text;
     result.resolvedLayout = constraints;
 
-    QImage dummyDevice = createDummyDevice(96.0);
+    QImage dummyDevice = createDummyDevice(logicalDpi);
     QFont font(QString::fromStdString(constraints.fontFamily));
     font.setPixelSize(qRound(pixelSize));
     font.setWeight(static_cast<QFont::Weight>(constraints.fontWeight));
@@ -188,7 +183,9 @@ LayoutResult TextLayoutEngine::layoutHorizontal(const QString& text,
 
     QFontInfo info(font);
     if (info.family().compare(font.family(), Qt::CaseInsensitive) != 0) {
-        result.resolvedLayout.fontFamily = info.family().toStdString();
+        if (!info.family().isEmpty()) {
+            result.resolvedLayout.fontFamily = info.family().toStdString();
+        }
         result.warnings.append(LayoutWarning{"layout.font_missing", "Requested font family not found."});
     }
 
@@ -236,8 +233,6 @@ LayoutResult TextLayoutEngine::layoutHorizontal(const QString& text,
 
     double y = 0.0;
     double lineHeight = fm.height() * constraints.lineSpacing;
-    double layoutWidth = 0.0;
-
     while (true) {
         QTextLine line = layout.createLine();
         if (!line.isValid())
@@ -246,14 +241,14 @@ LayoutResult TextLayoutEngine::layoutHorizontal(const QString& text,
         line.setLineWidth(availW);
         line.setPosition(QPointF(0, y));
         y += lineHeight;
-        layoutWidth = qMax(layoutWidth, line.naturalTextWidth());
     }
     layout.endLayout();
 
     double textHeight = y;
 
     // Vertical alignment offset
-    double yOffset = constraints.margins.top;
+    const QRectF availableRect(bounds.x + constraints.margins.left, bounds.y + constraints.margins.top, availW, availH);
+    double yOffset = availableRect.top();
     switch (constraints.alignment.vertical) {
         case domain::VerticalAlignment::Top:
             break;
@@ -265,14 +260,13 @@ LayoutResult TextLayoutEngine::layoutHorizontal(const QString& text,
             break;
     }
 
-    double xOffset = constraints.margins.left;
+    const double xOffset = availableRect.left();
     QRectF unionInk;
 
     for (int i = 0; i < layout.lineCount(); ++i) {
         QTextLine line = layout.lineAt(i);
         foreach (const QGlyphRun& run, line.glyphRuns()) {
             QRectF rect = run.boundingRect();
-            rect.translate(line.position());
             rect.translate(xOffset, yOffset);
             unionInk = unionInk.united(rect);
         }
@@ -285,13 +279,12 @@ LayoutResult TextLayoutEngine::layoutHorizontal(const QString& text,
     }
 
     result.inkBounds = unionInk;
-    result.layoutBounds = QRectF(xOffset, yOffset, availW, availH);
-
-    QRectF availRect(bounds.x + constraints.margins.left, bounds.y + constraints.margins.top, availW, availH);
+    result.layoutBounds = availableRect;
 
     // Tolerance 0.5px
-    if (unionInk.left() < availRect.left() - 0.5 || unionInk.right() > availRect.right() + 0.5 ||
-        unionInk.top() < availRect.top() - 0.5 || unionInk.bottom() > availRect.bottom() + 0.5) {
+    if (!unionInk.isEmpty() &&
+        (unionInk.left() < availableRect.left() - 0.5 || unionInk.right() > availableRect.right() + 0.5 ||
+         unionInk.top() < availableRect.top() - 0.5 || unionInk.bottom() > availableRect.bottom() + 0.5)) {
         result.overflow = true;
     }
 
@@ -301,19 +294,22 @@ LayoutResult TextLayoutEngine::layoutHorizontal(const QString& text,
 LayoutResult TextLayoutEngine::layoutVertical(const QString& text,
                                               const domain::RectGeometry& bounds,
                                               const domain::TextLayout& constraints,
-                                              double pixelSize) {
+                                              double pixelSize,
+                                              double logicalDpi) {
     LayoutResult result;
     result.originalText = text;
     result.resolvedLayout = constraints;
 
-    QImage dummyDevice = createDummyDevice(96.0);
+    QImage dummyDevice = createDummyDevice(logicalDpi);
     QFont font(QString::fromStdString(constraints.fontFamily));
     font.setPixelSize(qRound(pixelSize));
     font.setWeight(static_cast<QFont::Weight>(constraints.fontWeight));
 
     QFontInfo info(font);
     if (info.family().compare(font.family(), Qt::CaseInsensitive) != 0) {
-        result.resolvedLayout.fontFamily = info.family().toStdString();
+        if (!info.family().isEmpty()) {
+            result.resolvedLayout.fontFamily = info.family().toStdString();
+        }
         result.warnings.append(LayoutWarning{"layout.font_missing", "Requested font family not found."});
     }
 
@@ -466,8 +462,9 @@ LayoutResult TextLayoutEngine::layoutVertical(const QString& text,
 
     QRectF availRect(bounds.x + constraints.margins.left, bounds.y + constraints.margins.top, availW, availH);
 
-    if (unionInk.left() < availRect.left() - 0.5 || unionInk.right() > availRect.right() + 0.5 ||
-        unionInk.top() < availRect.top() - 0.5 || unionInk.bottom() > availRect.bottom() + 0.5) {
+    if (!unionInk.isEmpty() &&
+        (unionInk.left() < availRect.left() - 0.5 || unionInk.right() > availRect.right() + 0.5 ||
+         unionInk.top() < availRect.top() - 0.5 || unionInk.bottom() > availRect.bottom() + 0.5)) {
         result.overflow = true;
     }
 

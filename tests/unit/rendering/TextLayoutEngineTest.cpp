@@ -5,12 +5,9 @@
 #include <QFontDatabase>
 #include <QTest>
 
-#include <iostream>
-
 using namespace manga;
 
 void TextLayoutEngineTest::layoutHorizontalWrapsCorrectly() {
-    std::cout << "DEBUG: Running layoutHorizontalWrapsCorrectly" << std::endl;
     domain::RectGeometry bounds{0, 0, 200, 200};
     domain::TextLayout constraints;
     constraints.orientation = domain::TextOrientation::Horizontal;
@@ -21,8 +18,24 @@ void TextLayoutEngineTest::layoutHorizontalWrapsCorrectly() {
         "A very very long text that should wrap multiple times in a 200x200 box", bounds, constraints, 96.0);
 
     QVERIFY(!result.overflow);
-    std::cout << "DEBUG: inkBounds.height() = " << result.inkBounds.height() << std::endl;
     QVERIFY(result.inkBounds.height() > 16.0); // should be multiple lines
+}
+
+void TextLayoutEngineTest::layoutHorizontalHonorsPageCoordinatesAndDpi() {
+    domain::RectGeometry bounds{80, 60, 300, 180};
+    domain::TextLayout constraints;
+    constraints.orientation = domain::TextOrientation::Horizontal;
+    constraints.alignment = {domain::HorizontalAlignment::Left, domain::VerticalAlignment::Top};
+    constraints.fontSizePt = 12.0;
+    constraints.autoFit = false;
+
+    const auto layout96 = rendering::TextLayoutEngine::layoutText("Positioned text", bounds, constraints, 96.0);
+    const auto layout192 = rendering::TextLayoutEngine::layoutText("Positioned text", bounds, constraints, 192.0);
+
+    QCOMPARE(layout96.layoutBounds.topLeft(), QPointF(82.0, 62.0));
+    QVERIFY(layout96.inkBounds.left() >= layout96.layoutBounds.left() - 0.5);
+    QVERIFY(layout96.inkBounds.top() >= layout96.layoutBounds.top() - 0.5);
+    QVERIFY(layout192.inkBounds.height() > layout96.inkBounds.height());
 }
 
 void TextLayoutEngineTest::layoutVerticalHasCorrectBounds() {
@@ -55,4 +68,40 @@ void TextLayoutEngineTest::autoFitFindsBestSize() {
 
     QVERIFY(result.resolvedLayout.fontSizePt < 24.0);
     QVERIFY(!result.overflow || result.resolvedLayout.fontSizePt == 6.0);
+}
+
+void TextLayoutEngineTest::fixedSizeReportsOverflow() {
+    domain::RectGeometry bounds{0, 0, 20, 10};
+    domain::TextLayout constraints;
+    constraints.orientation = domain::TextOrientation::Horizontal;
+    constraints.wordWrap = false;
+    constraints.fontSizePt = 24.0;
+    constraints.autoFit = false;
+
+    const auto result = rendering::TextLayoutEngine::layoutText("This cannot fit", bounds, constraints, 96.0);
+
+    QVERIFY(result.overflow);
+}
+
+void TextLayoutEngineTest::reportsFontFallbackAndMissingGlyph() {
+    domain::RectGeometry bounds{0, 0, 200, 100};
+    domain::TextLayout constraints;
+    constraints.fontFamily = "MangaTranslator Definitely Missing Font";
+    constraints.fontSizePt = 12.0;
+    constraints.autoFit = false;
+
+    const QString text(QChar(0x0378));
+    const auto result = rendering::TextLayoutEngine::layoutText(text, bounds, constraints, 96.0);
+    const auto hasWarning = [&result](QStringView code) {
+        for (const auto& warning : result.warnings) {
+            if (warning.code == code) {
+                return true;
+            }
+        }
+        return false;
+    };
+
+    QVERIFY(hasWarning(u"layout.font_missing"));
+    QVERIFY(hasWarning(u"layout.missing_glyph"));
+    QVERIFY(!result.resolvedLayout.fontFamily.empty());
 }
