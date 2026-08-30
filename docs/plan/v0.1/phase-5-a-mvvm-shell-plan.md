@@ -2288,4 +2288,5 @@ P5-A 完成后对照 [`phase-5-ui-editor.md`](phase-5-ui-editor.md) 的达成情
 - `projectOpened` 目前只携带路径与名称；编辑器会话接管 `OpenProjectResult` 的重构 → P5-B。
 - 打开结果中 `warnings`/`recoverySource` 的错误恢复矩阵、`AppStatusTaskStrip`、Settings Surface → P5-D。
 - Back/Forward 过渡动画差异化、导航项视觉打磨 → P5-D。
+- Home 卡片右键缺「在文件夹中显示」、缺「查看全部」入口、打开中卡片的 ProgressRing/正在打开 态（home.md §2.2/§4.1）→ P5-D。
 - Light/Dark/窄宽度的正式视觉验收证据（截图）→ P5-D 视觉验收阶段补齐。
