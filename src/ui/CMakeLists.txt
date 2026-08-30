@@ -1,7 +1,10 @@
 add_library(manga_ui STATIC
+    base/BasePage.cpp
+    base/BasePage.h
     base/BaseViewModel.h
 )
 manga_apply_project_options(manga_ui)
+set_target_properties(manga_ui PROPERTIES AUTOMOC ON)
 
 target_include_directories(manga_ui
     PUBLIC
