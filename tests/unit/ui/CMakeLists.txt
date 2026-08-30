@@ -40,3 +40,24 @@ set_tests_properties(manga_tests_ui_base_page PROPERTIES
     LABELS "unit;ui"
     TIMEOUT 15
 )
+
+qt_add_executable(manga_tests_ui_navigation
+    navigation_controller_test.cpp
+)
+manga_apply_project_options(manga_tests_ui_navigation)
+set_target_properties(manga_tests_ui_navigation PROPERTIES AUTOMOC ON)
+
+target_link_libraries(manga_tests_ui_navigation
+    PRIVATE
+        manga_ui
+        Qt6::Test
+        Qt6::Widgets
+)
+
+manga_deploy_qt_runtime(manga_tests_ui_navigation)
+add_test(NAME manga_tests_ui_navigation COMMAND manga_tests_ui_navigation)
+set_tests_properties(manga_tests_ui_navigation PROPERTIES
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
+    LABELS "unit;ui"
+    TIMEOUT 15
+)

@@ -2,6 +2,13 @@ add_library(manga_ui STATIC
     base/BasePage.cpp
     base/BasePage.h
     base/BaseViewModel.h
+    navigation/INavigationPresenter.h
+    navigation/INavigationRegistrar.h
+    navigation/NavigationController.cpp
+    navigation/NavigationController.h
+    navigation/NavigationHistory.cpp
+    navigation/NavigationHistory.h
+    navigation/NavigationTypes.h
 )
 manga_apply_project_options(manga_ui)
 set_target_properties(manga_ui PROPERTIES AUTOMOC ON)
