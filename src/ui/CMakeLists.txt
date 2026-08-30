@@ -1,4 +1,6 @@
-add_library(manga_ui STATIC ui.cpp)
+add_library(manga_ui STATIC
+    base/BaseViewModel.h
+)
 manga_apply_project_options(manga_ui)
 
 target_include_directories(manga_ui
