@@ -32,8 +32,6 @@ signals:
     void canGoForwardChanged(bool canGoForward);
 
 private:
-    void emitAvailabilityChanges();
-
     INavigationPresenter* m_presenter; // non-owning
     NavigationHistory m_history;
     bool m_navigating{false};
