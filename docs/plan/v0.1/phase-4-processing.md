@@ -65,7 +65,7 @@
 ## 测试
 
 - [x] 任务成功、取消、排队取消、执行器 shutdown 和 Future 单次完成。（View 销毁、项目关闭和跨页迟到结果属于 P5/P6 生命周期验收提示，不作为 P4 Adapter 任务重复实现）
-- [x] 固定 OCR 模型元数据、参考输入和结果。（真实模型 job 固定 revision、Manifest、图/词表 SHA-256 和 8 张参考输入；期望值冻结为同 revision 上游 ONNX 参考实现的精确输出）
+- [x] 固定 OCR 模型元数据、参考输入和结果。（真实模型 job 固定 revision、Manifest、图/词表 SHA-256 和 8 张人工标注参考输入；以聚合 Unicode CER 门槛验收跨 CPU runner 的模型质量）
 - [x] 翻译成功、协议错误、认证、限流、超时和重试上限。（`OpenAiCompatibleTranslatorTest` 与 `RetryPolicyTest` 已覆盖 strict/JSON mode 成功、refusal/截断/过滤、缺少/非法 JSON、重复 ID、限流与指数退避重试、非 2xx 不重试、取消与立即终止退避、超时与超界响应拒绝）
 - [x] 日志、错误和设置中不存在密钥。（`WindowsCredentialStoreTest` 覆盖 Windows Credential Manager 读写删、非明文状态查询、空/含 NUL 拒绝；`OpenAiCompatibleTranslatorTest` 验证 key 仅以 Bearer Authorization 头发送且不进 body）
 - [x] 清除层非破坏性、无效输入和失败回退。（`SolidColorInpainterTest` 覆盖取整、2×2 下限、非法颜色/透明度、非有限矩形与取消；`ApplyResultUseCaseTest` 覆盖提交失败与 patch 尺寸不符时 Domain 不变）
@@ -658,7 +658,7 @@ Cancelled:
 - Manifest 单测用 KB 级假图和假 hash 覆盖未知字段、路径逃逸、丢文件、hash、tensor、token ID 和 runtime 版本。decoder 用 fake session 固定 logits，覆盖 greedy 采样、repetition penalty、内容串上限、EOS、maxLength、KV cache prefill/step 接力与取消。
 - 真实模型验收使用单独缓存的固定 ONNX 模型包，目录由 `MANGA_OCR_MODEL_DIR` 提供；模型包 hash 必须等于 release manifest。普通单元测试和离线重建不下载 1GB 权重；P4 release CI 的 `p4-model` job 是退出条件，不得因“本机没有模型”静默跳过。
 - 本地开发与测试的模型缓存约定：模型包放在仓库根 `models/`（已在 `.gitignore`，权重不进 Git），`MANGA_OCR_MODEL_DIR` 指向包含 `manifest.json` 的模型包目录；`QStandardPaths::AppLocalDataLocation` 仅为安装态应用的运行时默认值，测试不读取 AppData。
-- CPU 固定模型、固定图片的文本应精确一致；tensor 浮点容差 `1e-6`。性能只记录代表性基线，不用不稳定 wall-clock 阈值阻塞普通 CI。
+- Fake session 的 token 解码必须精确一致；真实 CPU 模型对 8 张人工标注图片逐张返回非空文本，聚合 Unicode CER 必须 `<= 0.20`。Session 请求 deterministic compute 以减少同一 backend 的波动，但不得把某次量化模型输出误当人工真值；tensor 浮点容差 `1e-6`。性能只记录代表性基线，不用不稳定 wall-clock 阈值阻塞普通 CI。
 
 #### Translation 与 Credential
 

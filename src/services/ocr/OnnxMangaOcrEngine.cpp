@@ -75,6 +75,9 @@ application::Result<void> OnnxMangaOcrEngine::ensureLoaded() {
 
     Ort::SessionOptions options;
     options.SetGraphOptimizationLevel(GraphOptimizationLevel::ORT_ENABLE_ALL);
+    // Autoregressive decoding amplifies small kernel differences, so deterministic
+    // implementations are required whenever ONNX Runtime provides them.
+    options.SetDeterministicCompute(true);
     options.SetIntraOpNumThreads(std::clamp(QThread::idealThreadCount() - 1, 1, 4));
     options.SetInterOpNumThreads(1);
     options.SetExecutionMode(ExecutionMode::ORT_SEQUENTIAL);

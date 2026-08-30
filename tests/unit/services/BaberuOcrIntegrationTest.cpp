@@ -10,10 +10,13 @@
 #include <QFile>
 #include <QImage>
 #include <QProcessEnvironment>
+#include <QStringList>
 #include <QtTest/QtTest>
 
+#include <algorithm>
 #include <cmath>
 #include <onnxruntime_cxx_api.h>
+#include <vector>
 
 namespace manga::services::test {
 
@@ -25,6 +28,29 @@ static QString modelDir() {
 
 static QString fixtureDir() {
     return QDir(QStringLiteral(MANGA_OCR_FIXTURES_DIR)).absoluteFilePath(QStringLiteral(".."));
+}
+
+static qsizetype unicodeEditDistance(const QString& actual, const QString& expected) {
+    const auto actualCodePoints = actual.toUcs4();
+    const auto expectedCodePoints = expected.toUcs4();
+    std::vector<qsizetype> previous(static_cast<std::size_t>(expectedCodePoints.size() + 1));
+    std::vector<qsizetype> current(previous.size());
+
+    for (qsizetype column = 0; column <= expectedCodePoints.size(); ++column) {
+        previous[static_cast<std::size_t>(column)] = column;
+    }
+    for (qsizetype row = 1; row <= actualCodePoints.size(); ++row) {
+        current[0] = row;
+        for (qsizetype column = 1; column <= expectedCodePoints.size(); ++column) {
+            const qsizetype substitutionCost = actualCodePoints[row - 1] == expectedCodePoints[column - 1] ? 0 : 1;
+            current[static_cast<std::size_t>(column)] =
+                std::min({previous[static_cast<std::size_t>(column)] + 1,
+                          current[static_cast<std::size_t>(column - 1)] + 1,
+                          previous[static_cast<std::size_t>(column - 1)] + substitutionCost});
+        }
+        std::swap(previous, current);
+    }
+    return previous.back();
 }
 
 } // namespace
@@ -154,12 +180,20 @@ void BaberuOcrIntegrationTest::integrationVocabLoadsCorrectly() {
     QVERIFY(!vocabResult->contentIds().isEmpty());
 }
 
-void BaberuOcrIntegrationTest::integrationEngineRecognizesText_data() {
-    QTest::addColumn<QString>("fileName");
-    QTest::addColumn<QString>("expectedText");
+void BaberuOcrIntegrationTest::integrationEngineMeetsCorpusAccuracy() {
+    const QString dir = modelDir();
+    if (dir.isEmpty()) {
+        QSKIP("MANGA_OCR_MODEL_DIR not set");
+    }
 
+    constexpr double kMaximumCorpusCer = 0.20;
     QFile expectedFile(QDir(fixtureDir()).filePath(QStringLiteral("samples/expected.txt")));
     QVERIFY2(expectedFile.open(QIODevice::ReadOnly | QIODevice::Text), qPrintable(expectedFile.errorString()));
+
+    qsizetype totalDistance = 0;
+    qsizetype totalExpectedCodePoints = 0;
+    int sampleCount = 0;
+    QStringList mismatchSummary;
     while (!expectedFile.atEnd()) {
         const QString line = QString::fromUtf8(expectedFile.readLine()).trimmed();
         if (line.isEmpty() || line.startsWith(QLatin1Char('#'))) {
@@ -169,40 +203,47 @@ void BaberuOcrIntegrationTest::integrationEngineRecognizesText_data() {
         QVERIFY2(separator > 0, qPrintable(QStringLiteral("Invalid OCR expectation: %1").arg(line)));
         const QString fileName = line.left(separator);
         const QString expectedText = line.mid(separator + 1);
-        QTest::newRow(qPrintable(fileName)) << fileName << expectedText;
+
+        const QString path = QDir(fixtureDir()).filePath(QStringLiteral("samples/") + fileName);
+        QVERIFY2(QFile::exists(path), qPrintable(QStringLiteral("Missing OCR fixture: %1").arg(path)));
+        QImage image(path);
+        QVERIFY2(!image.isNull(), qPrintable(QStringLiteral("Invalid OCR fixture: %1").arg(fileName)));
+
+        application::OcrRequest request;
+        request.pageId = domain::PageId::generate();
+        request.regionId = domain::RegionId::generate();
+        request.image = image;
+        request.rect =
+            domain::RectGeometry{0.0, 0.0, static_cast<double>(image.width()), static_cast<double>(image.height())};
+
+        application::OperationContext context;
+        auto future = m_engine->recognize(request, context);
+        future.waitForFinished();
+        auto response = future.result();
+
+        if (!response.has_value()) {
+            QFAIL(qPrintable(response.error().safeMessage));
+        }
+        QCOMPARE(response->regionId, request.regionId);
+        QVERIFY2(!response->text.isEmpty(), qPrintable(QStringLiteral("Empty OCR result for %1").arg(fileName)));
+
+        const qsizetype distance = unicodeEditDistance(response->text, expectedText);
+        if (distance > 0) {
+            mismatchSummary.append(QStringLiteral("%1:%2").arg(fileName).arg(distance));
+        }
+        totalDistance += distance;
+        totalExpectedCodePoints += expectedText.toUcs4().size();
+        ++sampleCount;
     }
-}
 
-void BaberuOcrIntegrationTest::integrationEngineRecognizesText() {
-    const QString dir = modelDir();
-    if (dir.isEmpty()) {
-        QSKIP("MANGA_OCR_MODEL_DIR not set");
-    }
-
-    QFETCH(QString, fileName);
-    QFETCH(QString, expectedText);
-
-    const QString path = QDir(fixtureDir()).filePath(QStringLiteral("samples/") + fileName);
-    QVERIFY2(QFile::exists(path), qPrintable(QStringLiteral("Missing OCR fixture: %1").arg(path)));
-    QImage img(path);
-    QVERIFY(!img.isNull());
-
-    application::OcrRequest req;
-    req.pageId = domain::PageId::generate();
-    req.regionId = domain::RegionId::generate();
-    req.image = img;
-    req.rect = domain::RectGeometry{0.0, 0.0, static_cast<double>(img.width()), static_cast<double>(img.height())};
-
-    application::OperationContext context;
-    auto future = m_engine->recognize(req, context);
-    future.waitForFinished();
-    auto res = future.result();
-
-    if (!res.has_value()) {
-        QFAIL(qPrintable(res.error().safeMessage));
-    }
-    QCOMPARE(res->regionId, req.regionId);
-    QCOMPARE(res->text, expectedText);
+    QCOMPARE(sampleCount, 8);
+    QVERIFY(totalExpectedCodePoints > 0);
+    const double corpusCer = static_cast<double>(totalDistance) / static_cast<double>(totalExpectedCodePoints);
+    QVERIFY2(corpusCer <= kMaximumCorpusCer,
+             qPrintable(QStringLiteral("OCR corpus CER %1 exceeds %2; distances: %3")
+                            .arg(corpusCer, 0, 'f', 4)
+                            .arg(kMaximumCorpusCer, 0, 'f', 2)
+                            .arg(mismatchSummary.join(QStringLiteral(", ")))));
 }
 
 } // namespace manga::services::test

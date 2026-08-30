@@ -1,9 +1,9 @@
-# Exact outputs from the pinned upstream ONNX reference implementation.
+# Ground-truth text rendered in each synthetic fixture.
 sample_0.png	こんにちは
 sample_1.png	ありがとう
-sample_2.png	おはよう．．．
-sample_3.png	さようならさよ
-sample_4.png	すいません．．．
+sample_2.png	おはよう
+sample_3.png	さようなら
+sample_4.png	すいません
 sample_5.png	いただきます
 sample_6.png	ごちそうさま
 sample_7.png	おやすみなさい

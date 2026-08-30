@@ -32,8 +32,7 @@ private slots:
     void integrationPreprocessorMatchesPilGoldenSolidRed();
     void integrationPreprocessorMatchesPilGoldenGradient();
     void integrationVocabLoadsCorrectly();
-    void integrationEngineRecognizesText_data();
-    void integrationEngineRecognizesText();
+    void integrationEngineMeetsCorpusAccuracy();
 
 private:
     std::unique_ptr<Ort::Env> m_env;
