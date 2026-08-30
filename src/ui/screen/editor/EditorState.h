@@ -76,8 +76,9 @@ struct RegionProjection {
     bool operator==(const RegionProjection&) const = default;
 };
 
-/// Document save and undo state projection. Task 5 wires the QUndoStack;
-/// until then canUndo/canRedo stay false and texts are plain defaults.
+/// Document save and undo state projection. Stays false until the undo command
+/// integration wires the project stack; until then canUndo and canRedo remain
+/// false and texts are plain defaults.
 struct DocumentSaveState {
     bool isDirty{false};
     bool isSaving{false};
@@ -113,7 +114,8 @@ struct EditorState {
     /// Inspector mode derived from selection count.
     InspectorMode inspectorMode{InspectorMode::Page};
 
-    /// Top-level undo/redo booleans mirroring the stack (Task 5 wires them).
+    /// Top-level undo/redo booleans mirroring the stack. Always false until
+    /// the undo command integration wires them.
     bool canUndo{false};
     bool canRedo{false};
     /// Document save state projection.

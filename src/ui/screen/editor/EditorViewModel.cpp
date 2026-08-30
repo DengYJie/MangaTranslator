@@ -253,7 +253,7 @@ void EditorViewModel::setActiveTool(CanvasTool tool) {
     if (!m_hasSession) {
         return;
     }
-    // Tool switch cancels uncommitted gestures (Task 4 hook point).
+    // Uncommitted canvas gestures are cancelled here once gesture support exists.
     updateState([&](EditorState& s) { s.activeTool = tool; });
 }
 

@@ -345,6 +345,64 @@ private slots:
         QCOMPARE(viewModel.state().selectedRegionIds[3], r3);
     }
 
+    void selectRegionRangeSamePrimaryAndTargetSelectsExactlyOne() {
+        Fixture f;
+        EditorViewModel viewModel(&f.thumbnailStore, &f.imageLoader, &f.registry);
+        auto session = makeSession(1, 4);
+        const auto r1 = regionAt(session, 0, 1);
+        viewModel.openProjectSession(std::move(session));
+        QTRY_VERIFY_WITH_TIMEOUT(!viewModel.state().isPageLoading, 2000);
+
+        // Establish primary at r1.
+        viewModel.selectRegion(r1, RegionSelectionMode::Replace);
+        // Range from primary to itself selects exactly that one region.
+        viewModel.selectRegion(r1, RegionSelectionMode::Range);
+        QCOMPARE(viewModel.state().selectedRegionIds.size(), 1);
+        QCOMPARE(viewModel.state().selectedRegionIds.first(), r1);
+        QCOMPARE(viewModel.state().primaryRegionId, r1);
+        QCOMPARE(viewModel.state().inspectorMode, InspectorMode::Single);
+    }
+
+    void selectRegionRangeReverseDirectionSelectsSameSpan() {
+        Fixture f;
+        EditorViewModel viewModel(&f.thumbnailStore, &f.imageLoader, &f.registry);
+        auto session = makeSession(1, 4);
+        const auto r0 = regionAt(session, 0, 0);
+        const auto r1 = regionAt(session, 0, 1);
+        const auto r2 = regionAt(session, 0, 2);
+        const auto r3 = regionAt(session, 0, 3);
+        viewModel.openProjectSession(std::move(session));
+        QTRY_VERIFY_WITH_TIMEOUT(!viewModel.state().isPageLoading, 2000);
+
+        // Primary at r3 (higher order), range to r0 (lower order).
+        viewModel.selectRegion(r3, RegionSelectionMode::Replace);
+        viewModel.selectRegion(r0, RegionSelectionMode::Range);
+        // Same contiguous span as forward direction: r0 through r3.
+        QCOMPARE(viewModel.state().selectedRegionIds.size(), 4);
+        QCOMPARE(viewModel.state().primaryRegionId, r3);
+        QCOMPARE(viewModel.state().selectedRegionIds[0], r0);
+        QCOMPARE(viewModel.state().selectedRegionIds[1], r1);
+        QCOMPARE(viewModel.state().selectedRegionIds[2], r2);
+        QCOMPARE(viewModel.state().selectedRegionIds[3], r3);
+    }
+
+    void selectRegionRangeWithNoPriorPrimaryFallsBackToReplace() {
+        Fixture f;
+        EditorViewModel viewModel(&f.thumbnailStore, &f.imageLoader, &f.registry);
+        auto session = makeSession(1, 4);
+        const auto r2 = regionAt(session, 0, 2);
+        viewModel.openProjectSession(std::move(session));
+        QTRY_VERIFY_WITH_TIMEOUT(!viewModel.state().isPageLoading, 2000);
+
+        // No prior selection, range select on r2.
+        viewModel.selectRegion(r2, RegionSelectionMode::Range);
+        // Falls back to Replace: only the target is selected and becomes primary.
+        QCOMPARE(viewModel.state().selectedRegionIds.size(), 1);
+        QCOMPARE(viewModel.state().selectedRegionIds.first(), r2);
+        QCOMPARE(viewModel.state().primaryRegionId, r2);
+        QCOMPARE(viewModel.state().inspectorMode, InspectorMode::Single);
+    }
+
     void selectRegionUnknownIdIsIgnored() {
         Fixture f;
         EditorViewModel viewModel(&f.thumbnailStore, &f.imageLoader, &f.registry);

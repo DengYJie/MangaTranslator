@@ -44,7 +44,8 @@ public:
     void noteViewTransform(double zoom, const QPointF& centerOnPage);
     void dismissNotice();
 
-    /// Sets the active canvas tool. Tool switch cancels uncommitted gestures (hook point for Task 4).
+    /// Sets the active canvas tool. Uncommitted canvas gestures are cancelled here
+    /// once gesture support exists.
     void setActiveTool(CanvasTool tool);
     /// Selects a region on the current page using the given selection mode.
     void selectRegion(const domain::RegionId& regionId, RegionSelectionMode mode);
