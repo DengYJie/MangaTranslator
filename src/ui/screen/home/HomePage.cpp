@@ -16,10 +16,6 @@ namespace manga::ui::screen::home {
 namespace {
 constexpr int kSideRailWidth = 320;      // spec §3.2: auxiliary column 300-340 px
 constexpr int kCompactBreakpoint = 1008; // spec §3.3: below this the page flows single-column
-constexpr int kEmptyCardMaxWidth = 920;
-constexpr int kPageHorizontalInset = 32;
-constexpr int kEmptyStateInset = 16;
-constexpr int kEmptyStateTopInset = 24;
 } // namespace
 
 HomePage::HomePage(HomeViewModel* viewModel, QWidget* parent) : base::BasePage(parent), m_viewModel(viewModel) {
@@ -100,68 +96,7 @@ void HomePage::buildUi() {
 
     // Empty state (spec §5.1).
     m_emptyState = new QWidget(stackContainer);
-    auto* emptyHostLayout = new QVBoxLayout(m_emptyState);
-    emptyHostLayout->setContentsMargins(kEmptyStateInset, kEmptyStateTopInset, kEmptyStateInset, kEmptyStateInset);
-
-    auto* emptyCard = new fluent::layout::Card(m_emptyState);
-    emptyCard->setObjectName(QStringLiteral("homeEmptyStateCard"));
-    emptyCard->setAppearance(fluent::layout::Card::Layer);
-    emptyCard->setMaximumWidth(kEmptyCardMaxWidth);
-    emptyCard->setMinimumHeight(224);
-    emptyCard->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Minimum);
-
-    m_emptyContentLayout = new QBoxLayout(QBoxLayout::LeftToRight, emptyCard);
-    m_emptyContentLayout->setContentsMargins(48, 40, 48, 40);
-    m_emptyContentLayout->setSpacing(48);
-
-    auto* emptyIntroduction = new QHBoxLayout;
-    emptyIntroduction->setSpacing(20);
-    auto* emptyGlyph = new QLabel(Typography::Icons::Document, emptyCard);
-    QFont emptyGlyphFont(Typography::FontFamily::FluentIcons);
-    emptyGlyphFont.setPixelSize(56);
-    emptyGlyph->setFont(emptyGlyphFont);
-    emptyGlyph->setAlignment(Qt::AlignCenter);
-    emptyGlyph->setAccessibleName(QString()); // decorative
-    emptyIntroduction->addWidget(emptyGlyph, 0, Qt::AlignTop);
-
-    auto* emptyCopy = new QVBoxLayout;
-    emptyCopy->setSpacing(8);
-    auto* emptyTitle = new QLabel(tr("创建第一个漫画项目"), emptyCard);
-    emptyTitle->setFont(themeFont(Typography::FontRole::Subtitle).toQFont());
-    emptyCopy->addWidget(emptyTitle);
-    auto* emptyHint = new QLabel(tr("导入漫画图片或图片文件夹，建立项目后即可开始翻译。"), emptyCard);
-    emptyHint->setFont(themeFont(Typography::FontRole::Body).toQFont());
-    emptyHint->setWordWrap(true);
-    emptyCopy->addWidget(emptyHint);
-    auto* emptyContinuation = new QLabel(tr("也可以打开已有项目，继续上次的工作。"), emptyCard);
-    emptyContinuation->setFont(themeFont(Typography::FontRole::Caption).toQFont());
-    emptyContinuation->setWordWrap(true);
-    emptyCopy->addWidget(emptyContinuation);
-    emptyCopy->addStretch(1);
-    emptyIntroduction->addLayout(emptyCopy, 1);
-    m_emptyContentLayout->addLayout(emptyIntroduction, 1);
-
-    auto* emptyActions = new QVBoxLayout;
-    emptyActions->setSpacing(8);
-    emptyActions->addStretch(1);
-    m_emptyNewButton = new fluent::basicinput::Button(tr("新建项目/导入"), emptyCard);
-    m_emptyNewButton->setFluentStyle(fluent::basicinput::Button::Accent);
-    m_emptyNewButton->setIconGlyph(Typography::Icons::Add);
-    m_emptyNewButton->setMinimumWidth(208);
-    connect(m_emptyNewButton, &fluent::basicinput::Button::clicked, this, &HomePage::importRequested);
-    emptyActions->addWidget(m_emptyNewButton);
-    auto* emptyOpenButton = new fluent::basicinput::Button(tr("打开已有项目"), emptyCard);
-    emptyOpenButton->setIconGlyph(Typography::Icons::Folder);
-    emptyOpenButton->setMinimumWidth(208);
-    connect(emptyOpenButton, &fluent::basicinput::Button::clicked, this, [this]() {
-        m_viewModel->requestOpenProjectDialog();
-    });
-    emptyActions->addWidget(emptyOpenButton);
-    emptyActions->addStretch(1);
-    m_emptyContentLayout->addLayout(emptyActions);
-
-    emptyHostLayout->addWidget(emptyCard, 0, Qt::AlignTop);
-    emptyHostLayout->addStretch(1);
+    m_emptyState->setAutoFillBackground(false);
     m_stack->addWidget(m_emptyState);
 
     // Recent projects card grid (WinUI GridView semantics, spec §2.2).
@@ -189,13 +124,9 @@ void HomePage::buildUi() {
     mainLayout->addWidget(stackContainer, 1);
 
     // Side rail: quick start (spec §2.3). Import flows land in P5-B; buttons stay inert.
-    auto* quickStartCard = new fluent::layout::Card(this);
-    quickStartCard->setObjectName(QStringLiteral("homeQuickStartCard"));
-    quickStartCard->setAppearance(fluent::layout::Card::Layer);
-    quickStartCard->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Maximum);
-    m_sideRail = quickStartCard;
+    m_sideRail = new QWidget(this);
     auto* railLayout = new QVBoxLayout(m_sideRail);
-    railLayout->setContentsMargins(16, 16, 16, 16);
+    railLayout->setContentsMargins(0, 0, 0, 0);
     railLayout->setSpacing(8);
     auto* quickHeader = new QLabel(tr("快速开始"), m_sideRail);
     quickHeader->setFont(themeFont(Typography::FontRole::BodyStrong).toQFont());
@@ -215,19 +146,14 @@ void HomePage::buildUi() {
     m_contentLayout = new QBoxLayout(QBoxLayout::LeftToRight);
     m_contentLayout->setSpacing(24);
     m_contentLayout->addWidget(m_mainArea, 1);
-    m_contentLayout->addWidget(m_sideRail, 0, Qt::AlignTop);
+    m_contentLayout->addWidget(m_sideRail, 0);
     rootLayout->addLayout(m_contentLayout, 1);
 }
 
 void HomePage::render(const HomeState& state) {
-    const bool hasRecentProjects = !state.recentProjects.isEmpty();
     m_model->setProjects(state.recentProjects);
-    m_stack->setCurrentWidget(hasRecentProjects ? m_gridView : m_emptyState);
-    m_sideRail->setVisible(hasRecentProjects);
-    m_openButton->setVisible(hasRecentProjects);
-    m_importButton->setVisible(hasRecentProjects);
+    m_stack->setCurrentWidget(state.recentProjects.isEmpty() ? m_emptyState : m_gridView);
     m_openButton->setEnabled(!state.isOpeningProject);
-    setDefaultFocusWidget(hasRecentProjects ? m_openButton : m_emptyNewButton);
 
     if (state.notice.has_value()) {
         const auto& notice = *state.notice;
@@ -256,18 +182,12 @@ void HomePage::updateResponsiveLayout(int availableWidth) {
     }
     const bool compact = availableWidth < kCompactBreakpoint;
     m_contentLayout->setDirection(compact ? QBoxLayout::TopToBottom : QBoxLayout::LeftToRight);
-    m_emptyContentLayout->setDirection(compact ? QBoxLayout::TopToBottom : QBoxLayout::LeftToRight);
     if (compact) {
         m_sideRail->setMinimumWidth(0);
         m_sideRail->setMaximumWidth(QWIDGETSIZE_MAX);
     } else {
         m_sideRail->setFixedWidth(kSideRailWidth);
     }
-
-    const int centeredInset = (availableWidth - (2 * kPageHorizontalInset) - kEmptyCardMaxWidth) / 2;
-    const int emptyStateHorizontalInset = qMax(kEmptyStateInset, centeredInset);
-    m_emptyState->layout()->setContentsMargins(
-        emptyStateHorizontalInset, kEmptyStateTopInset, emptyStateHorizontalInset, kEmptyStateInset);
 }
 
 void HomePage::showContextMenu(const QPoint& pos) {
