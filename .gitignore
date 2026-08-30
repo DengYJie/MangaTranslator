@@ -60,3 +60,4 @@
 
 # Superpowers agent workspace
 .superpowers/
+.worktrees/
