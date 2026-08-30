@@ -26,7 +26,7 @@ WinUI 3 参考控件：`NavigationView`、`TitleBar`、`ScrollView`、`ComboBox`
 ### 应用设置
 
 - 常规。
-- OCR 与检测。
+- OCR。
 - AI 翻译。
 - 模型管理。
 
@@ -86,23 +86,22 @@ WinUI 3 参考控件：`NavigationView`、`TitleBar`、`ScrollView`、`ComboBox`
 
 自动保存关闭时显示 Caution 文案，但不每次弹 Dialog。
 
-## 6. OCR 与检测
+## 6. OCR
 
 设置组：
 
 ### 默认引擎
 
-- 文本检测器：`ComboBox`。
 - OCR 引擎：`ComboBox`。
 - 默认语言：`ComboBox`。
 - 自动识别横排/竖排：`ToggleSwitch`。
 
-### 检测参数
+### 识别参数
 
-- 置信度阈值：`Slider + NumberBox`，二者同步。
-- Mask 扩张：`NumberBox`。
-- 合并相邻文本行：`ToggleSwitch`。
-- 高级参数：`Expander`，默认收起。
+- 最长边预处理尺寸和语言提示使用受支持的引擎选项；高级参数默认收起。
+- 修改只影响新 OCR 请求，不自动重跑已处理 Region。
+
+V0.1 不提供自动文字检测，因此本页不显示检测器、检测阈值、Mask 扩张或合并文本行设置。自动检测进入 V0.2 时，须与 `ITextDetector`、UseCase、Adapter 和编辑器命令一并交付，不能先放不可执行的设置项。
 
 ### 状态
 
@@ -124,7 +123,7 @@ WinUI 3 参考控件：`NavigationView`、`TitleBar`、`ScrollView`、`ComboBox`
 密钥行为：
 
 - 已保存时只显示 `已配置` 或固定掩码，不把真实密钥填回 UI。
-- 配置状态通过 `QueryProviderCredentialStatusUseCase` 查询，底层只调用 `hasApiKey`，不得读取后丢弃明文；替换和删除分别走 Configure/Clear UseCase。
+- 配置状态通过 `CheckCredentialStatusUseCase` 查询，底层只调用 `hasApiKey`，不得读取后丢弃明文；替换和删除分别走 `SetCredentialUseCase`、`ClearCredentialUseCase`。
 - `更新密钥` 后进入替换输入；取消不清除原密钥。
 - 提供 `移除密钥` 危险次要动作，使用 `ContentDialog` 确认影响。
 - 复制、选择全部和可访问 Value 不得暴露真实密钥。

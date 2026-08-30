@@ -37,7 +37,8 @@ Canvas Workspace 从上到下：
 
 1. `CommandBar`。
 2. Canvas viewport。
-3. 浮于画布顶部中央或嵌入 CommandBar 的 Preview `SelectorBar`。
+
+Preview `SelectorBar` 固定嵌入 `CommandBar` 的视图命令区，不在画布上另建浮动层。窄宽时整组进入 CommandBar 的可展开区域，仍保持当前模式可见。
 
 窗口最底部为全局 `AppStatusTaskStrip`，不属于编辑器页面内部。
 
@@ -45,7 +46,7 @@ Canvas Workspace 从上到下：
 
 ### 3.1 默认尺寸
 
-- 页面 Pane：220–248 px，默认 232 px。
+- 页面 Pane：220–248 px；Wide（`>=1440`）默认 232 px，Standard（`1200–1439`）默认 220 px。
 - Inspector：320–380 px，默认 352 px。
 - 分隔条视觉宽度 1 px，指针命中宽度 8 px。
 - Canvas 最小可用宽度建议 480 px。
@@ -54,7 +55,7 @@ Canvas Workspace 从上到下：
 
 - Hover 分隔条时显示左右调整光标和轻微 Accent 高亮。
 - 拖动实时调整，不播放缓动动画。
-- 双击分隔条恢复该 Pane 默认宽度。
+- 双击分隔条恢复当前响应式档位的默认宽度；页面 Pane 在 Wide 恢复 232 px，在 Standard 恢复 220 px。
 - 宽度保存到用户偏好；不同 DPI/窗口大小恢复时需 Clamp。
 - Pane 被折叠后，分隔条也隐藏，不能留下空白命中区。
 
@@ -83,7 +84,6 @@ Canvas Workspace 从上到下：
 页面行右键菜单：
 
 - 打开。
-- 重新检测文字。
 - 重新 OCR。
 - 重新翻译。
 - 标记为已校对 / 取消标记。
@@ -99,7 +99,7 @@ Primary Commands 从左到右：
 1. 历史：Undo、Redo。
 2. 视图：缩小、缩放值、放大、适应页面、100%。
 3. 工具：选择、平移、创建文字区域。
-4. 自动处理：检测、OCR、智能翻译。
+4. 自动处理：OCR、智能翻译。
 5. 输出：导出。
 
 Secondary Commands / Overflow：
@@ -114,7 +114,7 @@ Secondary Commands / Overflow：
 
 ### 5.2 控件选择
 
-- Undo/Redo、检测、OCR、导出：`AppBarButton`。
+- Undo/Redo、OCR、导出：`AppBarButton`。
 - 选择、平移、创建 Region：互斥 `AppBarToggleButton`。
 - 智能翻译：`SplitButton`。主侧执行最近的页面流水线配置；箭头侧选择阶段组合和上下文范围。
 - 缩放值：可点击 `DropDownButton`，菜单含 25%、50%、100%、200%、适应页面、适应宽度。
@@ -127,7 +127,7 @@ Secondary Commands / Overflow：
 1. 辅助视图命令。
 2. 单独排版/清除等低频阶段。
 3. 100% 和适应宽度等缩放预设。
-4. 检测与 OCR 可以缩为图标，但智能翻译、Undo/Redo 和当前工具必须可见。
+4. OCR 可以缩为图标，但智能翻译、Undo/Redo 和当前工具必须可见。
 
 任何宽度下 CommandBar 保持单行。禁止通过换行把画布顶部变成两层工具栏。
 
@@ -145,7 +145,7 @@ Secondary Commands / Overflow：
 
 - 画布工作区使用中性深色背景与细网格/无网格偏好。
 - 页面居中显示，周围保持至少 24 px 安全空间。
-- 页面切换保留每页独立的缩放和中心位置，或按用户偏好统一适应页面；行为必须稳定可预测。
+- V0.1 固定为每页独立记住缩放和中心位置；切回页面时恢复该状态。未访问页面首次打开使用适应页面。V0.1 不提供“统一适应页面”全局偏好。
 - Region 选择与 Inspector 选择使用稳定 Region ID 同步。
 - 异步图层到达时只更新对应图层，不重置缩放、平移或选择。
 
@@ -170,7 +170,7 @@ V0.1 使用并排比较：
 - 两侧使用相同的缩放比例、页面中心和翻页状态；在任一侧平移或缩放，另一侧同步响应。
 - 两侧页面保持相同显示尺寸，不允许因各自独立适应窗口而造成视觉错位。
 - 分隔区域只用于区分两个视图，不提供擦拭 Handle。
-- 不与 Region 编辑同时启用；进入对比模式时 Region 只读。
+- 不与 Region 编辑同时启用；进入对比模式时两侧固定显示只读 Region 轮廓，不显示 Handle、Hover 编辑状态或编辑入口，也不提供“显示 Region”开关。
 - 滑块擦拭比较属于后续版本。
 
 ## 7. Inspector
@@ -262,7 +262,7 @@ Inspector 显示当前页摘要：Region 数、OCR/翻译完成数、问题数�
 
 ### 9.1 单阶段
 
-点击检测/OCR/翻译后：
+点击 OCR/翻译后：
 
 - 命令进入 Busy，图标旁显示局部进度。
 - 画布对应 Region 显示非阻塞状态覆盖。
@@ -271,7 +271,9 @@ Inspector 显示当前页摘要：Region 数、OCR/翻译完成数、问题数�
 
 ### 9.2 智能翻译
 
-流水线：检测 → OCR → 翻译 → 清除 → 排版。
+流水线：OCR → 翻译 → 清除 → 排版。
+
+V0.1 只处理用户已创建的矩形 Region。当前页没有 Region 时，智能翻译入口不启动空流水线，而是在画布内提示先创建 Region。自动文字检测属于 V0.2，届时必须把 `ITextDetector`、UseCase、Adapter 与 UI 命令作为同一纵向能力交付；P5 不显示无契约的检测按钮或占位入口。
 
 - `SplitButton` 主侧启动前显示当前配置摘要 ToolTip。
 - 第一次付费远程调用可显示 `ContentDialog` 或设置中已接受的费用策略提示；之后不重复打断。
@@ -291,6 +293,7 @@ Inspector 显示当前页摘要：Region 数、OCR/翻译完成数、问题数�
 ### 10.1 Wide `>=1440`
 
 - 三栏常驻。
+- 页面 Pane 默认 232 px。
 - Inspector 352–380 px。
 - CommandBar 显示主要命令标签。
 
@@ -304,7 +307,7 @@ Inspector 显示当前页摘要：Region 数、OCR/翻译完成数、问题数�
 
 - 页面 Pane 切为 80–96 px 紧凑缩略图栏或按上次偏好折叠。
 - Inspector 320 px；必要时 Overlay。
-- Preview SelectorBar 可收进 CommandBar 内容区或悬浮画布顶部。
+- Preview SelectorBar 保持在 CommandBar 内；空间不足时整组进入可展开区域，不悬浮到画布。
 
 ### 10.4 Narrow `720–1007`
 
@@ -334,11 +337,21 @@ Inspector 显示当前页摘要：Region 数、OCR/翻译完成数、问题数�
 | `1` | 100% |
 | `Delete` | 删除选中 Region；文本编辑时删除文字 |
 | `Enter` | 编辑选中 Region 的译文 |
-| `Escape` | 取消手势、退出编辑或关闭 Overlay |
+| `Escape` | 按 IME/文本编辑、Overlay、页面导航的嵌套顺序逐层退出 |
 | `PageUp` / `PageDown` | 上一页 / 下一页 |
-| `Ctrl+Shift+T` | 对当前页执行智能翻译，可配置 |
+| `Ctrl+Shift+T` | 对当前页执行智能翻译；V0.1 固定，不提供配置入口 |
 
 快捷键在 ToolTip 和命令 Overflow 中显示。不能覆盖 IME 组合输入。
+
+### 11.1 Escape 嵌套顺序
+
+Escape 每次只处理最内层且消费一次按键，不允许同一次按键同时关闭多个层级：
+
+1. 存在 IME preedit 时先取消当前组合串，不写 Domain、不生成 Undo Command。
+2. 文本编辑会话活动时结束该会话并把焦点交还 Inspector/画布；已 commit 的文本保留在项目命令栈中。
+3. 有画布创建、移动、缩放等临时手势时取消手势并恢复起始投影。
+4. 关闭当前 Flyout；若无 Flyout，则关闭当前 Inspector/Page Overlay。
+5. 以上状态均不存在时才执行页面级后退导航。
 
 ## 12. 无障碍
 

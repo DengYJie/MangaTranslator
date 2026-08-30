@@ -118,7 +118,7 @@ Overlay 的高频绘制从 Canvas 获取只读 palette view，或使用 FluentQt
 
 ## 7. 移动
 
-1. 指针在 Region 内按下并超过拖动阈值。
+1. 指针在 Region 内按下并移动超过 4 device px 后才进入拖动；阈值内释放按普通点击/选择处理。
 2. 捕获指针，显示移动光标。
 3. 更新预览几何；Inspector 数值可节流显示。
 4. 可选吸附页面边缘、中心和相邻 Region 边缘；吸附发生时显示辅助线。

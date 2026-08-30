@@ -155,7 +155,7 @@
 ### 8.2 键盘
 
 - `Tab` 在主要交互元素之间前进；复合控件内部使用方向键。
-- `Enter` 执行默认操作；`Space` 切换 Toggle/选择；`Escape` 按“取消当前手势 → 关闭 Flyout/Overlay → 返回上一层”的顺序处理。
+- `Enter` 执行默认操作；`Space` 切换 Toggle/选择；`Escape` 从最内层状态逐次处理：取消 IME preedit → 结束文本编辑 → 取消当前手势 → 关闭 Flyout/Overlay → 返回上一层。每次按键只消费一个层级，已 commit 的文本继续由项目级 Undo 管理。
 - 键盘焦点使用可见双层焦点框，不与选择框混淆。
 - 快捷键不得在 `TextBox`、`PasswordBox`、`RichEditBox` 或 IME 组合输入期间劫持字符。
 

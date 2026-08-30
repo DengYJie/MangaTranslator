@@ -51,7 +51,7 @@
 
 设置分类示例：
 
-- 分组 `应用设置`：常规、OCR 与检测、AI 翻译、模型管理。
+- 分组 `应用设置`：常规、OCR、AI 翻译、模型管理。
 - 分组 `体验`：排版与字体、外观、性能、隐私。
 
 Settings Surface 顶部不显示齿轮和“设置”标题，也不包含“设置”导航项。第一个可见元素直接是分组标题或第一条分类项。
@@ -167,3 +167,13 @@ Surface 切换不得：
 - 主导航和设置导航共享同一个内容宿主，不叠加。
 - 720、1008、1200、1440 px 附近缩放无重叠、无丢失返回入口。
 - 键盘、鼠标、高对比度、减少动画和 200% 文本缩放均可完成导航。
+
+## 12. 窗口几何持久化
+
+窗口几何属于外壳内部偏好，不在设置页增加可见开关。外壳通过 `IAppSettingsStore` 保存和恢复：
+
+- `ui/mainWindow/normalGeometry`：非最大化状态的窗口几何。
+- `ui/mainWindow/maximized`：关闭前是否最大化；不恢复最小化状态。
+- `ui/editor/pagePaneWidth/wide`、`ui/editor/pagePaneWidth/standard` 与 `ui/editor/inspectorWidth`：桌面三栏模式的逻辑像素宽度。
+
+保存最大化窗口时同时保留最近一次 normal geometry。恢复时先根据当前屏幕集合 Clamp：窗口至少有标题栏和 64×64 px 内容落在某个可用屏幕内；完全离屏或尺寸无效时使用当前主屏幕居中默认值。Pane 宽度按当前断点和 Canvas 最小宽度 Clamp；Overlay/抽屉的临时宽度不得覆盖桌面三栏宽度偏好。

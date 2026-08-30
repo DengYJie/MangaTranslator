@@ -35,7 +35,7 @@
 | --- | --- | --- |
 | 首页 / 项目中心 | [pages/home.md](pages/home.md) | 创建、打开和恢复项目 |
 | 新建项目 / 导入 | [pages/import.md](pages/import.md) | 导入当前版本支持的来源并建立项目；V0.1 为图片和文件夹 |
-| 漫画编辑器 | [pages/editor.md](pages/editor.md) | 检测、OCR、翻译、清除、排版和人工校对 |
+| 漫画编辑器 | [pages/editor.md](pages/editor.md) | 手工 Region、OCR、翻译、清除、排版和人工校对 |
 | 批量翻译 | [pages/batch.md](pages/batch.md) | 运行、观察、暂停、恢复和重试整章流水线 |
 | 术语库 | [pages/glossary.md](pages/glossary.md) | 管理全局、当前项目及最终有效术语 |
 | 设置 | [pages/settings.md](pages/settings.md) | 配置引擎、模型、网络、排版、外观、性能和隐私 |
