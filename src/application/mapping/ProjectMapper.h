@@ -13,6 +13,25 @@ public:
         dto.name = QString::fromStdString(project.name());
         return dto;
     }
+
+    static ProjectSessionDescriptor toSessionDescriptor(const domain::ComicProject& project,
+                                                        const QString& projectRootPath) {
+        ProjectSessionDescriptor descriptor;
+        descriptor.projectId = project.id();
+        descriptor.projectRootPath = projectRootPath;
+        descriptor.projectName = QString::fromStdString(project.name());
+        descriptor.pages.reserve(static_cast<qsizetype>(project.pages().size()));
+        for (const auto& page : project.pages()) {
+            PageDescriptor entry;
+            entry.id = page.id();
+            entry.orderIndex = page.orderIndex();
+            entry.imageSize = page.imageSize();
+            entry.originalAssetPath = QString::fromStdString(page.originalAssetPath());
+            entry.regionCount = static_cast<int>(page.regions().size());
+            descriptor.pages.append(entry);
+        }
+        return descriptor;
+    }
 };
 
 } // namespace manga::application::mapping

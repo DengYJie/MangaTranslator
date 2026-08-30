@@ -33,13 +33,24 @@ public:
 
 class FakeProjectRepository final : public application::IProjectRepository {
 public:
+    int openPageCount{0};
+    bool failCreate{false};
+    QString lastCreatedPath;
+    int saveCallCount{0};
+    int closeCallCount{0};
+
     bool failOpen{false};
     QString lastOpenedPath;
 
-    QFuture<application::Result<application::ProjectDescriptor>> createProject(application::CreateProjectRequest,
-                                                                               application::OperationContext) override {
-        return application::makeFailedFuture<application::ProjectDescriptor>(
-            application::makeApplicationError(application::ErrorCategory::Project, "test.create_failed", "stub"));
+    QFuture<application::Result<application::ProjectDescriptor>>
+    createProject(application::CreateProjectRequest request, application::OperationContext) override {
+        if (failCreate) {
+            return application::makeFailedFuture<application::ProjectDescriptor>(
+                application::makeApplicationError(application::ErrorCategory::Project, "test.create_failed", "stub"));
+        }
+        lastCreatedPath = request.path;
+        return application::makeReadyFuture<application::ProjectDescriptor>(
+            application::ProjectDescriptor{domain::ProjectId::generate(), request.name, request.path});
     }
     QFuture<application::Result<application::OpenProjectResult>> openProject(application::OpenProjectRequest request,
                                                                              application::OperationContext) override {
@@ -49,7 +60,14 @@ public:
                 application::ErrorCategory::Project, "test.open_failed", "无法打开项目"));
         }
         application::OpenProjectResult result;
-        result.project = domain::ComicProject("Demo Project");
+        domain::ComicProject project("Demo Project");
+        for (int i = 0; i < openPageCount; ++i) {
+            project.addPage(domain::ComicPage(domain::PageId::generate(),
+                                              "assets/original/page_" + std::to_string(1000 + i) + ".png",
+                                              domain::ImageSize{1200, 1800},
+                                              i));
+        }
+        result.project = std::move(project);
         return application::makeReadyFuture<application::OpenProjectResult>(std::move(result));
     }
     QFuture<application::Result<application::OpenProjectResult>>
@@ -59,8 +77,8 @@ public:
     }
     QFuture<application::Result<application::SaveProjectResult>> saveProject(application::SaveProjectRequest,
                                                                              application::OperationContext) override {
-        return application::makeFailedFuture<application::SaveProjectResult>(
-            application::makeApplicationError(application::ErrorCategory::Project, "test.save_failed", "stub"));
+        ++saveCallCount;
+        return application::makeReadyFuture<application::SaveProjectResult>(application::SaveProjectResult{1});
     }
     QFuture<application::Result<application::SaveAsProjectResult>>
     saveProjectAs(application::SaveAsProjectRequest, application::OperationContext) override {
@@ -69,6 +87,7 @@ public:
     }
     QFuture<application::Result<void>> closeProject(application::CloseProjectRequest,
                                                     application::OperationContext) override {
+        ++closeCallCount;
         return application::makeReadyFuture<void>({});
     }
 };

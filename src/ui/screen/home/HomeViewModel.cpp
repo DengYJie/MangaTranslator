@@ -1,6 +1,7 @@
 #include "ui/screen/home/HomeViewModel.h"
 
 #include "application/dto/ProjectDto.h"
+#include "application/mapping/ProjectMapper.h"
 #include "application/ports/IProjectRepository.h"
 #include "application/ports/IRecentProjectsStore.h"
 #include "application/workflow/OperationRegistry.h"
@@ -57,7 +58,10 @@ void HomeViewModel::handleOpenFinished() {
         m_recentStore->addRecentProject({name, m_pendingOpenPath, QDateTime::currentMSecsSinceEpoch()});
         refresh();
         Q_EMIT toastRequested(tr("已打开项目「%1」").arg(name), false);
-        Q_EMIT projectOpened(m_pendingOpenPath, name);
+        auto session =
+            application::mapping::ProjectMapper::toSessionDescriptor(result.value().project, m_pendingOpenPath);
+        session.warnings = result.value().warnings;
+        Q_EMIT projectOpened(session);
     } else {
         const QString safeMessage = result.error().safeMessage;
         const QString retryPath = m_pendingOpenPath;
