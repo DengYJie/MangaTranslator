@@ -32,8 +32,12 @@ public:
 
     /// Test-only observation hook.
     [[nodiscard]] bool isEmptyStateVisibleForTest() const;
+    [[nodiscard]] fluent::basicinput::Button* importButtonForTest() const;
 
     void onThemeUpdated() override;
+
+Q_SIGNALS:
+    void importRequested();
 
 protected:
     void updateResponsiveLayout(int availableWidth) override;
@@ -49,6 +53,7 @@ private:
     QLabel* m_titleLabel{nullptr};
     QLabel* m_subtitleLabel{nullptr};
     fluent::basicinput::Button* m_openButton{nullptr};
+    fluent::basicinput::Button* m_importButton{nullptr};
     fluent::basicinput::Button* m_newProjectButton{nullptr};
     fluent::status_info::InfoBar* m_infoBar{nullptr};
     // Single reused retry action: InfoBar::setActionWidget detaches without deleting,

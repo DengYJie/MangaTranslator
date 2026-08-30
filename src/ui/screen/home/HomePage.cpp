@@ -62,13 +62,11 @@ void HomePage::buildUi() {
     });
     headerRow->addWidget(m_openButton, 0, Qt::AlignVCenter);
 
-    // The import wizard is a P5-B destination; keep the primary action visible but inert.
-    m_newProjectButton = new fluent::basicinput::Button(tr("新建项目/导入"), this);
-    m_newProjectButton->setFluentStyle(fluent::basicinput::Button::Accent);
-    m_newProjectButton->setIconGlyph(Typography::Icons::Add);
-    m_newProjectButton->setEnabled(false);
-    m_newProjectButton->setToolTip(tr("导入向导将在后续版本提供"));
-    headerRow->addWidget(m_newProjectButton, 0, Qt::AlignVCenter);
+    m_importButton = new fluent::basicinput::Button(tr("新建项目/导入"), this);
+    m_importButton->setFluentStyle(fluent::basicinput::Button::Accent);
+    m_importButton->setIconGlyph(Typography::Icons::Add);
+    connect(m_importButton, &fluent::basicinput::Button::clicked, this, &HomePage::importRequested);
+    headerRow->addWidget(m_importButton, 0, Qt::AlignVCenter);
     rootLayout->addLayout(headerRow);
 
     m_infoBar = new fluent::status_info::InfoBar(this);
@@ -120,8 +118,7 @@ void HomePage::buildUi() {
     emptyButtons->addStretch(1);
     auto* emptyNewButton = new fluent::basicinput::Button(tr("新建项目/导入"), m_emptyState);
     emptyNewButton->setFluentStyle(fluent::basicinput::Button::Accent);
-    emptyNewButton->setEnabled(false);
-    emptyNewButton->setToolTip(tr("导入向导将在后续版本提供"));
+    connect(emptyNewButton, &fluent::basicinput::Button::clicked, this, &HomePage::importRequested);
     emptyButtons->addWidget(emptyNewButton);
     auto* emptyOpenButton = new fluent::basicinput::Button(tr("打开已有项目"), m_emptyState);
     connect(emptyOpenButton, &fluent::basicinput::Button::clicked, this, [this]() {
@@ -241,6 +238,10 @@ void HomePage::showContextMenu(const QPoint& pos) {
 
 bool HomePage::isEmptyStateVisibleForTest() const {
     return m_stack != nullptr && m_stack->currentWidget() == m_emptyState;
+}
+
+fluent::basicinput::Button* HomePage::importButtonForTest() const {
+    return m_importButton;
 }
 
 void HomePage::onThemeUpdated() {

@@ -9,6 +9,8 @@
 #include "ui/screen/editor/EditorViewModel.h"
 #include "ui/screen/home/HomePage.h"
 #include "ui/screen/home/HomeViewModel.h"
+#include "ui/screen/import/ImportPage.h"
+#include "ui/screen/import/ImportViewModel.h"
 #include "ui/window/MainWindow.h"
 
 #include <FluentQt/FluentQt.h>
@@ -103,6 +105,34 @@ int Application::run() {
         controller->navigate(QStringLiteral("home"));
     });
     QObject::connect(editorPage, &ui::screen::editor::EditorPage::importPagesRequested, controller, [controller]() {
+        controller->navigate(QStringLiteral("import"));
+    });
+
+    auto* importViewModel = new ui::screen::import_::ImportViewModel(
+        m_context->projectRepository(), m_context->comicImporter(), m_context->operationRegistry());
+    auto* importPage = new ui::screen::import_::ImportPage(importViewModel);
+
+    ui::navigation::NavigationItemDescriptor importItem;
+    importItem.routeKey = QStringLiteral("import");
+    importItem.text = QCoreApplication::translate("Application", "导入漫画");
+    importItem.iconGlyph = QStringLiteral("\uE896");
+    mainWindow->addNavigationItem(importItem, QStringLiteral("main"));
+    mainWindow->registerRoute(QStringLiteral("import"), importPage, QStringLiteral("main"));
+
+    QObject::connect(importViewModel,
+                     &ui::screen::import_::ImportViewModel::projectImported,
+                     editorViewModel,
+                     &ui::screen::editor::EditorViewModel::openProjectSession);
+    QObject::connect(
+        importViewModel,
+        &ui::screen::import_::ImportViewModel::projectImported,
+        controller,
+        [controller](const application::ProjectSessionDescriptor&) { controller->navigate(QStringLiteral("editor")); });
+    QObject::connect(importViewModel,
+                     &ui::screen::import_::ImportViewModel::cancelRequested,
+                     controller,
+                     [controller]() { controller->navigate(QStringLiteral("home")); });
+    QObject::connect(homePage, &ui::screen::home::HomePage::importRequested, controller, [controller]() {
         controller->navigate(QStringLiteral("import"));
     });
 

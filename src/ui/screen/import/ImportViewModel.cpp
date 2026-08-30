@@ -89,6 +89,7 @@ void ImportViewModel::setProjectName(const QString& name) {
     updateState([name](ImportState& state) {
         state.projectName = name;
         state.nameError.clear();
+        state.formErrorCount = 0;
     });
 }
 
@@ -96,6 +97,7 @@ void ImportViewModel::setSaveLocation(const QString& location) {
     updateState([location](ImportState& state) {
         state.saveLocation = location;
         state.locationError.clear();
+        state.formErrorCount = 0;
     });
 }
 
