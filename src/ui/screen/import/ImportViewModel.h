@@ -78,6 +78,7 @@ private:
     void handleCreateFinished();
     void handleImportFinished();
     void handleImportProgress(int value, int maximum);
+    void handleAckFinished();
     void handleSaveFinished();
     void failToEditingState(const application::ApplicationError& error);
     void releaseCreatedProject(); // CloseProjectUseCase after failed/cancelled import
@@ -89,6 +90,7 @@ private:
     QFutureWatcher<application::Result<application::ProjectDescriptor>> m_createWatcher;
     QFutureWatcher<application::Result<application::ImportImagesResult>> m_importWatcher;
     QFutureWatcher<application::Result<application::SaveProjectResult>> m_saveWatcher;
+    QFutureWatcher<application::Result<void>> m_ackWatcher;
     QFutureWatcher<application::Result<void>> m_closeWatcher;
 
     Stage m_stage{Stage::None};

@@ -31,6 +31,7 @@ ImportViewModel::ImportViewModel(application::IProjectRepository* projectReposit
             updateState([maximum](ImportState& state) { state.totalPageCount = maximum; });
         }
     });
+    connect(&m_ackWatcher, &QFutureWatcherBase::finished, this, &ImportViewModel::handleAckFinished);
     connect(&m_saveWatcher, &QFutureWatcherBase::finished, this, &ImportViewModel::handleSaveFinished);
     connect(&m_closeWatcher, &QFutureWatcherBase::finished, this, []() {});
 }
@@ -122,6 +123,7 @@ bool ImportViewModel::validateForm() {
         state.nameError.clear();
         state.locationError.clear();
         state.formErrorCount = 0;
+        state.notice = std::nullopt;
 
         QString trimmedName = state.projectName.trimmed();
         if (trimmedName.isEmpty()) {
@@ -147,35 +149,18 @@ bool ImportViewModel::validateForm() {
             valid = false;
         }
 
-        bool hasUnsupported = false;
+        int unsupportedCount = 0;
         for (const auto& s : state.sources) {
             if (!s.supported) {
-                hasUnsupported = true;
-                break;
-            }
-        }
-        if (hasUnsupported) {
-            // we do not count it into formErrorCount, but handle it as a notice
-        }
-    });
-
-    if (valid) {
-        bool hasUnsupported = false;
-        int unsupportedCount = 0;
-        for (const auto& s : m_state.sources) {
-            if (!s.supported) {
-                hasUnsupported = true;
                 unsupportedCount++;
             }
         }
-        if (hasUnsupported) {
-            updateState([unsupportedCount](ImportState& state) {
-                state.notice =
-                    ImportNotice{ImportNotice::Severity::Error, tr("有 %1 项需要修正").arg(unsupportedCount)};
-            });
+        if (unsupportedCount > 0) {
+            state.notice = ImportNotice{ImportNotice::Severity::Error, tr("有 %1 项需要修正").arg(unsupportedCount)};
             valid = false;
         }
-    }
+    });
+
     return valid;
 }
 
@@ -324,13 +309,20 @@ void ImportViewModel::handleImportFinished() {
     ackReq.batchId = m_importResult.batchId;
 
     application::AcknowledgeImportedAssetsUseCase ackUseCase(m_comicImporter);
-    // Ignore result of acknowledge for now as it is synchronous in the fake or we can wait for it.
-    // Wait, the brief says it is QFuture, but here we can just execute and not wait for save?
-    // Actually we should wait, or just let it run. The spec says "-> Acknowledge... -> Stage::Finalizing: Save...".
-    // Wait, if it's a QFuture we can just block on it? No, in UI thread we can't block. But Acknowledge might be
-    // synchronous in memory. Wait, in fake Acknowledge returns void. Let's just execute and ignore the future because
-    // the brief says we just call it before Save. Wait, let's just call it and then save.
-    (void)ackUseCase.execute(ackReq, m_currentContext);
+    m_ackWatcher.setFuture(ackUseCase.execute(ackReq, m_currentContext));
+}
+
+void ImportViewModel::handleAckFinished() {
+    if (!isRequestCurrent(m_requestToken)) {
+        return;
+    }
+
+    auto result = m_ackWatcher.result();
+    if (!result.has_value()) {
+        failToEditingState(result.error());
+        releaseCreatedProject();
+        return;
+    }
 
     m_stage = Stage::Finalizing;
 
