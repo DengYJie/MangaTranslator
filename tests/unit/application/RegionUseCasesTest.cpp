@@ -226,3 +226,21 @@ void RegionUseCasesTest::testApplyRegionSnapshotsBatchValidationFailureModifiesN
     // Page must be completely unmodified
     QVERIFY(*project.findPage(page.id()) == snapshotBefore);
 }
+
+void RegionUseCasesTest::testApplyRegionSnapshotsEmptyEditsIsNoop() {
+    ComicProject project("Test", ProjectId::generate());
+    ComicPage page(PageId::generate(), "test.png", {1000, 1000});
+    const RegionId r1 = RegionId::generate();
+    QVERIFY(page.addRegion(TextRegion(r1, {10, 10, 50, 50})));
+    QVERIFY(project.addPage(page));
+
+    const auto snapshotBefore = *project.findPage(page.id());
+    const auto revisionBefore = project.revision();
+
+    ApplyRegionSnapshotsUseCase useCase(&project);
+    ApplyRegionSnapshotsRequest req{.pageId = page.id(), .edits = {}};
+    auto result = useCase.execute(req);
+    QVERIFY(result.has_value());
+    QVERIFY(*project.findPage(page.id()) == snapshotBefore);
+    QCOMPARE(project.revision(), revisionBefore);
+}

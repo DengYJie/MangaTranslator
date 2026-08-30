@@ -15,4 +15,5 @@ private slots:
     void testRemoveRegionNotFound();
     void testApplyRegionSnapshotsSuccess();
     void testApplyRegionSnapshotsBatchValidationFailureModifiesNothing();
+    void testApplyRegionSnapshotsEmptyEditsIsNoop();
 };

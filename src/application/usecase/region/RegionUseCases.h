@@ -102,7 +102,7 @@ class InsertRegionUseCase {
 public:
     explicit InsertRegionUseCase(domain::ComicProject* project) : m_project(project) {}
 
-    [[nodiscard]] Result<void> execute(const InsertRegionRequest& request);
+    [[nodiscard]] Result<void> execute(InsertRegionRequest request);
 
 private:
     domain::ComicProject* m_project;
@@ -134,7 +134,7 @@ struct ApplyRegionSnapshotsRequest {
     std::vector<domain::PageRegionEdit> edits;
 };
 
-/// Validates ALL edits for the page before applying any. Any failure modifies nothing.
+/// Validates all edits for the page before applying any. Any failure modifies nothing.
 class ApplyRegionSnapshotsUseCase {
 public:
     explicit ApplyRegionSnapshotsUseCase(domain::ComicProject* project) : m_project(project) {}

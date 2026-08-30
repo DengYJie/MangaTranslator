@@ -7,6 +7,8 @@ namespace {
     return makeApplicationError(category, std::move(code), std::move(message));
 }
 
+constexpr auto kUndoInvariantBroken = "internal.undo_invariant_broken";
+
 [[nodiscard]] Result<const domain::ComicPage*> findPage(const domain::ComicProject* project,
                                                         const domain::PageId& pageId) {
     if (project == nullptr) {
@@ -109,7 +111,9 @@ Result<void> ReorderRegionUseCase::execute(const ReorderRegionRequest& request) 
     return {};
 }
 
-Result<void> InsertRegionUseCase::execute(const InsertRegionRequest& request) {
+// Use case validation produces user-facing Input error messages. The domain layer remains the authoritative invariant
+// source.
+Result<void> InsertRegionUseCase::execute(InsertRegionRequest request) {
     if (m_project == nullptr) {
         return std::unexpected(regionError(ErrorCategory::Internal, "internal.null_project", "Project is unavailable"));
     }
@@ -126,7 +130,7 @@ Result<void> InsertRegionUseCase::execute(const InsertRegionRequest& request) {
         return std::unexpected(
             regionError(ErrorCategory::Input, "input.invalid_order", "Insert order index is out of range"));
     }
-    auto result = m_project->insertRegionOnPage(request.pageId, request.region, request.orderIndex);
+    auto result = m_project->insertRegionOnPage(request.pageId, std::move(request.region), request.orderIndex);
     if (!result) {
         return std::unexpected(
             regionError(ErrorCategory::Input, "input.region_rejected", "Region could not be inserted"));
@@ -164,22 +168,23 @@ Result<void> ApplyRegionSnapshotsUseCase::execute(const ApplyRegionSnapshotsRequ
         return std::unexpected(page.error());
     }
 
-    // Validate ALL edits before applying any
+    // Translation content is trusted from snapshots because snapshots only carry values that were already domain-valid.
+    // This gate validates structure, geometry and layout.
     for (const auto& edit : request.edits) {
         const auto* region = (*page)->findRegion(edit.regionId);
         if (region == nullptr) {
-            return std::unexpected(regionError(
-                ErrorCategory::Internal, "internal.undo_invariant_broken", "Snapshot references a missing region"));
+            return std::unexpected(
+                regionError(ErrorCategory::Internal, kUndoInvariantBroken, "Snapshot references a missing region"));
         }
         if (edit.geometry.has_value()) {
             if (!edit.geometry->isValid() || !edit.geometry->isWithinBounds((*page)->imageSize())) {
-                return std::unexpected(regionError(
-                    ErrorCategory::Internal, "internal.undo_invariant_broken", "Snapshot contains invalid geometry"));
+                return std::unexpected(
+                    regionError(ErrorCategory::Internal, kUndoInvariantBroken, "Snapshot contains invalid geometry"));
             }
         }
         if (edit.layout.has_value() && !edit.layout->isValid()) {
-            return std::unexpected(regionError(
-                ErrorCategory::Internal, "internal.undo_invariant_broken", "Snapshot contains invalid layout"));
+            return std::unexpected(
+                regionError(ErrorCategory::Internal, kUndoInvariantBroken, "Snapshot contains invalid layout"));
         }
     }
 
@@ -190,7 +195,7 @@ Result<void> ApplyRegionSnapshotsUseCase::execute(const ApplyRegionSnapshotsRequ
     auto result = m_project->applyPageRegionEdits(request.pageId, request.edits);
     if (!result) {
         return std::unexpected(
-            regionError(ErrorCategory::Internal, "internal.undo_invariant_broken", "Snapshot batch edit was rejected"));
+            regionError(ErrorCategory::Internal, kUndoInvariantBroken, "Snapshot batch edit was rejected"));
     }
     return {};
 }
