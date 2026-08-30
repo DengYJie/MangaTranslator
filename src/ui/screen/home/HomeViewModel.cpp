@@ -50,14 +50,15 @@ void HomeViewModel::handleOpenFinished() {
     if (!isRequestCurrent(m_openToken)) {
         return; // Stale completion.
     }
-    const auto result = m_openWatcher.result();
+    auto result = m_openWatcher.result();
     updateState([](HomeState& state) { state.isOpeningProject = false; });
     if (result.has_value()) {
+        auto value = std::move(result).value();
         application::OpenedProjectSession session;
-        session.project = result.value().project;
+        session.project = std::move(value.project);
         session.projectRootPath = m_pendingOpenPath;
-        session.recoverySource = result.value().recoverySource;
-        session.warnings = result.value().warnings;
+        session.recoverySource = value.recoverySource;
+        session.warnings = std::move(value.warnings);
         const QString name = QString::fromStdString(session.project.name());
         m_recentStore->addRecentProject({name, m_pendingOpenPath, QDateTime::currentMSecsSinceEpoch()});
         refresh();

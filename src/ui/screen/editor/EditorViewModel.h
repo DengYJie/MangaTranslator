@@ -45,6 +45,7 @@ public:
     void noteViewTransform(double zoom, const QPointF& centerOnPage);
     void dismissNotice();
 
+    /// Returns the project revision for change tracking; 0 means no active session.
     [[nodiscard]] quint64 currentProjectRevision() const noexcept {
         return m_openedSession ? m_openedSession->project.revision() : 0;
     }
@@ -87,6 +88,8 @@ private:
     std::unique_ptr<application::LoadOrGenerateThumbnailUseCase> m_thumbnailUseCase;
     std::unique_ptr<application::LoadPageImageUseCase> m_pageLoadUseCase;
 
+    /// View-facing snapshot derived from m_openedSession; must be re-derived after aggregate mutations that change page
+    /// structure.
     application::ProjectSessionDescriptor m_session;
     std::optional<application::OpenedProjectSession> m_openedSession;
     bool m_hasSession{false};

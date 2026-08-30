@@ -364,7 +364,7 @@ void ImportViewModel::handleSaveFinished() {
     m_stage = Stage::None;
 
     application::OpenedProjectSession session;
-    session.project = m_project;
+    session.project = std::move(m_project);
     session.projectRootPath = m_projectRoot;
     session.recoverySource = application::RecoverySource::Current;
 

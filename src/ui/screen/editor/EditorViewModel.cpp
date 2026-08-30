@@ -72,7 +72,7 @@ void EditorViewModel::openProjectSession(application::OpenedProjectSession sessi
             entry.orderIndex = pageDesc.orderIndex;
             entry.displayName = QFileInfo(pageDesc.originalAssetPath).fileName();
             entry.imageSize = pageDesc.imageSize;
-            entry.regionCount = 0;
+            entry.regionCount = 0; // Region count projection arrives with the region projection task.
             s.pages.append(entry);
         }
 
