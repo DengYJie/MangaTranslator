@@ -1,6 +1,7 @@
 #pragma once
 
 #include "domain/model/Uuid.h"
+#include "ui/base/DomainMetaTypes.h"
 
 #include <QAbstractListModel>
 #include <QHash>
@@ -60,5 +61,3 @@ private:
 };
 
 } // namespace manga::ui::widget
-
-Q_DECLARE_METATYPE(manga::domain::PageId)

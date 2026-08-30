@@ -7,6 +7,7 @@ add_library(manga_ui STATIC
     base/BasePage.cpp
     base/BasePage.h
     base/BaseViewModel.h
+    base/DomainMetaTypes.h
     navigation/INavigationPresenter.h
     navigation/INavigationRegistrar.h
     navigation/NavigationController.cpp
@@ -38,6 +39,9 @@ add_library(manga_ui STATIC
     navigation/NavigationTypes.h
     navigation/NavigationWidget.cpp
     navigation/NavigationWidget.h
+    screen/editor/EditorState.h
+    screen/editor/EditorViewModel.cpp
+    screen/editor/EditorViewModel.h
     screen/home/HomePage.cpp
     screen/home/HomePage.h
     screen/home/HomeState.h
