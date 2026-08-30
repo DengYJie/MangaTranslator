@@ -4,13 +4,13 @@
 #include "QtTextLayouterTest.h"
 #include "SolidColorInpainterTest.h"
 
-#include <QCoreApplication>
+#include <QGuiApplication>
 #include <QtTest/QtTest>
 
 #include <iostream>
 
 int main(int argc, char* argv[]) {
-    QCoreApplication app(argc, argv);
+    QGuiApplication app(argc, argv);
 
     int status = 0;
 

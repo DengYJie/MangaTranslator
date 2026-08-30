@@ -1,0 +1,86 @@
+{
+  "manifestVersion": 1,
+  "id": "genshiai-baberu-ocr-onnx",
+  "version": "1.0.0",
+  "source": {
+    "repository": "genshiai-daichi/baberu-ocr",
+    "revision": "d9cc13153e9a1cd8fdfa3b7b1cc329da2020aeae",
+    "license": "Apache-2.0"
+  },
+  "runtime": {
+    "minimumOnnxRuntime": "1.26.0",
+    "opset": 17,
+    "executionProvider": "cpu"
+  },
+  "graphs": [
+    {
+      "role": "vision",
+      "file": "onnx/vision_fp16.onnx",
+      "sha256": "4ce333804846b23f1983376efe363c164d4624ecc6bd16f99a15a859d8423117",
+      "inputs": ["pixel_values"],
+      "outputs": ["vision_embeds"]
+    },
+    {
+      "role": "decoder-prefill",
+      "file": "onnx/decoder_prefill_int8.onnx",
+      "sha256": "4f8d28d4e5e8b6c7f3a4510663aa0a9199a7eec06bcb1dc0afb3ca571494e97f",
+      "inputs": ["vision_embeds", "input_ids"],
+      "outputs": [
+        "logits",
+        "present_k0", "present_k1", "present_k2",
+        "present_k3", "present_k4", "present_k5",
+        "present_v0", "present_v1", "present_v2",
+        "present_v3", "present_v4", "present_v5"
+      ]
+    },
+    {
+      "role": "decoder-step",
+      "file": "onnx/decoder_step_int8.onnx",
+      "sha256": "2eaf792ca70b67e55140ef0bcfbfc3c3b1e07d72ca277dcc46aae27c81f27ac8",
+      "inputs": [
+        "input_ids", "position_ids",
+        "past_k0", "past_k1", "past_k2",
+        "past_k3", "past_k4", "past_k5",
+        "past_v0", "past_v1", "past_v2",
+        "past_v3", "past_v4", "past_v5"
+      ],
+      "outputs": [
+        "logits",
+        "present_k0", "present_k1", "present_k2",
+        "present_k3", "present_k4", "present_k5",
+        "present_v0", "present_v1", "present_v2",
+        "present_v3", "present_v4", "present_v5"
+      ]
+    }
+  ],
+  "tokenizer": {
+    "type": "baberu-character-v1",
+    "vocabFile": "tokenizer/vocab.json",
+    "sha256": "681de4eb83154a397af49e2ddae4705041b12a22e16fe00860b829e889e5f47c",
+    "bosTokenId": 1,
+    "eosTokenId": 2,
+    "padTokenId": 0,
+    "unkTokenId": 3
+  },
+  "input": {
+    "width": 224,
+    "height": 224,
+    "layout": "NCHW",
+    "color": "RGB",
+    "sourceConversion": "RGB",
+    "resizeMode": "resize-only",
+    "resample": "bicubic"
+  },
+  "normalization": {
+    "scale": 0.00392156862745098,
+    "mean": [0.485, 0.456, 0.406],
+    "std": [0.229, 0.224, 0.225]
+  },
+  "generation": {
+    "maxLength": 128,
+    "strategy": "greedy",
+    "repetitionPenalty": 1.2,
+    "contentRunCap": 12
+  },
+  "postprocess": "baberu-v1"
+}

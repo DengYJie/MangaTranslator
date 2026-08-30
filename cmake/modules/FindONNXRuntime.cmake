@@ -12,7 +12,10 @@
 #
 # Hints:
 #   Set ONNXRUNTIME_ROOT_DIR to point to the root directory of a pre-built ONNX Runtime release.
+#   Set MANGA_DOWNLOAD_ONNXRUNTIME=ON to explicitly allow a verified pre-built release download.
 #
+
+option(MANGA_DOWNLOAD_ONNXRUNTIME "Allow CMake to download a verified ONNX Runtime release" OFF)
 
 # First try the upstream or vcpkg-provided Config module
 find_package(onnxruntime CONFIG QUIET)
@@ -53,29 +56,29 @@ if(WIN32)
     )
 endif()
 
-# If not found, download it automatically
-if(NOT ONNXRuntime_INCLUDE_DIR OR NOT ONNXRuntime_LIBRARY OR (WIN32 AND NOT ONNXRuntime_DLL))
+# Downloads are opt-in so ordinary configure and rebuilds remain offline.
+if(MANGA_DOWNLOAD_ONNXRUNTIME AND
+   (NOT ONNXRuntime_INCLUDE_DIR OR NOT ONNXRuntime_LIBRARY OR (WIN32 AND NOT ONNXRuntime_DLL)))
     message(STATUS "ONNX Runtime not found locally. Downloading prebuilt binaries...")
 
-    set(ONNXRUNTIME_VERSION "1.20.0") # Use a stable known version
+    set(ONNXRUNTIME_VERSION "1.26.0")
     set(ONNXRUNTIME_BASE_DIR "${CMAKE_BINARY_DIR}/_deps/onnxruntime-local")
 
     if(WIN32)
         set(ONNXRUNTIME_URL "https://github.com/microsoft/onnxruntime/releases/download/v${ONNXRUNTIME_VERSION}/onnxruntime-win-x64-${ONNXRUNTIME_VERSION}.zip")
         set(ONNXRUNTIME_ARCHIVE "${ONNXRUNTIME_BASE_DIR}/onnxruntime.zip")
         set(ONNXRUNTIME_EXTRACT_DIR "${ONNXRUNTIME_BASE_DIR}/onnxruntime-win-x64-${ONNXRUNTIME_VERSION}")
-        set(ONNXRUNTIME_HASH "b372de85cedd9387a0d4386b982265e8420e5bcc2f29394317e76525b832942e")
+        set(ONNXRUNTIME_HASH "6ebe99b5564bf4d029b6e93eac9ff423682b6212eade769e9ca3f685eaf500b4")
     elseif(APPLE)
-        # Simplified apple logic
-        set(ONNXRUNTIME_URL "https://github.com/microsoft/onnxruntime/releases/download/v${ONNXRUNTIME_VERSION}/onnxruntime-osx-universal2-${ONNXRUNTIME_VERSION}.tgz")
+        set(ONNXRUNTIME_URL "https://github.com/microsoft/onnxruntime/releases/download/v${ONNXRUNTIME_VERSION}/onnxruntime-osx-arm64-${ONNXRUNTIME_VERSION}.tgz")
         set(ONNXRUNTIME_ARCHIVE "${ONNXRUNTIME_BASE_DIR}/onnxruntime.tgz")
-        set(ONNXRUNTIME_EXTRACT_DIR "${ONNXRUNTIME_BASE_DIR}/onnxruntime-osx-universal2-${ONNXRUNTIME_VERSION}")
-        set(ONNXRUNTIME_HASH "d63b2cd93c92777c211640bc7820856e9ea53246f9455102724f38e4284e1287")
+        set(ONNXRUNTIME_EXTRACT_DIR "${ONNXRUNTIME_BASE_DIR}/onnxruntime-osx-arm64-${ONNXRUNTIME_VERSION}")
+        set(ONNXRUNTIME_HASH "7a1280bbb1701ea514f71828765237e7896e0f2e1cd332f1f70dbd5c3e33aca3")
     else()
         set(ONNXRUNTIME_URL "https://github.com/microsoft/onnxruntime/releases/download/v${ONNXRUNTIME_VERSION}/onnxruntime-linux-x64-${ONNXRUNTIME_VERSION}.tgz")
         set(ONNXRUNTIME_ARCHIVE "${ONNXRUNTIME_BASE_DIR}/onnxruntime.tgz")
         set(ONNXRUNTIME_EXTRACT_DIR "${ONNXRUNTIME_BASE_DIR}/onnxruntime-linux-x64-${ONNXRUNTIME_VERSION}")
-        set(ONNXRUNTIME_HASH "aa70d48b22e264b82e83f63245b51ddc9a47ae4a3a66903efaff1ba68b7b5930")
+        set(ONNXRUNTIME_HASH "1254da24fb389cf39dc0ff3451ab48301740ffbfcbaf646849df92f80ee92c57")
     endif()
 
     if(NOT EXISTS "${ONNXRUNTIME_EXTRACT_DIR}/include/onnxruntime_cxx_api.h")

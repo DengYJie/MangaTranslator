@@ -224,6 +224,14 @@ OnnxMangaOcrEngine::runInference(const application::OcrRequest& request,
     }
 
     Ort::Value& visionEmbeds = visOutputs.front();
+    const auto visionShape = visionEmbeds.GetTensorTypeAndShapeInfo().GetShape();
+    if (visionShape.size() < 2 || visionShape[1] <= 0) {
+        return std::unexpected<application::ApplicationError>(
+            application::makeApplicationError(application::ErrorCategory::Model,
+                                              QStringLiteral("model.incompatible"),
+                                              QStringLiteral("Vision output has an invalid sequence dimension")));
+    }
+    int64_t decoderPosition = visionShape[1] + 1;
     int64_t bosId = m_impl->manifest.tokenizer.bosTokenId;
     std::vector<int64_t> inputIdsValues = {bosId};
     std::vector<int64_t> inputIdsShape = {1, 1};
@@ -282,6 +290,7 @@ OnnxMangaOcrEngine::runInference(const application::OcrRequest& request,
 
     QVector<int> toks;
     std::set<int> seen;
+    seen.insert(static_cast<int>(bosId));
 
     const char* stepInputNames[] = {"input_ids",
                                     "position_ids",
@@ -312,7 +321,15 @@ OnnxMangaOcrEngine::runInference(const application::OcrRequest& request,
                                      "present_v5"};
 
     auto logitsInfo = logitsTensorOpt->GetTensorTypeAndShapeInfo();
-    int currentPos = logitsInfo.GetShape()[1];
+    const auto logitsShape = logitsInfo.GetShape();
+    if (logitsShape.size() < 3 || logitsShape[1] <= 0 || logitsShape[2] < vocabSize) {
+        return std::unexpected<application::ApplicationError>(
+            application::makeApplicationError(application::ErrorCategory::Model,
+                                              QStringLiteral("model.incompatible"),
+                                              QStringLiteral("Decoder logits do not match the tokenizer vocabulary")));
+    }
+    const int64_t logitsSequenceLength = logitsShape[1];
+    const int64_t logitsVocabularySize = logitsShape[2];
     bool isFirstStep = true;
 
     bool reachedEos = false;
@@ -327,7 +344,7 @@ OnnxMangaOcrEngine::runInference(const application::OcrRequest& request,
 
         float* logitsData = logitsTensorOpt->GetTensorMutableData<float>();
         if (isFirstStep) {
-            logitsData += (currentPos - 1) * vocabSize;
+            logitsData += (logitsSequenceLength - 1) * logitsVocabularySize;
             isFirstStep = false;
         }
 
@@ -381,7 +398,7 @@ OnnxMangaOcrEngine::runInference(const application::OcrRequest& request,
         }
 
         inputIdsValues[0] = nextToken;
-        std::vector<int64_t> posIdsValues = {currentPos};
+        std::vector<int64_t> posIdsValues = {decoderPosition};
         std::vector<int64_t> posIdsShape = {1, 1};
 
         inputIdsTensor = Ort::Value::CreateTensor<int64_t>(
@@ -418,7 +435,7 @@ OnnxMangaOcrEngine::runInference(const application::OcrRequest& request,
                                                   true));
         }
 
-        currentPos++;
+        decoderPosition++;
     }
 
     if (!reachedEos) {

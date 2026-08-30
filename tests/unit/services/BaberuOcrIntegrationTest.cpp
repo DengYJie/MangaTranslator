@@ -24,18 +24,30 @@ static QString modelDir() {
 }
 
 static QString fixtureDir() {
-    return QStringLiteral(MANGA_OCR_FIXTURES_DIR);
+    return QDir(QStringLiteral(MANGA_OCR_FIXTURES_DIR)).absoluteFilePath(QStringLiteral(".."));
 }
 
 } // namespace
+
+BaberuOcrIntegrationTest::BaberuOcrIntegrationTest() = default;
+
+BaberuOcrIntegrationTest::~BaberuOcrIntegrationTest() = default;
 
 void BaberuOcrIntegrationTest::initTestCase() {
     if (modelDir().isEmpty()) {
         QSKIP("MANGA_OCR_MODEL_DIR not set; skipping integration tests");
     }
+
+    m_env = std::make_unique<Ort::Env>(ORT_LOGGING_LEVEL_WARNING, "Test");
+    m_executor = std::make_unique<BoundedTaskExecutor>(1);
+    m_engine = std::make_unique<OnnxMangaOcrEngine>(m_env.get(), m_executor.get(), modelDir());
 }
 
-void BaberuOcrIntegrationTest::cleanupTestCase() {}
+void BaberuOcrIntegrationTest::cleanupTestCase() {
+    m_engine.reset();
+    m_executor.reset();
+    m_env.reset();
+}
 
 void BaberuOcrIntegrationTest::integrationManifestLoadsAndValidates() {
     const QString dir = modelDir();
@@ -57,7 +69,7 @@ void BaberuOcrIntegrationTest::integrationPreprocessorMatchesPilGoldenSolidRed()
     QVERIFY(manifestResult.has_value());
     const auto& manifest = *manifestResult;
 
-    QString path = QDir(fixtureDir()).filePath(QStringLiteral("solid_red_2x2.png"));
+    QString path = QDir(fixtureDir()).filePath(QStringLiteral("preprocess/solid_red_2x2.png"));
     if (!QFile::exists(path)) {
         QSKIP("Fixture not found");
     }
@@ -93,7 +105,7 @@ void BaberuOcrIntegrationTest::integrationPreprocessorMatchesPilGoldenGradient()
     QVERIFY(manifestResult.has_value());
     const auto& manifest = *manifestResult;
 
-    QString path = QDir(fixtureDir()).filePath(QStringLiteral("gradient_4x3.png"));
+    QString path = QDir(fixtureDir()).filePath(QStringLiteral("preprocess/gradient_4x3.png"));
     if (!QFile::exists(path)) {
         QSKIP("Fixture not found");
     }
@@ -142,20 +154,36 @@ void BaberuOcrIntegrationTest::integrationVocabLoadsCorrectly() {
     QVERIFY(!vocabResult->contentIds().isEmpty());
 }
 
+void BaberuOcrIntegrationTest::integrationEngineRecognizesText_data() {
+    QTest::addColumn<QString>("fileName");
+    QTest::addColumn<QString>("expectedText");
+
+    QFile expectedFile(QDir(fixtureDir()).filePath(QStringLiteral("samples/expected.txt")));
+    QVERIFY2(expectedFile.open(QIODevice::ReadOnly | QIODevice::Text), qPrintable(expectedFile.errorString()));
+    while (!expectedFile.atEnd()) {
+        const QString line = QString::fromUtf8(expectedFile.readLine()).trimmed();
+        if (line.isEmpty() || line.startsWith(QLatin1Char('#'))) {
+            continue;
+        }
+        const qsizetype separator = line.indexOf(QLatin1Char('\t'));
+        QVERIFY2(separator > 0, qPrintable(QStringLiteral("Invalid OCR expectation: %1").arg(line)));
+        const QString fileName = line.left(separator);
+        const QString expectedText = line.mid(separator + 1);
+        QTest::newRow(qPrintable(fileName)) << fileName << expectedText;
+    }
+}
+
 void BaberuOcrIntegrationTest::integrationEngineRecognizesText() {
     const QString dir = modelDir();
     if (dir.isEmpty()) {
         QSKIP("MANGA_OCR_MODEL_DIR not set");
     }
 
-    Ort::Env env(ORT_LOGGING_LEVEL_WARNING, "Test");
-    BoundedTaskExecutor executor(1);
-    OnnxMangaOcrEngine engine(&env, &executor, dir);
+    QFETCH(QString, fileName);
+    QFETCH(QString, expectedText);
 
-    QString path = QDir(fixtureDir()).filePath(QStringLiteral("gradient_4x3.png"));
-    if (!QFile::exists(path)) {
-        QSKIP("Fixture not found");
-    }
+    const QString path = QDir(fixtureDir()).filePath(QStringLiteral("samples/") + fileName);
+    QVERIFY2(QFile::exists(path), qPrintable(QStringLiteral("Missing OCR fixture: %1").arg(path)));
     QImage img(path);
     QVERIFY(!img.isNull());
 
@@ -166,12 +194,15 @@ void BaberuOcrIntegrationTest::integrationEngineRecognizesText() {
     req.rect = domain::RectGeometry{0.0, 0.0, static_cast<double>(img.width()), static_cast<double>(img.height())};
 
     application::OperationContext context;
-    auto future = engine.recognize(req, context);
+    auto future = m_engine->recognize(req, context);
     future.waitForFinished();
     auto res = future.result();
 
-    // We just verify it successfully ran inference and returned *something* without errors.
-    QVERIFY2(res.has_value(), qPrintable(res.error().safeMessage));
+    if (!res.has_value()) {
+        QFAIL(qPrintable(res.error().safeMessage));
+    }
+    QCOMPARE(res->regionId, req.regionId);
+    QCOMPARE(res->text, expectedText);
 }
 
 } // namespace manga::services::test
