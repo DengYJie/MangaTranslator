@@ -52,8 +52,6 @@ Q_SIGNALS:
     void thumbnailRequested(const manga::domain::PageId& pageId, bool force);
 
 private:
-    void updateShimmerTimer();
-
     PageListModel* m_model{nullptr};            // owned by this
     PageThumbnailDelegate* m_delegate{nullptr}; // owned by view
     QListView* m_view{nullptr};

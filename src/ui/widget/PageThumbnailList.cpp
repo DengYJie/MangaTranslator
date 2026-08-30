@@ -75,50 +75,35 @@ void PageThumbnailList::requestVisibleThumbnails() {
     int lastRow = m_view->indexAt(viewportRect.bottomLeft()).row();
 
     if (firstRow < 0) {
-        firstRow = 0;
-        lastRow = m_model->rowCount() - 1; // if layout not done, maybe ask all? or just return.
+        return;
     }
 
-    if (lastRow < 0)
+    if (lastRow < 0) {
         lastRow = m_model->rowCount() - 1;
+    }
 
     firstRow = std::max(0, firstRow - 2);
     lastRow = std::min(m_model->rowCount() - 1, lastRow + 2);
 
-    qDebug() << "requestVisibleThumbnails: firstRow=" << firstRow << " lastRow=" << lastRow
-             << " rowCount=" << m_model->rowCount();
-
     bool hasLoading = false;
     for (int i = firstRow; i <= lastRow; ++i) {
         auto status = static_cast<ThumbnailStatus>(m_model->index(i).data(PageListModel::ThumbnailStatusRole).toInt());
-        if (status == ThumbnailStatus::NotLoaded) {
-            if (auto pageId = m_model->pageIdAt(i)) {
-                qDebug() << "emitting requested for row" << i;
-                m_model->setThumbnailStatus(*pageId, ThumbnailStatus::Loading);
-                emit thumbnailRequested(*pageId, false);
-                hasLoading = true;
-            }
+        auto pageIdOpt = m_model->pageIdAt(i);
+        if (!pageIdOpt)
+            continue;
+
+        const auto& pageId = *pageIdOpt;
+        bool evicted = (status == ThumbnailStatus::Ready && !thumbnail(pageId));
+
+        if (status == ThumbnailStatus::NotLoaded || evicted) {
+            m_model->setThumbnailStatus(pageId, ThumbnailStatus::Loading);
+            emit thumbnailRequested(pageId, false);
+            hasLoading = true;
         } else if (status == ThumbnailStatus::Loading) {
             hasLoading = true;
         }
     }
 
-    if (hasLoading && !m_shimmerTimer->isActive()) {
-        m_shimmerTimer->start();
-    }
-
-    updateShimmerTimer();
-}
-
-void PageThumbnailList::updateShimmerTimer() {
-    bool hasLoading = false;
-    for (int i = 0; i < m_model->rowCount(); ++i) {
-        if (m_model->index(i).data(PageListModel::ThumbnailStatusRole).toInt() ==
-            static_cast<int>(ThumbnailStatus::Loading)) {
-            hasLoading = true;
-            break;
-        }
-    }
     if (hasLoading && !m_shimmerTimer->isActive()) {
         m_shimmerTimer->start();
     } else if (!hasLoading && m_shimmerTimer->isActive()) {
@@ -131,12 +116,11 @@ void PageThumbnailList::insertThumbnail(const domain::PageId& pageId, const QIma
     cost = std::max(1, cost);
     m_thumbnailCache.insert(QString::fromStdString(pageId.toString()), new QPixmap(QPixmap::fromImage(image)), cost);
     m_model->setThumbnailStatus(pageId, ThumbnailStatus::Ready);
-    updateShimmerTimer();
+    // requestVisibleThumbnails() will be called on paintEvent triggered by dataChanged
 }
 
 void PageThumbnailList::markThumbnailFailed(const domain::PageId& pageId, const QString& safeMessage) {
     m_model->setThumbnailStatus(pageId, ThumbnailStatus::Failed, safeMessage);
-    updateShimmerTimer();
 }
 
 void PageThumbnailList::resetLoadingThumbnails() {
@@ -148,7 +132,7 @@ void PageThumbnailList::resetLoadingThumbnails() {
             }
         }
     }
-    updateShimmerTimer();
+    requestVisibleThumbnails();
 }
 
 const QPixmap* PageThumbnailList::thumbnail(const domain::PageId& pageId) const {
