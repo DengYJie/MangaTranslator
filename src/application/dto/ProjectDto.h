@@ -2,6 +2,7 @@
 
 #include "domain/model/ComicProject.h"
 
+#include <QMetaType>
 #include <QString>
 #include <QVector>
 

@@ -7,6 +7,9 @@ class IAppSettingsStore;
 class IProjectRepository;
 class IRecentProjectsStore;
 class OperationRegistry;
+class IComicImporter;
+class IPageImageLoader;
+class IThumbnailStore;
 } // namespace manga::application
 
 namespace manga::data {
@@ -25,6 +28,12 @@ public:
     ApplicationContext(std::unique_ptr<application::IProjectRepository> projectRepository,
                        std::unique_ptr<application::IRecentProjectsStore> recentProjectsStore,
                        std::unique_ptr<application::IAppSettingsStore> appSettingsStore);
+    ApplicationContext(std::unique_ptr<application::IProjectRepository> projectRepository,
+                       std::unique_ptr<application::IRecentProjectsStore> recentProjectsStore,
+                       std::unique_ptr<application::IAppSettingsStore> appSettingsStore,
+                       std::unique_ptr<application::IThumbnailStore> thumbnailStore,
+                       std::unique_ptr<application::IPageImageLoader> pageImageLoader,
+                       std::unique_ptr<application::IComicImporter> comicImporter);
     ~ApplicationContext();
 
     ApplicationContext(const ApplicationContext&) = delete;
@@ -42,6 +51,15 @@ public:
     [[nodiscard]] application::OperationRegistry* operationRegistry() const {
         return m_operationRegistry.get();
     }
+    [[nodiscard]] application::IThumbnailStore* thumbnailStore() const {
+        return m_thumbnailStore.get();
+    }
+    [[nodiscard]] application::IPageImageLoader* pageImageLoader() const {
+        return m_pageImageLoader.get();
+    }
+    [[nodiscard]] application::IComicImporter* comicImporter() const {
+        return m_comicImporter.get();
+    }
 
     /// Deterministic reverse-order teardown entry point. Idempotent.
     void shutdown();
@@ -55,6 +73,9 @@ private:
     std::unique_ptr<application::IRecentProjectsStore> m_recentProjectsStore;
     std::unique_ptr<application::IAppSettingsStore> m_appSettingsStore;
     std::unique_ptr<application::OperationRegistry> m_operationRegistry;
+    std::unique_ptr<application::IThumbnailStore> m_thumbnailStore;
+    std::unique_ptr<application::IPageImageLoader> m_pageImageLoader;
+    std::unique_ptr<application::IComicImporter> m_comicImporter;
     bool m_shutdown{false};
 };
 
