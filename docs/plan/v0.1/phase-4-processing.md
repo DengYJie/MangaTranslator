@@ -408,7 +408,7 @@ public:
 ```
 
 - Port 位于 `application/ports`，Windows 实现在 `network/credentials`，测试使用 `FakeCredentialStore`。接口同步是刻意设计：Credential Manager 是短小本地调用，但 Translator 只能在网络线程调用，GUI/ViewModel 不直接读取 secret。
-- `hasApiKey()` 只返回配置状态，不读取或复制 CredentialBlob。P5 设置页通过 `QueryProviderCredentialStatusUseCase` 展示状态，通过 Configure/Clear UseCase 写入或删除；ViewModel 不持有 `SecretBytes`，除提交输入所需的最短生命周期外不保留明文。
+- `hasApiKey()` 只返回配置状态，不读取或复制 CredentialBlob。P5 设置页通过 `CheckCredentialStatusUseCase` 展示状态，通过 Set/Clear UseCase 写入或删除；ViewModel 不持有 `SecretBytes`，除提交输入所需的最短生命周期外不保留明文。
 - `providerId` 先按 Provider 配置规则校验；TargetName 固定为 `MangaTranslator/Credential/<providerId>/ApiKey`，Type 固定 `CRED_TYPE_GENERIC`，UserName 固定 `ApiKey`。
 - Windows 没有 `CRED_PERSIST_CURRENT_USER` 常量。V0.1 使用 `CRED_PERSIST_LOCAL_MACHINE`，表示该用户在本机后续登录会话仍可读取；不使用 Enterprise roaming。
 - 写入调用 `CredWriteW(..., 0)`，同 TargetName 更新为替换；读取使用 `CredReadW`，删除使用 `CredDeleteW`，链接 `Advapi32`。每次成功 `CredReadW` 必须用 RAII 配对 `CredFree`。

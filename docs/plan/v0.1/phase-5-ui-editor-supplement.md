@@ -28,6 +28,16 @@ ForgeAI 可作为 Navigation、MVVM 和响应式布局的结构参考，但 Mang
 
 三套概念都需包含 Light/Dark、单选、多选、加载、错误和窄窗口状态。评审记录每套方案保留与拒绝理由，由产品负责人选定一个方向后才能落生产 UI；不得在实现中拼接三套方案。
 
+### 视觉选择结论（2026-08-30，产品负责人）
+
+评审基于 `docs/ui/drafts/` 现有草稿与结构对比完成，未另行制作高保真概念图。选定方案一“画布优先，Inspector 为稳定右栏”：
+
+- 方案一（保留）：直接复用既定三栏、响应式抽屉和单一 `EditorViewModel`；Inspector 与画布 Region 选择的同步关系常驻可见；状态分支最少。
+- 方案二（拒绝）：上下文浮层/抽屉 Inspector 在正常宽度引入额外显隐状态，与窄宽抽屉模式职责重叠；Inspector 与 Region 选择的同步可见性不稳定。
+- 方案三（拒绝）：校对优先双栏把文本列表抬升为主对象，偏离 §1.1 的 Hero Surface 定位，把编辑器推向任务面板集合。
+
+实现不得拼接三套方案；最终实现与方案一的偏差在 P5 视觉验收证据中说明。
+
 ## 2. 依赖与所有权
 
 ```text
@@ -260,17 +270,17 @@ Inspector 完全由 `selectedRegionIds` 驱动：
 2. **Single**：原文、人工译文、AI candidates、清除状态和完整 `TextLayout`。Candidates 放入 `fluent::layout::Expander`，采用候选产生一条命令。
 3. **Multi**：显示选中数量和属性交集；仅允许批量字体、字重、字号、对齐、颜色、清除和删除。值不一致显示 mixed，不擅自选取第一个 Region 的值。
 
-用户编辑的译文进入 `manualText`。批量 OCR/翻译采用遇到 manual override 默认跳过并汇总“已保留 N 项人工修改”；只有显式确认替换才能覆盖。
+用户编辑的译文进入 `TranslationEntry::manualText`。批量 OCR/翻译采用遇到 manual override 默认跳过并汇总“已保留 N 项人工修改”；只有显式确认替换才能覆盖。
 
 ## 9. 凭据与设置
 
-设置页只使用三条 Application 用例：
+设置页只使用三条 Application 用例（同步返回 `Result`）：
 
-- `QueryProviderCredentialStatusUseCase(providerId) -> Configured/Missing/Unavailable`
-- `ConfigureProviderCredentialUseCase(providerId, SecretBytes)`
-- `ClearProviderCredentialUseCase(providerId)`
+- `CheckCredentialStatusUseCase(providerId) -> CredentialState{Configured, Missing, Unavailable}`
+- `SetCredentialUseCase(providerId, SecretBytes)`
+- `ClearCredentialUseCase(providerId)`
 
-状态查询落到 `ICredentialStore::hasApiKey()`，不得 read-then-discard。输入控件不提供回显现有 key；已配置时只显示状态和“替换/删除”。提交成功后立即清空编辑缓冲。Provider endpoint、model name 等非 secret 设置通过 `IApplicationSettingsStore` 保存；API Key 永不进入 QSettings。
+状态查询落到 `ICredentialStore::hasApiKey()`，不得 read-then-discard。输入控件不提供回显现有 key；已配置时只显示状态和“替换/删除”。提交成功后立即清空编辑缓冲。Provider endpoint、model name 等非 secret 设置通过 `IAppSettingsStore` 保存；API Key 永不进入 QSettings。
 
 ## 10. RecoveryAction 到 UI
 
@@ -322,7 +332,7 @@ Inspector 完全由 `selectedRegionIds` 驱动：
 - Light/Dark × 正常/窄/扁平窗口。
 - Empty/Loading/Single/Multi/Error/Overflow/ModelMissing。
 - 100%、200% 高 DPI 与 Reduce Motion。
-- 三套概念的比较图、选择结论、最终实现截图和偏差说明。
+- §1.2 的概念对比与选择结论、最终实现截图和偏差说明。
 
 ## 14. 明确不在 P5
 

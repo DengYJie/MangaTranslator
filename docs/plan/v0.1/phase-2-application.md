@@ -478,10 +478,10 @@ export/
 thumbnail/
   LoadOrGenerateThumbnailUseCase
 
-settings/
-  QueryProviderCredentialStatusUseCase
-  ConfigureProviderCredentialUseCase
-  ClearProviderCredentialUseCase
+credential/
+  CheckCredentialStatusUseCase
+  SetCredentialUseCase
+  ClearCredentialUseCase
 ```
 
 - 不为小函数造 UseCase，也不把多阶段流水线塞进 ViewModel。
