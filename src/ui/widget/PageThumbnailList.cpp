@@ -79,7 +79,8 @@ void PageThumbnailList::requestVisibleThumbnails() {
     }
 
     if (lastRow < 0) {
-        lastRow = m_model->rowCount() - 1;
+        int visibleCapacity = viewportRect.height() / 88 + 1;
+        lastRow = firstRow + visibleCapacity;
     }
 
     firstRow = std::max(0, firstRow - 2);
