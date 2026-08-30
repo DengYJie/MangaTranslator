@@ -144,6 +144,11 @@ public:
     /// Adds a region to a specific page. Validates project-wide RegionId uniqueness.
     [[nodiscard]] std::expected<void, ProjectEditError> addRegionToPage(const PageId& pageId, TextRegion region);
 
+    /// Inserts a region at a specific order position on a page.
+    /// Checks project-wide RegionId uniqueness, then inserts atomically, then marks dirty once.
+    [[nodiscard]] std::expected<void, ProjectEditError>
+    insertRegionOnPage(const PageId& pageId, TextRegion region, int orderIndex);
+
     /// Removes a region from a specific page.
     [[nodiscard]] std::expected<void, ProjectEditError> removeRegionFromPage(const PageId& pageId,
                                                                              const RegionId& regionId);

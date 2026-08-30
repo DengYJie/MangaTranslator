@@ -9,4 +9,10 @@ private slots:
     void testSuccessfulDeleteRegion();
     void testMoveAndResizeRegion();
     void testMissingRegionRejected();
+    void testInsertRegionAtExactOrder();
+    void testInsertRegionRejectsInvalidInput();
+    void testRemoveRegionReturnsFullRegionAndOrder();
+    void testRemoveRegionNotFound();
+    void testApplyRegionSnapshotsSuccess();
+    void testApplyRegionSnapshotsBatchValidationFailureModifiesNothing();
 };

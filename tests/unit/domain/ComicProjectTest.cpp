@@ -155,3 +155,61 @@ void ComicProjectTest::testApplyClearChangeOnPageRejectsUnknownIds() {
     QCOMPARE(missingRegion.error().code, ProjectErrorCode::EditNotFound);
     QVERIFY(!project.isDirty());
 }
+
+void ComicProjectTest::testInsertRegionOnPageSuccessAndRevision() {
+    ComicProject project("Test");
+    const PageId pageId = PageId::generate();
+    QVERIFY(project.addPage(ComicPage(pageId, "assets/original/page.png", {.width = 1000, .height = 1000})));
+    const RegionId r1 = RegionId::generate();
+    QVERIFY(project.addRegionToPage(pageId, makeRegion(r1)).has_value());
+    project.markClean();
+    const auto revBefore = project.revision();
+
+    const RegionId r2 = RegionId::generate();
+    TextRegion newRegion(r2, {.x = 200.0, .y = 200.0, .width = 50.0, .height = 50.0});
+    const auto result = project.insertRegionOnPage(pageId, std::move(newRegion), 0);
+    QVERIFY(result.has_value());
+    QVERIFY(project.isDirty());
+    QCOMPARE(project.revision(), revBefore + 1);
+
+    const auto* page = project.findPage(pageId);
+    QCOMPARE(page->regions().size(), size_t{2});
+    QCOMPARE(page->regions()[0].id(), r2);
+    QCOMPARE(page->regions()[1].id(), r1);
+}
+
+void ComicProjectTest::testInsertRegionOnPageDuplicateIdRejected() {
+    ComicProject project("Test");
+    const PageId page1Id = PageId::generate();
+    const PageId page2Id = PageId::generate();
+    QVERIFY(project.addPage(ComicPage(page1Id, "assets/original/page1.png", {.width = 1000, .height = 1000})));
+    QVERIFY(project.addPage(ComicPage(page2Id, "assets/original/page2.png", {.width = 1000, .height = 1000})));
+    const RegionId sharedId = RegionId::generate();
+    QVERIFY(project.addRegionToPage(page1Id, makeRegion(sharedId)).has_value());
+    project.markClean();
+    const auto revBefore = project.revision();
+
+    TextRegion duplicate(sharedId, {.x = 200.0, .y = 200.0, .width = 50.0, .height = 50.0});
+    const auto result = project.insertRegionOnPage(page2Id, std::move(duplicate), 0);
+    QVERIFY(!result.has_value());
+    QCOMPARE(result.error().code, ProjectErrorCode::DuplicateId);
+    QVERIFY(!project.isDirty());
+    QCOMPARE(project.revision(), revBefore);
+    QCOMPARE(project.findPage(page2Id)->regions().size(), size_t{0});
+}
+
+void ComicProjectTest::testInsertRegionOnPageInvalidInputLeavesProjectUnmodified() {
+    ComicProject project("Test");
+    const PageId pageId = PageId::generate();
+    QVERIFY(project.addPage(ComicPage(pageId, "assets/original/page.png", {.width = 1000, .height = 1000})));
+    project.markClean();
+    const auto revBefore = project.revision();
+
+    // Out-of-range order index
+    TextRegion badOrder(RegionId::generate(), {.x = 10.0, .y = 10.0, .width = 50.0, .height = 50.0});
+    const auto result = project.insertRegionOnPage(pageId, std::move(badOrder), 99);
+    QVERIFY(!result.has_value());
+    QVERIFY(!project.isDirty());
+    QCOMPARE(project.revision(), revBefore);
+    QCOMPARE(project.findPage(pageId)->regions().size(), size_t{0});
+}

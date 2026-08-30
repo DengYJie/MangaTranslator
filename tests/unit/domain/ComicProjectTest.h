@@ -13,4 +13,7 @@ private slots:
     void testMarkCleanRejectsStaleSaveRevision();
     void testApplyClearChangeOnPageSuccess();
     void testApplyClearChangeOnPageRejectsUnknownIds();
+    void testInsertRegionOnPageSuccessAndRevision();
+    void testInsertRegionOnPageDuplicateIdRejected();
+    void testInsertRegionOnPageInvalidInputLeavesProjectUnmodified();
 };

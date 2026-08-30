@@ -109,4 +109,90 @@ Result<void> ReorderRegionUseCase::execute(const ReorderRegionRequest& request) 
     return {};
 }
 
+Result<void> InsertRegionUseCase::execute(const InsertRegionRequest& request) {
+    if (m_project == nullptr) {
+        return std::unexpected(regionError(ErrorCategory::Internal, "internal.null_project", "Project is unavailable"));
+    }
+    const auto page = findPage(m_project, request.pageId);
+    if (!page) {
+        return std::unexpected(page.error());
+    }
+    if (!request.region.geometry().isValid() || !request.region.geometry().isWithinBounds((*page)->imageSize())) {
+        return std::unexpected(
+            regionError(ErrorCategory::Input, "input.invalid_geometry", "Region geometry is outside the page"));
+    }
+    const int regionCount = static_cast<int>((*page)->regions().size());
+    if (request.orderIndex < 0 || request.orderIndex > regionCount) {
+        return std::unexpected(
+            regionError(ErrorCategory::Input, "input.invalid_order", "Insert order index is out of range"));
+    }
+    auto result = m_project->insertRegionOnPage(request.pageId, request.region, request.orderIndex);
+    if (!result) {
+        return std::unexpected(
+            regionError(ErrorCategory::Input, "input.region_rejected", "Region could not be inserted"));
+    }
+    return {};
+}
+
+Result<RemovedRegion> RemoveRegionUseCase::execute(const RemoveRegionRequest& request) {
+    if (m_project == nullptr) {
+        return std::unexpected(regionError(ErrorCategory::Internal, "internal.null_project", "Project is unavailable"));
+    }
+    const auto page = findPage(m_project, request.pageId);
+    if (!page) {
+        return std::unexpected(page.error());
+    }
+    const auto* existing = (*page)->findRegion(request.regionId);
+    if (existing == nullptr) {
+        return std::unexpected(regionError(ErrorCategory::Input, "input.region_not_found", "Region was not found"));
+    }
+    RemovedRegion removed{.region = *existing, .orderIndex = existing->orderIndex()};
+    auto result = m_project->removeRegionFromPage(request.pageId, request.regionId);
+    if (!result) {
+        return std::unexpected(
+            regionError(ErrorCategory::Input, "input.region_rejected", "Region could not be removed"));
+    }
+    return removed;
+}
+
+Result<void> ApplyRegionSnapshotsUseCase::execute(const ApplyRegionSnapshotsRequest& request) {
+    if (m_project == nullptr) {
+        return std::unexpected(regionError(ErrorCategory::Internal, "internal.null_project", "Project is unavailable"));
+    }
+    const auto page = findPage(m_project, request.pageId);
+    if (!page) {
+        return std::unexpected(page.error());
+    }
+
+    // Validate ALL edits before applying any
+    for (const auto& edit : request.edits) {
+        const auto* region = (*page)->findRegion(edit.regionId);
+        if (region == nullptr) {
+            return std::unexpected(regionError(
+                ErrorCategory::Internal, "internal.undo_invariant_broken", "Snapshot references a missing region"));
+        }
+        if (edit.geometry.has_value()) {
+            if (!edit.geometry->isValid() || !edit.geometry->isWithinBounds((*page)->imageSize())) {
+                return std::unexpected(regionError(
+                    ErrorCategory::Internal, "internal.undo_invariant_broken", "Snapshot contains invalid geometry"));
+            }
+        }
+        if (edit.layout.has_value() && !edit.layout->isValid()) {
+            return std::unexpected(regionError(
+                ErrorCategory::Internal, "internal.undo_invariant_broken", "Snapshot contains invalid layout"));
+        }
+    }
+
+    if (request.edits.empty()) {
+        return {};
+    }
+
+    auto result = m_project->applyPageRegionEdits(request.pageId, request.edits);
+    if (!result) {
+        return std::unexpected(
+            regionError(ErrorCategory::Internal, "internal.undo_invariant_broken", "Snapshot batch edit was rejected"));
+    }
+    return {};
+}
+
 } // namespace manga::application

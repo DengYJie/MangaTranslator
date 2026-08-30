@@ -31,6 +31,48 @@ bool ComicPage::addRegion(TextRegion region) {
     return true;
 }
 
+std::expected<void, ProjectEditError> ComicPage::insertRegion(TextRegion region, int orderIndex) {
+    if (!region.isValid()) {
+        return std::unexpected(ProjectEditError{.code = ProjectErrorCode::EditGeometryRejected,
+                                                .message = "Region geometry is invalid",
+                                                .entityId = region.id().toString()});
+    }
+    if (m_imageSize.isValid() && !region.geometry().isWithinBounds(m_imageSize)) {
+        return std::unexpected(ProjectEditError{.code = ProjectErrorCode::OutOfBoundsGeometry,
+                                                .message = "Region geometry is outside the page bounds",
+                                                .entityId = region.id().toString()});
+    }
+    if (hasRegion(region.id())) {
+        return std::unexpected(ProjectEditError{.code = ProjectErrorCode::DuplicateId,
+                                                .message = "Region ID already exists on this page",
+                                                .entityId = region.id().toString()});
+    }
+    const int currentSize = static_cast<int>(m_regions.size());
+    if (orderIndex < 0 || orderIndex > currentSize) {
+        return std::unexpected(ProjectEditError{.code = ProjectErrorCode::EditOrderRejected,
+                                                .message = "Insert order index is out of range",
+                                                .entityId = region.id().toString()});
+    }
+
+    // Build the new region list on a temporary vector, then swap once
+    std::vector<TextRegion> newRegions;
+    newRegions.reserve(static_cast<size_t>(currentSize + 1));
+    for (int i = 0; i < orderIndex; ++i) {
+        newRegions.push_back(m_regions[static_cast<size_t>(i)]);
+    }
+    region.setOrderIndex(orderIndex);
+    newRegions.push_back(std::move(region));
+    for (int i = orderIndex; i < currentSize; ++i) {
+        newRegions.push_back(m_regions[static_cast<size_t>(i)]);
+    }
+    // Re-normalize order indices to ensure contiguity
+    for (size_t i = 0; i < newRegions.size(); ++i) {
+        newRegions[i].setOrderIndex(static_cast<int>(i));
+    }
+    m_regions = std::move(newRegions);
+    return {};
+}
+
 bool ComicPage::loadRegion(TextRegion region) {
     if (!region.isValid()) {
         return false;

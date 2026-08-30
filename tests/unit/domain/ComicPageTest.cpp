@@ -217,3 +217,125 @@ void ComicPageTest::testImageReplacementInvariant() {
     QVERIFY(!page.canReplaceOriginalImage({.width = 1000, .height = 1600}));
     QVERIFY(!page.canReplaceOriginalImage({.width = 800, .height = 1500}));
 }
+
+void ComicPageTest::testInsertRegionAtBeginning() {
+    ComicPage page(PageId::generate(), "assets/original/page_0001.png", {.width = 1000, .height = 1500}, 0);
+    const RegionId existingId = RegionId::generate();
+    QVERIFY(page.addRegion(TextRegion(existingId, {.x = 200.0, .y = 200.0, .width = 100.0, .height = 100.0})));
+
+    const RegionId newId = RegionId::generate();
+    TextRegion newRegion(newId, {.x = 10.0, .y = 10.0, .width = 50.0, .height = 50.0});
+    const auto result = page.insertRegion(std::move(newRegion), 0);
+    QVERIFY(result.has_value());
+    QCOMPARE(page.regions().size(), size_t{2});
+    QCOMPARE(page.regions()[0].id(), newId);
+    QCOMPARE(page.regions()[0].orderIndex(), 0);
+    QCOMPARE(page.regions()[1].id(), existingId);
+    QCOMPARE(page.regions()[1].orderIndex(), 1);
+}
+
+void ComicPageTest::testInsertRegionInMiddle() {
+    ComicPage page(PageId::generate(), "assets/original/page_0001.png", {.width = 1000, .height = 1500}, 0);
+    const RegionId r1 = RegionId::generate();
+    const RegionId r3 = RegionId::generate();
+    QVERIFY(page.addRegion(TextRegion(r1, {.x = 10.0, .y = 10.0, .width = 50.0, .height = 50.0})));
+    QVERIFY(page.addRegion(TextRegion(r3, {.x = 200.0, .y = 200.0, .width = 50.0, .height = 50.0})));
+
+    const RegionId r2 = RegionId::generate();
+    TextRegion middle(r2, {.x = 100.0, .y = 100.0, .width = 50.0, .height = 50.0});
+    const auto result = page.insertRegion(std::move(middle), 1);
+    QVERIFY(result.has_value());
+    QCOMPARE(page.regions().size(), size_t{3});
+    QCOMPARE(page.regions()[0].id(), r1);
+    QCOMPARE(page.regions()[1].id(), r2);
+    QCOMPARE(page.regions()[2].id(), r3);
+}
+
+void ComicPageTest::testInsertRegionAtEnd() {
+    ComicPage page(PageId::generate(), "assets/original/page_0001.png", {.width = 1000, .height = 1500}, 0);
+    const RegionId r1 = RegionId::generate();
+    QVERIFY(page.addRegion(TextRegion(r1, {.x = 10.0, .y = 10.0, .width = 50.0, .height = 50.0})));
+
+    const RegionId r2 = RegionId::generate();
+    TextRegion endRegion(r2, {.x = 200.0, .y = 200.0, .width = 50.0, .height = 50.0});
+    const auto result = page.insertRegion(std::move(endRegion), 1);
+    QVERIFY(result.has_value());
+    QCOMPARE(page.regions().size(), size_t{2});
+    QCOMPARE(page.regions()[1].id(), r2);
+    QCOMPARE(page.regions()[1].orderIndex(), 1);
+}
+
+void ComicPageTest::testInsertRegionDuplicateIdLeavesPageUnmodified() {
+    ComicPage page(PageId::generate(), "assets/original/page_0001.png", {.width = 1000, .height = 1500}, 0);
+    const RegionId r1 = RegionId::generate();
+    QVERIFY(page.addRegion(TextRegion(r1, {.x = 10.0, .y = 10.0, .width = 50.0, .height = 50.0})));
+    const ComicPage snapshot = page;
+
+    TextRegion duplicate(r1, {.x = 200.0, .y = 200.0, .width = 50.0, .height = 50.0});
+    const auto result = page.insertRegion(std::move(duplicate), 0);
+    QVERIFY(!result.has_value());
+    QCOMPARE(result.error().code, ProjectErrorCode::DuplicateId);
+    QVERIFY(page == snapshot);
+}
+
+void ComicPageTest::testInsertRegionOutOfRangeOrderLeavesPageUnmodified() {
+    ComicPage page(PageId::generate(), "assets/original/page_0001.png", {.width = 1000, .height = 1500}, 0);
+    const RegionId r1 = RegionId::generate();
+    QVERIFY(page.addRegion(TextRegion(r1, {.x = 10.0, .y = 10.0, .width = 50.0, .height = 50.0})));
+    const ComicPage snapshot = page;
+
+    // orderIndex = 5 when only 1 region exists (valid range is 0..1)
+    TextRegion badOrder(RegionId::generate(), {.x = 200.0, .y = 200.0, .width = 50.0, .height = 50.0});
+    const auto result = page.insertRegion(std::move(badOrder), 5);
+    QVERIFY(!result.has_value());
+    QCOMPARE(result.error().code, ProjectErrorCode::EditOrderRejected);
+    QVERIFY(page == snapshot);
+
+    // Negative order index
+    TextRegion negOrder(RegionId::generate(), {.x = 200.0, .y = 200.0, .width = 50.0, .height = 50.0});
+    const auto negResult = page.insertRegion(std::move(negOrder), -1);
+    QVERIFY(!negResult.has_value());
+    QCOMPARE(negResult.error().code, ProjectErrorCode::EditOrderRejected);
+    QVERIFY(page == snapshot);
+}
+
+void ComicPageTest::testInsertRegionInvalidGeometryLeavesPageUnmodified() {
+    ComicPage page(PageId::generate(), "assets/original/page_0001.png", {.width = 1000, .height = 1500}, 0);
+    const ComicPage snapshot = page;
+
+    // Geometry too small (< 2x2)
+    TextRegion tooSmall(RegionId::generate(), {.x = 10.0, .y = 10.0, .width = 1.0, .height = 1.0});
+    const auto result = page.insertRegion(std::move(tooSmall), 0);
+    QVERIFY(!result.has_value());
+    QCOMPARE(result.error().code, ProjectErrorCode::EditGeometryRejected);
+    QVERIFY(page == snapshot);
+
+    // Out of bounds
+    TextRegion oob(RegionId::generate(), {.x = 950.0, .y = 1400.0, .width = 100.0, .height = 200.0});
+    const auto oobResult = page.insertRegion(std::move(oob), 0);
+    QVERIFY(!oobResult.has_value());
+    QCOMPARE(oobResult.error().code, ProjectErrorCode::OutOfBoundsGeometry);
+    QVERIFY(page == snapshot);
+}
+
+void ComicPageTest::testInsertRegionMaintainsContiguousOrder() {
+    ComicPage page(PageId::generate(), "assets/original/page_0001.png", {.width = 1000, .height = 1500}, 0);
+    const RegionId r1 = RegionId::generate();
+    const RegionId r2 = RegionId::generate();
+    const RegionId r3 = RegionId::generate();
+    QVERIFY(page.addRegion(TextRegion(r1, {.x = 10.0, .y = 10.0, .width = 50.0, .height = 50.0})));
+    QVERIFY(page.addRegion(TextRegion(r2, {.x = 70.0, .y = 10.0, .width = 50.0, .height = 50.0})));
+    QVERIFY(page.addRegion(TextRegion(r3, {.x = 130.0, .y = 10.0, .width = 50.0, .height = 50.0})));
+
+    // Insert at position 1
+    const RegionId rNew = RegionId::generate();
+    TextRegion inserted(rNew, {.x = 200.0, .y = 200.0, .width = 50.0, .height = 50.0});
+    QVERIFY(page.insertRegion(std::move(inserted), 1).has_value());
+
+    // Verify contiguous 0..3
+    QCOMPARE(page.regions().size(), size_t{4});
+    for (size_t i = 0; i < page.regions().size(); ++i) {
+        QCOMPARE(page.regions()[i].orderIndex(), static_cast<int>(i));
+    }
+    QVERIFY(page.isValid());
+}

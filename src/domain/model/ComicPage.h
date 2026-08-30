@@ -5,6 +5,7 @@
 #include "domain/model/Uuid.h"
 #include "domain/validation/ValidationResult.h"
 
+#include <expected>
 #include <optional>
 #include <string>
 #include <vector>
@@ -81,6 +82,11 @@ public:
     /// Validates: unique ID, isValid(), strictly within image bounds.
     /// Automatically assigns contiguous orderIndex = regions.size().
     bool addRegion(TextRegion region);
+
+    /// Inserts a region at a specific order position atomically.
+    /// Validates geometry, uniqueness, and order range on a temporary copy before swapping.
+    /// On success the region list is contiguous 0..N-1 with no half-success state.
+    [[nodiscard]] std::expected<void, ProjectEditError> insertRegion(TextRegion region, int orderIndex);
 
     /// Removes a region by ID and re-normalizes orderIndex to contiguous 0..N-1.
     bool removeRegion(const RegionId& regionId);

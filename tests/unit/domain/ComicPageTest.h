@@ -18,4 +18,11 @@ private slots:
     void testSetRegionFlagsDontNeedUpdateCallback();
     void testNormalizeRegionOrder();
     void testImageReplacementInvariant();
+    void testInsertRegionAtBeginning();
+    void testInsertRegionInMiddle();
+    void testInsertRegionAtEnd();
+    void testInsertRegionDuplicateIdLeavesPageUnmodified();
+    void testInsertRegionOutOfRangeOrderLeavesPageUnmodified();
+    void testInsertRegionInvalidGeometryLeavesPageUnmodified();
+    void testInsertRegionMaintainsContiguousOrder();
 };

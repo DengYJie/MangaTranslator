@@ -97,6 +97,26 @@ std::expected<void, ProjectEditError> ComicProject::addRegionToPage(const PageId
     return {};
 }
 
+std::expected<void, ProjectEditError>
+ComicProject::insertRegionOnPage(const PageId& pageId, TextRegion region, int orderIndex) {
+    ComicPage* page = findPageMutable(pageId);
+    if (!page) {
+        return std::unexpected(ProjectEditError{
+            .code = ProjectErrorCode::EditNotFound, .message = "Page not found", .entityId = pageId.toString()});
+    }
+    if (hasRegionInAnyPage(region.id())) {
+        return std::unexpected(ProjectEditError{.code = ProjectErrorCode::DuplicateId,
+                                                .message = "RegionId already exists in the project",
+                                                .entityId = region.id().toString()});
+    }
+    auto result = page->insertRegion(std::move(region), orderIndex);
+    if (!result) {
+        return result;
+    }
+    markDirty();
+    return {};
+}
+
 std::expected<void, ProjectEditError> ComicProject::removeRegionFromPage(const PageId& pageId,
                                                                          const RegionId& regionId) {
     ComicPage* page = findPageMutable(pageId);
