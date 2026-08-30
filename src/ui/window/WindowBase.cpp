@@ -1,6 +1,6 @@
-#include "WindowBase.h"
+#include "ui/window/WindowBase.h"
 
-#include "TitleBar.h"
+#include "ui/window/TitleBar.h"
 
 #include <FluentQt/StatusInfo.h>
 #include <QColor>

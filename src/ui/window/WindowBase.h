@@ -106,10 +106,7 @@ protected:
 
 private:
     Q_DECLARE_PRIVATE(WindowBase)
-    const std
-
-        ::unique_ptr<WindowBasePrivate>
-            d_ptr;
+    const std::unique_ptr<WindowBasePrivate> d_ptr;
 };
 
 } // namespace manga::ui::window

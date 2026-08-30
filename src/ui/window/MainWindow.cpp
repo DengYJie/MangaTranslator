@@ -46,6 +46,9 @@ void MainWindow::setNavigationController(navigation::NavigationController* contr
 
     auto* backShortcut = new QShortcut(QKeySequence::Back, this);
     connect(backShortcut, &QShortcut::activated, m_controller, &navigation::NavigationController::goBack);
+
+    auto* forwardShortcut = new QShortcut(QKeySequence::Forward, this);
+    connect(forwardShortcut, &QShortcut::activated, m_controller, &navigation::NavigationController::goForward);
 }
 
 void MainWindow::restoreWindowGeometry() {

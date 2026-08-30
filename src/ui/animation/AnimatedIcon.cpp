@@ -1,4 +1,4 @@
-#include "AnimatedIcon.h"
+#include "ui/animation/AnimatedIcon.h"
 
 #include <FluentQt/Design.h>
 #include <QEvent>

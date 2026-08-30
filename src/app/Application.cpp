@@ -67,7 +67,7 @@ int Application::run() {
     mainWindow->setNavigationController(controller);
 
     auto* homeViewModel = new ui::screen::home::HomeViewModel(
-        m_context->recentProjectsStore(), m_context->projectRepository(), m_context->operationRegistry());
+        m_context->recentProjectsStore(), m_context->projectRepository(), m_context->operationRegistry(), mainWindow);
     auto* homePage = new ui::screen::home::HomePage(homeViewModel);
 
     ui::navigation::NavigationItemDescriptor homeItem;

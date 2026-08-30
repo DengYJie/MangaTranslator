@@ -73,12 +73,28 @@ private slots:
     void backAndForwardRestoreRoutes() {
         FakePresenter presenter;
         manga::ui::navigation::NavigationController controller(&presenter);
+        QSignalSpy forwardSpy(&controller, &manga::ui::navigation::NavigationController::canGoForwardChanged);
+        controller.navigate(QStringLiteral("home"));
+        controller.navigate(QStringLiteral("settings.general"));
+        QCOMPARE(forwardSpy.size(), 0);
+        controller.goBack();
+        QCOMPARE(presenter.presented.last(), QStringLiteral("home"));
+        QCOMPARE(forwardSpy.size(), 1);
+        controller.goForward();
+        QCOMPARE(presenter.presented.last(), QStringLiteral("settings.general"));
+        QCOMPARE(forwardSpy.size(), 2);
+    }
+
+    void navigateAfterGoBackTruncatesForward() {
+        FakePresenter presenter;
+        presenter.knownRoutes.append(QStringLiteral("editor"));
+        manga::ui::navigation::NavigationController controller(&presenter);
         controller.navigate(QStringLiteral("home"));
         controller.navigate(QStringLiteral("settings.general"));
         controller.goBack();
-        QCOMPARE(presenter.presented.last(), QStringLiteral("home"));
-        controller.goForward();
-        QCOMPARE(presenter.presented.last(), QStringLiteral("settings.general"));
+        QVERIFY(controller.canGoForward());
+        controller.navigate(QStringLiteral("editor"));
+        QVERIFY(!controller.canGoForward());
     }
 
     void reentrantNavigateIsIgnored() {

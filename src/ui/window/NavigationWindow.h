@@ -1,10 +1,10 @@
 #pragma once
 
-#include "WindowBase.h"
 #include "ui/navigation/INavigationPresenter.h"
 #include "ui/navigation/INavigationRegistrar.h"
 #include "ui/navigation/NavigationMetrics.h"
 #include "ui/navigation/NavigationTypes.h"
+#include "ui/window/WindowBase.h"
 
 #include <QHash>
 #include <QPointer>

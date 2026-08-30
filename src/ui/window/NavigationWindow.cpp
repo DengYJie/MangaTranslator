@@ -86,8 +86,6 @@ void NavigationWindow::initNavigation() {
             this,
             [this](int index) {
                 const QString routeKey = m_indexToRouteMap.value(index);
-                qDebug().noquote() << "[NavigationWindow] contentHost currentIndexChanged index=" << index
-                                   << "mappedRoute=" << routeKey;
                 if (!routeKey.isEmpty()) {
                     if (auto* panel = activeNavigationPanel()) {
                         panel->setCurrentItem(routeKey);
@@ -123,7 +121,6 @@ bool NavigationWindow::registerSurface(const QString& surfaceId, navigation::Nav
     panel->setBackButtonVisible(false);
 
     connect(panel, &navigation::NavigationPanel::itemSelected, this, [this](const QString& routeKey) {
-        qDebug().noquote() << "[NavigationWindow] panel itemSelected -> navigationRequested:" << routeKey;
         Q_EMIT navigationRequested(routeKey);
     });
 
@@ -156,7 +153,6 @@ bool NavigationWindow::registerSurface(const QString& surfaceId, navigation::Nav
     });
 
     m_surfaces.insert(surfaceId, panel);
-    qDebug().noquote() << "[NavigationWindow] registered surface:" << surfaceId << "panel:" << panel;
     return true;
 }
 
@@ -193,8 +189,6 @@ bool NavigationWindow::registerRoute(const QString& routeKey, QWidget* page, con
     desc.contentIndex = index;
 
     m_routes.insert(routeKey, desc);
-    qDebug().noquote() << "[NavigationWindow] registerRoute SUCCESS key=" << routeKey << "surface=" << desc.surfaceId
-                       << "index=" << index << "widget=" << page;
     return true;
 }
 
@@ -276,7 +270,6 @@ bool NavigationWindow::setActiveNavigationSurface(const QString& surfaceId) {
     targetPanel->show();
     targetPanel->updateIndicatorVisuals(false);
 
-    qDebug().noquote() << "[NavigationWindow] activated surface:" << surfaceId << "panel:" << targetPanel.data();
     return true;
 }
 
@@ -388,10 +381,6 @@ bool NavigationWindow::presentRoute(const QString& routeKey, navigation::Navigat
                 break;
         }
         const bool animated = (direction != navigation::NavigationDirection::None);
-
-        qDebug().noquote() << "[NavigationWindow] present route=" << routeKey << "surface=" << desc.surfaceId
-                           << "fromIndex=" << currentIndex << "toIndex=" << desc.contentIndex
-                           << "direction=" << animDirection;
 
         contentHost->setCurrentIndex(desc.contentIndex, animDirection, animated);
     }

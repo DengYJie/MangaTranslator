@@ -1,5 +1,5 @@
 #pragma once
-#include "AnimatedVisualSource.h"
+#include "ui/animation/AnimatedVisualSource.h"
 
 #include <FluentQt/Foundation.h>
 #include <QWidget>

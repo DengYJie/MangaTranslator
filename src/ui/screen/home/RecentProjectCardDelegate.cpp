@@ -89,7 +89,7 @@ void RecentProjectCardDelegate::paint(QPainter* painter,
     painter->drawText(timeRect, Qt::AlignLeft | Qt::AlignVCenter, timeText);
 
     if (option.state.testFlag(QStyle::State_HasFocus)) {
-        // Two-layer keyboard focus ring per the Fluent focus contract.
+        // Single accent-outer keyboard focus ring; the inner layer is deferred to P5-D visual polish.
         painter->setBrush(Qt::NoBrush);
         painter->setPen(QPen(tokens.strokeFocusOuter, 2));
         painter->drawRoundedRect(cardRect.adjusted(-1, -1, 1, 1), kCardRadius + 1, kCardRadius + 1);

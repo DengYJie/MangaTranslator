@@ -1,8 +1,8 @@
-#include "TitleBar.h"
+#include "ui/window/TitleBar.h"
 
-#include "../animation/AnimatedBackVisualSource.h"
-#include "../animation/AnimatedGlobalNavVisualSource.h"
-#include "../animation/AnimatedIcon.h"
+#include "ui/animation/AnimatedBackVisualSource.h"
+#include "ui/animation/AnimatedGlobalNavVisualSource.h"
+#include "ui/animation/AnimatedIcon.h"
 
 #include <FluentQt/Design.h>
 #include <FluentQt/StatusInfo.h>
