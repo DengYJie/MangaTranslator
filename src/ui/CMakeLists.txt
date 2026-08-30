@@ -35,4 +35,5 @@ target_link_libraries(manga_ui
         Qt6::Gui
         Qt6::Widgets
         FluentQt::FluentQt
+        QWindowKit::Widgets
 )

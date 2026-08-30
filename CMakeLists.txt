@@ -43,6 +43,32 @@ if(NOT TARGET FluentQt::FluentQt)
     )
 endif()
 
+find_package(QWindowKit CONFIG QUIET)
+if(NOT TARGET QWindowKit::Widgets)
+    include(FetchContent)
+
+    set(QWINDOWKIT_BUILD_STATIC ON CACHE BOOL "" FORCE)
+    set(QWINDOWKIT_BUILD_WIDGETS ON CACHE BOOL "" FORCE)
+    set(QWINDOWKIT_BUILD_QUICK OFF CACHE BOOL "" FORCE)
+    set(QWINDOWKIT_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+    set(QWINDOWKIT_BUILD_DOCUMENTATIONS OFF CACHE BOOL "" FORCE)
+    set(QWINDOWKIT_INSTALL OFF CACHE BOOL "" FORCE)
+
+    FetchContent_Declare(qwindowkit
+        GIT_REPOSITORY https://github.com/stdware/qwindowkit.git
+        GIT_TAG 35e88f3655720ed0537c7dd1dde243bf4a70c94c # pre-1.5.0, same pin as ForgeAI
+        UPDATE_DISCONNECTED TRUE
+    )
+    FetchContent_MakeAvailable(qwindowkit)
+endif()
+
+if(NOT TARGET QWindowKit::Widgets)
+    message(FATAL_ERROR
+        "QWindowKit was not found. Set QWindowKit_DIR or CMAKE_PREFIX_PATH "
+        "to a QWindowKit installation."
+    )
+endif()
+
 add_library(manga_project_options INTERFACE)
 target_compile_options(manga_project_options INTERFACE
     "$<$<CXX_COMPILER_ID:MSVC>:/W4>"
