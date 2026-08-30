@@ -26,7 +26,9 @@ Do not create catch-all `manager`, `common`, `helper`, or `misc` modules. Name a
 - Put public declarations in `.h` and non-trivial implementation in `.cpp`. Avoid large inline implementations.
 - Prefer project namespaces over global symbols. Follow established namespace spelling once code exists.
 - Types use `PascalCase`; functions and variables use `camelCase`; private data members use `m_` prefix; constants use the established local convention.
-- Qt signals describe facts in past/present state (`stateChanged`, `progressChanged`); slots and intent methods use verbs (`openProject`, `cancelTranslation`).
+- Qt signals describe facts in past/present state (`stateChanged`, `progressChanged`); connected members and intent methods use verbs (`openProject`, `cancelTranslation`).
+- Use `Q_SIGNALS`, `Q_SLOTS`, and `Q_EMIT`, never the keyword-style aliases `signals`, `slots`, or `emit`. A typed
+  connection target stays an ordinary member unless a documented meta-object contract requires a slot.
 
 ## Qt boundaries
 

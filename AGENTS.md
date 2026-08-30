@@ -56,6 +56,11 @@ Follow `CODING.md` and the checked-in `.clang-format`. In brief: use UTF-8/LF, f
 identifiers and code comments, self-contained headers, explicit ownership, and the established C++/Qt naming rules.
 Format only files touched by the change; do not create unrelated formatting churn.
 
+Use Qt's non-keyword macros in C++: `Q_SIGNALS`, `Q_SLOTS`, and `Q_EMIT`. Do not write the keyword-style aliases
+`signals`, `slots`, or `emit`. A function connected through typed `connect()` remains an ordinary member function
+unless Qt meta-object invocation specifically requires a slot declaration. New targets should define
+`QT_NO_KEYWORDS`; existing targets may enable it only after their owned sources and tests have been migrated.
+
 Comments state non-obvious constraints and invariants only. Do not write narrative asides that reference the current
 task, fix, or history; persistence and similar rules belong in the owning code or docs, not in story-telling comments.
 Write comments as plain declarative sentences: no hyphens as sentence separators, no em dashes, and no decorative

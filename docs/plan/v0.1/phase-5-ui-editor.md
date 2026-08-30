@@ -17,6 +17,24 @@
 
 补充规格负责冻结依赖边界、状态生命周期、渲染缓存、Undo/Dirty、缩略图、凭据与错误恢复；本文件只维护实施清单和验收门槛。
 
+## 分段实施计划
+
+P5 按可独立构建、测试和评审的纵向里程碑顺序执行：
+
+1. [`phase-5-a-mvvm-shell-plan.md`](phase-5-a-mvvm-shell-plan.md)：MVVM 基础设施、组合根、应用外壳和 Home 项目中心。
+2. [`phase-5-b-editor-skeleton-plan.md`](phase-5-b-editor-skeleton-plan.md)：Editor/Import 路由、页面列表、惰性缩略图和原图画布。
+3. [`phase-5-c-region-inspector-plan.md`](phase-5-c-region-inspector-plan.md)：可编辑项目会话、Region 交互、Inspector、单一 Undo/Dirty/保存闭环。
+4. [`phase-5-d-processing-settings-acceptance-plan.md`](phase-5-d-processing-settings-acceptance-plan.md)：处理 proposal 与可撤销采用、全局任务条、可执行 Settings、错误恢复和 full-profile 视觉验收。
+
+依赖顺序固定为 `P5-A → P5-B → P5-C → P5-D`。后续里程碑可以修订前一里程碑暴露的窄接口，但不得复制状态或绕过前置 UseCase。具体所有权边界：
+
+- P5-B 交付只读 `ProjectSessionDescriptor` 投影；P5-C 修订 Home→Editor handoff，确保可编辑 `ComicProject` 聚合由当前 Editor 会话唯一持有。
+- P5-C 交付项目唯一 `QUndoStack` 和同步 prepared snapshot 命令接口；P5-D 的 OCR、翻译、清除和排版采用必须复用它。
+- P5-D Settings 只注册有 Port、Adapter、typed UseCase 和实际运行时消费方的分类；缺少能力边界的模型下载、连接测试、缓存清理等入口不显示。
+- P5-D 是 P5-A～P5-D 的统一视觉发布门；此前里程碑的截图或冒烟检查不能替代 final build 的 full-profile 证据。
+
+所有新增/触及 Qt C++ 使用 `Q_SIGNALS`、`Q_SLOTS`、`Q_EMIT`，不使用 `signals`、`slots`、`emit` 关键字别名；typed `connect()` 的普通接收成员不声明为 slot。
+
 ## TODO
 
 ### 开工前契约

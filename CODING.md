@@ -60,6 +60,12 @@ This document is the human-facing coding standard for MangaTranslator. Repositor
 ## Qt and FluentQt
 
 - Use typed signal/slot connections and context-bound lambdas.
+- Declare signal sections with `Q_SIGNALS`, declare meta-object slots with `Q_SLOTS`, and emit with `Q_EMIT`.
+  Do not use Qt's keyword-style aliases `signals`, `slots`, or `emit`.
+- A receiver used only by typed `connect()` is an ordinary member function. Use `Q_SLOTS` or `Q_SLOT` only when
+  string-based meta-object invocation, Designer auto-connection, or another documented Qt runtime contract needs it.
+- Define `QT_NO_KEYWORDS` for new Qt targets. Enable it on an existing target only after migrating that target's
+  production and test sources to the `Q_*` macros.
 - Access a `QObject` only from its owning thread. Widgets, ViewModels, scenes, and `QPixmap` stay on the GUI thread.
 - Guard delayed callbacks with receiver context, `QPointer`, generation IDs, or another explicit lifetime mechanism.
 - Use FluentQt public controls and semantic theme/color APIs. Do not add a custom `QStyle`, `QProxyStyle`, parallel

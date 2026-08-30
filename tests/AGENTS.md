@@ -30,6 +30,8 @@ Use the test framework and target naming established by CMake once present. Each
 - Keep unit tests independent of execution order and machine-specific absolute paths.
 - Compare floating-point/model geometry with documented tolerances, not arbitrary exact pixels.
 - GUI tests must pump the Qt event loop deliberately and use bounded waits; no unconditional sleeps.
+- Qt Test classes use `private Q_SLOTS:` for discovered test functions. Test doubles use `Q_SIGNALS` and `Q_EMIT`;
+  do not introduce the keyword-style aliases `signals`, `slots`, or `emit`.
 
 ## Visual validation
 
