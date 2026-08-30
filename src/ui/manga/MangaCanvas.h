@@ -76,6 +76,7 @@ protected:
     void wheelEvent(QWheelEvent* event) override;
     void keyPressEvent(QKeyEvent* event) override;
     void resizeEvent(QResizeEvent* event) override;
+    void showEvent(QShowEvent* event) override;
     void drawForeground(QPainter* painter, const QRectF& rect) override;
     void scrollContentsBy(int dx, int dy) override;
 

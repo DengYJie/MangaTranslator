@@ -6,6 +6,7 @@
 #include "ui/widget/PageListModel.h"
 #include "ui/widget/PageThumbnailList.h"
 
+#include <FluentQt/FluentQt.h>
 #include <QShortcut>
 #include <QSplitter>
 #include <QVBoxLayout>
@@ -49,13 +50,22 @@ EditorPage::EditorPage(EditorViewModel* viewModel, QWidget* parent) : base::Base
 
 void EditorPage::buildUi() {
     auto* layout = new QVBoxLayout(this);
-    layout->setContentsMargins(0, 0, 0, 0);
+    layout->setContentsMargins(8, 8, 8, 8);
+    layout->setSpacing(0);
 
     m_splitter = new QSplitter(Qt::Horizontal, this);
+    m_splitter->setHandleWidth(8);
     layout->addWidget(m_splitter);
 
-    m_pageList = new widget::PageThumbnailList(m_splitter);
-    m_splitter->addWidget(m_pageList);
+    auto* pagePaneCard = new fluent::layout::Card(m_splitter);
+    pagePaneCard->setObjectName(QStringLiteral("editorPagePaneCard"));
+    pagePaneCard->setAppearance(fluent::layout::Card::Layer);
+    auto* pagePaneLayout = new QVBoxLayout(pagePaneCard);
+    pagePaneLayout->setContentsMargins(0, 0, 0, 0);
+    pagePaneLayout->setSpacing(0);
+    m_pageList = new widget::PageThumbnailList(pagePaneCard);
+    pagePaneLayout->addWidget(m_pageList);
+    m_splitter->addWidget(pagePaneCard);
 
     m_canvas = new ui::manga::MangaCanvas(m_splitter);
     m_splitter->addWidget(m_canvas);
@@ -86,9 +96,10 @@ void EditorPage::render(const EditorState& state) {
     } else if (state.pages.isEmpty()) {
         m_lastPlaceholder = ui::manga::MangaCanvas::ContentState::NoPage;
         m_canvas->setContentState(m_lastPlaceholder, tr("项目中还没有页面"), tr("导入页面"));
-    } else if (state.notice && state.notice->retryable) {
+    } else if (state.notice) {
         m_lastPlaceholder = ui::manga::MangaCanvas::ContentState::Error;
-        m_canvas->setContentState(m_lastPlaceholder, state.notice->safeMessage, tr("重试加载"));
+        m_canvas->setContentState(
+            m_lastPlaceholder, state.notice->safeMessage, state.notice->retryable ? tr("重试加载") : QString());
     } else if (state.isPageLoading) {
         m_lastPlaceholder = ui::manga::MangaCanvas::ContentState::Loading;
         QString displayName;

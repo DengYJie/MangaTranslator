@@ -54,6 +54,7 @@ private:
     QLabel* m_subtitleLabel{nullptr};
     fluent::basicinput::Button* m_openButton{nullptr};
     fluent::basicinput::Button* m_importButton{nullptr};
+    fluent::basicinput::Button* m_emptyNewButton{nullptr};
     fluent::basicinput::Button* m_newProjectButton{nullptr};
     fluent::status_info::InfoBar* m_infoBar{nullptr};
     // Single reused retry action: InfoBar::setActionWidget detaches without deleting,
@@ -61,6 +62,7 @@ private:
     fluent::basicinput::Button* m_retryButton{nullptr};
     QString m_currentRetryPath;
     QBoxLayout* m_contentLayout{nullptr}; // direction flips with the width breakpoint
+    QBoxLayout* m_emptyContentLayout{nullptr};
     QWidget* m_mainArea{nullptr};
     QWidget* m_sideRail{nullptr};
     QStackedLayout* m_stack{nullptr};

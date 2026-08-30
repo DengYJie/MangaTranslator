@@ -1,4 +1,4 @@
-#include "app/Application.h"
+﻿#include "app/Application.h"
 
 #include "app/ApplicationContext.h"
 #include "application/ports/IAppSettingsStore.h"
@@ -112,11 +112,6 @@ int Application::run() {
         m_context->projectRepository(), m_context->comicImporter(), m_context->operationRegistry());
     auto* importPage = new ui::screen::import_::ImportPage(importViewModel);
 
-    ui::navigation::NavigationItemDescriptor importItem;
-    importItem.routeKey = QStringLiteral("import");
-    importItem.text = QCoreApplication::translate("Application", "导入漫画");
-    importItem.iconGlyph = QStringLiteral("\uE896");
-    mainWindow->addNavigationItem(importItem, QStringLiteral("main"));
     mainWindow->registerRoute(QStringLiteral("import"), importPage, QStringLiteral("main"));
 
     QObject::connect(importViewModel,

@@ -4,14 +4,34 @@
 
 #include <FluentQt/FluentQt.h>
 #include <QFileDialog>
+#include <QFrame>
+#include <QListView>
 #include <QMouseEvent>
 #include <QPainter>
+#include <QPalette>
 #include <QResizeEvent>
 #include <QScrollArea>
 #include <QStandardPaths>
 #include <QStyledItemDelegate>
 
 namespace manga::ui::screen::import_ {
+
+namespace {
+
+void makeScrollSurfaceTransparent(QScrollArea* scrollArea) {
+    scrollArea->setAutoFillBackground(false);
+    scrollArea->setAttribute(Qt::WA_TranslucentBackground);
+    scrollArea->viewport()->setAutoFillBackground(false);
+    scrollArea->viewport()->setAttribute(Qt::WA_TranslucentBackground);
+
+    QPalette palette = scrollArea->palette();
+    palette.setColor(QPalette::Window, Qt::transparent);
+    palette.setColor(QPalette::Base, Qt::transparent);
+    scrollArea->setPalette(palette);
+    scrollArea->viewport()->setPalette(palette);
+}
+
+} // namespace
 
 class SourcesDelegate : public QStyledItemDelegate {
 public:
@@ -41,8 +61,7 @@ public:
         iconFont.setPixelSize(16);
         painter->setFont(iconFont);
         painter->setPen(colors.textPrimary);
-        painter->drawText(
-            x, y + 6, isFolder ? QStringLiteral("\uE8B7") : QStringLiteral("\uE8B5")); // Folder or Document
+        painter->drawText(x, y + 6, isFolder ? QStringLiteral("") : QStringLiteral("")); // Folder or Document
 
         x += 32;
         painter->setFont(option.font);
@@ -59,7 +78,7 @@ public:
         iconFont.setPixelSize(14);
         painter->setFont(iconFont);
         painter->setPen(colors.textSecondary);
-        painter->drawText(iconX, y + 5, QStringLiteral("\uE711")); // Cancel
+        painter->drawText(iconX, y + 5, QStringLiteral("")); // Cancel
 
         painter->restore();
     }
@@ -105,6 +124,18 @@ void ImportPage::setupUi() {
     rootLayout->setContentsMargins(0, 0, 0, 0);
     rootLayout->setSpacing(0);
 
+    auto* headerLayout = new QVBoxLayout;
+    headerLayout->setContentsMargins(24, 24, 24, 16);
+    headerLayout->setSpacing(4);
+    auto* titleLabel = new fluent::textfields::Label(tr("导入漫画"), this);
+    titleLabel->setFluentTypography(Typography::FontRole::TitleLarge);
+    auto* subtitleLabel = new fluent::textfields::Label(tr("添加页面并设置本项目的翻译工作流。"), this);
+    subtitleLabel->setFluentTypography(Typography::FontRole::Body);
+    subtitleLabel->setTextColorRole(fluent::textfields::Label::TextColorRole::Secondary);
+    headerLayout->addWidget(titleLabel);
+    headerLayout->addWidget(subtitleLabel);
+    rootLayout->addLayout(headerLayout);
+
     m_infoBar = new fluent::status_info::InfoBar(this);
     m_infoBar->setIsOpen(false);
     m_infoBar->setIsClosable(true);
@@ -115,70 +146,105 @@ void ImportPage::setupUi() {
     rootLayout->addWidget(m_progressBar);
 
     auto* scrollArea = new QScrollArea(this);
+    scrollArea->setObjectName(QStringLiteral("importScrollArea"));
     scrollArea->setWidgetResizable(true);
     scrollArea->setFrameShape(QFrame::NoFrame);
-    scrollArea->setStyleSheet(
-        QStringLiteral("QScrollArea { background: transparent; } QWidget#scrollWidget { background: transparent; }"));
+    makeScrollSurfaceTransparent(scrollArea);
 
     auto* scrollWidget = new QWidget(scrollArea);
     scrollWidget->setObjectName(QStringLiteral("scrollWidget"));
+    scrollWidget->setAutoFillBackground(false);
     m_mainLayout = new QBoxLayout(QBoxLayout::LeftToRight, scrollWidget);
-    m_mainLayout->setContentsMargins(24, 24, 24, 24);
+    m_mainLayout->setContentsMargins(24, 8, 24, 24);
     m_mainLayout->setSpacing(24);
     scrollArea->setWidget(scrollWidget);
     rootLayout->addWidget(scrollArea, 1);
 
     // Source Pane
-    m_sourcePane = new QWidget(this);
+    auto* sourceCard = new fluent::layout::Card(scrollWidget);
+    sourceCard->setObjectName(QStringLiteral("importSourceCard"));
+    sourceCard->setAppearance(fluent::layout::Card::Layer);
+    m_sourcePane = sourceCard;
     auto* sourceLayout = new QVBoxLayout(m_sourcePane);
-    sourceLayout->setContentsMargins(0, 0, 0, 0);
+    sourceLayout->setContentsMargins(16, 16, 16, 16);
+    sourceLayout->setSpacing(12);
+
+    auto* stageLayout = new QHBoxLayout;
+    stageLayout->setSpacing(8);
+    const QString stageTexts[3] = {tr("1  选择文件"), tr("2  项目设置"), tr("3  开始导入")};
+    for (int i = 0; i < 3; ++i) {
+        m_stageLabels[i] = new fluent::textfields::Label(stageTexts[i], this);
+        m_stageLabels[i]->setFluentTypography(Typography::FontRole::Body);
+        stageLayout->addWidget(m_stageLabels[i]);
+        if (i < 2) {
+            m_stageConnectors[i] = new QFrame(this);
+            m_stageConnectors[i]->setFrameShape(QFrame::HLine);
+            m_stageConnectors[i]->setFixedWidth(48);
+            stageLayout->addWidget(m_stageConnectors[i], 0, Qt::AlignVCenter);
+        }
+    }
+    stageLayout->addStretch(1);
+    sourceLayout->addLayout(stageLayout);
 
     m_dropZone = new FileDropZone(this);
     m_dropZone->setMinimumHeight(120);
 
     m_sourceModel = new PendingSourcesModel(m_viewModel, this);
-    m_sourceListView = new fluent::collections::ListView(this);
+    // Raw QListView: fluent ListView swallows row mouse events, which would break
+    // the delegate remove hotspot in editorEvent. Theming lives in SourcesDelegate.
+    m_sourceListView = new QListView(this);
     m_sourceListView->setModel(m_sourceModel);
     m_sourceListView->setItemDelegate(new SourcesDelegate(this, m_viewModel, this));
-    m_sourceListView->setSelectionMode(fluent::collections::ListView::SelectionMode::None);
+    m_sourceListView->setSelectionMode(QAbstractItemView::NoSelection);
+    m_sourceListView->setFrameShape(QFrame::NoFrame);
+    m_sourceListView->setAutoFillBackground(false);
+    m_sourceListView->viewport()->setAutoFillBackground(false);
 
     sourceLayout->addWidget(m_dropZone);
     sourceLayout->addWidget(m_sourceListView, 1);
 
     // Settings Pane
-    m_settingsPane = new QWidget(this);
+    auto* settingsCard = new fluent::layout::Card(scrollWidget);
+    settingsCard->setObjectName(QStringLiteral("importSettingsCard"));
+    settingsCard->setAppearance(fluent::layout::Card::Layer);
+    m_settingsPane = settingsCard;
     m_settingsPane->setFixedWidth(380);
     auto* settingsLayout = new QVBoxLayout(m_settingsPane);
-    settingsLayout->setContentsMargins(0, 0, 0, 0);
+    settingsLayout->setContentsMargins(16, 16, 16, 16);
     settingsLayout->setSpacing(16);
 
+    auto* projectNameLabel = new fluent::textfields::Label(tr("项目名称"), this);
     m_projectNameEdit = new fluent::textfields::LineEdit(this);
-    m_projectNameEdit->setPlaceholderText(
-        tr("项目名称")); // Actually need explicit labels but LineEdit in FluentQt usually has a placeholder or label?
-                         // The brief says "设置面板字段（显式标签，不靠 Placeholder）"
-    // So we add QLabel
-    auto* projectNameLabel = new QLabel(tr("项目名称"), this);
+    m_nameErrorLabel = new fluent::textfields::Label(this);
+    m_nameErrorLabel->setFluentTypography(Typography::FontRole::Caption);
+    m_nameErrorLabel->setVisible(false);
 
+    auto* saveLocationLabel = new fluent::textfields::Label(tr("保存位置"), this);
     m_saveLocationEdit = new fluent::textfields::LineEdit(this);
     m_saveLocationEdit->setReadOnly(true);
-    m_browseButton = new fluent::basicinput::Button(this);
-    m_browseButton->setText(tr("浏览"));
-    auto* saveLocationLabel = new QLabel(tr("保存位置"), this);
+    m_browseButton = new fluent::basicinput::Button(tr("浏览"), this);
+    m_locationErrorLabel = new fluent::textfields::Label(this);
+    m_locationErrorLabel->setFluentTypography(Typography::FontRole::Caption);
+    m_locationErrorLabel->setVisible(false);
     auto* saveLocationLayout = new QHBoxLayout;
     saveLocationLayout->addWidget(m_saveLocationEdit, 1);
     saveLocationLayout->addWidget(m_browseButton);
 
-    auto* directionLabel = new QLabel(tr("阅读方向"), this);
+    auto* directionLabel = new fluent::textfields::Label(tr("阅读方向"), this);
     m_rtlRadio = new fluent::basicinput::RadioButton(tr("从右到左（日式漫画）"), this);
     m_ltrRadio = new fluent::basicinput::RadioButton(tr("从左到右"), this);
     auto* directionLayout = new QVBoxLayout;
     directionLayout->addWidget(m_rtlRadio);
     directionLayout->addWidget(m_ltrRadio);
 
-    auto* sourceLangLabel = new QLabel(tr("源语言"), this);
+    auto* sourceLangLabel = new fluent::textfields::Label(tr("源语言"), this);
     m_sourceLangCombo = new fluent::basicinput::ComboBox(this);
-    auto* targetLangLabel = new QLabel(tr("目标语言"), this);
+    auto* targetLangLabel = new fluent::textfields::Label(tr("目标语言"), this);
     m_targetLangCombo = new fluent::basicinput::ComboBox(this);
+    m_languageCautionLabel =
+        new fluent::textfields::Label(tr("源语言与目标语言相同：此配置适用于校对、重排和再处理场景。"), this);
+    m_languageCautionLabel->setFluentTypography(Typography::FontRole::Caption);
+    m_languageCautionLabel->setVisible(false);
 
     auto setupCombo = [](fluent::basicinput::ComboBox* combo) {
         combo->addItem("日本語", "ja");
@@ -193,56 +259,48 @@ void ImportPage::setupUi() {
     m_submitButton = new fluent::basicinput::Button(this);
     m_cancelImportButton = new fluent::basicinput::Button(this);
     m_cancelImportButton->setText(tr("取消导入"));
+    m_cancelImportButton->setVisible(false);
     auto* buttonsLayout = new QHBoxLayout;
     buttonsLayout->addWidget(m_submitButton, 1);
     buttonsLayout->addWidget(m_cancelImportButton);
 
     settingsLayout->addWidget(projectNameLabel);
     settingsLayout->addWidget(m_projectNameEdit);
+    settingsLayout->addWidget(m_nameErrorLabel);
     settingsLayout->addWidget(saveLocationLabel);
     settingsLayout->addLayout(saveLocationLayout);
+    settingsLayout->addWidget(m_locationErrorLabel);
     settingsLayout->addWidget(directionLabel);
     settingsLayout->addLayout(directionLayout);
     settingsLayout->addWidget(sourceLangLabel);
     settingsLayout->addWidget(m_sourceLangCombo);
     settingsLayout->addWidget(targetLangLabel);
     settingsLayout->addWidget(m_targetLangCombo);
+    settingsLayout->addWidget(m_languageCautionLabel);
     settingsLayout->addStretch(1);
     settingsLayout->addLayout(buttonsLayout);
 
     m_mainLayout->addWidget(m_sourcePane, 1);
     m_mainLayout->addWidget(m_settingsPane);
+
+    applyThemeColors();
+    updateStageIndicator();
 }
 
 void ImportPage::bindViewModel() {
     connect(m_viewModel, &ImportViewModel::browseFilesRequested, this, [this]() {
         auto paths = QFileDialog::getOpenFileNames(
-            this, tr("Select Files"), QString(), tr("图片文件 (*.jpg *.jpeg *.png *.webp)"));
+            this, tr("选择图片文件"), QString(), tr("图片文件 (*.jpg *.jpeg *.png *.webp)"));
         if (!paths.isEmpty()) {
             m_viewModel->addSourcePaths(paths);
         }
     });
     connect(m_viewModel, &ImportViewModel::browseFolderRequested, this, [this]() {
-        auto path = QFileDialog::getExistingDirectory(this, tr("Select Folder"));
+        auto path = QFileDialog::getExistingDirectory(this, tr("选择图片文件夹"));
         if (!path.isEmpty()) {
             m_viewModel->addSourcePaths({path});
         }
     });
-    connect(m_viewModel, &ImportViewModel::browseLocationRequested, this, [this]() {
-        auto path = QFileDialog::getExistingDirectory(this, tr("Select Save Location"));
-        if (!path.isEmpty()) {
-            m_viewModel->setSaveLocation(path);
-        }
-    });
-    connect(m_infoBar, &fluent::status_info::InfoBar::closed, m_viewModel, &ImportViewModel::dismissNotice);
-    connect(m_viewModel, &ImportViewModel::stateChanged, this, &ImportPage::updateState);
-
-    connect(m_dropZone, &FileDropZone::pathsDropped, m_viewModel, &ImportViewModel::addSourcePaths);
-
-    connect(
-        m_projectNameEdit, &fluent::textfields::LineEdit::textChanged, m_viewModel, &ImportViewModel::setProjectName);
-
-    connect(m_browseButton, &fluent::basicinput::Button::clicked, m_viewModel, &ImportViewModel::requestBrowseLocation);
     connect(m_viewModel, &ImportViewModel::browseLocationRequested, this, [this]() {
         QString dir = QFileDialog::getExistingDirectory(
             this, tr("选择保存位置"), QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation));
@@ -250,6 +308,17 @@ void ImportPage::bindViewModel() {
             m_viewModel->setSaveLocation(dir);
         }
     });
+    connect(m_infoBar, &fluent::status_info::InfoBar::closed, m_viewModel, &ImportViewModel::dismissNotice);
+    connect(m_viewModel, &ImportViewModel::stateChanged, this, &ImportPage::updateState);
+
+    connect(m_dropZone, &FileDropZone::pathsDropped, m_viewModel, &ImportViewModel::addSourcePaths);
+    connect(m_dropZone, &FileDropZone::browseFilesRequested, m_viewModel, &ImportViewModel::requestBrowseFiles);
+    connect(m_dropZone, &FileDropZone::browseFolderRequested, m_viewModel, &ImportViewModel::requestBrowseFolder);
+
+    connect(
+        m_projectNameEdit, &fluent::textfields::LineEdit::textChanged, m_viewModel, &ImportViewModel::setProjectName);
+
+    connect(m_browseButton, &fluent::basicinput::Button::clicked, m_viewModel, &ImportViewModel::requestBrowseLocation);
 
     connect(m_rtlRadio, &fluent::basicinput::RadioButton::toggled, this, [this](bool checked) {
         if (checked)
@@ -273,6 +342,41 @@ void ImportPage::bindViewModel() {
     updateState(m_viewModel->state());
 }
 
+void ImportPage::onThemeUpdated() {
+    base::BasePage::onThemeUpdated();
+    applyThemeColors();
+}
+
+void ImportPage::applyThemeColors() {
+    const auto& colors = themeColorsRef();
+    const QString criticalStyle = QStringLiteral("color: %1;").arg(colors.systemCritical.name());
+    const QString cautionStyle = QStringLiteral("color: %1;").arg(colors.systemCaution.name());
+    m_nameErrorLabel->setStyleSheet(criticalStyle);
+    m_locationErrorLabel->setStyleSheet(criticalStyle);
+    m_languageCautionLabel->setStyleSheet(cautionStyle);
+    for (auto* connector : m_stageConnectors) {
+        QPalette palette = connector->palette();
+        palette.setColor(QPalette::WindowText, colors.strokeDefault);
+        connector->setPalette(palette);
+    }
+}
+
+void ImportPage::updateStageIndicator() {
+    for (int i = 0; i < 3; ++i) {
+        const int stage = i + 1;
+        if (stage == m_currentStage) {
+            m_stageLabels[i]->setFluentTypography(Typography::FontRole::BodyStrong);
+            m_stageLabels[i]->setTextColorRole(fluent::textfields::Label::TextColorRole::Accent);
+        } else if (stage < m_currentStage) {
+            m_stageLabels[i]->setFluentTypography(Typography::FontRole::Body);
+            m_stageLabels[i]->setTextColorRole(fluent::textfields::Label::TextColorRole::Primary);
+        } else {
+            m_stageLabels[i]->setFluentTypography(Typography::FontRole::Body);
+            m_stageLabels[i]->setTextColorRole(fluent::textfields::Label::TextColorRole::Secondary);
+        }
+    }
+}
+
 void ImportPage::updateState(const manga::ui::screen::import_::ImportState& state) {
     if (m_projectNameEdit->text() != state.projectName) {
         m_projectNameEdit->setText(state.projectName);
@@ -281,15 +385,21 @@ void ImportPage::updateState(const manga::ui::screen::import_::ImportState& stat
         m_saveLocationEdit->setText(state.saveLocation);
     }
 
+    m_nameErrorLabel->setText(state.nameError);
+    m_nameErrorLabel->setVisible(!state.nameError.isEmpty());
+    m_locationErrorLabel->setText(state.locationError);
+    m_locationErrorLabel->setVisible(!state.locationError.isEmpty());
+    m_languageCautionLabel->setVisible(state.languageCaution);
+
     if (state.readingDirection == domain::ReadingDirection::RightToLeft) {
         m_rtlRadio->setChecked(true);
     } else {
         m_ltrRadio->setChecked(true);
     }
 
-    auto setComboByData = [](fluent::basicinput::ComboBox* combo, const QString& data) {
+    auto setComboByData = [](fluent::basicinput::ComboBox* combo, const QString& targetData) {
         for (int i = 0; i < combo->count(); ++i) {
-            if (combo->itemData(i).toString() == data) {
+            if (combo->itemData(i).toString() == targetData) {
                 combo->setCurrentIndex(i);
                 break;
             }
@@ -297,6 +407,12 @@ void ImportPage::updateState(const manga::ui::screen::import_::ImportState& stat
     };
     setComboByData(m_sourceLangCombo, state.sourceLanguageCode);
     setComboByData(m_targetLangCombo, state.targetLanguageCode);
+
+    const int stage = state.importInProgress ? 3 : (state.sources.isEmpty() ? 1 : 2);
+    if (stage != m_currentStage) {
+        m_currentStage = stage;
+        updateStageIndicator();
+    }
 
     if (state.importInProgress) {
         m_submitButton->setText(tr("正在导入 %1/%2").arg(state.importedPageCount).arg(state.totalPageCount));
@@ -314,7 +430,7 @@ void ImportPage::updateState(const manga::ui::screen::import_::ImportState& stat
         m_targetLangCombo->setEnabled(false);
     } else {
         m_progressBar->setVisible(false);
-        m_cancelImportButton->setVisible(true);
+        m_cancelImportButton->setVisible(false);
         m_dropZone->setEnabled(true);
         m_projectNameEdit->setEnabled(true);
         m_browseButton->setEnabled(true);

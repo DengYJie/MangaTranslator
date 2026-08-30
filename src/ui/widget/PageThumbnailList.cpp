@@ -3,7 +3,9 @@
 #include "ui/widget/PageListModel.h"
 #include "ui/widget/PageThumbnailDelegate.h"
 
-#include <FluentQt/Collections.h>
+#include <FluentQt/TextFields.h>
+#include <QHBoxLayout>
+#include <QListView>
 #include <QScrollBar>
 #include <QTimer>
 #include <QVBoxLayout>
@@ -11,17 +13,34 @@
 namespace manga::ui::widget {
 
 PageThumbnailList::PageThumbnailList(QWidget* parent)
-    : QWidget(parent), m_model(new PageListModel(this)), m_view(new fluent::collections::ListView(this)),
-      m_shimmerTimer(new QTimer(this)) {
+    : QWidget(parent), m_model(new PageListModel(this)), m_view(new QListView(this)), m_shimmerTimer(new QTimer(this)) {
     m_thumbnailCache.setMaxCost(64 * 1024);
 
     auto layout = new QVBoxLayout(this);
     layout->setContentsMargins(0, 0, 0, 0);
-    layout->addWidget(m_view);
 
+    auto* headerLayout = new QHBoxLayout;
+    headerLayout->setContentsMargins(16, 12, 16, 8);
+    m_headerTitle = new fluent::textfields::Label(tr("页面"), this);
+    m_headerTitle->setFluentTypography(Typography::FontRole::BodyStrong);
+    m_headerCount = new fluent::textfields::Label(this);
+    m_headerCount->setFluentTypography(Typography::FontRole::Caption);
+    m_headerCount->setTextColorRole(fluent::textfields::Label::TextColorRole::Secondary);
+    headerLayout->addWidget(m_headerTitle);
+    headerLayout->addWidget(m_headerCount, 1, Qt::AlignRight | Qt::AlignVCenter);
+    layout->addLayout(headerLayout);
+
+    layout->addWidget(m_view, 1);
+
+    // FluentQt ListView swallows mouse press/release on valid rows, which breaks
+    // QAbstractItemView::clicked and delegate editorEvent hotspots; a raw QListView
+    // with Fluent token painting in the delegate is the documented porting gap.
     m_view->setModel(m_model);
     m_view->setVerticalScrollMode(QAbstractItemView::ScrollPerPixel);
     m_view->setSelectionMode(QAbstractItemView::SingleSelection);
+    m_view->setFrameShape(QFrame::NoFrame);
+    m_view->setAutoFillBackground(false);
+    m_view->viewport()->setAutoFillBackground(false);
 
     m_delegate = new PageThumbnailDelegate(this, m_view);
     m_view->setItemDelegate(m_delegate);
@@ -33,6 +52,11 @@ PageThumbnailList::PageThumbnailList(QWidget* parent)
     });
 
     connect(m_view->verticalScrollBar(), &QScrollBar::valueChanged, this, [this]() { requestVisibleThumbnails(); });
+
+    connect(m_model, &QAbstractItemModel::modelReset, this, [this]() { updateCountLabel(); });
+    connect(m_model, &QAbstractItemModel::rowsInserted, this, [this]() { updateCountLabel(); });
+    connect(m_model, &QAbstractItemModel::rowsRemoved, this, [this]() { updateCountLabel(); });
+    updateCountLabel();
 
     m_shimmerTimer->setInterval(50);
     connect(m_shimmerTimer, &QTimer::timeout, this, [this]() {
@@ -65,8 +89,16 @@ void PageThumbnailList::setCurrentPageId(const domain::PageId& pageId) {
     int row = m_model->rowForPageId(pageId);
     if (row >= 0) {
         QSignalBlocker blocker(m_view->selectionModel());
-        m_view->setCurrentIndex(m_model->index(row));
+        const QModelIndex index = m_model->index(row);
+        m_view->setCurrentIndex(index);
+        if (!m_view->verticalScrollBar()->isSliderDown()) {
+            m_view->scrollTo(index);
+        }
     }
+}
+
+void PageThumbnailList::updateCountLabel() {
+    m_headerCount->setText(tr("%1 页").arg(m_model->rowCount()));
 }
 
 void PageThumbnailList::requestVisibleThumbnails() {

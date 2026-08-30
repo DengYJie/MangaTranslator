@@ -7,6 +7,7 @@
 #include <QKeyEvent>
 #include <QPainter>
 #include <QResizeEvent>
+#include <QShowEvent>
 #include <QWheelEvent>
 
 #include <algorithm>
@@ -15,6 +16,9 @@ namespace manga::ui::manga {
 
 namespace {
 constexpr double kZoomLevels[] = {0.05, 0.10, 0.25, 0.50, 0.75, 1.0, 1.5, 2.0, 4.0, 8.0, 16.0};
+// The document workspace remains dark in both application themes so page edges stay visible.
+const QColor kDefaultCanvasBackground(QStringLiteral("#202124"));
+const QColor kDefaultCanvasForeground(QStringLiteral("#F3F3F3"));
 } // namespace
 
 MangaCanvas::MangaCanvas(QWidget* parent) : QGraphicsView(parent) {
@@ -29,19 +33,16 @@ MangaCanvas::MangaCanvas(QWidget* parent) : QGraphicsView(parent) {
     m_placeholderAction->hide();
     connect(m_placeholderAction, &fluent::basicinput::Button::clicked, this, &MangaCanvas::placeholderActionActivated);
 
-    // Initialize theme
-    const auto& colors = themeColorsRef();
-    m_backgroundColor = colors.bgCanvas;
-    m_placeholderTextColor = colors.textPrimary;
+    m_backgroundColor = kDefaultCanvasBackground;
+    m_placeholderTextColor = kDefaultCanvasForeground;
     setBackgroundBrush(m_backgroundColor);
 }
 
 MangaCanvas::~MangaCanvas() = default;
 
 void MangaCanvas::onThemeUpdated() {
-    const auto& colors = themeColorsRef();
-    m_backgroundColor = colors.bgCanvas;
-    m_placeholderTextColor = colors.textPrimary;
+    m_backgroundColor = kDefaultCanvasBackground;
+    m_placeholderTextColor = kDefaultCanvasForeground;
     setBackgroundBrush(m_backgroundColor);
     if (viewport()) {
         viewport()->update();
@@ -279,7 +280,7 @@ void MangaCanvas::emitViewTransform() {
 }
 
 void MangaCanvas::layoutPlaceholderButton() {
-    if (!m_placeholderAction->isVisible() || !viewport()) {
+    if (m_placeholderAction->isHidden() || !viewport()) {
         return;
     }
 
@@ -292,6 +293,11 @@ void MangaCanvas::layoutPlaceholderButton() {
     }
 
     m_placeholderAction->move(x, y);
+}
+
+void MangaCanvas::showEvent(QShowEvent* event) {
+    QGraphicsView::showEvent(event);
+    layoutPlaceholderButton();
 }
 
 } // namespace manga::ui::manga

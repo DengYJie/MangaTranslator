@@ -18,6 +18,7 @@
 - 处理任务绑定 `operationId + projectSessionGeneration + ProjectId + PageId + RegionId/contentRevision`。切页不取消项目任务；关闭/切换项目、用户取消或同目标替换才失效。
 - Worker 只传递不可变值与 `QImage`；Widget、`QPixmap`、Scene、ViewModel、UndoStack 和 FluentQt 对象只在 GUI 线程。
 - `safeMessage` 可见，`diagnostic` 永不上屏；Cancelled/stale completion 静默，不制造错误 Toast。
+- “打开项目”不是通用文件夹导入：所选根目录必须包含可读 `project.json`，且 V0.1 编辑会话必须能在根目录创建 `.mangatranslator.lock` 并保存；读权限、写权限和另一实例锁定不得互相误报。
 - `AppStatusTaskStrip` 是摘要，不替代页面级 `InfoBar`、阻塞 `ContentDialog` 或任务详情。
 - Settings 只注册有真实读取、验证、保存和运行时效果的分类。V0.1 本计划交付常规、OCR 模型位置、AI 翻译凭据/基础配置和外观；模型下载/迁移、连接测试、排版默认、性能调度和隐私清理没有现成能力边界，不显示入口。
 - API Key 只经 `SecretBytes` 和 Credential UseCase；状态查询只调用 `hasApiKey()`，不得 read-then-discard、回显、复制或记录。
@@ -47,6 +48,7 @@
 - `src/ui/widget/AppStatusTaskStrip.*` 与 `src/ui/model/OperationListModel.*`：全局摘要和任务 Flyout。
 - `src/application/usecase/settings/`：typed settings read/save/validate。
 - `src/ui/screen/settings/` 与 `src/ui/widget/Settings*.{h,cpp}`：Settings Surface 和有限内容页。
+- `src/data/DataErrorMapping.*` 与 `src/data/project/FileSystemProjectRepository.cpp`：项目目录形状、读取失败和 `QLockFile::LockError` 的稳定错误分类。
 - `src/ui/error/RecoveryPresenter.*`：错误去重与 `RecoveryAction` 映射。
 - `.fluentqt/`、`tests/visual/`：full-profile 设计与最终证据。
 
@@ -592,13 +594,72 @@ git commit -m "feat(ui): add executable settings surface"
 
 ---
 
-### Task 9: RecoveryAction Presenter、去重节流与所有可执行入口
+### Task 9: 细分项目目录打开失败并冻结恢复矩阵
+
+**Files:**
+- Modify: `src/data/DataErrorMapping.h`
+- Modify: `src/data/DataErrorMapping.cpp`
+- Modify: `src/data/project/FileSystemProjectRepository.cpp`
+- Test: `tests/unit/data/FileSystemProjectRepositoryTest.cpp`
+
+**Interfaces:**
+- `toProjectLockError(QLockFile::LockError error) -> application::ApplicationError` 是所有项目根 `QLockFile` 获取失败的唯一映射；调用方必须在 `tryLock(0)` 失败后传入 `lock.error()`，不能继续无条件返回 `persistence.locked`。
+- `project.not_a_project` 表示选中的现有目录缺少普通文件 `project.json`；它不复用 `persistence.not_found`，因为后者表示最近项目路径本身已经移动或删除。
+- Safe message 不含绝对路径、Windows 用户名、锁文件内容或 OS diagnostic；完整路径只保留在内部请求上下文，不能复制进 `diagnostic` 后上屏。
+
+| 失败点 | 稳定 code | RecoveryAction | 页面内呈现与动作 |
+|---|---|---|---|
+| Windows 原生文件夹选择器拒绝浏览目录，尚未返回选择结果 | 无应用错误 | 无 | 保留原生系统提示；应用不追加 InfoBar/Toast，用户留在选择器中选择有权访问的位置 |
+| 最近项目根目录已移动或删除，canonical root 为空 | `persistence.not_found` | `ChoosePath` | “项目文件夹不存在或已移动” + “选择其他位置”；最近项目卡片同时提供移除 |
+| 现有目录缺少普通文件 `project.json` | `project.not_a_project` | `ChoosePath` | “所选文件夹不是 MangaTranslator 项目” + “选择其他位置”；不得把普通图片文件夹描述为损坏项目 |
+| 打开 `project.json` 返回 `QFileDevice::PermissionsError` | `persistence.permission_denied` | `ChoosePath` | “没有读取该项目文件夹的权限” + “选择其他位置” |
+| 创建 `.mangatranslator.lock` 返回 `QLockFile::PermissionError` | `persistence.read_only` | `ChoosePath` | “该项目文件夹不可写，无法以编辑模式打开” + “选择其他位置” |
+| `QLockFile::LockFailedError`，确认锁由存活的其他实例持有 | `persistence.locked` | `Retry` | “项目已在另一个 MangaTranslator 实例中打开” + “重试”；不建议管理员权限 |
+| `QLockFile::UnknownError` 或未归类的读取 I/O | `persistence.io` | `Retry` | “暂时无法访问项目文件夹” + “重试”；diagnostic 只记录稳定 Qt/OS 数字错误码 |
+| current `project.json` 损坏但备份可恢复 | `persistence.recovery_failed` 后执行既有 recovery UseCase | 专用恢复决策 | 阻塞对话框提供“从备份恢复/取消”；恢复成功显示 warning，不把它归为权限错误 |
+
+- [ ] **Step 1: 写项目打开分类失败测试**
+
+在 `FileSystemProjectRepositoryTest` 覆盖：不存在根目录、普通目录无 `project.json`、`project.json` 读取被拒、有效项目根不可写、第二 repository 持有锁、stale lock 可清除、unknown lock mapping。Windows deny ACE 或目录只读无法可靠建立时只允许带明确平台原因 `QSKIP`，不能把该行记作通过。
+
+- [ ] **Step 2: 运行确认失败**
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .agents/skills/manga-translator-build/scripts/build.ps1 -Preset local-test -Target manga_tests_data
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .agents/skills/manga-translator-build/scripts/test.ps1 -Preset local-test -Regex "manga_tests_data"
+```
+
+Expected: 新增断言至少分别暴露当前把缺少 `project.json` 归为 `persistence.io`、把 `QLockFile::PermissionError` 归为 `persistence.locked` 的行为。
+
+- [ ] **Step 3: 实现项目路径与锁错误映射**
+
+`openProject` 在取得 session lock 后验证 `project.json` 存在且为普通文件，再执行原有 read/deserialize/asset validation；任何失败都释放新锁。`toProjectLockError` 显式 switch `LockFailedError`、`PermissionError`、`UnknownError`，并由 create/open/recover/save-as 的全部项目锁获取点复用。不要用预先的 `QFileInfo::isWritable()` 代替实际锁操作，Windows ACL 和网络文件系统以操作结果为准。
+
+- [ ] **Step 4: 运行 data tests**
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .agents/skills/manga-translator-build/scripts/test.ps1 -Preset local-test -Regex "manga_tests_data"
+```
+
+Expected: 项目目录矩阵可自动化的各行通过，原有 second-session 与 stale-lock 测试继续通过。
+
+- [ ] **Step 5: Commit（仅在获授权时）**
+
+```bash
+git add src/data/DataErrorMapping.* src/data/project/FileSystemProjectRepository.cpp tests/unit/data/FileSystemProjectRepositoryTest.cpp
+git commit -m "fix(data): distinguish project open access failures"
+```
+
+---
+
+### Task 10: RecoveryAction Presenter、去重节流与所有可执行入口
 
 **Files:**
 - Create: `src/ui/error/RecoveryPresenter.h`
 - Create: `src/ui/error/RecoveryPresenter.cpp`
 - Modify: `src/ui/screen/home/HomeState.h`
 - Modify: `src/ui/screen/home/HomeViewModel.cpp`
+- Modify: `src/ui/screen/home/HomePage.cpp`
 - Modify: `src/ui/screen/import/ImportViewModel.cpp`
 - Modify: `src/ui/screen/editor/EditorViewModel.cpp`
 - Modify: `src/ui/screen/settings/SettingsViewModel.cpp`
@@ -622,9 +683,9 @@ struct RecoveryPresentation {
 
 - `RecoveryPresenter::present(error, targetKey, now)` 合并 3 秒内相同 `code+targetKey`；Cancelled/stale 返回 `std::nullopt`。
 
-- [ ] **Step 1: 写每个 enum 分支失败测试**
+- [ ] **Step 1: 写每个 enum 分支和项目打开路由失败测试**
 
-覆盖 Retry、OpenSettings、Reauthenticate、LocateModel、ChoosePath、FreeDiskSpace、None、Cancelled；断言 `diagnostic` 从不进入 presentation。
+覆盖 Retry、OpenSettings、Reauthenticate、LocateModel、ChoosePath、FreeDiskSpace、None、Cancelled；再逐行覆盖 Task 9 的项目目录矩阵，断言 code、中文可翻译文案、actionText、blocking、目标去重键和路由效果。`diagnostic`、绝对路径和锁文件内容从不进入 presentation。
 
 - [ ] **Step 2: 运行确认失败**
 
@@ -634,11 +695,11 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .agents/skills/manga-tra
 
 - [ ] **Step 3: 实现映射与去重**
 
-映射严格遵循 supplement §10。Presenter 只决定安全文案/动作，不直接打开 dialog、folder 或 route。
+映射严格遵循 supplement §10 和 Task 9 的项目目录矩阵。Presenter 只决定安全文案/动作，不直接打开 dialog、folder 或 route；文案在 UI translation context 中按稳定 code 生成，data 层 `safeMessage` 只作未知 code fallback。
 
 - [ ] **Step 4: 接入 Application shell effects**
 
-`Retry` 回到原 owning ViewModel 创建新 operationId；`OpenSettings/Reauthenticate/LocateModel` 导航具体 Settings category/field；`ChoosePath` 重开 picker 并保留表单；`FreeDiskSpace` 显示安全目录名与所需空间并提供“查看位置”；`None` 无动作。
+`Retry` 回到原 owning ViewModel 创建新 operationId；Home 的 `persistence.locked` 重试同一路径，其他任务保持原业务目标。`OpenSettings/Reauthenticate/LocateModel` 导航具体 Settings category/field；`ChoosePath` 重开 picker 并保留表单，Home 的项目路径类错误回到“打开 MangaTranslator 项目”选择器。`FreeDiskSpace` 显示安全目录名与所需空间并提供“查看位置”；`None` 无动作。原生选择器自身拒绝访问并返回空路径时不调用 `openProjectPath()`，也不生成第二条应用错误。
 
 - [ ] **Step 5: 关闭 P5-A/P5-B 明确遗留**
 
@@ -659,7 +720,7 @@ git commit -m "feat(ui): add executable error recovery routes"
 
 ---
 
-### Task 10: 响应式、无障碍、主题与产品文案收口
+### Task 11: 响应式、无障碍、主题与产品文案收口
 
 **Files:**
 - Modify: `src/ui/screen/editor/EditorPage.cpp`
@@ -709,7 +770,7 @@ git commit -m "fix(ui): finish responsive and accessible p5 surfaces"
 
 ---
 
-### Task 11: 工程验收、视觉 inspect-fix-recapture 与独立评审
+### Task 12: 工程验收、视觉 inspect-fix-recapture 与独立评审
 
 **Files:**
 - Create: `tests/visual/p5/visual-evidence.json`
@@ -784,5 +845,6 @@ git commit -m "test(ui): record p5 engineering and visual acceptance"
 - `AppStatusTaskStrip` 同时可信地表达 Dirty/保存、活动任务和必要环境状态；多任务可发现并可导航回目标。
 - Settings 只显示四个可执行分类；API Key 不回显、不持久化到 QSettings、不进入日志或可访问 Value。
 - 每个 `RecoveryAction` 有测试过的 UI 路径；diagnostic 不可见，同类错误去重节流。
+- 项目打开失败能区分路径不存在、非项目目录、读取权限、目录只读、另一实例锁定和未知 I/O；原生选择器拒绝访问不会产生重复应用错误。
 - Light/Dark、五档宽度、flat height、高 DPI、高对比度、reduce motion、IME 和重要错误/空/溢出状态有最终 build 证据。
 - full-profile visual evidence contract v4 与 project structure validator 通过，独立 reviewer 九项评分均至少 4/5，无 open blocker/major。

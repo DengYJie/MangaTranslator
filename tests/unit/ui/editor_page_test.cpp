@@ -6,6 +6,7 @@
 #include "ui/widget/PageListModel.h"
 #include "ui/widget/PageThumbnailList.h"
 
+#include <FluentQt/FluentQt.h>
 #include <QPushButton>
 #include <QSignalSpy>
 #include <QtTest>
@@ -32,7 +33,7 @@ application::ProjectSessionDescriptor makeSession(int pageCount) {
 
 class EditorPageTest : public QObject {
     Q_OBJECT
-private slots:
+private Q_SLOTS:
     void initTestCase() {
         qRegisterMetaType<domain::PageId>();
         qRegisterMetaType<ui::screen::editor::PageImageDelivery>();
@@ -50,6 +51,20 @@ private slots:
         QSignalSpy spy(&page, &ui::screen::editor::EditorPage::openProjectRequested);
         QTest::mouseClick(page.canvasForTest()->placeholderActionButtonForTest(), Qt::LeftButton);
         QCOMPARE(spy.size(), 1);
+    }
+
+    void pagePaneUsesFluentCardSurface() {
+        test::FakeThumbnailStore thumbnails;
+        test::FakePageImageLoader images;
+        application::OperationRegistry registry;
+        ui::screen::editor::EditorViewModel viewModel(&thumbnails, &images, &registry);
+        ui::screen::editor::EditorPage page(&viewModel);
+
+        auto* pagePaneCard = page.findChild<fluent::layout::Card*>(QStringLiteral("editorPagePaneCard"));
+
+        QVERIFY(pagePaneCard != nullptr);
+        QCOMPARE(pagePaneCard->appearance(), fluent::layout::Card::Layer);
+        QVERIFY(page.pageListForTest()->parentWidget() == pagePaneCard);
     }
 
     void openSessionPopulatesListAndCanvas() {

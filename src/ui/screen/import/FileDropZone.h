@@ -1,8 +1,14 @@
 #pragma once
 
 #include <FluentQt/Foundation.h>
-#include <QLabel>
 #include <QWidget>
+
+namespace fluent::basicinput {
+class Button;
+}
+namespace fluent::textfields {
+class Label;
+}
 
 namespace manga::ui::screen::import_ {
 
@@ -12,10 +18,15 @@ public:
     explicit FileDropZone(QWidget* parent = nullptr);
     ~FileDropZone() override;
 
+    void onThemeUpdated() override;
+
 Q_SIGNALS:
     void pathsDropped(const QVector<QString>& paths);
+    void browseFilesRequested();
+    void browseFolderRequested();
 
 protected:
+    void changeEvent(QEvent* event) override;
     void dragEnterEvent(QDragEnterEvent* event) override;
     void dragLeaveEvent(QDragLeaveEvent* event) override;
     void dropEvent(QDropEvent* event) override;
@@ -29,10 +40,14 @@ private:
     };
 
     VisualState m_visualState = VisualState::Rest;
-    QLabel* m_iconLabel;
-    QLabel* m_textLabel;
+    fluent::textfields::Label* m_iconLabel;
+    fluent::textfields::Label* m_textLabel;
+    fluent::textfields::Label* m_formatLabel;
+    fluent::basicinput::Button* m_browseFilesButton;
+    fluent::basicinput::Button* m_browseFolderButton;
 
     void updateVisualState(VisualState state);
+    void refreshText();
 };
 
 } // namespace manga::ui::screen::import_

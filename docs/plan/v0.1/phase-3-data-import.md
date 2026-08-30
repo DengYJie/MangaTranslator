@@ -146,6 +146,7 @@ input.image_too_large            尺寸或 RGBA8 内存超限
 input.invalid_request            请求参数无效
 
 Project（项目数据与资产错误）：
+project.not_a_project          现有目录缺少普通文件 project.json
 project.invalid_structure
 project.invalid_semantic
 project.unsupported_schema_version

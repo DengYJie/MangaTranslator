@@ -3,6 +3,7 @@
 #include "ui/widget/PageListModel.h"
 #include "ui/widget/PageThumbnailList.h"
 
+#include <FluentQt/Foundation.h>
 #include <QEvent>
 #include <QMouseEvent>
 #include <QPainter>
@@ -36,10 +37,10 @@ void PageThumbnailDelegate::paint(QPainter* painter,
     painter->save();
     painter->setRenderHint(QPainter::Antialiasing);
 
+    const auto& colors = m_list->themeColorsRef();
+
     if (option.state & QStyle::State_Selected) {
-        painter->fillRect(option.rect, option.palette.highlight());
-    } else if (option.state & QStyle::State_MouseOver) {
-        // Just a subtle hover effect if desired, or skip
+        painter->fillRect(option.rect, colors.subtleSecondary);
     }
 
     QRect thumbRect(option.rect.left() + 16, option.rect.top() + (88 - 72) / 2, 56, 72);
@@ -73,22 +74,38 @@ void PageThumbnailDelegate::paint(QPainter* painter,
             m_shimmerProgress,
             true);
     } else if (status == ThumbnailStatus::Failed) {
-        painter->setPen(option.palette.text().color());
+        QFont warnFont(Typography::FontFamily::FluentIcons);
+        warnFont.setPixelSize(16);
+        painter->setFont(warnFont);
+        painter->setPen(colors.textPrimary);
         painter->drawText(thumbRect, Qt::AlignCenter, QStringLiteral("\uE7BA"));
     }
 
-    // Text
+    // Text: page number primary, file name secondary.
     QRect textRect = option.rect;
     textRect.setLeft(thumbRect.right() + 16);
     textRect.setRight(option.rect.right() - 16);
+    QRect topRect(textRect.left(), textRect.top(), textRect.width(), textRect.height() / 2);
+    QRect bottomRect(textRect.left(), topRect.bottom(), textRect.width(), textRect.height() - topRect.height());
+
+    const int orderIndex = index.data(PageListModel::OrderIndexRole).toInt();
+    QFont primaryFont = option.font;
+    primaryFont.setWeight(QFont::DemiBold);
+    painter->setFont(primaryFont);
+    painter->setPen(colors.textPrimary);
+    painter->drawText(topRect, Qt::AlignVCenter | Qt::AlignLeft, tr("第 %1 页").arg(orderIndex + 1));
 
     QString displayName = index.data(PageListModel::DisplayNameRole).toString();
-    painter->setPen(option.palette.text().color());
-    painter->drawText(textRect, Qt::AlignVCenter | Qt::AlignLeft, displayName);
+    painter->setFont(option.font);
+    painter->setPen(colors.textSecondary);
+    painter->drawText(bottomRect, Qt::AlignVCenter | Qt::AlignLeft, displayName);
 
     if (status == ThumbnailStatus::Failed) {
-        QRect retryRect = retryHotspotRect(option.rect);
-        painter->drawText(retryRect, Qt::AlignCenter, QStringLiteral("\uE72C")); // Refresh icon
+        QFont retryFont(Typography::FontFamily::FluentIcons);
+        retryFont.setPixelSize(14);
+        painter->setFont(retryFont);
+        painter->setPen(colors.textSecondary);
+        painter->drawText(retryHotspotRect(option.rect), Qt::AlignCenter, QStringLiteral("\uE72C"));
     }
 
     painter->restore();

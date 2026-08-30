@@ -7,7 +7,13 @@ using manga::ui::manga::MangaCanvas;
 
 class MangaCanvasTest : public QObject {
     Q_OBJECT
-private slots:
+private Q_SLOTS:
+    void canvasKeepsDocumentWorkspaceDark() {
+        MangaCanvas canvas;
+
+        QCOMPARE(canvas.backgroundBrush().color(), QColor(QStringLiteral("#202124")));
+    }
+
     void zOrderConstantsAreStrictlyOrdered() {
         static_assert(manga::ui::canvas::kZBackground < manga::ui::canvas::kZPageOriginal);
         static_assert(manga::ui::canvas::kZPageOriginal < manga::ui::canvas::kZCleaningLayer);

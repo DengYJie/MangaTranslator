@@ -13,14 +13,14 @@ class ComboBox;
 } // namespace fluent::basicinput
 namespace fluent::textfields {
 class LineEdit;
-}
+class Label;
+} // namespace fluent::textfields
 namespace fluent::status_info {
 class InfoBar;
 class ProgressBar;
 } // namespace fluent::status_info
-namespace fluent::collections {
-class ListView;
-}
+class QFrame;
+class QListView;
 
 #include <QHBoxLayout>
 #include <QStackedLayout>
@@ -35,6 +35,8 @@ class ImportPage : public base::BasePage {
 public:
     explicit ImportPage(ImportViewModel* viewModel, QWidget* parent = nullptr);
     ~ImportPage() override;
+
+    void onThemeUpdated() override;
 
     FileDropZone* dropZoneForTest() const;
     fluent::basicinput::Button* submitButtonForTest() const;
@@ -57,13 +59,20 @@ private:
     QWidget* m_sourcePane;
     QWidget* m_settingsPane;
 
+    fluent::textfields::Label* m_stageLabels[3];
+    QFrame* m_stageConnectors[2];
+    int m_currentStage{1};
+
     // UI elements
     FileDropZone* m_dropZone;
-    fluent::collections::ListView* m_sourceListView;
+    QListView* m_sourceListView;
     PendingSourcesModel* m_sourceModel;
 
     fluent::textfields::LineEdit* m_projectNameEdit;
+    fluent::textfields::Label* m_nameErrorLabel;
     fluent::textfields::LineEdit* m_saveLocationEdit;
+    fluent::textfields::Label* m_locationErrorLabel;
+    fluent::textfields::Label* m_languageCautionLabel;
     fluent::basicinput::Button* m_browseButton;
     fluent::basicinput::RadioButton* m_rtlRadio;
     fluent::basicinput::RadioButton* m_ltrRadio;
@@ -75,6 +84,8 @@ private:
 
     void setupUi();
     void bindViewModel();
+    void applyThemeColors();
+    void updateStageIndicator();
 };
 
 } // namespace manga::ui::screen::import_

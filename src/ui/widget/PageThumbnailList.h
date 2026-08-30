@@ -5,11 +5,15 @@
 #include <FluentQt/Foundation.h>
 #include <FluentQt/StatusInfo.h>
 #include <QCache>
-#include <QListView>
 #include <QPixmap>
 #include <QWidget>
 
 class QTimer;
+class QListView;
+
+namespace fluent::textfields {
+class Label;
+}
 
 namespace manga::ui::widget {
 
@@ -52,6 +56,10 @@ Q_SIGNALS:
     void thumbnailRequested(const ::manga::domain::PageId& pageId, bool force);
 
 private:
+    void updateCountLabel();
+
+    fluent::textfields::Label* m_headerTitle{nullptr};
+    fluent::textfields::Label* m_headerCount{nullptr};
     PageListModel* m_model{nullptr};            // owned by this
     PageThumbnailDelegate* m_delegate{nullptr}; // owned by view
     QListView* m_view{nullptr};

@@ -5,6 +5,8 @@
 #include "ui/screen/import/ImportPage.h"
 #include "ui/screen/import/ImportViewModel.h"
 
+#include <FluentQt/FluentQt.h>
+#include <QScrollArea>
 #include <QSignalSpy>
 #include <QtTest>
 
@@ -12,7 +14,26 @@ using namespace manga;
 
 class ImportPageTest : public QObject {
     Q_OBJECT
-private slots:
+private Q_SLOTS:
+    void contentUsesFluentCardsOnTransparentScrollSurface() {
+        test::FakeProjectRepository repository;
+        application::test::FakeComicImporter importer;
+        application::OperationRegistry registry;
+        ui::screen::import_::ImportViewModel viewModel(&repository, &importer, &registry);
+        ui::screen::import_::ImportPage page(&viewModel);
+
+        auto* sourceCard = page.findChild<fluent::layout::Card*>(QStringLiteral("importSourceCard"));
+        auto* settingsCard = page.findChild<fluent::layout::Card*>(QStringLiteral("importSettingsCard"));
+        auto* scrollArea = page.findChild<QScrollArea*>(QStringLiteral("importScrollArea"));
+
+        QVERIFY(sourceCard != nullptr);
+        QVERIFY(settingsCard != nullptr);
+        QVERIFY(scrollArea != nullptr);
+        QCOMPARE(sourceCard->appearance(), fluent::layout::Card::Layer);
+        QCOMPARE(settingsCard->appearance(), fluent::layout::Card::Layer);
+        QCOMPARE(scrollArea->viewport()->palette().color(QPalette::Base), QColor(Qt::transparent));
+    }
+
     void submitButtonTracksFormValidation() {
         test::FakeProjectRepository repository;
         application::test::FakeComicImporter importer;
