@@ -1,4 +1,9 @@
 add_library(manga_ui STATIC
+    animation/AnimatedBackVisualSource.h
+    animation/AnimatedGlobalNavVisualSource.h
+    animation/AnimatedIcon.cpp
+    animation/AnimatedIcon.h
+    animation/AnimatedVisualSource.h
     base/BasePage.cpp
     base/BasePage.h
     base/BaseViewModel.h
@@ -6,15 +11,41 @@ add_library(manga_ui STATIC
     navigation/INavigationRegistrar.h
     navigation/NavigationController.cpp
     navigation/NavigationController.h
+    navigation/NavigationFlyout.cpp
+    navigation/NavigationFlyout.h
+    navigation/NavigationFocusHost.h
     navigation/NavigationHistory.cpp
     navigation/NavigationHistory.h
+    navigation/NavigationIndicator.cpp
+    navigation/NavigationIndicator.h
+    navigation/NavigationMetrics.h
     navigation/NavigationPanel.cpp
     navigation/NavigationPanel.h
-    navigation/NavigationSurfaceHost.cpp
-    navigation/NavigationSurfaceHost.h
+    navigation/NavigationPushButton.cpp
+    navigation/NavigationPushButton.h
+    navigation/NavigationSectionHeader.cpp
+    navigation/NavigationSectionHeader.h
+    navigation/NavigationSeparator.cpp
+    navigation/NavigationSeparator.h
+    navigation/NavigationToolButton.cpp
+    navigation/NavigationToolButton.h
+    navigation/NavigationTreeItem.cpp
+    navigation/NavigationTreeItem.h
+    navigation/NavigationTreeWidget.cpp
+    navigation/NavigationTreeWidget.h
+    navigation/NavigationTreeWidgetBase.cpp
+    navigation/NavigationTreeWidgetBase.h
     navigation/NavigationTypes.h
+    navigation/NavigationWidget.cpp
+    navigation/NavigationWidget.h
     window/MainWindow.cpp
     window/MainWindow.h
+    window/NavigationWindow.cpp
+    window/NavigationWindow.h
+    window/TitleBar.cpp
+    window/TitleBar.h
+    window/WindowBase.cpp
+    window/WindowBase.h
 )
 manga_apply_project_options(manga_ui)
 set_target_properties(manga_ui PROPERTIES AUTOMOC ON)

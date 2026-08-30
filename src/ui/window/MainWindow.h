@@ -1,6 +1,6 @@
 #pragma once
 
-#include <FluentQt/Windowing.h>
+#include "ui/window/NavigationWindow.h"
 
 namespace manga::application {
 class IAppSettingsStore;
@@ -8,36 +8,29 @@ class IAppSettingsStore;
 
 namespace manga::ui::navigation {
 class NavigationController;
-class NavigationSurfaceHost;
-} // namespace manga::ui::navigation
-
-namespace fluent::basicinput {
-class Button;
 }
 
 namespace manga::ui::window {
 
-/// Top-level shell: Fluent Window chrome, title bar zones, geometry persistence.
-class MainWindow : public fluent::windowing::Window {
+/// Top-level shell window: NavigationWindow plus geometry persistence and
+/// back/forward wiring against the navigation controller.
+class MainWindow : public NavigationWindow {
     Q_OBJECT
 public:
-    MainWindow(application::IAppSettingsStore* settingsStore,
-               navigation::NavigationSurfaceHost* host,
-               navigation::NavigationController* controller,
-               QWidget* parent = nullptr);
-    ~MainWindow() override;
+    explicit MainWindow(application::IAppSettingsStore* settingsStore, QWidget* parent = nullptr);
+
+    /// Wires the controller to the title bar and panel intents. Non-owning.
+    void setNavigationController(navigation::NavigationController* controller);
 
 protected:
     void closeEvent(QCloseEvent* event) override;
 
 private:
-    void buildTitleBar();
     void restoreWindowGeometry();
     void saveWindowGeometry();
 
-    application::IAppSettingsStore* m_settingsStore; // non-owning
-    navigation::NavigationController* m_controller;  // non-owning
-    fluent::basicinput::Button* m_backButton{nullptr};
+    application::IAppSettingsStore* m_settingsStore;         // non-owning
+    navigation::NavigationController* m_controller{nullptr}; // non-owning
 };
 
 } // namespace manga::ui::window

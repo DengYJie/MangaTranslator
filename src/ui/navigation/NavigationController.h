@@ -26,7 +26,7 @@ public:
         return m_history.canGoForward();
     }
 
-signals:
+Q_SIGNALS:
     void routeChanged(const QString& routeKey);
     void canGoBackChanged(bool canGoBack);
     void canGoForwardChanged(bool canGoForward);

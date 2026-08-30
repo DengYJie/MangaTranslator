@@ -6,7 +6,7 @@ class QString;
 
 namespace manga::ui::navigation {
 
-/// Renders routes in a content host. Implemented by NavigationSurfaceHost.
+/// Renders routes in a content host. Implemented by NavigationWindow.
 class INavigationPresenter {
 public:
     virtual ~INavigationPresenter() = default;
