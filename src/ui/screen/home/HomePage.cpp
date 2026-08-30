@@ -2,15 +2,21 @@
 
 #include "ui/screen/home/HomeState.h"
 #include "ui/screen/home/HomeViewModel.h"
+#include "ui/screen/home/RecentProjectCardDelegate.h"
 #include "ui/screen/home/RecentProjectsModel.h"
 
 #include <FluentQt/FluentQt.h>
+#include <QBoxLayout>
 #include <QFileDialog>
 #include <QLabel>
 #include <QStackedLayout>
-#include <QVBoxLayout>
 
 namespace manga::ui::screen::home {
+
+namespace {
+constexpr int kSideRailWidth = 320;      // spec §3.2: auxiliary column 300-340 px
+constexpr int kCompactBreakpoint = 1008; // spec §3.3: below this the page flows single-column
+} // namespace
 
 HomePage::HomePage(HomeViewModel* viewModel, QWidget* parent) : base::BasePage(parent), m_viewModel(viewModel) {
     buildUi();
@@ -37,27 +43,38 @@ void HomePage::buildUi() {
     rootLayout->setContentsMargins(32, 24, 32, 24);
     rootLayout->setSpacing(16);
 
+    // Page header: title block left, commands right (spec §2.1).
+    auto* headerRow = new QHBoxLayout;
+    auto* titleBlock = new QVBoxLayout;
     m_titleLabel = new QLabel(tr("欢迎回来"), this);
     m_titleLabel->setFont(themeFont(Typography::FontRole::Title).toQFont());
-    rootLayout->addWidget(m_titleLabel);
-
+    titleBlock->addWidget(m_titleLabel);
     m_subtitleLabel = new QLabel(tr("继续漫画翻译项目，或开始新的工作。"), this);
     m_subtitleLabel->setFont(themeFont(Typography::FontRole::Body).toQFont());
-    rootLayout->addWidget(m_subtitleLabel);
+    titleBlock->addWidget(m_subtitleLabel);
+    headerRow->addLayout(titleBlock);
+    headerRow->addStretch(1);
 
     m_openButton = new fluent::basicinput::Button(tr("打开项目"), this);
     m_openButton->setIconGlyph(Typography::Icons::Folder);
     connect(m_openButton, &fluent::basicinput::Button::clicked, this, [this]() {
         m_viewModel->requestOpenProjectDialog();
     });
-    rootLayout->addWidget(m_openButton, 0, Qt::AlignLeft);
+    headerRow->addWidget(m_openButton, 0, Qt::AlignVCenter);
+
+    // The import wizard is a P5-B destination; keep the primary action visible but inert.
+    m_newProjectButton = new fluent::basicinput::Button(tr("新建项目/导入"), this);
+    m_newProjectButton->setFluentStyle(fluent::basicinput::Button::Accent);
+    m_newProjectButton->setIconGlyph(Typography::Icons::Add);
+    m_newProjectButton->setEnabled(false);
+    m_newProjectButton->setToolTip(tr("导入向导将在后续版本提供"));
+    headerRow->addWidget(m_newProjectButton, 0, Qt::AlignVCenter);
+    rootLayout->addLayout(headerRow);
 
     m_infoBar = new fluent::status_info::InfoBar(this);
     m_infoBar->setIsOpen(false);
     m_infoBar->setIsClosable(true);
     connect(m_infoBar, &fluent::status_info::InfoBar::closed, this, [this]() { m_viewModel->dismissNotice(); });
-    // Single reused retry action: InfoBar::setActionWidget detaches without deleting,
-    // so allocating a fresh button per render would leak it.
     m_retryButton = new fluent::basicinput::Button(tr("重试"), this);
     connect(m_retryButton, &fluent::basicinput::Button::clicked, this, [this]() {
         if (!m_currentRetryPath.isEmpty()) {
@@ -66,40 +83,109 @@ void HomePage::buildUi() {
     });
     rootLayout->addWidget(m_infoBar);
 
-    auto* contentContainer = new QWidget(this);
-    m_stack = new QStackedLayout(contentContainer);
+    // Main area: recent projects section.
+    m_mainArea = new QWidget(this);
+    auto* mainLayout = new QVBoxLayout(m_mainArea);
+    mainLayout->setContentsMargins(0, 0, 0, 0);
+    mainLayout->setSpacing(12);
+    auto* recentHeader = new QLabel(tr("最近项目"), m_mainArea);
+    recentHeader->setFont(themeFont(Typography::FontRole::BodyStrong).toQFont());
+    mainLayout->addWidget(recentHeader);
 
-    m_emptyState = new QWidget(contentContainer);
+    auto* stackContainer = new QWidget(m_mainArea);
+    m_stack = new QStackedLayout(stackContainer);
+
+    // Empty state (spec §5.1).
+    m_emptyState = new QWidget(stackContainer);
     auto* emptyLayout = new QVBoxLayout(m_emptyState);
-    auto* emptyLabel = new QLabel(tr("还没有最近项目\n点击「打开项目」开始。"), m_emptyState);
-    emptyLabel->setAlignment(Qt::AlignCenter);
-    emptyLabel->setFont(themeFont(Typography::FontRole::BodyLarge).toQFont());
-    emptyLayout->addStretch();
-    emptyLayout->addWidget(emptyLabel);
-    emptyLayout->addStretch();
+    emptyLayout->setSpacing(8);
+    emptyLayout->addStretch(1);
+    auto* emptyGlyph = new QLabel(Typography::Icons::Document, m_emptyState);
+    QFont emptyGlyphFont(Typography::FontFamily::FluentIcons);
+    emptyGlyphFont.setPixelSize(48);
+    emptyGlyph->setFont(emptyGlyphFont);
+    emptyGlyph->setAlignment(Qt::AlignCenter);
+    emptyGlyph->setAccessibleName(QString()); // decorative
+    emptyLayout->addWidget(emptyGlyph);
+    auto* emptyTitle = new QLabel(tr("创建第一个漫画项目"), m_emptyState);
+    emptyTitle->setFont(themeFont(Typography::FontRole::Subtitle).toQFont());
+    emptyTitle->setAlignment(Qt::AlignCenter);
+    emptyLayout->addWidget(emptyTitle);
+    auto* emptyHint = new QLabel(tr("导入图片或打开已有项目开始翻译。"), m_emptyState);
+    emptyHint->setFont(themeFont(Typography::FontRole::Body).toQFont());
+    emptyHint->setAlignment(Qt::AlignCenter);
+    emptyLayout->addWidget(emptyHint);
+    auto* emptyButtons = new QHBoxLayout;
+    emptyButtons->addStretch(1);
+    auto* emptyNewButton = new fluent::basicinput::Button(tr("新建项目/导入"), m_emptyState);
+    emptyNewButton->setFluentStyle(fluent::basicinput::Button::Accent);
+    emptyNewButton->setEnabled(false);
+    emptyNewButton->setToolTip(tr("导入向导将在后续版本提供"));
+    emptyButtons->addWidget(emptyNewButton);
+    auto* emptyOpenButton = new fluent::basicinput::Button(tr("打开已有项目"), m_emptyState);
+    connect(emptyOpenButton, &fluent::basicinput::Button::clicked, this, [this]() {
+        m_viewModel->requestOpenProjectDialog();
+    });
+    emptyButtons->addWidget(emptyOpenButton);
+    emptyButtons->addStretch(1);
+    emptyLayout->addLayout(emptyButtons);
+    emptyLayout->addStretch(1);
     m_stack->addWidget(m_emptyState);
 
-    m_listView = new fluent::collections::ListView(contentContainer);
+    // Recent projects card grid (WinUI GridView semantics, spec §2.2).
+    m_gridView = new fluent::collections::GridView(stackContainer);
     m_model = new RecentProjectsModel(this);
-    m_listView->setModel(m_model);
-    m_listView->setContextMenuPolicy(Qt::CustomContextMenu);
-    connect(m_listView, &QWidget::customContextMenuRequested, this, &HomePage::showContextMenu);
-    connect(m_listView, &QListView::doubleClicked, this, [this](const QModelIndex& index) {
+    m_delegate = new RecentProjectCardDelegate(this, m_gridView);
+    m_gridView->setModel(m_model);
+    m_gridView->setItemDelegate(m_delegate);
+    m_gridView->setCellSize(QSize(240, 216));
+    m_gridView->setHorizontalSpacing(16);
+    m_gridView->setVerticalSpacing(16);
+    m_gridView->setContextMenuPolicy(Qt::CustomContextMenu);
+    connect(m_gridView, &QWidget::customContextMenuRequested, this, &HomePage::showContextMenu);
+    const auto openAt = [this](const QModelIndex& index) {
         if (index.isValid()) {
             const QString path = index.data(RecentProjectsModel::PathRole).toString();
             if (!path.isEmpty()) {
                 m_viewModel->openProjectPath(path);
             }
         }
-    });
-    m_stack->addWidget(m_listView);
+    };
+    connect(m_gridView, &QAbstractItemView::activated, this, openAt);
+    connect(m_gridView, &QAbstractItemView::doubleClicked, this, openAt);
+    m_stack->addWidget(m_gridView);
+    mainLayout->addWidget(stackContainer, 1);
 
-    rootLayout->addWidget(contentContainer, 1);
+    // Side rail: quick start (spec §2.3). Import flows land in P5-B; buttons stay inert.
+    m_sideRail = new QWidget(this);
+    auto* railLayout = new QVBoxLayout(m_sideRail);
+    railLayout->setContentsMargins(0, 0, 0, 0);
+    railLayout->setSpacing(8);
+    auto* quickHeader = new QLabel(tr("快速开始"), m_sideRail);
+    quickHeader->setFont(themeFont(Typography::FontRole::BodyStrong).toQFont());
+    railLayout->addWidget(quickHeader);
+    const auto addQuickAction = [this, railLayout](const QString& glyph, const QString& text) {
+        auto* button = new fluent::basicinput::Button(text, m_sideRail);
+        button->setIconGlyph(glyph);
+        button->setEnabled(false);
+        button->setToolTip(tr("导入向导将在后续版本提供"));
+        railLayout->addWidget(button);
+        return button;
+    };
+    addQuickAction(Typography::Icons::Document, tr("从图片创建项目"));
+    addQuickAction(Typography::Icons::Folder, tr("从图片文件夹创建项目"));
+    railLayout->addStretch(1);
+
+    m_contentLayout = new QBoxLayout(QBoxLayout::LeftToRight);
+    m_contentLayout->setSpacing(24);
+    m_contentLayout->addWidget(m_mainArea, 1);
+    m_contentLayout->addWidget(m_sideRail, 0);
+    rootLayout->addLayout(m_contentLayout, 1);
 }
 
 void HomePage::render(const HomeState& state) {
     m_model->setProjects(state.recentProjects);
-    m_stack->setCurrentWidget(state.recentProjects.isEmpty() ? m_emptyState : m_listView);
+    m_stack->setCurrentWidget(state.recentProjects.isEmpty() ? m_emptyState : m_gridView);
     m_openButton->setEnabled(!state.isOpeningProject);
 
     if (state.notice.has_value()) {
@@ -123,8 +209,17 @@ void HomePage::render(const HomeState& state) {
     }
 }
 
+void HomePage::updateResponsiveLayout(int availableWidth) {
+    if (m_contentLayout == nullptr || m_sideRail == nullptr) {
+        return;
+    }
+    const bool compact = availableWidth < kCompactBreakpoint;
+    m_contentLayout->setDirection(compact ? QBoxLayout::TopToBottom : QBoxLayout::LeftToRight);
+    m_sideRail->setFixedWidth(compact ? QWIDGETSIZE_MAX : kSideRailWidth);
+}
+
 void HomePage::showContextMenu(const QPoint& pos) {
-    const QModelIndex index = m_listView->indexAt(pos);
+    const QModelIndex index = m_gridView->indexAt(pos);
     if (!index.isValid()) {
         return;
     }
@@ -135,7 +230,7 @@ void HomePage::showContextMenu(const QPoint& pos) {
     fluent::menus_toolbars::FluentMenu menu(QString(), this);
     auto* openAction = menu.addAction(tr("打开"));
     auto* removeAction = menu.addAction(tr("从最近列表中移除"));
-    const QAction* selected = menu.exec(m_listView->viewport()->mapToGlobal(pos));
+    const QAction* selected = menu.exec(m_gridView->viewport()->mapToGlobal(pos));
     if (selected == openAction) {
         m_viewModel->openProjectPath(path);
     } else if (selected == removeAction) {
@@ -149,11 +244,18 @@ bool HomePage::isEmptyStateVisibleForTest() const {
 
 void HomePage::onThemeUpdated() {
     BasePage::onThemeUpdated();
+    const auto& tokens = themeColorsRef();
     if (m_titleLabel) {
         m_titleLabel->setFont(themeFont(Typography::FontRole::Title).toQFont());
     }
     if (m_subtitleLabel) {
         m_subtitleLabel->setFont(themeFont(Typography::FontRole::Body).toQFont());
+        QPalette palette = m_subtitleLabel->palette();
+        palette.setColor(QPalette::WindowText, tokens.textSecondary);
+        m_subtitleLabel->setPalette(palette);
+    }
+    if (m_gridView) {
+        m_gridView->viewport()->update(); // delegate reads tokens at paint time
     }
 }
 

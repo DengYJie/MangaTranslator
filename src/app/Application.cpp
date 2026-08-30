@@ -81,6 +81,17 @@ int Application::run() {
     controller->navigate(QStringLiteral("home"));
     m_mainWindow->show();
 
+    // Debug aid: --screenshot <path> grabs the settled window and quits.
+    const auto args = m_app->arguments();
+    const int shotIndex = args.indexOf(QStringLiteral("--screenshot"));
+    if (shotIndex >= 0 && shotIndex + 1 < args.size()) {
+        const QString path = args.at(shotIndex + 1);
+        QTimer::singleShot(500, m_app.get(), [this, path]() {
+            m_mainWindow->grab().save(path);
+            QCoreApplication::quit();
+        });
+    }
+
     if (m_smokeTest) {
         QTimer::singleShot(0, m_app.get(), &QCoreApplication::quit);
     }

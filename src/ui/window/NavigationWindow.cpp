@@ -33,7 +33,11 @@ NavigationWindow::~NavigationWindow() {
 
 void NavigationWindow::initNavigation() {
     m_navigationView = new fluent::navigation::NavigationView(this);
-    m_navigationView->setDisplayMode(fluent::navigation::NavigationView::DisplayMode::Auto);
+    // Main surface stays a fixed compact rail (shell spec §6.1); the pane toggle
+    // expands it temporarily. Auto mode would widen it by window width.
+    m_navigationView->setDisplayMode(fluent::navigation::NavigationView::DisplayMode::Left);
+    m_navigationView->setPaneOpen(false);
+    m_navigationView->setExpandedPaneWidth(256);
 
     // 1. Create the default main navigation surface.
     auto* mainPanel = new navigation::NavigationPanel(m_navigationView);
@@ -263,6 +267,10 @@ bool NavigationWindow::setActiveNavigationSurface(const QString& surfaceId) {
 
     m_navigationView->setMainChromeWidget(targetPanel.data(), fluent::WidgetOwnership::Reparented);
     m_activeSurfaceId = surfaceId;
+
+    // Shell spec §6.1: the main surface defaults to the compact rail, secondary
+    // surfaces (e.g. settings) to an expanded pane so category names stay readable.
+    m_navigationView->setPaneOpen(surfaceId != QStringLiteral("main"));
 
     syncActivePanelState();
     targetPanel->show();

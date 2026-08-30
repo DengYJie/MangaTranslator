@@ -43,6 +43,8 @@ add_library(manga_ui STATIC
     screen/home/HomeState.h
     screen/home/HomeViewModel.cpp
     screen/home/HomeViewModel.h
+    screen/home/RecentProjectCardDelegate.cpp
+    screen/home/RecentProjectCardDelegate.h
     screen/home/RecentProjectsModel.cpp
     screen/home/RecentProjectsModel.h
     screen/home/RelativeTime.cpp
