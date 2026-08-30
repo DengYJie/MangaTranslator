@@ -4,10 +4,13 @@
 #include "application/ports/IPageImageLoader.h"
 #include "application/ports/IThumbnailStore.h"
 #include "application/usecase/import/ImportUseCases.h"
+#include "application/usecase/region/RegionUseCases.h"
 #include "application/usecase/thumbnail/ThumbnailUseCases.h"
 #include "application/workflow/OperationRegistry.h"
 
 #include <QFileInfo>
+
+#include <algorithm>
 
 namespace manga::ui::screen::editor {
 
@@ -72,7 +75,7 @@ void EditorViewModel::openProjectSession(application::OpenedProjectSession sessi
             entry.orderIndex = pageDesc.orderIndex;
             entry.displayName = QFileInfo(pageDesc.originalAssetPath).fileName();
             entry.imageSize = pageDesc.imageSize;
-            entry.regionCount = 0; // Region count projection arrives with the region projection task.
+            entry.regionCount = pageDesc.regionCount;
             s.pages.append(entry);
         }
 
@@ -81,6 +84,20 @@ void EditorViewModel::openProjectSession(application::OpenedProjectSession sessi
         s.notice.reset();
         s.isPageLoading = false;
         s.currentPageId = domain::PageId{};
+
+        // Reset region selection and tool state for new session.
+        s.regions.clear();
+        s.selectedRegionIds.clear();
+        s.primaryRegionId = domain::RegionId{};
+        s.activeTool = CanvasTool::Select;
+        s.previewMode = PreviewMode::Original;
+        s.inspectorMode = InspectorMode::Page;
+        s.canUndo = false;
+        s.canRedo = false;
+        s.saveState = DocumentSaveState{};
+        if (m_openedSession) {
+            s.saveState.isDirty = m_openedSession->project.isDirty();
+        }
     });
 
     Q_EMIT thumbnailsInvalidated();
@@ -130,7 +147,14 @@ void EditorViewModel::selectPage(const domain::PageId& pageId) {
         s.isPageLoading = true;
         s.notice.reset();
         s.viewGeneration++;
+
+        // Page switch clears region selection.
+        s.selectedRegionIds.clear();
+        s.primaryRegionId = domain::RegionId{};
+        s.inspectorMode = InspectorMode::Page;
     });
+
+    rebuildCurrentPageProjection();
 
     Q_EMIT thumbnailsInvalidated();
 
@@ -223,6 +247,242 @@ void EditorViewModel::dismissNotice() {
     if (m_state.notice.has_value()) {
         updateState([&](EditorState& s) { s.notice.reset(); });
     }
+}
+
+void EditorViewModel::setActiveTool(CanvasTool tool) {
+    if (!m_hasSession) {
+        return;
+    }
+    // Tool switch cancels uncommitted gestures (Task 4 hook point).
+    updateState([&](EditorState& s) { s.activeTool = tool; });
+}
+
+void EditorViewModel::selectRegion(const domain::RegionId& regionId, RegionSelectionMode mode) {
+    if (!m_hasSession || !m_state.currentPageId.isValid()) {
+        return;
+    }
+
+    // Verify the region exists on the current page.
+    bool found = false;
+    for (const auto& rp : m_state.regions) {
+        if (rp.id == regionId) {
+            found = true;
+            break;
+        }
+    }
+    if (!found) {
+        return; // Unknown region id is ignored.
+    }
+
+    updateState([&](EditorState& s) {
+        switch (mode) {
+            case RegionSelectionMode::Replace:
+                s.selectedRegionIds.clear();
+                s.selectedRegionIds.append(regionId);
+                s.primaryRegionId = regionId;
+                break;
+            case RegionSelectionMode::Toggle: {
+                const int idx = s.selectedRegionIds.indexOf(regionId);
+                if (idx >= 0) {
+                    s.selectedRegionIds.removeAt(idx);
+                    // If toggling off the primary, pick the first remaining or nil.
+                    if (s.primaryRegionId == regionId) {
+                        s.primaryRegionId =
+                            s.selectedRegionIds.isEmpty() ? domain::RegionId{} : s.selectedRegionIds.first();
+                    }
+                } else {
+                    s.selectedRegionIds.append(regionId);
+                    s.primaryRegionId = regionId;
+                }
+                break;
+            }
+            case RegionSelectionMode::Range: {
+                // Range selects contiguous span in region order between current primary and target.
+                if (!s.primaryRegionId.isValid()) {
+                    // No primary yet, treat as Replace.
+                    s.selectedRegionIds.clear();
+                    s.selectedRegionIds.append(regionId);
+                    s.primaryRegionId = regionId;
+                    break;
+                }
+                // Find order indices of primary and target.
+                int primaryOrder = -1;
+                int targetOrder = -1;
+                for (const auto& rp : s.regions) {
+                    if (rp.id == s.primaryRegionId) {
+                        primaryOrder = rp.orderIndex;
+                    }
+                    if (rp.id == regionId) {
+                        targetOrder = rp.orderIndex;
+                    }
+                }
+                if (primaryOrder < 0 || targetOrder < 0) {
+                    break;
+                }
+                const int lo = std::min(primaryOrder, targetOrder);
+                const int hi = std::max(primaryOrder, targetOrder);
+                s.selectedRegionIds.clear();
+                for (const auto& rp : s.regions) {
+                    if (rp.orderIndex >= lo && rp.orderIndex <= hi) {
+                        s.selectedRegionIds.append(rp.id);
+                    }
+                }
+                // Primary stays unchanged during range selection.
+                break;
+            }
+        }
+
+        // Sort selected IDs by page region order.
+        std::sort(s.selectedRegionIds.begin(),
+                  s.selectedRegionIds.end(),
+                  [&s](const domain::RegionId& a, const domain::RegionId& b) {
+                      int orderA = -1;
+                      int orderB = -1;
+                      for (const auto& rp : s.regions) {
+                          if (rp.id == a)
+                              orderA = rp.orderIndex;
+                          if (rp.id == b)
+                              orderB = rp.orderIndex;
+                      }
+                      return orderA < orderB;
+                  });
+
+        // Derive inspector mode from selection count.
+        if (s.selectedRegionIds.isEmpty()) {
+            s.inspectorMode = InspectorMode::Page;
+            s.primaryRegionId = domain::RegionId{};
+        } else if (s.selectedRegionIds.size() == 1) {
+            s.inspectorMode = InspectorMode::Single;
+        } else {
+            s.inspectorMode = InspectorMode::Multi;
+        }
+    });
+}
+
+void EditorViewModel::clearRegionSelection() {
+    if (!m_hasSession) {
+        return;
+    }
+    updateState([&](EditorState& s) {
+        s.selectedRegionIds.clear();
+        s.primaryRegionId = domain::RegionId{};
+        s.inspectorMode = InspectorMode::Page;
+    });
+}
+
+void EditorViewModel::selectAllRegionsOnCurrentPage() {
+    if (!m_hasSession || !m_state.currentPageId.isValid()) {
+        return;
+    }
+    updateState([&](EditorState& s) {
+        s.selectedRegionIds.clear();
+        for (const auto& rp : s.regions) {
+            s.selectedRegionIds.append(rp.id);
+        }
+        if (!s.selectedRegionIds.isEmpty()) {
+            s.primaryRegionId = s.selectedRegionIds.first();
+            s.inspectorMode = s.selectedRegionIds.size() == 1 ? InspectorMode::Single : InspectorMode::Multi;
+        } else {
+            s.primaryRegionId = domain::RegionId{};
+            s.inspectorMode = InspectorMode::Page;
+        }
+    });
+}
+
+void EditorViewModel::setPreviewMode(PreviewMode mode) {
+    if (!m_hasSession) {
+        return;
+    }
+    updateState([&](EditorState& s) { s.previewMode = mode; });
+}
+
+bool EditorViewModel::removeRegionForTest(const domain::RegionId& regionId) {
+    if (!m_hasSession || !m_openedSession || !m_state.currentPageId.isValid()) {
+        return false;
+    }
+
+    application::RemoveRegionUseCase useCase(&m_openedSession->project);
+    application::RemoveRegionRequest request;
+    request.pageId = m_state.currentPageId;
+    request.regionId = regionId;
+
+    auto result = useCase.execute(request);
+    if (!result.has_value()) {
+        return false;
+    }
+
+    rebuildCurrentPageProjection();
+
+    // Update save state after mutation.
+    updateState([this](EditorState& s) { s.saveState.isDirty = m_openedSession->project.isDirty(); });
+
+    return true;
+}
+
+void EditorViewModel::rebuildCurrentPageProjection() {
+    if (!m_hasSession || !m_openedSession || !m_state.currentPageId.isValid()) {
+        return;
+    }
+
+    const auto* page = m_openedSession->project.findPage(m_state.currentPageId);
+    if (!page) {
+        return;
+    }
+
+    QVector<RegionProjection> projections;
+    projections.reserve(static_cast<int>(page->regions().size()));
+    for (const auto& region : page->regions()) {
+        RegionProjection rp;
+        rp.id = region.id();
+        rp.geometry = region.geometry();
+        rp.orderIndex = region.orderIndex();
+        rp.contentRevision = region.contentRevision();
+        rp.isLocked = region.isLocked();
+        rp.isCleared = region.isCleared();
+        rp.hasManualTranslation = region.translation().hasManualText();
+        projections.append(rp);
+    }
+
+    // Sort by orderIndex.
+    std::sort(projections.begin(), projections.end(), [](const RegionProjection& a, const RegionProjection& b) {
+        return a.orderIndex < b.orderIndex;
+    });
+
+    // Sanitize selection: drop IDs no longer present in the page.
+    auto isValidId = [&projections](const domain::RegionId& id) {
+        for (const auto& rp : projections) {
+            if (rp.id == id) {
+                return true;
+            }
+        }
+        return false;
+    };
+
+    QVector<domain::RegionId> sanitizedSelection;
+    for (const auto& id : m_state.selectedRegionIds) {
+        if (isValidId(id)) {
+            sanitizedSelection.append(id);
+        }
+    }
+
+    domain::RegionId sanitizedPrimary = m_state.primaryRegionId;
+    if (!sanitizedPrimary.isValid() || !isValidId(sanitizedPrimary)) {
+        sanitizedPrimary = sanitizedSelection.isEmpty() ? domain::RegionId{} : sanitizedSelection.first();
+    }
+
+    InspectorMode mode = InspectorMode::Page;
+    if (sanitizedSelection.size() == 1) {
+        mode = InspectorMode::Single;
+    } else if (sanitizedSelection.size() > 1) {
+        mode = InspectorMode::Multi;
+    }
+
+    updateState([&](EditorState& s) {
+        s.regions = projections;
+        s.selectedRegionIds = sanitizedSelection;
+        s.primaryRegionId = sanitizedPrimary;
+        s.inspectorMode = mode;
+    });
 }
 
 void EditorViewModel::startPageLoad(const domain::PageId& pageId) {

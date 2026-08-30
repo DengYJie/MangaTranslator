@@ -35,8 +35,60 @@ struct EditorNotice {
     bool operator==(const EditorNotice&) const = default;
 };
 
-/// P5-B subset of the frozen EditorState (supplement §4): no regions, no tools, no
-/// preview mode yet. Only stable IDs and value data; pixmaps never enter State.
+/// Canvas interaction tool.
+enum class CanvasTool {
+    Select,
+    Pan,
+    CreateRegion
+};
+
+/// Page preview mode for comparing original and translated content.
+enum class PreviewMode {
+    Original,
+    Translated,
+    Compare
+};
+
+/// Selection behavior when clicking a region.
+enum class RegionSelectionMode {
+    Replace,
+    Toggle,
+    Range
+};
+
+/// Inspector panel mode derived from selection count.
+enum class InspectorMode {
+    Page,
+    Single,
+    Multi
+};
+
+/// Value-typed projection of one text region on the current page.
+struct RegionProjection {
+    domain::RegionId id;
+    domain::RectGeometry geometry;
+    int orderIndex{0};
+    quint64 contentRevision{0};
+    bool isLocked{false};
+    bool isCleared{false};
+    bool hasManualTranslation{false};
+
+    bool operator==(const RegionProjection&) const = default;
+};
+
+/// Document save and undo state projection. Task 5 wires the QUndoStack;
+/// until then canUndo/canRedo stay false and texts are plain defaults.
+struct DocumentSaveState {
+    bool isDirty{false};
+    bool isSaving{false};
+    QString undoText{QStringLiteral("Undo")};
+    QString redoText{QStringLiteral("Redo")};
+    std::optional<QString> saveError;
+
+    bool operator==(const DocumentSaveState&) const = default;
+};
+
+/// Frozen editor state snapshot. All value-typed, no domain pointers or pixmaps.
 struct EditorState {
     domain::ProjectId projectId{}; // nil = no project open
     QString projectName;
@@ -47,6 +99,26 @@ struct EditorState {
     quint64 projectSessionGeneration{0};
     bool isPageLoading{false};
     std::optional<EditorNotice> notice;
+
+    /// Current page region projections sorted by orderIndex.
+    QVector<RegionProjection> regions;
+    /// Selected region IDs sorted by page region order.
+    QVector<domain::RegionId> selectedRegionIds;
+    /// Primary region ID (always a member of selectedRegionIds; nil when empty).
+    domain::RegionId primaryRegionId{};
+    /// Active canvas tool.
+    CanvasTool activeTool{CanvasTool::Select};
+    /// Page preview mode.
+    PreviewMode previewMode{PreviewMode::Original};
+    /// Inspector mode derived from selection count.
+    InspectorMode inspectorMode{InspectorMode::Page};
+
+    /// Top-level undo/redo booleans mirroring the stack (Task 5 wires them).
+    bool canUndo{false};
+    bool canRedo{false};
+    /// Document save state projection.
+    DocumentSaveState saveState;
+
     bool operator==(const EditorState&) const = default;
 };
 

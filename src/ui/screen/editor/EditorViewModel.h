@@ -8,7 +8,6 @@
 
 #include <QFutureWatcher>
 #include <QHash>
-#include <QSet>
 
 #include <optional>
 
@@ -45,6 +44,21 @@ public:
     void noteViewTransform(double zoom, const QPointF& centerOnPage);
     void dismissNotice();
 
+    /// Sets the active canvas tool. Tool switch cancels uncommitted gestures (hook point for Task 4).
+    void setActiveTool(CanvasTool tool);
+    /// Selects a region on the current page using the given selection mode.
+    void selectRegion(const domain::RegionId& regionId, RegionSelectionMode mode);
+    /// Clears all region selection.
+    void clearRegionSelection();
+    /// Selects all regions on the current page.
+    void selectAllRegionsOnCurrentPage();
+    /// Sets the preview mode for comparing original and translated content.
+    void setPreviewMode(PreviewMode mode);
+
+    /// Test-only hook: removes a region via RemoveRegionUseCase and rebuilds projection.
+    /// Production intents must not use this method.
+    [[nodiscard]] bool removeRegionForTest(const domain::RegionId& regionId);
+
     /// Returns the project revision for change tracking; 0 means no active session.
     [[nodiscard]] quint64 currentProjectRevision() const noexcept {
         return m_openedSession ? m_openedSession->project.revision() : 0;
@@ -80,6 +94,10 @@ private:
     void pumpThumbnailQueue();
     void cancelThumbnailRequests();
     [[nodiscard]] const application::PageDescriptor* findPage(const domain::PageId& pageId) const;
+
+    /// Rebuilds current page region projections from m_openedSession->project only.
+    /// Called after openProjectSession, selectPage, and synchronous mutations.
+    void rebuildCurrentPageProjection();
 
     application::IThumbnailStore* m_thumbnailStore;      // non-owning, may be null in tests
     application::IPageImageLoader* m_pageImageLoader;    // non-owning, may be null in tests
