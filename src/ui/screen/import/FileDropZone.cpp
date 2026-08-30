@@ -48,18 +48,18 @@ void FileDropZone::dragEnterEvent(QDragEnterEvent* event) {
             }
             QString path = url.toLocalFile();
             QFileInfo info(path);
+            QString ext = info.suffix().toLower();
             if (info.isFile()) {
-                QString ext = info.suffix().toLower();
-                if (ext != QStringLiteral("jpg") && ext != QStringLiteral("jpeg") && ext != QStringLiteral("png") &&
-                    ext != QStringLiteral("webp")) {
+                if (!ext.isEmpty() && ext != QStringLiteral("jpg") && ext != QStringLiteral("jpeg") &&
+                    ext != QStringLiteral("png") && ext != QStringLiteral("webp")) {
                     allSupported = false;
                     break;
                 }
-            } else if (!info.isDir()) { // 无后缀等同于文件夹启发式在Task7，但这里检查后缀
-                QString ext = info.suffix();
-                if (!ext.isEmpty()) { // heuristic: folders might not have suffix, or they do but we let them pass if
-                                      // isDir. If not isDir and not isFile?
-                    // Actually let's just let folders pass, or files without suffix if they are assumed folders
+            } else if (!info.isDir()) {
+                if (!ext.isEmpty() && ext != QStringLiteral("jpg") && ext != QStringLiteral("jpeg") &&
+                    ext != QStringLiteral("png") && ext != QStringLiteral("webp")) {
+                    allSupported = false;
+                    break;
                 }
             }
         }

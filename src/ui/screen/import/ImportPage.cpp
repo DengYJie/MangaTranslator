@@ -7,6 +7,7 @@
 #include <QMouseEvent>
 #include <QPainter>
 #include <QResizeEvent>
+#include <QScrollArea>
 #include <QStandardPaths>
 #include <QStyledItemDelegate>
 
@@ -106,16 +107,26 @@ void ImportPage::setupUi() {
 
     m_infoBar = new fluent::status_info::InfoBar(this);
     m_infoBar->setIsOpen(false);
+    m_infoBar->setIsClosable(true);
     rootLayout->addWidget(m_infoBar);
 
     m_progressBar = new fluent::status_info::ProgressBar(this);
     m_progressBar->setVisible(false);
     rootLayout->addWidget(m_progressBar);
 
-    m_mainLayout = new QBoxLayout(QBoxLayout::LeftToRight);
+    auto* scrollArea = new QScrollArea(this);
+    scrollArea->setWidgetResizable(true);
+    scrollArea->setFrameShape(QFrame::NoFrame);
+    scrollArea->setStyleSheet(
+        QStringLiteral("QScrollArea { background: transparent; } QWidget#scrollWidget { background: transparent; }"));
+
+    auto* scrollWidget = new QWidget(scrollArea);
+    scrollWidget->setObjectName(QStringLiteral("scrollWidget"));
+    m_mainLayout = new QBoxLayout(QBoxLayout::LeftToRight, scrollWidget);
     m_mainLayout->setContentsMargins(24, 24, 24, 24);
     m_mainLayout->setSpacing(24);
-    rootLayout->addLayout(m_mainLayout);
+    scrollArea->setWidget(scrollWidget);
+    rootLayout->addWidget(scrollArea, 1);
 
     // Source Pane
     m_sourcePane = new QWidget(this);
@@ -181,7 +192,7 @@ void ImportPage::setupUi() {
 
     m_submitButton = new fluent::basicinput::Button(this);
     m_cancelImportButton = new fluent::basicinput::Button(this);
-    m_cancelImportButton->setText(tr("取消"));
+    m_cancelImportButton->setText(tr("取消导入"));
     auto* buttonsLayout = new QHBoxLayout;
     buttonsLayout->addWidget(m_submitButton, 1);
     buttonsLayout->addWidget(m_cancelImportButton);
@@ -204,6 +215,26 @@ void ImportPage::setupUi() {
 }
 
 void ImportPage::bindViewModel() {
+    connect(m_viewModel, &ImportViewModel::browseFilesRequested, this, [this]() {
+        auto paths = QFileDialog::getOpenFileNames(
+            this, tr("Select Files"), QString(), tr("图片文件 (*.jpg *.jpeg *.png *.webp)"));
+        if (!paths.isEmpty()) {
+            m_viewModel->addSourcePaths(paths);
+        }
+    });
+    connect(m_viewModel, &ImportViewModel::browseFolderRequested, this, [this]() {
+        auto path = QFileDialog::getExistingDirectory(this, tr("Select Folder"));
+        if (!path.isEmpty()) {
+            m_viewModel->addSourcePaths({path});
+        }
+    });
+    connect(m_viewModel, &ImportViewModel::browseLocationRequested, this, [this]() {
+        auto path = QFileDialog::getExistingDirectory(this, tr("Select Save Location"));
+        if (!path.isEmpty()) {
+            m_viewModel->setSaveLocation(path);
+        }
+    });
+    connect(m_infoBar, &fluent::status_info::InfoBar::closed, m_viewModel, &ImportViewModel::dismissNotice);
     connect(m_viewModel, &ImportViewModel::stateChanged, this, &ImportPage::updateState);
 
     connect(m_dropZone, &FileDropZone::pathsDropped, m_viewModel, &ImportViewModel::addSourcePaths);
@@ -312,6 +343,7 @@ void ImportPage::updateState(const manga::ui::screen::import_::ImportState& stat
         m_infoBar->setIsOpen(true);
     } else {
         m_infoBar->setIsOpen(false);
+        m_infoBar->setIsClosable(true);
     }
 }
 
