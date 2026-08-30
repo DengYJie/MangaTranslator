@@ -76,6 +76,7 @@ void HomePage::buildUi() {
     m_infoBar->setIsClosable(true);
     connect(m_infoBar, &fluent::status_info::InfoBar::closed, this, [this]() { m_viewModel->dismissNotice(); });
     m_retryButton = new fluent::basicinput::Button(tr("重试"), this);
+    m_retryButton->hide(); // Hosted by the InfoBar only while a retryable notice is shown.
     connect(m_retryButton, &fluent::basicinput::Button::clicked, this, [this]() {
         if (!m_currentRetryPath.isEmpty()) {
             m_viewModel->openProjectPath(m_currentRetryPath);
