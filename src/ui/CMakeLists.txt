@@ -49,6 +49,12 @@ add_library(manga_ui STATIC
     screen/home/RecentProjectsModel.h
     screen/home/RelativeTime.cpp
     screen/home/RelativeTime.h
+    widget/PageListModel.cpp
+    widget/PageListModel.h
+    widget/PageThumbnailDelegate.cpp
+    widget/PageThumbnailDelegate.h
+    widget/PageThumbnailList.cpp
+    widget/PageThumbnailList.h
     window/MainWindow.cpp
     window/MainWindow.h
     window/NavigationWindow.cpp
