@@ -209,7 +209,7 @@ V0.1 不提供多边形创建或旋转。后续版本加入多边形时，需要
 
 ## 13. 文本渲染预览
 
-- 画布与导出共同依赖 `manga_rendering::TextLayoutEngine/TextRasterizer`，使用相同的换行、glyph、字重、字距、颜色、描边和 overflow 结果。
+- 画布预览与导出请求的图层快照共同使用 `manga_rendering::TextLayoutEngine/TextRasterizer`，确保换行、glyph、字重、字距、颜色、描边和 overflow 一致；Data Exporter 本身只合成快照。
 - 排版和栅格化在 `paint()` 外按 Region 预计算；`TextLayerItem::paint()` 只绘制缓存的 `QPixmap` 或轻量 glyph cache，不调用 Port、Domain 或文件系统。
 - 高倍率缩放时文字与边缘必须保持清晰；质量切换使用 Cross-fade，不能闪白。
 - 字体缺失、溢出、字形缺失在 Region 上显示 Caution，不把错误文字直接烧入清理层。

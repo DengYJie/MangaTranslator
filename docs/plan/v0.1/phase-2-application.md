@@ -1,7 +1,7 @@
 # P2：Application 契约与 UseCase
 
 > 状态：Complete
-> P5 前置修订：UseCase 层已实现，Data 层待办（generation、缩略图、凭据状态与 Clear Undo）
+> P5 前置修订：Complete（generation、缩略图、凭据状态与 Clear Undo 契约均已落地）
 > 前置阶段：P1
 > 输出：可由 Fake Port 完整驱动的 V0.1 业务流程
 

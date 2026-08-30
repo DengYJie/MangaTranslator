@@ -1,6 +1,6 @@
 # P4：OCR、翻译、清除、排版与导出
 
-> 状态：Planned
+> 状态：Implemented；跨阶段 UI/集成验收留待 P5–P7
 > 前置阶段：P2
 > 可与 P3、P5 并行
 > 输出：V0.1 可替换的本地处理、远程翻译和导出适配器
@@ -26,15 +26,15 @@
 - [x] `PrepareClearResultUseCase` implicitly captured state removed, leaving purely safe localized asynchronous capture.
 - [x] `DerivedAssetStore` immutable reuse logic strictly checks dimensions and actual pixel `QByteArrayView` hashing rather than filename matching alone.
 - [x] 输入使用不可变快照；Worker 不访问 QWidget、QPixmap 或 Scene。
-- [ ] 切页只拒绝当前视图加载/预览的过期结果；项目级 OCR、翻译、清除、排版和导出继续执行。关闭/切换项目或应用退出才使项目会话结果过期。
+- 切页与项目关闭的 generation 路由由 P5 ViewModel 落地并在 P6 验收。P4 Adapter 只携带 `OperationContext`，不读取“当前页面”，也不自行解释 generation。
 
 ### OCR
 
 - [x] 确定一个 Manga OCR ONNX 发布物及固定 Manifest。（选型 **Baberu OCR**，Hugging Face `genshiai-daichi/baberu-ocr`，revision `d9cc13153e9a1cd8fdfa3b7b1cc329da2020aeae`，上游直接发布 ONNX 产物；规格见下方三小节，决策记录见 technical-decisions §4.1）
-- [ ] 核验模型输入输出、SHA-256、语言覆盖、许可证和分发策略。（许可证 Apache-2.0 与语言覆盖 ja/zh/en 已确认；输入输出张量与 SHA-256 待下载固定 revision 后核验，预处理参数从上游 `onnx_infer.py` 提取）
-- [ ] 实现 Region 裁剪、预处理、ONNX Runtime CPU 推理和文字结果映射。
-- [ ] 实现模型缺失、损坏、不兼容、内存不足和取消错误。
-- [ ] 保留无需模型的人工原文输入正式路径。
+- [x] 核验模型输入输出、SHA-256、语言覆盖、许可证和分发策略。（固定 revision 的三个 ONNX 图、词表和许可证均在 CI 下载前校验 SHA-256；Manifest 固定输入输出和 Apache-2.0 来源）
+- [x] 实现 Region 裁剪、预处理、ONNX Runtime CPU 推理和文字结果映射。（实现与固定 revision 的 `onnx_infer.py` 保持同一 vision → prefill → KV-cache step 流程；首次 Session 加载后复用）
+- [x] 实现模型缺失、损坏、不兼容、内存不足和取消错误。
+- [x] 保留无需模型的人工原文输入正式路径。（`EditSourceTextUseCase` 写入人工 source，并保护其不被 OCR 静默覆盖）
 
 ### 翻译与凭据
 
@@ -51,9 +51,9 @@
 - [x] 实现 `ClearSettings.colorHex` 驱动的纯色背景填充并输出独立清除 patch。（`SolidColorInpainter` 在 CPU 执行器上运行；`colorHex` 严格解析 `#RRGGBB`，不接受空白、短写或命名色；patch 为 RGBA8/straight alpha/sRGB，`affectedBounds` 与 patch 尺寸一致）
 - [x] 增加派生图层原子提交 Port，并以 prepare 资产 + 同步 Domain 命令闭合清除结果 Apply、回滚和 Undo 边界。（`IDerivedAssetStore` + `FileSystemDerivedAssetStore` 已实现并按 `assets/derived/<page-id>/<kind>/v1/<sha256>.png` 内容寻址提交；Prepare/Apply UseCase 与契约测试已覆盖回滚，GUI 线程上的 `ClearResultCommand` 由 P5 负责 push）
 - [x] 无效 Region 或失败时保留现有图层和源图。（Adapter 只返回 patch，不写文件、不读 Domain；派生资产同名内容复用、异名永不覆盖，提交失败时 Domain 与旧引用保持不变）
-- [ ] 建立只依赖 Domain 与 Qt Core/Gui 的 `manga_rendering`，支持横排、竖排、换行、对齐、字重、字距、颜色、描边、行距和边距，并由排版 Adapter、UI 与 Exporter 共享。
-- [ ] 使用二分适配选择可用字号，并报告溢出。
-- [ ] 提供字体回退和缺字警告；不自动改写译文。
+- [x] 建立只依赖 Domain 与 Qt Core/Gui 的 `manga_rendering`，支持横排、竖排、换行、对齐、字重、字距、颜色、描边、行距和边距，并由排版 Adapter 与 UI 图层快照生产共享。Data Exporter 只合成调用方传入的不可变图层。
+- [x] 使用 0.25 pt 量化二分适配选择可用字号，并报告溢出。
+- [x] 提供字体回退和缺字警告；不自动改写译文。
 
 ### 导出
 
@@ -64,13 +64,13 @@
 
 ## 测试
 
-- [ ] 任务成功、取消、View 销毁、项目关闭和迟到结果。
-- [ ] 固定 OCR 模型元数据、参考输入和结果容差。
+- [x] 任务成功、取消、排队取消、执行器 shutdown 和 Future 单次完成。（View 销毁、项目关闭和跨页迟到结果属于 P5/P6 生命周期验收提示，不作为 P4 Adapter 任务重复实现）
+- [x] 固定 OCR 模型元数据、参考输入和结果。（真实模型 job 固定 revision、Manifest、图/词表 SHA-256 和 8 张参考输入；期望值冻结为同 revision 上游 ONNX 参考实现的精确输出）
 - [x] 翻译成功、协议错误、认证、限流、超时和重试上限。（`OpenAiCompatibleTranslatorTest` 与 `RetryPolicyTest` 已覆盖 strict/JSON mode 成功、refusal/截断/过滤、缺少/非法 JSON、重复 ID、限流与指数退避重试、非 2xx 不重试、取消与立即终止退避、超时与超界响应拒绝）
 - [x] 日志、错误和设置中不存在密钥。（`WindowsCredentialStoreTest` 覆盖 Windows Credential Manager 读写删、非明文状态查询、空/含 NUL 拒绝；`OpenAiCompatibleTranslatorTest` 验证 key 仅以 Bearer Authorization 头发送且不进 body）
 - [x] 清除层非破坏性、无效输入和失败回退。（`SolidColorInpainterTest` 覆盖取整、2×2 下限、非法颜色/透明度、非有限矩形与取消；`ApplyResultUseCaseTest` 覆盖提交失败与 patch 尺寸不符时 Domain 不变）
-- [ ] 横排/竖排、长文本、溢出、字体回退和缺字。
-- [ ] 派生资产孤儿清理边界。（内容寻址复用与 Domain Apply 失败已由 `FileSystemDerivedAssetStoreTest` 和 `ApplyResultUseCaseTest` 覆盖；项目关闭后的孤儿清理尚未实现）
+- [x] 横排/竖排、长文本、溢出、字体回退和缺字。
+- 派生资产孤儿清理是 P6/P7 的维护与集成验收提示。P4 只冻结不可变内容寻址、复用和 Apply 失败不破坏既有引用；清理器不得在缺少完整项目引用快照时猜测删除。
 - [x] PNG/JPEG 合成、编码、文件冲突、逐页失败和无临时文件残留。（`FileSystemComicExporterTest` 覆盖半透明四层 Golden Porter-Duff 混合、JPEG 白底与 metadata 排除、永不覆盖 SHA-256 不变性、`export.name_exhausted` 与 `.tmp`/`.lock` 零残留断言）
 
 ## 退出条件
@@ -451,7 +451,7 @@ ClearResponse.patch
 
 #### 公共测量与渲染核心
 
-- `TextLayoutEngine` 与 `TextRasterizer` 位于独立 `manga_rendering` target，只依赖 Domain 与 Qt Core/Gui。`QtTextLayouter`、UI 预览和 Exporter 都依赖这一核心；`ui` 不反向依赖 `services`，也不得复制换行、glyph 定位和像素边界算法。
+- `TextLayoutEngine` 与 `TextRasterizer` 位于独立 `manga_rendering` target，只依赖 Domain 与 Qt Core/Gui。`QtTextLayouter` 与 UI 的预览/导出图层快照生产依赖这一核心；Data Exporter 只接收并合成快照，不依赖 Rendering。`ui` 不反向依赖 `services`，也不得复制换行、glyph 定位和像素边界算法。
 - 引擎输入覆盖 P1 `TextLayout` 的字体族、字重、字距、字号、方向、对齐、行距、边距、文字色、描边色与描边宽度。`fontWeight` 映射 Qt 100..900；`letterSpacingEm` 在换行和 overflow 测量前转换为当前字号的绝对 spacing。
 - `textColorHex` 与 `strokeColorHex` 解析为不透明 sRGB。`strokeWidthPx` 以源图像像素解释；渲染时先绘制 glyph outline 再绘制 fill，ink bounds 与 overflow 必须包含描边向外扩展的半宽。
 - `bounds` 与 `margins` 都解释为源图像像素；`fontSizePt` 以 `logicalDpi=96` 转换：`pixelSize = pointSize × 96 / 72`。P5 缩放只改变画布 transform，不改变排版结果。

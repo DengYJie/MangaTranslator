@@ -21,11 +21,10 @@
 
 ### 开工前契约
 
-- [ ] 完成 P1 `TextLayout` 样式字段在 V1 Schema 的序列化与校验，更新 Domain/Schema 测试。
-- [ ] 完成 P2 分范围 generation、`IThumbnailStore`、凭据状态 UseCase、应用设置 Port 和 Clear 两阶段采用协议。
-- [ ] 作为 P5 跨层前置补丁，在 Data 层实现 `IThumbnailStore` 和应用设置/最近项目 Port Adapter；UI 不直接承担文件或 QSettings 读写。
-- [ ] 建立 `manga_rendering` target，并让 UI、排版 Adapter 与 Exporter 共享同一测量/栅格化实现。
-- [ ] 用 FluentQt 公共 API 做最小探针，确认计划使用的 `NavigationView`、`CommandBar`、`ShimmerPainter`、`Expander`、主题回调和动态主题覆盖 API。
+- [x] 完成 P1 `TextLayout` 样式字段在 V1 Schema 的序列化与校验，更新 Domain/Schema 测试。
+- [x] 完成 P2 分范围 generation、`IThumbnailStore`、凭据状态 UseCase、应用设置 Port 和 Clear 两阶段采用协议。
+- [x] 作为 P5 跨层前置补丁，在 Data 层实现 `IThumbnailStore` 和应用设置/最近项目 Port Adapter；UI 不直接承担文件或 QSettings 读写。
+- [x] 建立 `manga_rendering` target，由 UI 图层快照生产和排版 Adapter 共享测量/栅格化实现；Data Exporter 只合成传入的不可变图层，不依赖 Rendering。
 
 ### 产品与视觉设计门
 
@@ -107,7 +106,7 @@
 
 - 用户不依赖自动检测即可创建并完整编辑矩形 Region、文本与排版样式。
 - View 不直接访问 Repository、网络客户端、ONNX Session、文件系统、QSettings 或 Credential Manager。
-- UI 预览与导出共享 `manga_rendering` 结果，关键版式和 overflow 判定一致。
+- UI 预览与导出请求中的文字图层由同一 `manga_rendering` 结果生成，Data Exporter 只合成快照，关键版式和 overflow 判定一致。
 - 切页不污染当前视图，也不误取消用户启动的项目级后台任务。
 - 窄窗口和扁平窗口下页面、画布、Inspector 与主要操作仍可访问。
 

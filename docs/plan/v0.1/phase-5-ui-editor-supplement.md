@@ -36,7 +36,6 @@ ui ───────────────→ application ─────�
  └────→ rendering ───────┘
           ↑
 services ─┘
-export ───┘
 
 data/network ─────→ application ports + domain
 app ──────────────→ all layers, construction only
@@ -51,7 +50,7 @@ app ──────────────→ all layers, construction only
 - 提供 `TextLayoutEngine`、`TextRasterizer` 及不可变结果类型。
 - `services::QtTextLayouter` 使用它产生 `LayoutResponse`。
 - UI 使用它预计算活动页 Region 的渲染缓存。
-- Exporter 使用它生成最终 translation/manualOverride layer。
+- UI 的图层快照生产使用它生成 translation/manualOverride layer；Exporter 只合成调用方提供的不可变图层。
 
 UI 不依赖 `services`。`QGraphicsItem::paint()` 不调用 Layout Port，不运行换行算法，不读取 Domain，也不触发整页异步重渲染。
 
@@ -80,7 +79,7 @@ struct TextLayout {
 };
 ```
 
-项目格式 `schemaVersion` 从 1 迁移到 2，默认补入 `fontWeight=400`、`letterSpacingEm=0`、`textColorHex=#000000`、`strokeColorHex=#FFFFFF`、`strokeWidthPx=0`。这只是 schema 迁移，不提升 `formatVersion`。
+项目格式在 V0.1 继续使用 `schemaVersion = 1`。上述字段已经属于冻结的 V1 Schema，加载时必须完整存在并通过严格校验；不得再为同一 V0.1 格式虚构 schema 2 迁移。
 
 渲染缓存 key 至少包含：RegionId、文本来源、`contentRevision`、完整 `TextLayout`、Region 源像素 bounds、目标 DPI 契约和 renderer version。任一字段改变只失效对应 Region；字体数据库或 renderer version 改变失效活动页全部文字缓存。
 
@@ -295,7 +294,7 @@ Inspector 完全由 `selectedRegionIds` 驱动：
 - Inspector：`fluent::layout::Card`、`Expander`、`Field`，结合 TextEdit、NumberBox、ComboBox、ColorPicker 和 ToggleSwitch。
 - 反馈：InfoBar 用于可持续的页面内问题，Toast 用于已完成的轻量反馈，ContentDialog 只用于需要立即选择的阻塞决策。
 
-应用初始化遵循 FluentQt 公开 API 的先后约束：在 `QApplication` 构造前准备 High DPI，随后初始化 FluentQt resources，再创建 Window。具体符号必须以锁定 revision 的公共头文件和最小编译探针为准，不从示例项目复制私有实现。
+应用初始化遵循 FluentQt 公开 API 的先后约束：在 `QApplication` 构造前准备 High DPI，随后初始化 FluentQt resources，再创建 Window。具体符号以锁定 revision 的公共头文件以及实际组件的编译和交互测试为准，不设置独立探针，也不从示例项目复制私有实现。
 
 ## 12. 响应式与可访问性
 

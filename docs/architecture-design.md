@@ -70,7 +70,7 @@ app/ApplicationContext 构造并连接所有层
 core 不依赖任何业务层
 ```
 
-`rendering` 是唯一允许被 UI、Services 和 Exporter 共同依赖的功能共享层。它只依赖 Domain 与 Qt Core/Gui，负责确定性的文字测量、glyph 定位和源图像像素坐标下的栅格化；不得访问项目目录、Port、ViewModel、QWidget、FluentQt 或具体 Adapter。排版 Adapter、画布预览和导出必须复用该层，不能分别实现换行与竖排规则。
+`rendering` 是 UI 与 Services 可共同依赖的功能共享层。它只依赖 Domain 与 Qt Core/Gui，负责确定性的文字测量、glyph 定位和源图像像素坐标下的栅格化；不得访问项目目录、Port、ViewModel、QWidget、FluentQt 或具体 Adapter。排版 Adapter、画布预览和导出图层快照生产必须复用该层；Data Exporter 只合成调用方传入的不可变图层，不能反向依赖 Rendering。
 
 ### 3.1 Domain
 
@@ -266,7 +266,7 @@ V0.3 的跨页上下文仍以单页为提交和输出单位：当前页完整 Re
 
 ### 6.5 排版与渲染
 
-`ITextLayouter` 根据文字、可用区域、方向、字体和边距产生 resolved `TextLayout`。`manga_rendering` 中的 `TextLayoutEngine` 是测量与绘制的唯一实现；`QtTextLayouter`、画布和 Exporter 都调用它。自动字号通过二分搜索寻找不溢出的最大字号。
+`ITextLayouter` 根据文字、可用区域、方向、字体和边距产生 resolved `TextLayout`。`manga_rendering` 中的 `TextLayoutEngine` 是测量与绘制的唯一实现；`QtTextLayouter`、画布和导出图层快照生产调用它，Data Exporter 不调用。自动字号通过二分搜索寻找不溢出的最大字号。
 
 页面采用非破坏性图层：
 

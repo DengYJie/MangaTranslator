@@ -1,7 +1,7 @@
 # P1：Domain 与项目格式
 
 > 状态：Complete
-> P5 前置修订：Pending（排版样式与 schema v2）
+> P5 前置修订：Complete（排版样式直接纳入尚未发布的 schema v1）
 > 前置阶段：P0
 > 输出：可独立测试的领域模型、业务不变量和 V0.1 项目 Schema
 
@@ -134,7 +134,7 @@ struct RectGeometry {
 
 #### `TextLayout`
 
-以下为完成“P5 前置排版契约修订”后的目标结构；当前实现仍是 schema v1 的基础字段，不能把本节视为已落地代码。
+以下排版字段已落入 Domain、schema v1、序列化器与严格校验。V0.1 尚未发布，因此不为未公开的中间结构制造 schema v2 迁移。
 
 ```cpp
 std::string fontFamily;
@@ -214,7 +214,7 @@ int orderIndex;
 - `schemaVersion` — project.json Schema 版本
 - `formatVersion` — 项目目录/资产组织格式版本
 
-迁移主要看 `schemaVersion + formatVersion`。当前实现仍为 schema v1；P5 前置补丁落地后 current schema 才提升为 2。Schema v1 → v2 只为 `TextLayout` 补齐上述五个稳定默认字段，不改资产目录或 `formatVersion`。
+迁移主要看 `schemaVersion + formatVersion`。当前实现保持 schema v1，且 `TextLayout` 已要求上述五个稳定字段。首次公开格式冻结后，任何新增必填字段才通过新的 schemaVersion 和显式迁移引入。
 
 #### 资产命名
 
@@ -269,11 +269,13 @@ Domain 不生成 UI 文案。
 
 ### 迁移策略
 
+V0.1 当前只存在 `schemaVersion = 1`，没有已发布的旧格式需要迁移。下列逐级迁移规则只在未来真正引入 schema 2 后启用：
+
 ```text
 schemaVersion: 1 → 2 → 3
 ```
 
-每次只支持逐级迁移：`migrateV1ToV2()`, `migrateV2ToV3()`。
+届时每次只支持逐级迁移，例如 `migrateV1ToV2()`、`migrateV2ToV3()`；不得为仍属于 V1 的字段补充提前制造空迁移。
 
 加载规则：
 - `version == current` → 直接读取

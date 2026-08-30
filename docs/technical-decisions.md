@@ -222,7 +222,7 @@ MSVC 生产目标启用 `/W4` 与 `/permissive-`；第三方警告不提升为�
 ### 7.3 基础排版
 
 - V0.1 支持横排、竖排、字体、字重、字距、颜色、描边、对齐、换行、行距、边距和字号二分适配。
-- 测量与栅格化使用独立 `manga_rendering` target，只依赖 Domain 与 Qt Core/Gui；排版 Adapter、画布预览和导出共享同一实现。
+- 测量与栅格化使用独立 `manga_rendering` target，只依赖 Domain 与 Qt Core/Gui；排版 Adapter、画布预览和导出图层快照生产共享同一实现，Data Exporter 只合成快照。
 - V0.1 不承诺完整日文禁则、振假名和高级文本塑形。
 - 字体缺失时使用明确的字体回退，并在界面显示警告。
 
