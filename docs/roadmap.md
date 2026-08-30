@@ -95,6 +95,8 @@ MangaTranslator 是面向漫画翻译与校对的桌面工作台。它将导入�
 
 ## 4. V0.2：自动文本检测
 
+分阶段执行清单见 [`docs/plan/v0.2/README.md`](plan/v0.2/README.md)。
+
 ### 版本目标
 
 减少逐个手工框选的成本，同时保持检测结果完全可见、可修改、可删除和可重新运行。
@@ -107,6 +109,7 @@ MangaTranslator 是面向漫画翻译与校对的桌面工作台。它将导入�
 
 - 固定 1024×1024 输入的 comic-text-detector ONNX 候选模型，使用 ONNX Runtime CPU；再分发许可通过审核后才能随应用发布。
 - 页面级自动检测并生成 TextRegion、Lines 和 Mask。
+- `ITextDetector` 允许统一布局模型返回可选 Bubble/Panel 分析候选；V0.2 不把它们设为 OCR 前置，也不交付独立气泡/分镜编辑器。
 - 检测置信度、运行状态、失败原因和需要检查标记。
 - 自动结果的选择、移动、缩放、合并、拆分和删除。
 - 人工区域与自动区域来源区分。
@@ -123,6 +126,7 @@ MangaTranslator 是面向漫画翻译与校对的桌面工作台。它将导入�
 - 复杂气泡、分镜和拟声词完整语义检测。
 - 多设备分布式推理。
 - DirectML/CUDA、动态模型输入、多模型切换、嵌套归档和加密归档。
+- PaddleOCR-VL/Manga OCR/Hayai OCR 选择器、Koharu 的 ML Inpaint 模型和本地 GGUF 翻译模型。
 - Region 旋转、多边形编辑和 LaMa。
 
 ### 前置依赖

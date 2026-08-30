@@ -122,7 +122,7 @@ Port 契约统一形态：异步操作返回 `QFuture<std::expected<T, Applicati
 
 ### 3.3 Adapters
 
-- `services` 实现本地计算 Port，包括 ONNX 检测与 OCR、清除和排版 Adapter；文字测量与最终栅格化委托给共享 `rendering` 层。V0.1 只接入一个 Manga OCR ONNX 实现与基础纯色清除；OpenCV 和 LaMa 按路线图后移。
+- `services` 实现本地计算 Port，包括 ONNX 检测与 OCR、清除和排版 Adapter；文字测量与最终栅格化委托给共享 `rendering` 层。V0.1 只接入一个 Manga OCR ONNX 实现与基础纯色清除；V0.2 增加统一页面检测与 OpenCV，LaMa 按路线图后移。检测 Adapter 可以由一个模型同时返回文字、气泡、分镜和 Mask，但 Application 只消费当前版本声明支持的能力。
 - `data` 实现目录型项目仓储、用户级术语 SQLite、V0.3 项目任务/TM SQLite，以及按版本开放的图片文件夹、CBZ、PDF 等导入器。
 - `network` 在 V0.1 只实现通用 OpenAI-compatible Chat Completions 适配器；Provider 专属 SDK 和其他协议适配器属于后续能力。
 
@@ -208,7 +208,8 @@ View::render(State)
 ```text
 ComicPage
   -> ITextDetector
-       -> blocks + lines + mask
+       -> text regions + lines + masks
+       -> optional bubble/panel analysis candidates
   -> ReadingOrder
   -> IOcrEngine
        -> sourceText
@@ -225,7 +226,9 @@ ComicPage
 
 ### 6.1 文字检测
 
-第一阶段检测“文字区域”，不把“气泡检测”设为前置条件。推荐以 comic-text-detector 的 ONNX 模型作为候选，实现必须隐藏在 `ITextDetector` 后面。
+`ITextDetector` 表达页面分析能力，不绑定“一个输出只能来自一个模型”。V0.2 的最低合同是文字区域、文字行和清除 Mask；能够统一输出气泡、分镜或拟声词类别的布局模型可以通过同一 Port 返回可选分析候选，但这些能力不能成为 OCR、人工框选或保存的隐式前置条件。
+
+V0.2 推荐以 comic-text-detector 的 ONNX 模型作为 CPU 技术候选，同时用 Koharu Layout RF-DETR Seg 2XL 做质量和部署比较。具体模型、预处理和第三方类型必须隐藏在 `ITextDetector` 后面。
 
 输出至少包含：
 
@@ -235,8 +238,17 @@ ComicPage
 - 用于清除的 Mask。
 - 置信度。
 - 映射回源图像的坐标。
+- Adapter 能力声明，以及可选的气泡、分镜和类别分析候选。
+
+V0.2 只要求 TextRegion、Lines 和 Mask 进入正式采用与持久化合同。Bubble/Panel 可以用于分析 overlay、质量比较和未来关联，但 V0.2 不提供独立气泡/分镜编辑器，也不把候选静默写进 Domain。
 
 OpenCV 适合预处理、轮廓、Mask 修正和后处理，不作为复杂漫画场景的主检测器。
+
+### 6.1.1 模型 Profile
+
+检测、OCR、翻译和 Inpaint 分别拥有一个类型化 `ModelProfile`。Profile 至少包含 processor kind、model identity、adapter/config version、runtime/backend、capabilities、Manifest identity、license status 和非敏感参数摘要。
+
+V0.2 每个阶段只有一个生产 Profile，不提供多模型选择器。这个合同用于隔离配置、错误、模型校验和后续替换；V0.3 以后增加模型选择时不得修改 Pipeline 或 Domain 的基本形状。排版继续由确定性的共享 `rendering` 实现负责，不伪装成可下载 ML Profile。
 
 ### 6.2 OCR
 
