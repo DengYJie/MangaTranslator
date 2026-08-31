@@ -12,6 +12,8 @@ add_library(manga_ui STATIC
     command/EditorCommandContext.h
     command/RegionCommands.cpp
     command/RegionCommands.h
+    command/RegionPropertyCommand.cpp
+    command/RegionPropertyCommand.h
     navigation/INavigationPresenter.h
     navigation/INavigationRegistrar.h
     navigation/NavigationController.cpp
@@ -49,6 +51,8 @@ add_library(manga_ui STATIC
     screen/editor/EditorViewModel.cpp
     screen/editor/EditorViewModel.h
     screen/editor/InspectorState.h
+    screen/editor/TextEditSession.cpp
+    screen/editor/TextEditSession.h
     screen/home/HomePage.cpp
     screen/home/HomePage.h
     screen/home/HomeState.h

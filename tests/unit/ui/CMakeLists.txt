@@ -406,3 +406,24 @@ set_tests_properties(manga_tests_ui_inspector_state PROPERTIES
     LABELS "unit;ui"
     TIMEOUT 15
 )
+
+qt_add_executable(manga_tests_ui_text_edit_session
+    text_edit_session_test.cpp
+)
+manga_apply_project_options(manga_tests_ui_text_edit_session)
+set_target_properties(manga_tests_ui_text_edit_session PROPERTIES AUTOMOC ON)
+
+target_link_libraries(manga_tests_ui_text_edit_session
+    PRIVATE
+        manga_ui
+        Qt6::Test
+        Qt6::Widgets
+)
+
+manga_deploy_qt_runtime(manga_tests_ui_text_edit_session)
+add_test(NAME manga_tests_ui_text_edit_session COMMAND manga_tests_ui_text_edit_session)
+set_tests_properties(manga_tests_ui_text_edit_session PROPERTIES
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
+    LABELS "unit;ui"
+    TIMEOUT 15
+)

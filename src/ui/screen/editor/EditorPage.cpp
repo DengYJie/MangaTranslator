@@ -36,8 +36,9 @@ EditorPage::EditorPage(EditorViewModel* viewModel, QWidget* parent) : base::Base
 
     connect(m_viewModel, &EditorViewModel::pageImageReady, this, &EditorPage::handlePageImageReady);
 
-    // Inspector deletion intent reuses the existing region lifecycle command path.
-    // Text and layout edit intents are not consumed by the ViewModel yet.
+    // Inspector intents: deletion reuses the region lifecycle command path; text and
+    // style edits flow through the merge-aware property commands; FocusOut of an
+    // Inspector text control seals the active text merge batch.
     connect(m_inspector,
             &widget::InspectorPanel::deleteRegionsRequested,
             m_viewModel,
@@ -46,6 +47,18 @@ EditorPage::EditorPage(EditorViewModel* viewModel, QWidget* parent) : base::Base
                     m_viewModel->deleteRegions(regionIds);
                 }
             });
+    connect(m_inspector,
+            &widget::InspectorPanel::fieldEditCommitted,
+            m_viewModel,
+            &EditorViewModel::commitInspectorFieldEdit);
+    connect(m_inspector,
+            &widget::InspectorPanel::candidateAdoptionRequested,
+            m_viewModel,
+            &EditorViewModel::adoptCandidate);
+    connect(m_inspector,
+            &widget::InspectorPanel::textEditingSessionFinished,
+            m_viewModel,
+            &EditorViewModel::sealTextEditSession);
 
     m_viewModel->observe(this, [this](const EditorState& state) { render(state); });
 

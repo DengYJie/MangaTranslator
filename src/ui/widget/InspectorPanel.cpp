@@ -11,6 +11,7 @@
 #include <QPainter>
 #include <QRegularExpression>
 #include <QStackedWidget>
+#include <QTextEdit>
 #include <QVBoxLayout>
 
 #include <cmath>
@@ -31,6 +32,28 @@ const QRegularExpression& hexColorPattern() {
 
 QString percentText(double confidence) {
     return QString::number(qRound(confidence * 100.0)) + QStringLiteral("%");
+}
+
+/// Replays projected text into an Inspector text control. An unchanged value is the
+/// echo of the control's own commit and must not disturb cursor or selection; a real
+/// change restores the previous cursor/selection clamped to the new text length.
+void setTextPreservingCursor(fluent::textfields::TextEdit* edit, const QString& text) {
+    if (edit->toPlainText() == text) {
+        return;
+    }
+    auto* inner = edit->findChild<QTextEdit*>();
+    if (inner == nullptr) {
+        edit->setPlainText(text);
+        return;
+    }
+    const QTextCursor previous = inner->textCursor();
+    const int position = previous.position();
+    const int anchor = previous.anchor();
+    edit->setPlainText(text);
+    QTextCursor restored = inner->textCursor();
+    restored.setPosition(qMin(anchor, text.size()));
+    restored.setPosition(qMin(position, text.size()), QTextCursor::KeepAnchor);
+    inner->setTextCursor(restored);
 }
 
 // Orientation and alignment combo rows are inserted in domain enum ordinal order;
@@ -227,7 +250,7 @@ QWidget* InspectorPanel::buildSingleHost() {
     sourceField->setEditor(m_sourceEdit, fluent::WidgetOwnership::Owned);
     translationLayout->addWidget(sourceField);
     connect(m_sourceEdit, &TextEdit::textChanged, this, [this]() {
-        if (!m_updating) {
+        if (!m_updating && !m_inImePreedit) {
             emitFieldEdit(InspectorField::SourceText, m_sourceEdit->toPlainText());
         }
     });
@@ -247,10 +270,20 @@ QWidget* InspectorPanel::buildSingleHost() {
     translationField->setEditor(m_translationEdit, fluent::WidgetOwnership::Owned);
     translationLayout->addWidget(translationField);
     connect(m_translationEdit, &TextEdit::textChanged, this, [this]() {
-        if (!m_updating) {
+        if (!m_updating && !m_inImePreedit) {
             emitFieldEdit(InspectorField::ManualTranslation, m_translationEdit->toPlainText());
         }
     });
+
+    // The project undo stack is the single authoritative text history. The control
+    // keeps only selection, cursor and uncommitted IME preedit; FocusOut seals the
+    // ViewModel merge batch via the event filter.
+    for (auto* edit : {m_sourceEdit, m_translationEdit}) {
+        if (auto* inner = edit->findChild<QTextEdit*>()) {
+            inner->setUndoRedoEnabled(false);
+            inner->installEventFilter(this);
+        }
+    }
 
     m_translationMetaLabel = new Label();
     m_translationMetaLabel->setObjectName(QStringLiteral("inspectorTranslationMeta"));
@@ -817,7 +850,7 @@ void InspectorPanel::populateSingle(const screen::editor::SingleRegionInspectorS
     m_currentPageId = state.pageId;
     m_currentRegionIds = {state.regionId};
 
-    m_sourceEdit->setPlainText(state.sourceText);
+    setTextPreservingCursor(m_sourceEdit, state.sourceText);
     switch (state.sourceType) {
         case domain::TextSourceType::OcrAuto:
             m_sourceMetaLabel->setText(tr("OCR 识别 · 置信度 %1").arg(percentText(state.sourceConfidence)));
@@ -830,7 +863,7 @@ void InspectorPanel::populateSingle(const screen::editor::SingleRegionInspectorS
             break;
     }
 
-    m_translationEdit->setPlainText(state.manualTranslation);
+    setTextPreservingCursor(m_translationEdit, state.manualTranslation);
     if (state.hasManualTranslation) {
         m_translationMetaLabel->setText(tr("生效译文：人工译文"));
     } else if (!state.effectiveTranslation.isEmpty()) {
@@ -1020,6 +1053,18 @@ void InspectorPanel::emitFieldEdit(screen::editor::InspectorField field, const Q
         return;
     }
     Q_EMIT fieldEditCommitted(m_currentPageId, m_currentRegionIds, field, value);
+}
+
+bool InspectorPanel::eventFilter(QObject* watched, QEvent* event) {
+    // The filter is installed only on the two inner text editors; a FocusOut here
+    // always means a text control lost focus and the merge batch must be sealed.
+    if (event->type() == QEvent::FocusOut) {
+        Q_EMIT textEditingSessionFinished();
+    } else if (event->type() == QEvent::InputMethod) {
+        auto* imeEvent = static_cast<QInputMethodEvent*>(event);
+        m_inImePreedit = !imeEvent->preeditString().isEmpty();
+    }
+    return QWidget::eventFilter(watched, event);
 }
 
 void InspectorPanel::handleNumericCommit(fluent::layout::Field* field,

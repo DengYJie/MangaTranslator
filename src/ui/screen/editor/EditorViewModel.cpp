@@ -8,6 +8,7 @@
 #include "application/usecase/thumbnail/ThumbnailUseCases.h"
 #include "application/workflow/OperationRegistry.h"
 #include "ui/command/RegionCommands.h"
+#include "ui/command/RegionPropertyCommand.h"
 
 #include <QFileInfo>
 
@@ -15,12 +16,92 @@
 
 namespace manga::ui::screen::editor {
 
+namespace {
+
+/// Applies one Inspector style field value to a layout copy. Returns false for
+/// non-style fields and out-of-range enum payloads; range checks on numeric values
+/// are delegated to TextLayout::isValid by the caller.
+bool applyStyleFieldValue(domain::TextLayout& layout, InspectorField field, const QVariant& value) {
+    switch (field) {
+        case InspectorField::FontFamily: {
+            const auto family = value.toString().trimmed();
+            if (family.isEmpty()) {
+                return false;
+            }
+            layout.fontFamily = family.toStdString();
+            return true;
+        }
+        case InspectorField::FontWeight:
+            layout.fontWeight = value.toInt();
+            return true;
+        case InspectorField::FontSizePt:
+            layout.fontSizePt = value.toDouble();
+            return true;
+        case InspectorField::LetterSpacingEm:
+            layout.letterSpacingEm = value.toDouble();
+            return true;
+        case InspectorField::LineSpacing:
+            layout.lineSpacing = value.toDouble();
+            return true;
+        case InspectorField::Orientation: {
+            const int ordinal = value.toInt();
+            if (ordinal < 0 || ordinal > static_cast<int>(domain::TextOrientation::Vertical)) {
+                return false;
+            }
+            layout.orientation = static_cast<domain::TextOrientation>(ordinal);
+            return true;
+        }
+        case InspectorField::HorizontalAlignment: {
+            const int ordinal = value.toInt();
+            if (ordinal < 0 || ordinal > static_cast<int>(domain::HorizontalAlignment::Justify)) {
+                return false;
+            }
+            layout.alignment.horizontal = static_cast<domain::HorizontalAlignment>(ordinal);
+            return true;
+        }
+        case InspectorField::VerticalAlignment: {
+            const int ordinal = value.toInt();
+            if (ordinal < 0 || ordinal > static_cast<int>(domain::VerticalAlignment::Bottom)) {
+                return false;
+            }
+            layout.alignment.vertical = static_cast<domain::VerticalAlignment>(ordinal);
+            return true;
+        }
+        case InspectorField::MarginTop:
+            layout.margins.top = value.toDouble();
+            return true;
+        case InspectorField::MarginRight:
+            layout.margins.right = value.toDouble();
+            return true;
+        case InspectorField::MarginBottom:
+            layout.margins.bottom = value.toDouble();
+            return true;
+        case InspectorField::MarginLeft:
+            layout.margins.left = value.toDouble();
+            return true;
+        case InspectorField::TextColorHex:
+            layout.textColorHex = value.toString().toStdString();
+            return true;
+        case InspectorField::StrokeColorHex:
+            layout.strokeColorHex = value.toString().toStdString();
+            return true;
+        case InspectorField::StrokeWidthPx:
+            layout.strokeWidthPx = value.toDouble();
+            return true;
+        default:
+            return false;
+    }
+}
+
+} // namespace
+
 EditorViewModel::EditorViewModel(application::IThumbnailStore* thumbnailStore,
                                  application::IPageImageLoader* pageImageLoader,
                                  application::OperationRegistry* operationRegistry,
                                  QObject* parent)
     : base::BaseViewModel<EditorViewModel, EditorState>(parent), m_thumbnailStore(thumbnailStore),
-      m_pageImageLoader(pageImageLoader), m_operationRegistry(operationRegistry) {
+      m_pageImageLoader(pageImageLoader), m_operationRegistry(operationRegistry),
+      m_textEditSession(std::make_unique<TextEditSession>()) {
     if (m_thumbnailStore && m_pageImageLoader) {
         m_thumbnailUseCase =
             std::make_unique<application::LoadOrGenerateThumbnailUseCase>(m_thumbnailStore, m_pageImageLoader);
@@ -70,6 +151,7 @@ void EditorViewModel::openProjectSession(application::OpenedProjectSession sessi
     m_undoStack = std::make_unique<QUndoStack>();
     m_commandContext = std::make_unique<command::EditorCommandContext>(&m_openedSession->project);
     m_undoHistoryFaulted = false;
+    m_textEditSession->reset();
 
     updateState([this](EditorState& s) {
         s.projectId = m_session.projectId;
@@ -126,6 +208,7 @@ void EditorViewModel::closeProjectSession() {
     m_undoStack.reset();
     m_commandContext.reset();
     m_undoHistoryFaulted = false;
+    m_textEditSession->reset();
 
     m_hasSession = false;
     m_session = application::ProjectSessionDescriptor{};
@@ -147,6 +230,8 @@ void EditorViewModel::selectPage(const domain::PageId& pageId) {
     if (!m_hasSession || pageId == m_state.currentPageId || findPage(pageId) == nullptr) {
         return;
     }
+
+    sealActiveTextSession();
 
     if (m_operationRegistry && m_pageLoadOperation.isValid()) {
         m_operationRegistry->cancelOperation(m_pageLoadOperation);
@@ -287,6 +372,8 @@ void EditorViewModel::selectRegion(const domain::RegionId& regionId, RegionSelec
         return; // Unknown region id is ignored.
     }
 
+    sealActiveTextSession();
+
     updateState([&](EditorState& s) {
         switch (mode) {
             case RegionSelectionMode::Replace:
@@ -377,6 +464,7 @@ void EditorViewModel::clearRegionSelection() {
     if (!m_hasSession) {
         return;
     }
+    sealActiveTextSession();
     updateState([&](EditorState& s) {
         s.selectedRegionIds.clear();
         s.primaryRegionId = domain::RegionId{};
@@ -389,6 +477,7 @@ void EditorViewModel::selectAllRegionsOnCurrentPage() {
     if (!m_hasSession || !m_state.currentPageId.isValid()) {
         return;
     }
+    sealActiveTextSession();
     updateState([&](EditorState& s) {
         s.selectedRegionIds.clear();
         for (const auto& rp : s.regions) {
@@ -926,6 +1015,171 @@ void EditorViewModel::commitRegionGeometry(const domain::RegionId& regionId,
 
     rebuildCurrentPageProjection();
     refreshUndoState();
+}
+
+void EditorViewModel::sealActiveTextSession() {
+    if (m_textEditSession) {
+        m_textEditSession->seal();
+    }
+}
+
+void EditorViewModel::sealTextEditSession() {
+    sealActiveTextSession();
+}
+
+void EditorViewModel::pushPropertyCommand(command::RegionPropertyCommand* cmd) {
+    m_undoStack->push(cmd);
+    // A merged push deletes cmd; read fault state from the surviving stack top.
+    const auto* top = dynamic_cast<const command::RegionCommand*>(m_undoStack->command(m_undoStack->index() - 1));
+    if (top != nullptr && top->hasFaulted()) {
+        m_undoHistoryFaulted = true;
+    }
+
+    rebuildCurrentPageProjection();
+    refreshUndoState();
+}
+
+void EditorViewModel::commitInspectorFieldEdit(const domain::PageId& pageId,
+                                               const QVector<domain::RegionId>& regionIds,
+                                               InspectorField field,
+                                               const QVariant& value) {
+    if (!m_hasSession || !m_undoStack || !m_commandContext || regionIds.isEmpty() || pageId != m_state.currentPageId) {
+        return;
+    }
+
+    switch (field) {
+        case InspectorField::SourceText:
+        case InspectorField::ManualTranslation:
+            if (regionIds.size() == 1 && value.canConvert<QString>()) {
+                commitTextEdit(pageId, regionIds.first(), field, value.toString());
+            }
+            return;
+        case InspectorField::Cleared:
+            // The clear lifecycle uses its own two-phase command path; a plain
+            // property command cannot carry the immutable clear assets.
+            return;
+        default:
+            commitStyleEdit(pageId, regionIds, field, value);
+            return;
+    }
+}
+
+void EditorViewModel::commitTextEdit(const domain::PageId& pageId,
+                                     const domain::RegionId& regionId,
+                                     InspectorField field,
+                                     const QString& text) {
+    const auto* page = m_openedSession->project.findPage(pageId);
+    const auto* region = page != nullptr ? page->findRegion(regionId) : nullptr;
+    if (region == nullptr || region->isLocked()) {
+        return;
+    }
+
+    domain::PageRegionEdit before;
+    before.regionId = regionId;
+    domain::PageRegionEdit after;
+    after.regionId = regionId;
+    command::RegionPropertyField propertyField;
+
+    if (field == InspectorField::SourceText) {
+        if (region->source().text == text.toStdString()) {
+            return;
+        }
+        before.source = region->source();
+        auto next = region->source();
+        // setManualText preserves provenance: OCR text becomes OcrManualModified.
+        next.setManualText(text.toStdString());
+        after.source = std::move(next);
+        propertyField = command::RegionPropertyField::SourceText;
+    } else {
+        if (region->translation().manualText().value_or(std::string()) == text.toStdString()) {
+            return;
+        }
+        before.translation = region->translation();
+        auto next = region->translation();
+        next.setManualText(text.toStdString());
+        after.translation = std::move(next);
+        propertyField = command::RegionPropertyField::ManualTranslation;
+    }
+
+    const auto key = m_textEditSession->keyFor(m_openedSession->project.id(), pageId, regionId, propertyField);
+    auto* cmd = new command::RegionPropertyCommand(
+        m_commandContext.get(), key, m_textEditSession->nowMs(), before, after, QStringLiteral("Edit Text"));
+    pushPropertyCommand(cmd);
+}
+
+void EditorViewModel::commitStyleEdit(const domain::PageId& pageId,
+                                      const QVector<domain::RegionId>& regionIds,
+                                      InspectorField field,
+                                      const QVariant& value) {
+    const auto* page = m_openedSession->project.findPage(pageId);
+    if (page == nullptr) {
+        return;
+    }
+
+    QVector<command::RegionPropertyCommand::PropertyEdit> edits;
+    for (const auto& regionId : regionIds) {
+        const auto* region = page->findRegion(regionId);
+        // One missing or locked target vetoes the whole batch before anything is pushed.
+        if (region == nullptr || region->isLocked()) {
+            return;
+        }
+        auto layout = region->layout();
+        if (!applyStyleFieldValue(layout, field, value) || !layout.isValid()) {
+            return;
+        }
+        if (layout == region->layout()) {
+            continue;
+        }
+        command::RegionPropertyCommand::PropertyEdit entry;
+        entry.regionId = regionId;
+        entry.before.regionId = regionId;
+        entry.before.layout = region->layout();
+        entry.after.regionId = regionId;
+        entry.after.layout = layout;
+        edits.append(std::move(entry));
+    }
+    if (edits.isEmpty()) {
+        return;
+    }
+
+    sealActiveTextSession();
+    auto* cmd = new command::RegionPropertyCommand(m_commandContext.get(), pageId, edits, QStringLiteral("Edit Style"));
+    pushPropertyCommand(cmd);
+}
+
+void EditorViewModel::adoptCandidate(const domain::PageId& pageId,
+                                     const domain::RegionId& regionId,
+                                     const QString& candidateId) {
+    if (!m_hasSession || !m_undoStack || !m_commandContext || pageId != m_state.currentPageId) {
+        return;
+    }
+    const auto* page = m_openedSession->project.findPage(pageId);
+    const auto* region = page != nullptr ? page->findRegion(regionId) : nullptr;
+    if (region == nullptr || region->isLocked()) {
+        return;
+    }
+
+    const auto candidate = candidateId.toStdString();
+    if (!region->translation().hasCandidate(candidate)) {
+        return;
+    }
+
+    command::RegionPropertyCommand::PropertyEdit entry;
+    entry.regionId = regionId;
+    entry.before.regionId = regionId;
+    entry.before.translation = region->translation();
+    entry.after = entry.before;
+    entry.after.translation->selectCandidate(candidate);
+    if (*entry.before.translation == *entry.after.translation) {
+        return; // Already the selected candidate.
+    }
+
+    sealActiveTextSession();
+    auto* cmd = new command::RegionPropertyCommand(m_commandContext.get(),
+                                                   pageId,
+                                                   QVector<command::RegionPropertyCommand::PropertyEdit>{entry},
+                                                   QStringLiteral("Adopt Candidate"));
+    pushPropertyCommand(cmd);
 }
 
 void EditorViewModel::undo() {

@@ -3,8 +3,10 @@
 #include <FluentQt/BasicInput.h>
 #include <FluentQt/Layout.h>
 #include <FluentQt/TextFields.h>
+#include <QInputMethodEvent>
 #include <QListWidget>
 #include <QSignalSpy>
+#include <QTextEdit>
 #include <QtTest>
 
 using namespace manga;
@@ -379,6 +381,92 @@ private Q_SLOTS:
         panel.setInspectorState(InspectorState{pageState});
         QVERIFY(panel.pageHostForTest()->isVisibleTo(&panel));
         QVERIFY(!panel.multiHostForTest()->isVisibleTo(&panel));
+    }
+
+    void textControlsDisableInternalUndo() {
+        InspectorPanel panel;
+        panel.show();
+        panel.setInspectorState(InspectorState{makeSingleState()});
+
+        for (const auto* name : {"inspectorSourceEdit", "inspectorTranslationEdit"}) {
+            auto* edit = panel.findChild<fluent::textfields::TextEdit*>(QString::fromLatin1(name));
+            QVERIFY(edit != nullptr);
+            auto* inner = edit->findChild<QTextEdit*>();
+            QVERIFY(inner != nullptr);
+            QVERIFY(!inner->isUndoRedoEnabled());
+        }
+    }
+
+    void imePreeditDoesNotEmitIntentButCommitEmitsOnce() {
+        InspectorPanel panel;
+        panel.show();
+        const auto state = makeSingleState();
+        panel.setInspectorState(InspectorState{state});
+
+        auto* edit = panel.findChild<fluent::textfields::TextEdit*>(QStringLiteral("inspectorTranslationEdit"));
+        QVERIFY(edit != nullptr);
+        auto* inner = edit->findChild<QTextEdit*>();
+        QVERIFY(inner != nullptr);
+        inner->setFocus();
+
+        QSignalSpy spy(&panel, &InspectorPanel::fieldEditCommitted);
+
+        // Preedit composition only lives in the control; it must not produce an intent.
+        QInputMethodEvent preeditEvent(QStringLiteral("にほ"), {});
+        QCoreApplication::sendEvent(inner, &preeditEvent);
+        QCOMPARE(spy.size(), 0);
+
+        // One commit string produces exactly one committed intent.
+        QInputMethodEvent commitEvent;
+        commitEvent.setCommitString(QStringLiteral("日本語"), 0, 0);
+        QCoreApplication::sendEvent(inner, &commitEvent);
+        QCOMPARE(spy.size(), 1);
+        QCOMPARE(spy.first().at(2).value<InspectorField>(), InspectorField::ManualTranslation);
+        QVERIFY(spy.first().at(3).toString().contains(QStringLiteral("日本語")));
+    }
+
+    void stateEchoKeepsCursorAndSelection() {
+        InspectorPanel panel;
+        panel.show();
+        auto state = makeSingleState();
+        panel.setInspectorState(InspectorState{state});
+
+        auto* edit = panel.findChild<fluent::textfields::TextEdit*>(QStringLiteral("inspectorTranslationEdit"));
+        QVERIFY(edit != nullptr);
+        auto* inner = edit->findChild<QTextEdit*>();
+        QVERIFY(inner != nullptr);
+
+        QTextCursor cursor = inner->textCursor();
+        cursor.setPosition(2);
+        cursor.setPosition(6, QTextCursor::KeepAnchor);
+        inner->setTextCursor(cursor);
+
+        // Replaying the same text (the control's own committed value) must not touch the cursor.
+        panel.setInspectorState(InspectorState{state});
+        QCOMPARE(inner->textCursor().position(), 6);
+        QCOMPARE(inner->textCursor().anchor(), 2);
+
+        // A genuinely different text (e.g. Undo) restores a clamped, valid cursor.
+        state.manualTranslation = QStringLiteral("abc");
+        panel.setInspectorState(InspectorState{state});
+        QCOMPARE(edit->toPlainText(), QStringLiteral("abc"));
+        QVERIFY(inner->textCursor().position() <= 3);
+    }
+
+    void focusOutRequestsSessionSeal() {
+        InspectorPanel panel;
+        panel.show();
+        panel.setInspectorState(InspectorState{makeSingleState()});
+
+        auto* edit = panel.findChild<fluent::textfields::TextEdit*>(QStringLiteral("inspectorTranslationEdit"));
+        QVERIFY(edit != nullptr);
+        auto* inner = edit->findChild<QTextEdit*>();
+        QVERIFY(inner != nullptr);
+
+        QSignalSpy spy(&panel, &InspectorPanel::textEditingSessionFinished);
+        QEvent focusOut(QEvent::FocusOut);
+        QCoreApplication::sendEvent(inner, &focusOut);
+        QCOMPARE(spy.size(), 1);
     }
 };
 

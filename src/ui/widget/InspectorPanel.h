@@ -72,6 +72,11 @@ Q_SIGNALS:
                                     const domain::RegionId& regionId,
                                     const QString& candidateId);
     void deleteRegionsRequested(const domain::PageId& pageId, const QVector<domain::RegionId>& regionIds);
+    /// A text control lost focus; the ViewModel seals the active text merge batch.
+    void textEditingSessionFinished();
+
+protected:
+    bool eventFilter(QObject* watched, QEvent* event) override;
 
 private:
     void buildUi();
@@ -100,6 +105,7 @@ private:
 
     void setLockedEditing(bool locked);
     bool m_updating{false};
+    bool m_inImePreedit{false};
     screen::editor::InspectorMode m_mode{screen::editor::InspectorMode::Page};
     /// Identity of the rendered projection, used to build intent signals.
     domain::PageId m_currentPageId;

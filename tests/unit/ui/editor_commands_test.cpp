@@ -1,5 +1,6 @@
 #include "ui/command/EditorCommandContext.h"
 #include "ui/command/RegionCommands.h"
+#include "ui/command/RegionPropertyCommand.h"
 #include "ui/manga/RegionInteraction.h"
 
 #include <QUndoStack>
@@ -213,6 +214,233 @@ private slots:
 
         QVERIFY(context.insertRegion(pageId, snapshot, 0).has_value());
         cmd.undo(); // Reinsertion collides with the reappeared region id.
+        QVERIFY(cmd.hasFaulted());
+    }
+
+    void textPropertyCommandUndoRedoRoundTrip() {
+        auto project = makeProject(1200, 1800, 1);
+        const auto pageId = firstPageId(project);
+        const auto regionId = regionAt(project, 0, 0);
+        EditorCommandContext context(&project);
+        QUndoStack stack;
+
+        domain::PageRegionEdit before;
+        before.regionId = regionId;
+        before.translation = project.findPage(pageId)->findRegion(regionId)->translation();
+        domain::PageRegionEdit after = before;
+        after.translation->setManualText("typed text");
+
+        const TextEditSessionKey key{project.id(), pageId, regionId, RegionPropertyField::ManualTranslation, 1};
+        stack.push(new RegionPropertyCommand(&context, key, 1000, before, after, QStringLiteral("Edit Text")));
+
+        QCOMPARE(project.findPage(pageId)->findRegion(regionId)->translation().manualText(),
+                 std::optional<std::string>("typed text"));
+
+        stack.undo();
+        QVERIFY(!project.findPage(pageId)->findRegion(regionId)->translation().manualText().has_value());
+
+        stack.redo();
+        QCOMPARE(project.findPage(pageId)->findRegion(regionId)->translation().manualText(),
+                 std::optional<std::string>("typed text"));
+    }
+
+    void textPropertyCommandsMergeAtWindowBoundary() {
+        auto project = makeProject(1200, 1800, 1);
+        const auto pageId = firstPageId(project);
+        const auto regionId = regionAt(project, 0, 0);
+        EditorCommandContext context(&project);
+        QUndoStack stack;
+
+        const TextEditSessionKey key{project.id(), pageId, regionId, RegionPropertyField::ManualTranslation, 7};
+
+        const auto makeEdit = [&]() {
+            domain::PageRegionEdit edit;
+            edit.regionId = regionId;
+            edit.translation = project.findPage(pageId)->findRegion(regionId)->translation();
+            return edit;
+        };
+
+        auto before = makeEdit();
+        auto mid = before;
+        mid.translation->setManualText("A");
+        auto after = mid;
+        after.translation->setManualText("AB");
+
+        stack.push(new RegionPropertyCommand(&context, key, 10'000, before, mid, QStringLiteral("Edit Text")));
+        // 499 ms later, same session key: merges into one command.
+        stack.push(new RegionPropertyCommand(&context,
+                                             key,
+                                             10'000 + RegionPropertyCommand::kMergeWindowMs - 1,
+                                             mid,
+                                             after,
+                                             QStringLiteral("Edit Text")));
+
+        QCOMPARE(stack.count(), 1);
+        QCOMPARE(project.findPage(pageId)->findRegion(regionId)->translation().manualText(),
+                 std::optional<std::string>("AB"));
+
+        stack.undo();
+        QVERIFY(!project.findPage(pageId)->findRegion(regionId)->translation().manualText().has_value());
+    }
+
+    void textPropertyCommandsDoNotMergeBeyondWindow() {
+        auto project = makeProject(1200, 1800, 1);
+        const auto pageId = firstPageId(project);
+        const auto regionId = regionAt(project, 0, 0);
+        EditorCommandContext context(&project);
+        QUndoStack stack;
+
+        const TextEditSessionKey key{project.id(), pageId, regionId, RegionPropertyField::ManualTranslation, 7};
+
+        domain::PageRegionEdit before;
+        before.regionId = regionId;
+        before.translation = project.findPage(pageId)->findRegion(regionId)->translation();
+        auto mid = before;
+        mid.translation->setManualText("A");
+        auto after = mid;
+        after.translation->setManualText("AB");
+
+        stack.push(new RegionPropertyCommand(&context, key, 10'000, before, mid, QStringLiteral("Edit Text")));
+        // 501 ms later: the merge window is closed.
+        stack.push(new RegionPropertyCommand(&context,
+                                             key,
+                                             10'000 + RegionPropertyCommand::kMergeWindowMs + 1,
+                                             mid,
+                                             after,
+                                             QStringLiteral("Edit Text")));
+
+        QCOMPARE(stack.count(), 2);
+    }
+
+    void textPropertyCommandsDoNotMergeAcrossSessionOrField() {
+        auto project = makeProject(1200, 1800, 1);
+        const auto pageId = firstPageId(project);
+        const auto regionId = regionAt(project, 0, 0);
+        EditorCommandContext context(&project);
+        QUndoStack stack;
+
+        domain::PageRegionEdit before;
+        before.regionId = regionId;
+        before.translation = project.findPage(pageId)->findRegion(regionId)->translation();
+        auto after = before;
+        after.translation->setManualText("A");
+
+        const TextEditSessionKey key{project.id(), pageId, regionId, RegionPropertyField::ManualTranslation, 1};
+        const TextEditSessionKey sealedKey{project.id(), pageId, regionId, RegionPropertyField::ManualTranslation, 2};
+
+        stack.push(new RegionPropertyCommand(&context, key, 10'000, before, after, QStringLiteral("Edit Text")));
+        // A new session id never merges even inside the time window.
+        stack.push(new RegionPropertyCommand(&context, sealedKey, 10'100, before, after, QStringLiteral("Edit Text")));
+        QCOMPARE(stack.count(), 2);
+
+        // A different field never merges either.
+        domain::PageRegionEdit sourceEdit;
+        sourceEdit.regionId = regionId;
+        sourceEdit.source = project.findPage(pageId)->findRegion(regionId)->source();
+        auto sourceAfter = sourceEdit;
+        sourceAfter.source->setManualText("edited");
+        const TextEditSessionKey sourceKey{project.id(), pageId, regionId, RegionPropertyField::SourceText, 3};
+        stack.push(new RegionPropertyCommand(
+            &context, sourceKey, 10'200, sourceEdit, sourceAfter, QStringLiteral("Edit Text")));
+        QCOMPARE(stack.count(), 3);
+    }
+
+    void candidateAdoptionCommandNeverMerges() {
+        auto project = makeProject(1200, 1800, 1);
+        const auto pageId = firstPageId(project);
+        const auto regionId = regionAt(project, 0, 0);
+        EditorCommandContext context(&project);
+        QUndoStack stack;
+
+        auto* region = project.findPage(pageId)->findRegion(regionId);
+        domain::TranslationEntry translation;
+        translation.setModelResult("model", {domain::TranslationCandidate{"c1", "one", 0.9, "p"}});
+        // Rebind the region translation through a snapshot edit so the candidate exists.
+        domain::PageRegionEdit seedEdit;
+        seedEdit.regionId = regionId;
+        seedEdit.translation = translation;
+        QVERIFY(context.applySnapshots(pageId, {seedEdit}).has_value());
+        region = project.findPage(pageId)->findRegion(regionId);
+
+        const auto buildAdoption = [&]() -> RegionPropertyCommand* {
+            RegionPropertyCommand::PropertyEdit entry;
+            entry.regionId = regionId;
+            entry.before.regionId = regionId;
+            entry.before.translation = region->translation();
+            entry.after = entry.before;
+            entry.after.translation->selectCandidate("c1");
+            return new RegionPropertyCommand(&context,
+                                             pageId,
+                                             QVector<RegionPropertyCommand::PropertyEdit>{entry},
+                                             QStringLiteral("Adopt Candidate"));
+        };
+
+        stack.push(buildAdoption());
+        QVERIFY(project.findPage(pageId)->findRegion(regionId)->translation().selectedCandidateId().has_value());
+
+        // Undo, then a repeated adoption is still its own command (no merging for Candidate).
+        stack.undo();
+        QVERIFY(!project.findPage(pageId)->findRegion(regionId)->translation().selectedCandidateId().has_value());
+        stack.push(buildAdoption());
+        QCOMPARE(stack.count(), 1); // undone tail was truncated; the new push stands alone
+        QCOMPARE(stack.index(), 1);
+
+        // A second adoption right after the first must not merge into it.
+        stack.push(buildAdoption());
+        QCOMPARE(stack.count(), 2);
+    }
+
+    void batchStyleCommandRestoresAllRegionsOnUndo() {
+        auto project = makeProject(1200, 1800, 3);
+        const auto pageId = firstPageId(project);
+        EditorCommandContext context(&project);
+        QUndoStack stack;
+
+        QVector<RegionPropertyCommand::PropertyEdit> edits;
+        for (const auto& region : project.findPage(pageId)->regions()) {
+            RegionPropertyCommand::PropertyEdit entry;
+            entry.regionId = region.id();
+            entry.before.regionId = region.id();
+            entry.before.layout = region.layout();
+            entry.after = entry.before;
+            entry.after.layout->fontSizePt = 22.0;
+            edits.append(entry);
+        }
+
+        stack.push(new RegionPropertyCommand(&context, pageId, edits, QStringLiteral("Edit Style")));
+
+        for (const auto& region : project.findPage(pageId)->regions()) {
+            QCOMPARE(region.layout().fontSizePt, 22.0);
+        }
+
+        stack.undo();
+        for (const auto& region : project.findPage(pageId)->regions()) {
+            QCOMPARE(region.layout().fontSizePt, 14.0);
+        }
+
+        stack.redo();
+        for (const auto& region : project.findPage(pageId)->regions()) {
+            QCOMPARE(region.layout().fontSizePt, 22.0);
+        }
+    }
+
+    void propertyCommandFaultsWhenRegionMissing() {
+        auto project = makeProject(1200, 1800, 1);
+        const auto pageId = firstPageId(project);
+        const auto regionId = regionAt(project, 0, 0);
+        EditorCommandContext context(&project);
+
+        domain::PageRegionEdit before;
+        before.regionId = regionId;
+        before.translation = project.findPage(pageId)->findRegion(regionId)->translation();
+        auto after = before;
+        after.translation->setManualText("typed text");
+
+        const TextEditSessionKey key{project.id(), pageId, regionId, RegionPropertyField::ManualTranslation, 1};
+        RegionPropertyCommand cmd(&context, key, 1000, before, after, QStringLiteral("Edit Text"));
+
+        (void)project.removeRegionFromPage(pageId, regionId);
+        cmd.redo();
         QVERIFY(cmd.hasFaulted());
     }
 };

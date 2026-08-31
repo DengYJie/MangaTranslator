@@ -5,12 +5,15 @@
 #include "application/operation/AsyncResult.h"
 #include "ui/base/BaseViewModel.h"
 #include "ui/command/EditorCommandContext.h"
+#include "ui/command/RegionPropertyCommand.h"
 #include "ui/manga/RegionInteraction.h"
 #include "ui/screen/editor/EditorState.h"
+#include "ui/screen/editor/TextEditSession.h"
 
 #include <QFutureWatcher>
 #include <QHash>
 #include <QUndoStack>
+#include <QVariant>
 
 #include <memory>
 #include <optional>
@@ -74,9 +77,30 @@ public:
     /// Redoes the last undone command. No-op when faulted or stack empty.
     void redo();
 
+    /// Consumes one Inspector field edit. Source/translation text edits route through
+    /// the merge-aware text session; style edits become one macro command over all
+    /// target regions. Any invalid target vetoes the whole batch.
+    void commitInspectorFieldEdit(const domain::PageId& pageId,
+                                  const QVector<domain::RegionId>& regionIds,
+                                  InspectorField field,
+                                  const QVariant& value);
+    /// Adopts a translation candidate as its own undoable command. Never merges with
+    /// manual translation edits.
+    void adoptCandidate(const domain::PageId& pageId, const domain::RegionId& regionId, const QString& candidateId);
+    /// Seals the active text merge batch (FocusOut from an Inspector text control).
+    void sealTextEditSession();
+
     /// Test-only hook: removes a region via RemoveRegionUseCase and rebuilds projection.
     /// Production intents must not use this method.
     [[nodiscard]] bool removeRegionForTest(const domain::RegionId& regionId);
+    /// Test-only hook: number of commands on the undo stack.
+    [[nodiscard]] int undoStackCountForTest() const noexcept {
+        return m_undoStack ? m_undoStack->count() : 0;
+    }
+    /// Test-only hook: replaces the text session clock with a controllable source.
+    void setTextEditClockForTest(TextEditSession::Clock clock) {
+        m_textEditSession = std::make_unique<TextEditSession>(std::move(clock));
+    }
 
     /// Returns the project revision for change tracking; 0 means no active session.
     [[nodiscard]] quint64 currentProjectRevision() const noexcept {
@@ -122,8 +146,22 @@ private:
     /// Caller must invoke inside an updateState lambda after selection/page fields are set.
     void updateInspectorProjection(EditorState& s) const;
 
-    /// Hook for future text editing sessions. Currently a no-op placeholder.
-    void sealActiveTextSession() {}
+    /// Seals the active text merge batch before an operation that must not merge:
+    /// selection change, page switch, explicit apply, Undo/Redo, or session close.
+    void sealActiveTextSession();
+
+    /// Pushes a property command and refreshes projections and undo state. After a
+    /// successful merge the pushed command is deleted by the stack, so fault state is
+    /// read from the surviving stack top.
+    void pushPropertyCommand(command::RegionPropertyCommand* cmd);
+    void commitTextEdit(const domain::PageId& pageId,
+                        const domain::RegionId& regionId,
+                        InspectorField field,
+                        const QString& text);
+    void commitStyleEdit(const domain::PageId& pageId,
+                         const QVector<domain::RegionId>& regionIds,
+                         InspectorField field,
+                         const QVariant& value);
 
     /// Refreshes canUndo/canRedo/undoText/redoText and undoHistoryFaulted into State from the stack.
     void refreshUndoState();
@@ -147,6 +185,10 @@ private:
     std::unique_ptr<QUndoStack> m_undoStack;
     std::unique_ptr<command::EditorCommandContext> m_commandContext;
     bool m_undoHistoryFaulted{false};
+
+    /// Merge-aware text edit session; lives for the ViewModel lifetime and is reset
+    /// on session open/close.
+    std::unique_ptr<TextEditSession> m_textEditSession;
 
     QFutureWatcher<application::Result<QImage>> m_pageLoadWatcher;
     quint64 m_pageLoadToken{0};
