@@ -10,6 +10,12 @@ class OperationRegistry;
 class IComicImporter;
 class IPageImageLoader;
 class IThumbnailStore;
+class IOcrEngine;
+class ITranslator;
+class IInpainter;
+class ITextLayouter;
+class IDerivedAssetStore;
+class ICredentialStore;
 } // namespace manga::application
 
 namespace manga::data {
@@ -33,7 +39,13 @@ public:
                        std::unique_ptr<application::IAppSettingsStore> appSettingsStore,
                        std::unique_ptr<application::IThumbnailStore> thumbnailStore,
                        std::unique_ptr<application::IPageImageLoader> pageImageLoader,
-                       std::unique_ptr<application::IComicImporter> comicImporter);
+                       std::unique_ptr<application::IComicImporter> comicImporter,
+                       std::unique_ptr<application::IOcrEngine> ocrEngine,
+                       std::unique_ptr<application::ITranslator> translator,
+                       std::unique_ptr<application::IInpainter> inpainter,
+                       std::unique_ptr<application::ITextLayouter> textLayouter,
+                       std::unique_ptr<application::IDerivedAssetStore> derivedAssetStore,
+                       std::unique_ptr<application::ICredentialStore> credentialStore);
     ~ApplicationContext();
 
     ApplicationContext(const ApplicationContext&) = delete;
@@ -61,6 +73,25 @@ public:
         return m_comicImporter.get();
     }
 
+    [[nodiscard]] application::IOcrEngine* ocrEngine() const {
+        return m_ocrEngine.get();
+    }
+    [[nodiscard]] application::ITranslator* translator() const {
+        return m_translator.get();
+    }
+    [[nodiscard]] application::IInpainter* inpainter() const {
+        return m_inpainter.get();
+    }
+    [[nodiscard]] application::ITextLayouter* textLayouter() const {
+        return m_textLayouter.get();
+    }
+    [[nodiscard]] application::IDerivedAssetStore* derivedAssetStore() const {
+        return m_derivedAssetStore.get();
+    }
+    [[nodiscard]] application::ICredentialStore* credentialStore() const {
+        return m_credentialStore.get();
+    }
+
     /// Deterministic reverse-order teardown entry point. Idempotent.
     void shutdown();
 
@@ -76,6 +107,12 @@ private:
     std::unique_ptr<application::IThumbnailStore> m_thumbnailStore;
     std::unique_ptr<application::IPageImageLoader> m_pageImageLoader;
     std::unique_ptr<application::IComicImporter> m_comicImporter;
+    std::unique_ptr<application::IOcrEngine> m_ocrEngine;
+    std::unique_ptr<application::ITranslator> m_translator;
+    std::unique_ptr<application::IInpainter> m_inpainter;
+    std::unique_ptr<application::ITextLayouter> m_textLayouter;
+    std::unique_ptr<application::IDerivedAssetStore> m_derivedAssetStore;
+    std::unique_ptr<application::ICredentialStore> m_credentialStore;
     bool m_shutdown{false};
 };
 

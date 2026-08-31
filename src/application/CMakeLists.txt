@@ -1,6 +1,7 @@
 add_library(manga_application STATIC
     operation/OperationProgressReporter.cpp
     workflow/OperationRegistry.cpp
+    workflow/SmartTranslatePageWorkflow.cpp
     usecase/export/ExportUseCases.cpp
     usecase/region/RegionUseCases.cpp
     usecase/text/TextUseCases.cpp

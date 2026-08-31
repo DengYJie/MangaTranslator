@@ -35,6 +35,12 @@ ApplicationContext::ApplicationContext(std::unique_ptr<application::IProjectRepo
                          std::move(appSettingsStore),
                          nullptr,
                          nullptr,
+                         nullptr,
+                         nullptr,
+                         nullptr,
+                         nullptr,
+                         nullptr,
+                         nullptr,
                          nullptr) {}
 
 ApplicationContext::ApplicationContext(std::unique_ptr<application::IProjectRepository> projectRepository,
@@ -42,12 +48,20 @@ ApplicationContext::ApplicationContext(std::unique_ptr<application::IProjectRepo
                                        std::unique_ptr<application::IAppSettingsStore> appSettingsStore,
                                        std::unique_ptr<application::IThumbnailStore> thumbnailStore,
                                        std::unique_ptr<application::IPageImageLoader> pageImageLoader,
-                                       std::unique_ptr<application::IComicImporter> comicImporter)
+                                       std::unique_ptr<application::IComicImporter> comicImporter,
+                                       std::unique_ptr<application::IOcrEngine> ocrEngine,
+                                       std::unique_ptr<application::ITranslator> translator,
+                                       std::unique_ptr<application::IInpainter> inpainter,
+                                       std::unique_ptr<application::ITextLayouter> textLayouter,
+                                       std::unique_ptr<application::IDerivedAssetStore> derivedAssetStore,
+                                       std::unique_ptr<application::ICredentialStore> credentialStore)
     : m_projectRepository(std::move(projectRepository)), m_recentProjectsStore(std::move(recentProjectsStore)),
       m_appSettingsStore(std::move(appSettingsStore)),
       m_operationRegistry(std::make_unique<application::OperationRegistry>()),
       m_thumbnailStore(std::move(thumbnailStore)), m_pageImageLoader(std::move(pageImageLoader)),
-      m_comicImporter(std::move(comicImporter)) {}
+      m_comicImporter(std::move(comicImporter)), m_ocrEngine(std::move(ocrEngine)), m_translator(std::move(translator)),
+      m_inpainter(std::move(inpainter)), m_textLayouter(std::move(textLayouter)),
+      m_derivedAssetStore(std::move(derivedAssetStore)), m_credentialStore(std::move(credentialStore)) {}
 
 ApplicationContext::~ApplicationContext() {
     shutdown();

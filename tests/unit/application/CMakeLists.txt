@@ -5,6 +5,8 @@ qt_add_executable(manga_tests_application
     ApplyResultUseCaseTest.h
     TranslatePageUseCaseTest.cpp
     TranslatePageUseCaseTest.h
+    SmartTranslatePageWorkflowTest.cpp
+    SmartTranslatePageWorkflowTest.h
     ClearRegionUseCaseTest.cpp
     ClearRegionUseCaseTest.h
     LayoutRegionUseCaseTest.cpp

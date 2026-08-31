@@ -5,6 +5,7 @@
 #include "application/dto/OcrDto.h"
 #include "application/dto/TranslationDto.h"
 #include "application/operation/AsyncResult.h"
+#include "application/operation/OperationDescriptor.h"
 #include "application/ports/IInpainter.h"
 #include "application/ports/IOcrEngine.h"
 #include "application/ports/ITextLayouter.h"
@@ -34,20 +35,20 @@ public:
     RecognizeRegionUseCase(IOcrEngine* engine, OperationRegistry* registry) : m_engine(engine), m_registry(registry) {}
 
     [[nodiscard]] QFuture<Result<OcrResponse>> execute(const OcrRequest& request,
-                                                       domain::ProjectId projectId,
+                                                       const OperationDescriptor& descriptor,
                                                        quint64 sessionGeneration,
                                                        OperationId& outOperationId) {
         outOperationId = {};
         if (m_engine == nullptr || m_registry == nullptr) {
             return makeFailedFuture<OcrResponse>(detail::unavailableDependency());
         }
-        if (!projectId.isValid() || !request.pageId.isValid() || !request.regionId.isValid() ||
+        if (!descriptor.projectId.isValid() || !request.pageId.isValid() || !request.regionId.isValid() ||
             request.image.isNull() || !request.rect.isValid() || request.language.empty()) {
             return makeFailedFuture<OcrResponse>(
                 detail::invalidProcessingInput("input.invalid_ocr_request", "OCR request is invalid"));
         }
 
-        const auto context = m_registry->createOperation(sessionGeneration, 0);
+        const auto context = m_registry->createOperation(descriptor, sessionGeneration, 0);
         outOperationId = context.operationId;
         return m_engine->recognize(request, context);
     }
@@ -69,15 +70,14 @@ public:
         : m_translator(translator), m_registry(registry) {}
 
     [[nodiscard]] QFuture<Result<TranslationResponse>> execute(const TranslationRequest& request,
-                                                               domain::ProjectId projectId,
-                                                               domain::PageId pageId,
+                                                               const OperationDescriptor& descriptor,
                                                                quint64 sessionGeneration,
                                                                OperationId& outOperationId) {
         outOperationId = {};
         if (m_translator == nullptr || m_registry == nullptr) {
             return makeFailedFuture<TranslationResponse>(detail::unavailableDependency());
         }
-        if (!projectId.isValid() || !pageId.isValid() || request.sourceLanguage.empty() ||
+        if (!descriptor.projectId.isValid() || !descriptor.pageId.isValid() || request.sourceLanguage.empty() ||
             request.targetLanguage.empty() || request.regions.isEmpty()) {
             return makeFailedFuture<TranslationResponse>(
                 detail::invalidProcessingInput("input.invalid_translation_request", "Translation request is invalid"));
@@ -92,7 +92,7 @@ public:
             regionIds.insert(key);
         }
 
-        const auto context = m_registry->createOperation(sessionGeneration, 0);
+        const auto context = m_registry->createOperation(descriptor, sessionGeneration, 0);
         outOperationId = context.operationId;
         return m_translator->translate(request, context);
     }
@@ -113,8 +113,10 @@ public:
     ClearRegionUseCase(IInpainter* inpainter, OperationRegistry* registry)
         : m_inpainter(inpainter), m_registry(registry) {}
 
-    [[nodiscard]] QFuture<Result<ClearResponse>>
-    execute(const ClearRequest& request, quint64 sessionGeneration, OperationId& outOperationId) {
+    [[nodiscard]] QFuture<Result<ClearResponse>> execute(const ClearRequest& request,
+                                                         const OperationDescriptor& descriptor,
+                                                         quint64 sessionGeneration,
+                                                         OperationId& outOperationId) {
         outOperationId = {};
         if (m_inpainter == nullptr || m_registry == nullptr) {
             return makeFailedFuture<ClearResponse>(detail::unavailableDependency());
@@ -131,7 +133,7 @@ public:
                 detail::invalidProcessingInput("input.invalid_clear_request", "Clear request is invalid"));
         }
 
-        const auto context = m_registry->createOperation(sessionGeneration, 0);
+        const auto context = m_registry->createOperation(descriptor, sessionGeneration, 0);
         outOperationId = context.operationId;
         return m_inpainter->clear(request, context);
     }
@@ -153,21 +155,21 @@ public:
         : m_layouter(layouter), m_registry(registry) {}
 
     [[nodiscard]] QFuture<Result<LayoutResponse>> execute(const LayoutRequest& request,
-                                                          domain::ProjectId projectId,
+                                                          const OperationDescriptor& descriptor,
                                                           quint64 sessionGeneration,
                                                           OperationId& outOperationId) {
         outOperationId = {};
         if (m_layouter == nullptr || m_registry == nullptr) {
             return makeFailedFuture<LayoutResponse>(detail::unavailableDependency());
         }
-        if (!projectId.isValid() || !request.pageId.isValid() || !request.regionId.isValid() ||
+        if (!descriptor.projectId.isValid() || !request.pageId.isValid() || !request.regionId.isValid() ||
             request.text.isEmpty() || !request.bounds.isValid() || !request.constraints.isValid() ||
             request.logicalDpi <= 0.0) {
             return makeFailedFuture<LayoutResponse>(
                 detail::invalidProcessingInput("input.invalid_layout_request", "Layout request is invalid"));
         }
 
-        const auto context = m_registry->createOperation(sessionGeneration, 0);
+        const auto context = m_registry->createOperation(descriptor, sessionGeneration, 0);
         outOperationId = context.operationId;
         return m_layouter->layout(request, context);
     }

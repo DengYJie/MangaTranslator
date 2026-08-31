@@ -136,7 +136,13 @@ private slots:
                                                std::move(settings),
                                                std::move(thumbnails),
                                                std::move(images),
-                                               std::move(importer));
+                                               std::move(importer),
+                                               nullptr,
+                                               nullptr,
+                                               nullptr,
+                                               nullptr,
+                                               nullptr,
+                                               nullptr);
         QCOMPARE(context.thumbnailStore(), thumbnailsPtr);
         QCOMPARE(context.pageImageLoader(), imagesPtr);
         QCOMPARE(context.comicImporter(), importerPtr);
