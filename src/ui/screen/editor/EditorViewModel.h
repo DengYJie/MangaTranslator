@@ -80,6 +80,10 @@ public:
     void commitRegionGeometry(const domain::RegionId& regionId,
                               const domain::RectGeometry& newGeometry,
                               canvas::EditKind kind);
+    /// P5-D hook: pushes an external command to the project undo stack.
+    void pushPreparedCommand(QUndoCommand* cmd);
+    /// P5-D hook: cancels all ongoing background project tasks.
+    void cancelProjectTasks();
     /// Undoes the last command. No-op when faulted or stack empty.
     void undo();
     /// Redoes the last undone command. No-op when faulted or stack empty.

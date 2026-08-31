@@ -210,7 +210,8 @@ void EditorViewModel::closeProjectSession() {
     }
     invalidateRequests();
 
-    // P5-D 项目任务取消钩子（当前为空实现）
+    // P5-D 项目任务取消钩子
+    cancelProjectTasks();
 
     // Stop accepting commands by destroying undo infrastructure before releasing the aggregate.
     m_undoStack.reset();
@@ -1202,6 +1203,29 @@ void EditorViewModel::adoptCandidate(const domain::PageId& pageId,
                                                    QVector<command::RegionPropertyCommand::PropertyEdit>{entry},
                                                    QStringLiteral("Adopt Candidate"));
     pushPropertyCommand(cmd);
+}
+
+void EditorViewModel::pushPreparedCommand(QUndoCommand* cmd) {
+    if (!m_hasSession || !m_undoStack) {
+        delete cmd;
+        return;
+    }
+    sealActiveTextSession();
+    m_undoStack->push(cmd);
+
+    const auto* top = dynamic_cast<const command::RegionCommand*>(m_undoStack->command(m_undoStack->index() - 1));
+    if (top != nullptr && top->hasFaulted()) {
+        m_undoHistoryFaulted = true;
+    }
+    rebuildCurrentPageProjection();
+    refreshUndoState();
+}
+
+void EditorViewModel::cancelProjectTasks() {
+    if (!m_hasSession) {
+        return;
+    }
+    ++m_viewState.viewGeneration;
 }
 
 void EditorViewModel::undo() {

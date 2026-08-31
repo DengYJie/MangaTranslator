@@ -113,3 +113,4 @@ target_link_libraries(manga_ui
         FluentQt::FluentQt
         QWindowKit::Widgets
 )
+# P5-C Integration: EditorViewModel hooks added

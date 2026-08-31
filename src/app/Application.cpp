@@ -13,8 +13,10 @@
 #include "ui/screen/import/ImportViewModel.h"
 #include "ui/window/MainWindow.h"
 
+#include <FluentQt/DialogsFlyouts.h>
 #include <FluentQt/FluentQt.h>
 #include <QApplication>
+#include <QLabel>
 #include <QTimer>
 
 namespace manga::app {
@@ -128,15 +130,15 @@ int Application::run() {
                      mainWindow,
                      [editorViewModel, mainWindow, handleProjectClose](
                          const manga::ui::screen::editor::ProjectCloseSummary& summary) {
-                         auto* dialog = new fluent::ContentDialog(mainWindow);
+                         auto* dialog = new fluent::dialogs_flyouts::ContentDialog(mainWindow);
                          dialog->setTitle(summary.projectName);
-                         dialog->setContent(summary.safeMessage);
+                         dialog->setContent(new QLabel(summary.safeMessage));
                          dialog->setPrimaryButtonText(QCoreApplication::translate("Application", "保存并关闭"));
                          dialog->setSecondaryButtonText(QCoreApplication::translate("Application", "不保存"));
                          dialog->setCloseButtonText(QCoreApplication::translate("Application", "取消"));
 
                          QObject::connect(dialog,
-                                          &fluent::ContentDialog::primaryButtonClicked,
+                                          &fluent::dialogs_flyouts::ContentDialog::primaryButtonClicked,
                                           editorViewModel,
                                           [editorViewModel, mainWindow, handleProjectClose]() {
                                               // When saving finishes, EditorViewModel emits saveCompleted. We connect a
@@ -167,11 +169,11 @@ int Application::run() {
                                           });
 
                          QObject::connect(dialog,
-                                          &fluent::ContentDialog::secondaryButtonClicked,
+                                          &fluent::dialogs_flyouts::ContentDialog::secondaryButtonClicked,
                                           editorViewModel,
                                           &ui::screen::editor::EditorViewModel::confirmDiscardAndClose);
                          QObject::connect(dialog,
-                                          &fluent::ContentDialog::closeButtonClicked,
+                                          &fluent::dialogs_flyouts::ContentDialog::closeButtonClicked,
                                           editorViewModel,
                                           &ui::screen::editor::EditorViewModel::cancelClose);
 
@@ -234,7 +236,10 @@ int Application::run() {
     }
 
     if (m_smokeTest) {
-        QTimer::singleShot(0, m_app.get(), &QCoreApplication::quit);
+        QTimer::singleShot(0, mainWindow, [mainWindow, app = m_app.get()]() {
+            mainWindow->forceClose();
+            app->exit(0);
+        });
     }
     return m_app->exec();
 }
