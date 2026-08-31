@@ -24,9 +24,9 @@
 - 固定图片 fixture 必须在 `tests/fixtures/README.md` 登记来源与许可证；禁止用户漫画或来源不明素材进仓库。
 - 普通离线套件不得依赖真实 OCR 模型、真实凭据或公共网络；真实 ONNX 推理由既有 CI `p4-model` 作业（`.github/workflows/ci.yml`）单独覆盖，本计划不修改该作业。
 - 构建与测试（Git Bash 中调 PowerShell 脚本，细节见 `.agents/skills/manga-translator-build/SKILL.md`）：
-  - 配置：`powershell.exe -NoProfile -ExecutionPolicy Bypass -File .agents/skills/manga-translator-build/scripts/build.ps1 -Preset local-test -Configure`
-  - 构建：`powershell.exe -NoProfile -ExecutionPolicy Bypass -File .agents/skills/manga-translator-build/scripts/build.ps1 -Preset local-test`（可加 `-Target <target>`）
-  - 聚焦测试：`powershell.exe -NoProfile -ExecutionPolicy Bypass -File .agents/skills/manga-translator-build/scripts/test.ps1 -Preset local-test -Regex <regex>`
+  - 配置：`pwsh -NoProfile -ExecutionPolicy Bypass -File tools/build/build.ps1 -Preset local-test -Configure`
+  - 构建：`pwsh -NoProfile -ExecutionPolicy Bypass -File tools/build/build.ps1 -Preset local-test`（可加 `-Target <target>`）
+  - 聚焦测试：`pwsh -NoProfile -ExecutionPolicy Bypass -File tools/build/test.ps1 -Preset local-test -Regex <regex>`
   - 全量：`test.ps1 -Preset local-test`（不带 `-Regex`）
   - 日志：`build/local-test/build.log` / `ctest.log` / `Testing/Temporary/LastTest.log`。
 - 一个测试可执行文件只有一个 `QTEST_MAIN`。新集成测试目标命名 `manga_tests_integration_<scenario>`（沿用 `manga_tests_ui_<name>` 既有先例），统一被 `-R manga_tests_integration` 匹配；`ENVIRONMENT "QT_QPA_PLATFORM=offscreen"`、`LABELS "integration"`、场景目标 `TIMEOUT 60`、其余 `TIMEOUT 30`。含 Q_OBJECT 的目标必须 `set_target_properties(<t> PROPERTIES AUTOMOC ON)`。
@@ -131,7 +131,7 @@ struct RealDataStack {
 脚手架暂无独立测试目标；用 Task 4 的首个场景目标验证编译。此步只运行：
 
 ```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .agents/skills/manga-translator-build/scripts/build.ps1 -Preset local-test -Target manga_tests_integration
+pwsh -NoProfile -ExecutionPolicy Bypass -File tools/build/build.ps1 -Preset local-test -Target manga_tests_integration
 ```
 
 Expected: 既有占位目标仍编译通过（本任务不改 CMake）。
@@ -180,7 +180,7 @@ void translatorReadsLatestProviderConfigSnapshot();
 - [ ] **Step 2: 运行确认失败**
 
 ```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .agents/skills/manga-translator-build/scripts/build.ps1 -Preset local-test -Target manga_tests_app
+pwsh -NoProfile -ExecutionPolicy Bypass -File tools/build/build.ps1 -Preset local-test -Target manga_tests_app
 ```
 
 Expected: 编译失败（`comicExporter()`、快照构造重载不存在）或新断言失败。
@@ -196,7 +196,7 @@ Expected: 编译失败（`comicExporter()`、快照构造重载不存在）或�
 - [ ] **Step 5: 运行测试**
 
 ```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .agents/skills/manga-translator-build/scripts/test.ps1 -Preset local-test -Regex "manga_tests_(app|network)"
+pwsh -NoProfile -ExecutionPolicy Bypass -File tools/build/test.ps1 -Preset local-test -Regex "manga_tests_(app|network)"
 ```
 
 Expected: 新用例与既有 `OpenAiCompatibleTranslatorTest` 全绿。
@@ -245,7 +245,7 @@ void windowCloseCancelKeepsContextAndSessionAlive();
 - [ ] **Step 2: 运行确认失败**
 
 ```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .agents/skills/manga-translator-build/scripts/build.ps1 -Preset local-test -Target manga_tests_app
+pwsh -NoProfile -ExecutionPolicy Bypass -File tools/build/build.ps1 -Preset local-test -Target manga_tests_app
 ```
 
 Expected: 编译失败（注入构造重载、`cancelAll` 调用点缺失）或断言失败。
@@ -286,7 +286,7 @@ void ApplicationContext::shutdown() {
 - [ ] **Step 5: 运行测试**
 
 ```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .agents/skills/manga-translator-build/scripts/test.ps1 -Preset local-test -Regex "manga_tests_app"
+pwsh -NoProfile -ExecutionPolicy Bypass -File tools/build/test.ps1 -Preset local-test -Regex "manga_tests_app"
 ```
 
 Expected: `manga_tests_app` 与 `manga_tests_app_smoke`（`tests/CMakeLists.txt` 既有 offscreen 冒烟）全绿。
@@ -345,7 +345,7 @@ public:
 - [ ] **Step 2: 运行确认失败**
 
 ```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .agents/skills/manga-translator-build/scripts/build.ps1 -Preset local-test -Target manga_tests_ui_export_snapshot_builder
+pwsh -NoProfile -ExecutionPolicy Bypass -File tools/build/build.ps1 -Preset local-test -Target manga_tests_ui_export_snapshot_builder
 ```
 
 Expected: 编译失败（`ExportSnapshotBuilder` 不存在）。
@@ -384,8 +384,8 @@ private Q_SLOTS:
 - [ ] **Step 5: 运行确认失败再修通**
 
 ```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .agents/skills/manga-translator-build/scripts/build.ps1 -Preset local-test -Target manga_tests_integration_e01_manual_offline
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .agents/skills/manga-translator-build/scripts/test.ps1 -Preset local-test -Regex "manga_tests_integration_e01"
+pwsh -NoProfile -ExecutionPolicy Bypass -File tools/build/build.ps1 -Preset local-test -Target manga_tests_integration_e01_manual_offline
+pwsh -NoProfile -ExecutionPolicy Bypass -File tools/build/test.ps1 -Preset local-test -Regex "manga_tests_integration_e01"
 ```
 
 Expected: 首轮红（Compile 或断言暴露真实集成缺口）；修复只允许落在 owning layer 的最小契约修正，禁止把逻辑塞进 `ApplicationContext` 或测试特判。最终全绿。
@@ -393,7 +393,7 @@ Expected: 首轮红（Compile 或断言暴露真实集成缺口）；修复只�
 - [ ] **Step 6: 运行相邻回归**
 
 ```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .agents/skills/manga-translator-build/scripts/test.ps1 -Preset local-test -Regex "manga_tests_(ui_export_snapshot_builder|data|application)"
+pwsh -NoProfile -ExecutionPolicy Bypass -File tools/build/test.ps1 -Preset local-test -Regex "manga_tests_(ui_export_snapshot_builder|data|application)"
 ```
 
 - [ ] **Step 7: Commit（仅在获授权时）**
@@ -434,8 +434,8 @@ void staleSessionGenerationResultIsRejected();
 - [ ] **Step 2: 运行确认失败再修通**
 
 ```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .agents/skills/manga-translator-build/scripts/build.ps1 -Preset local-test -Target manga_tests_integration_e02_ocr
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .agents/skills/manga-translator-build/scripts/test.ps1 -Preset local-test -Regex "manga_tests_integration_e02"
+pwsh -NoProfile -ExecutionPolicy Bypass -File tools/build/build.ps1 -Preset local-test -Target manga_tests_integration_e02_ocr
+pwsh -NoProfile -ExecutionPolicy Bypass -File tools/build/test.ps1 -Preset local-test -Regex "manga_tests_integration_e02"
 ```
 
 Expected: 暴露的缺口只允许在 application 的 prepare/adopt 或 ui 的 adoption 命令层修；若 P5-D 行为已满足则首轮即绿（记录为验证通过而非新修）。
@@ -481,8 +481,8 @@ void adoptedTranslationSurvivesSaveReopen();
 - [ ] **Step 2: 运行确认失败再修通**
 
 ```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .agents/skills/manga-translator-build/scripts/build.ps1 -Preset local-test -Target manga_tests_integration_e03_translation
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .agents/skills/manga-translator-build/scripts/test.ps1 -Preset local-test -Regex "manga_tests_integration_e03"
+pwsh -NoProfile -ExecutionPolicy Bypass -File tools/build/build.ps1 -Preset local-test -Target manga_tests_integration_e03_translation
+pwsh -NoProfile -ExecutionPolicy Bypass -File tools/build/test.ps1 -Preset local-test -Regex "manga_tests_integration_e03"
 ```
 
 - [ ] **Step 3: Commit（仅在获授权时）**
@@ -529,8 +529,8 @@ void failedStageKeepsCommittedStagesAndOriginals();
 - [ ] **Step 2: 运行确认失败再修通**
 
 ```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .agents/skills/manga-translator-build/scripts/build.ps1 -Preset local-test -Target manga_tests_integration_e04_processing
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .agents/skills/manga-translator-build/scripts/test.ps1 -Preset local-test -Regex "manga_tests_integration_e04"
+pwsh -NoProfile -ExecutionPolicy Bypass -File tools/build/build.ps1 -Preset local-test -Target manga_tests_integration_e04_processing
+pwsh -NoProfile -ExecutionPolicy Bypass -File tools/build/test.ps1 -Preset local-test -Regex "manga_tests_integration_e04"
 ```
 
 - [ ] **Step 3: Commit（仅在获授权时）**
@@ -567,7 +567,7 @@ git commit -m "test(integration): add P6-E04 full processing scenario"
 - [ ] **Step 2: 运行确认失败**
 
 ```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .agents/skills/manga-translator-build/scripts/build.ps1 -Preset local-test -Target manga_tests_ui_editor_export
+pwsh -NoProfile -ExecutionPolicy Bypass -File tools/build/build.ps1 -Preset local-test -Target manga_tests_ui_editor_export
 ```
 
 - [ ] **Step 3: 实现导出入口**
@@ -593,8 +593,8 @@ void singlePageFailureKeepsOtherOutputsAndProject();
 - [ ] **Step 5: 运行确认失败再修通**
 
 ```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .agents/skills/manga-translator-build/scripts/build.ps1 -Preset local-test -Target manga_tests_integration_e05_export
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .agents/skills/manga-translator-build/scripts/test.ps1 -Preset local-test -Regex "manga_tests_(integration_e05|ui_editor_export)"
+pwsh -NoProfile -ExecutionPolicy Bypass -File tools/build/build.ps1 -Preset local-test -Target manga_tests_integration_e05_export
+pwsh -NoProfile -ExecutionPolicy Bypass -File tools/build/test.ps1 -Preset local-test -Regex "manga_tests_(integration_e05|ui_editor_export)"
 ```
 
 - [ ] **Step 6: Commit（仅在获授权时）**
@@ -642,8 +642,8 @@ void diskFullSaveFailureKeepsDirtyAndLastValidFile();
 - [ ] **Step 2: 运行确认失败再修通**
 
 ```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .agents/skills/manga-translator-build/scripts/build.ps1 -Preset local-test -Target manga_tests_integration_persistence
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .agents/skills/manga-translator-build/scripts/test.ps1 -Preset local-test -Regex "manga_tests_integration_persistence"
+pwsh -NoProfile -ExecutionPolicy Bypass -File tools/build/build.ps1 -Preset local-test -Target manga_tests_integration_persistence
+pwsh -NoProfile -ExecutionPolicy Bypass -File tools/build/test.ps1 -Preset local-test -Regex "manga_tests_integration_persistence"
 ```
 
 Expected: 暴露的缺口在 `data`（保存事务/恢复）或 P5-C 保存协议层修正；P3/P5-D 已覆盖的行为首轮即绿并记录为验证。
@@ -695,8 +695,8 @@ void applicationExitRunsSameProtocolAsWindowClose();
 - [ ] **Step 2: 运行确认失败再修通**
 
 ```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .agents/skills/manga-translator-build/scripts/build.ps1 -Preset local-test -Target manga_tests_integration_session
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .agents/skills/manga-translator-build/scripts/test.ps1 -Preset local-test -Regex "manga_tests_integration_session"
+pwsh -NoProfile -ExecutionPolicy Bypass -File tools/build/build.ps1 -Preset local-test -Target manga_tests_integration_session
+pwsh -NoProfile -ExecutionPolicy Bypass -File tools/build/test.ps1 -Preset local-test -Regex "manga_tests_integration_session"
 ```
 
 - [ ] **Step 3: Commit（仅在获授权时）**
@@ -747,16 +747,16 @@ void projectSwitchRejectsLateResults();              // 引用 Task 10 用例，
 - [ ] **Step 2: 运行确认失败再修通**
 
 ```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .agents/skills/manga-translator-build/scripts/build.ps1 -Preset local-test -Target manga_tests_integration_recovery
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .agents/skills/manga-translator-build/scripts/test.ps1 -Preset local-test -Regex "manga_tests_integration_recovery"
+pwsh -NoProfile -ExecutionPolicy Bypass -File tools/build/build.ps1 -Preset local-test -Target manga_tests_integration_recovery
+pwsh -NoProfile -ExecutionPolicy Bypass -File tools/build/test.ps1 -Preset local-test -Regex "manga_tests_integration_recovery"
 ```
 
 - [ ] **Step 3: 全量验证**
 
 ```powershell
 prek run --all-files
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .agents/skills/manga-translator-build/scripts/build.ps1 -Preset local-test
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .agents/skills/manga-translator-build/scripts/test.ps1 -Preset local-test
+pwsh -NoProfile -ExecutionPolicy Bypass -File tools/build/build.ps1 -Preset local-test
+pwsh -NoProfile -ExecutionPolicy Bypass -File tools/build/test.ps1 -Preset local-test
 ```
 
 Expected: 全绿；记录实际通过数量与任何 QSKIP/未运行边界，禁止写“应当通过”。确认 `manga_tests_app_smoke` 仍通过且新增集成目标全部离线确定性（无真实模型/凭据/公共网络依赖）。

@@ -22,9 +22,9 @@
 - 所有 Widget/QPixmap/ViewModel 只在 GUI 线程；工作线程只产生隐式共享 `QImage`；`QFutureWatcher` 回调先核对请求令牌与 generation。
 - View 不直接访问 Repository/Store/文件系统/QSettings；ViewModel 依赖一律构造注入接口指针。
 - 构建与测试（Git Bash 中调 PowerShell 脚本，细节见 `.agents/skills/manga-translator-build/SKILL.md`）：
-  - 配置：`powershell.exe -NoProfile -ExecutionPolicy Bypass -File .agents/skills/manga-translator-build/scripts/build.ps1 -Preset local-test -Configure`
-  - 构建：`powershell.exe -NoProfile -ExecutionPolicy Bypass -File .agents/skills/manga-translator-build/scripts/build.ps1 -Preset local-test`（可加 `-Target <target>`）
-  - 聚焦测试：`powershell.exe -NoProfile -ExecutionPolicy Bypass -File .agents/skills/manga-translator-build/scripts/test.ps1 -Preset local-test -Regex manga_tests_ui`
+  - 配置：`pwsh -NoProfile -ExecutionPolicy Bypass -File tools/build/build.ps1 -Preset local-test -Configure`
+  - 构建：`pwsh -NoProfile -ExecutionPolicy Bypass -File tools/build/build.ps1 -Preset local-test`（可加 `-Target <target>`）
+  - 聚焦测试：`pwsh -NoProfile -ExecutionPolicy Bypass -File tools/build/test.ps1 -Preset local-test -Regex manga_tests_ui`
   - 全量：`test.ps1 -Preset local-test`（不带 `-Regex`）
   - 日志：`build/local-test/build.log` / `ctest.log`。
 - 一个测试可执行文件只有一个 `QTEST_MAIN`；新 UI 测试目标一律 `manga_tests_ui_<name>`，offscreen，TIMEOUT 15。含 Q_OBJECT 的目标必须 `set_target_properties(<t> PROPERTIES AUTOMOC ON)`。
@@ -112,7 +112,7 @@ void projectOpenedCarriesFullSessionDescriptor() {
 - `closeProject` 改为：`++closeCallCount;` 后返回就绪 Future。
 
 ```bash
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .agents/skills/manga-translator-build/scripts/build.ps1 -Preset local-test -Target manga_tests_ui_home_view_model
+pwsh -NoProfile -ExecutionPolicy Bypass -File tools/build/build.ps1 -Preset local-test -Target manga_tests_ui_home_view_model
 ```
 
 Expected: 编译失败（`ProjectSessionDescriptor` / `ProjectMapper::toSessionDescriptor` 不存在，新信号签名不匹配）。
@@ -197,8 +197,8 @@ Q_EMIT projectOpened(session);
 - [ ] **Step 5: 运行确认通过**
 
 ```bash
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .agents/skills/manga-translator-build/scripts/build.ps1 -Preset local-test -Target manga_tests_ui_home_view_model
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .agents/skills/manga-translator-build/scripts/test.ps1 -Preset local-test -Regex "manga_tests_ui_home|manga_tests_ui_home_page|manga_tests_app"
+pwsh -NoProfile -ExecutionPolicy Bypass -File tools/build/build.ps1 -Preset local-test -Target manga_tests_ui_home_view_model
+pwsh -NoProfile -ExecutionPolicy Bypass -File tools/build/test.ps1 -Preset local-test -Regex "manga_tests_ui_home|manga_tests_ui_home_page|manga_tests_app"
 ```
 
 Expected: 全绿。注意 `home_page_test.cpp` 若因信号签名变化编译失败，同步修订（它不监听 `projectOpened` 则无需改）。
@@ -318,8 +318,8 @@ ApplicationContext::ApplicationContext(std::unique_ptr<application::IProjectRepo
 - [ ] **Step 5: 运行确认通过**
 
 ```bash
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .agents/skills/manga-translator-build/scripts/build.ps1 -Preset local-test -Target manga_tests_app
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .agents/skills/manga-translator-build/scripts/test.ps1 -Preset local-test -Regex manga_tests_app
+pwsh -NoProfile -ExecutionPolicy Bypass -File tools/build/build.ps1 -Preset local-test -Target manga_tests_app
+pwsh -NoProfile -ExecutionPolicy Bypass -File tools/build/test.ps1 -Preset local-test -Regex manga_tests_app
 ```
 
 Expected: 4 个用例全绿（含既有 2 个）。
@@ -665,8 +665,8 @@ set_tests_properties(manga_tests_ui_manga_canvas PROPERTIES
 - [ ] **Step 5: 运行确认通过**
 
 ```bash
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .agents/skills/manga-translator-build/scripts/build.ps1 -Preset local-test -Target manga_tests_ui_manga_canvas
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .agents/skills/manga-translator-build/scripts/test.ps1 -Preset local-test -Regex manga_tests_ui_manga_canvas
+pwsh -NoProfile -ExecutionPolicy Bypass -File tools/build/build.ps1 -Preset local-test -Target manga_tests_ui_manga_canvas
+pwsh -NoProfile -ExecutionPolicy Bypass -File tools/build/test.ps1 -Preset local-test -Regex manga_tests_ui_manga_canvas
 ```
 
 Expected: 9 个用例全绿。若 `viewTransformRoundTripsThroughZoomAndCenter` 在 offscreen 下因布局未 settle 失败，在 `show()` 后加 `QCoreApplication::processEvents();` 再断言。
@@ -1023,8 +1023,8 @@ private:
 - [ ] **Step 5: 运行确认通过**
 
 ```bash
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .agents/skills/manga-translator-build/scripts/build.ps1 -Preset local-test
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .agents/skills/manga-translator-build/scripts/test.ps1 -Preset local-test -Regex "manga_tests_ui_page"
+pwsh -NoProfile -ExecutionPolicy Bypass -File tools/build/build.ps1 -Preset local-test
+pwsh -NoProfile -ExecutionPolicy Bypass -File tools/build/test.ps1 -Preset local-test -Regex "manga_tests_ui_page"
 ```
 
 Expected: 两个新目标共 9 个用例全绿。
@@ -1575,8 +1575,8 @@ QTEST_GUILESS_MAIN(EditorViewModelTest)
 - [ ] **Step 5: 运行确认通过**
 
 ```bash
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .agents/skills/manga-translator-build/scripts/build.ps1 -Preset local-test -Target manga_tests_ui_editor_view_model
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .agents/skills/manga-translator-build/scripts/test.ps1 -Preset local-test -Regex manga_tests_ui_editor_view_model
+pwsh -NoProfile -ExecutionPolicy Bypass -File tools/build/build.ps1 -Preset local-test -Target manga_tests_ui_editor_view_model
+pwsh -NoProfile -ExecutionPolicy Bypass -File tools/build/test.ps1 -Preset local-test -Regex manga_tests_ui_editor_view_model
 ```
 
 Expected: 10 个用例全绿。
@@ -1797,8 +1797,8 @@ QObject::connect(editorPage, &ui::screen::editor::EditorPage::importPagesRequest
 - [ ] **Step 5: 运行确认通过**
 
 ```bash
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .agents/skills/manga-translator-build/scripts/build.ps1 -Preset local-test
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .agents/skills/manga-translator-build/scripts/test.ps1 -Preset local-test -Regex "manga_tests_ui_editor|manga_tests_app"
+pwsh -NoProfile -ExecutionPolicy Bypass -File tools/build/build.ps1 -Preset local-test
+pwsh -NoProfile -ExecutionPolicy Bypass -File tools/build/test.ps1 -Preset local-test -Regex "manga_tests_ui_editor|manga_tests_app"
 ```
 
 Expected: 新用例全绿；`manga_tests_app_smoke` 仍通过（外壳新增 editor 页面与导航项，初始路由仍是 home）。
@@ -2205,8 +2205,8 @@ target_include_directories(manga_tests_ui_import_view_model
 - [ ] **Step 5: 运行确认通过**
 
 ```bash
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .agents/skills/manga-translator-build/scripts/build.ps1 -Preset local-test -Target manga_tests_ui_import_view_model
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .agents/skills/manga-translator-build/scripts/test.ps1 -Preset local-test -Regex manga_tests_ui_import_view_model
+pwsh -NoProfile -ExecutionPolicy Bypass -File tools/build/build.ps1 -Preset local-test -Target manga_tests_ui_import_view_model
+pwsh -NoProfile -ExecutionPolicy Bypass -File tools/build/test.ps1 -Preset local-test -Regex manga_tests_ui_import_view_model
 ```
 
 Expected: 8 个用例全绿。
@@ -2370,8 +2370,8 @@ QObject::connect(homePage, &ui::screen::home::HomePage::importRequested, control
 - [ ] **Step 5: 运行确认通过**
 
 ```bash
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .agents/skills/manga-translator-build/scripts/build.ps1 -Preset local-test
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .agents/skills/manga-translator-build/scripts/test.ps1 -Preset local-test
+pwsh -NoProfile -ExecutionPolicy Bypass -File tools/build/build.ps1 -Preset local-test
+pwsh -NoProfile -ExecutionPolicy Bypass -File tools/build/test.ps1 -Preset local-test
 ```
 
 Expected: 全量测试绿（含 `manga_tests_app_smoke`：三个路由均注册，初始 home）。
@@ -2393,14 +2393,14 @@ git commit -m "feat(ui): add import page with drop zone and project form"
 - [ ] **Step 1: 全量构建**
 
 ```bash
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .agents/skills/manga-translator-build/scripts/build.ps1 -Preset local-test -Configure
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .agents/skills/manga-translator-build/scripts/build.ps1 -Preset local-test
+pwsh -NoProfile -ExecutionPolicy Bypass -File tools/build/build.ps1 -Preset local-test -Configure
+pwsh -NoProfile -ExecutionPolicy Bypass -File tools/build/build.ps1 -Preset local-test
 ```
 
 - [ ] **Step 2: 全量测试**
 
 ```bash
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .agents/skills/manga-translator-build/scripts/test.ps1 -Preset local-test
+pwsh -NoProfile -ExecutionPolicy Bypass -File tools/build/test.ps1 -Preset local-test
 ```
 
 Expected: 所有 target 全绿。

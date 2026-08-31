@@ -1568,9 +1568,9 @@ private:
 - [ ] **Step 6: 运行确认通过**
 
 ```bash
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .agents/skills/manga-translator-build/scripts/build.ps1 -Preset local-test -Configure
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .agents/skills/manga-translator-build/scripts/build.ps1 -Preset local-test
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .agents/skills/manga-translator-build/scripts/test.ps1 -Preset local-test
+pwsh -NoProfile -ExecutionPolicy Bypass -File tools/build/build.ps1 -Preset local-test -Configure
+pwsh -NoProfile -ExecutionPolicy Bypass -File tools/build/build.ps1 -Preset local-test
+pwsh -NoProfile -ExecutionPolicy Bypass -File tools/build/test.ps1 -Preset local-test
 ```
 
 Expected: 全量构建与全部测试绿；特别确认 `manga_tests_ui_main_window` 与 `manga_tests_ui_navigation_window` 不再有堆断言（旧缺陷随 `fluent::windowing::Window` 移除而消失）。

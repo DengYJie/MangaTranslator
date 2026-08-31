@@ -172,7 +172,7 @@ struct OperationSnapshot {
 - [ ] **Step 2: 运行确认失败**
 
 ```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .agents/skills/manga-translator-build/scripts/build.ps1 -Preset local-test -Target manga_tests_application
+pwsh -NoProfile -ExecutionPolicy Bypass -File tools/build/build.ps1 -Preset local-test -Target manga_tests_application
 ```
 
 - [ ] **Step 3: 实现 reporter 与 GUI-thread publication**
@@ -186,7 +186,7 @@ executor 创建的 `TaskProgress` 同时更新 `QPromise` 和 `context.progressR
 - [ ] **Step 5: 运行 Application/Services 测试**
 
 ```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .agents/skills/manga-translator-build/scripts/test.ps1 -Preset local-test -Regex "manga_tests_(application|services)"
+pwsh -NoProfile -ExecutionPolicy Bypass -File tools/build/test.ps1 -Preset local-test -Regex "manga_tests_(application|services)"
 ```
 
 - [ ] **Step 6: Commit（仅在获授权时）**
@@ -244,7 +244,7 @@ struct PageProcessingProposal {
 - [ ] **Step 2: 运行确认失败**
 
 ```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .agents/skills/manga-translator-build/scripts/build.ps1 -Preset local-test -Target manga_tests_application
+pwsh -NoProfile -ExecutionPolicy Bypass -File tools/build/build.ps1 -Preset local-test -Target manga_tests_application
 ```
 
 - [ ] **Step 3: 扩展 Processing UseCase 的 descriptor 参数**
@@ -262,7 +262,7 @@ Workflow 串联 focused UseCase/Future，保留已完成 proposal；失败时返
 - [ ] **Step 6: 运行测试**
 
 ```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .agents/skills/manga-translator-build/scripts/test.ps1 -Preset local-test -Regex "manga_tests_(application|app)"
+pwsh -NoProfile -ExecutionPolicy Bypass -File tools/build/test.ps1 -Preset local-test -Regex "manga_tests_(application|app)"
 ```
 
 - [ ] **Step 7: Commit（仅在获授权时）**
@@ -316,7 +316,7 @@ struct PreparedProcessingAdoption {
 - [ ] **Step 2: 运行确认失败**
 
 ```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .agents/skills/manga-translator-build/scripts/build.ps1 -Preset local-test -Target manga_tests_application
+pwsh -NoProfile -ExecutionPolicy Bypass -File tools/build/build.ps1 -Preset local-test -Target manga_tests_application
 ```
 
 - [ ] **Step 3: 实现 prepare UseCases**
@@ -339,7 +339,7 @@ push 前在同一 GUI event 再做最终 snapshot 校验；push 后任何命令�
 - [ ] **Step 6: 运行测试**
 
 ```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .agents/skills/manga-translator-build/scripts/test.ps1 -Preset local-test -Regex "manga_tests_(application|ui_processing_adoption)"
+pwsh -NoProfile -ExecutionPolicy Bypass -File tools/build/test.ps1 -Preset local-test -Regex "manga_tests_(application|ui_processing_adoption)"
 ```
 
 - [ ] **Step 7: Commit（仅在获授权时）**
@@ -376,7 +376,7 @@ git commit -m "feat(ui): adopt processing results through project undo"
 - [ ] **Step 2: 运行确认失败**
 
 ```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .agents/skills/manga-translator-build/scripts/build.ps1 -Preset local-test -Target manga_tests_ui_editor_processing
+pwsh -NoProfile -ExecutionPolicy Bypass -File tools/build/build.ps1 -Preset local-test -Target manga_tests_ui_editor_processing
 ```
 
 - [ ] **Step 3: 实现 Controller watcher 所有权**
@@ -394,7 +394,7 @@ Smart Translate 为唯一 Accent action；没有 Region 时禁用并提供明确
 - [ ] **Step 6: 运行测试**
 
 ```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .agents/skills/manga-translator-build/scripts/test.ps1 -Preset local-test -Regex "manga_tests_ui_(editor_processing|editor_page)"
+pwsh -NoProfile -ExecutionPolicy Bypass -File tools/build/test.ps1 -Preset local-test -Regex "manga_tests_ui_(editor_processing|editor_page)"
 ```
 
 - [ ] **Step 7: Commit（仅在获授权时）**
@@ -432,7 +432,7 @@ git commit -m "feat(ui): add editor processing and review workflow"
 - [ ] **Step 2: 运行确认失败**
 
 ```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .agents/skills/manga-translator-build/scripts/build.ps1 -Preset local-test -Target manga_tests_ui_app_status_task_strip
+pwsh -NoProfile -ExecutionPolicy Bypass -File tools/build/build.ps1 -Preset local-test -Target manga_tests_ui_app_status_task_strip
 ```
 
 - [ ] **Step 3: 实现三段式 Strip**
@@ -450,7 +450,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .agents/skills/manga-tra
 - [ ] **Step 6: 运行测试**
 
 ```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .agents/skills/manga-translator-build/scripts/test.ps1 -Preset local-test -Regex "manga_tests_ui_(operation_list_model|app_status_task_strip|main_window)"
+pwsh -NoProfile -ExecutionPolicy Bypass -File tools/build/test.ps1 -Preset local-test -Regex "manga_tests_ui_(operation_list_model|app_status_task_strip|main_window)"
 ```
 
 - [ ] **Step 7: Commit（仅在获授权时）**
@@ -513,7 +513,7 @@ struct AppSettingsSnapshot {
 - [ ] **Step 2: 运行确认失败**
 
 ```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .agents/skills/manga-translator-build/scripts/build.ps1 -Preset local-test -Target manga_tests_application
+pwsh -NoProfile -ExecutionPolicy Bypass -File tools/build/build.ps1 -Preset local-test -Target manga_tests_application
 ```
 
 - [ ] **Step 3: 实现 typed UseCases**
@@ -531,7 +531,7 @@ UI 永远只看到 `AppSettingsSnapshot`，不拼 key。Provider setting 明确�
 - [ ] **Step 6: 运行测试**
 
 ```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .agents/skills/manga-translator-build/scripts/test.ps1 -Preset local-test -Regex "manga_tests_(application|services|app)"
+pwsh -NoProfile -ExecutionPolicy Bypass -File tools/build/test.ps1 -Preset local-test -Regex "manga_tests_(application|services|app)"
 ```
 
 - [ ] **Step 7: Commit（仅在获授权时）**
@@ -574,7 +574,7 @@ git commit -m "feat(application): add typed executable app settings"
 - [ ] **Step 2: 运行确认失败**
 
 ```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .agents/skills/manga-translator-build/scripts/build.ps1 -Preset local-test -Target manga_tests_ui_settings_view_model
+pwsh -NoProfile -ExecutionPolicy Bypass -File tools/build/build.ps1 -Preset local-test -Target manga_tests_ui_settings_view_model
 ```
 
 - [ ] **Step 3: 实现 SettingsViewModel**
@@ -596,7 +596,7 @@ TitleBar 只保留应用名和 Back；设置分类 pane 不含重复“设置”
 - [ ] **Step 7: 注册 Settings 路由并运行测试**
 
 ```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .agents/skills/manga-translator-build/scripts/test.ps1 -Preset local-test -Regex "manga_tests_ui_settings"
+pwsh -NoProfile -ExecutionPolicy Bypass -File tools/build/test.ps1 -Preset local-test -Regex "manga_tests_ui_settings"
 ```
 
 - [ ] **Step 8: Commit（仅在获授权时）**
@@ -639,8 +639,8 @@ git commit -m "feat(ui): add executable settings surface"
 - [ ] **Step 2: 运行确认失败**
 
 ```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .agents/skills/manga-translator-build/scripts/build.ps1 -Preset local-test -Target manga_tests_data
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .agents/skills/manga-translator-build/scripts/test.ps1 -Preset local-test -Regex "manga_tests_data"
+pwsh -NoProfile -ExecutionPolicy Bypass -File tools/build/build.ps1 -Preset local-test -Target manga_tests_data
+pwsh -NoProfile -ExecutionPolicy Bypass -File tools/build/test.ps1 -Preset local-test -Regex "manga_tests_data"
 ```
 
 Expected: 新增断言至少分别暴露当前把缺少 `project.json` 归为 `persistence.io`、把 `QLockFile::PermissionError` 归为 `persistence.locked` 的行为。
@@ -652,7 +652,7 @@ Expected: 新增断言至少分别暴露当前把缺少 `project.json` 归为 `p
 - [ ] **Step 4: 运行 data tests**
 
 ```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .agents/skills/manga-translator-build/scripts/test.ps1 -Preset local-test -Regex "manga_tests_data"
+pwsh -NoProfile -ExecutionPolicy Bypass -File tools/build/test.ps1 -Preset local-test -Regex "manga_tests_data"
 ```
 
 Expected: 项目目录矩阵可自动化的各行通过，原有 second-session 与 stale-lock 测试继续通过。
@@ -704,7 +704,7 @@ struct RecoveryPresentation {
 - [ ] **Step 2: 运行确认失败**
 
 ```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .agents/skills/manga-translator-build/scripts/build.ps1 -Preset local-test -Target manga_tests_ui_recovery_presenter
+pwsh -NoProfile -ExecutionPolicy Bypass -File tools/build/build.ps1 -Preset local-test -Target manga_tests_ui_recovery_presenter
 ```
 
 - [ ] **Step 3: 实现映射与去重**
@@ -722,7 +722,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .agents/skills/manga-tra
 - [ ] **Step 6: 运行测试**
 
 ```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .agents/skills/manga-translator-build/scripts/test.ps1 -Preset local-test -Regex "manga_tests_ui_(recovery|home|import|navigation)"
+pwsh -NoProfile -ExecutionPolicy Bypass -File tools/build/test.ps1 -Preset local-test -Regex "manga_tests_ui_(recovery|home|import|navigation)"
 ```
 
 - [ ] **Step 7: Commit（仅在获授权时）**
@@ -772,7 +772,7 @@ F6 pane cycle、完整 Tab order、Region virtual children、Tooltip/accessible 
 - [ ] **Step 5: 运行测试**
 
 ```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .agents/skills/manga-translator-build/scripts/test.ps1 -Preset local-test -Regex "manga_tests_ui_(responsive|accessibility)"
+pwsh -NoProfile -ExecutionPolicy Bypass -File tools/build/test.ps1 -Preset local-test -Regex "manga_tests_ui_(responsive|accessibility)"
 ```
 
 - [ ] **Step 6: Commit（仅在获授权时）**
@@ -799,9 +799,9 @@ git commit -m "fix(ui): finish responsive and accessible p5 surfaces"
 
 ```powershell
 prek run --all-files
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .agents/skills/manga-translator-build/scripts/configure.ps1 -Preset local-test
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .agents/skills/manga-translator-build/scripts/build.ps1 -Preset local-test
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .agents/skills/manga-translator-build/scripts/test.ps1 -Preset local-test
+pwsh -NoProfile -ExecutionPolicy Bypass -File tools/build/build.ps1 -Preset local-test -Configure
+pwsh -NoProfile -ExecutionPolicy Bypass -File tools/build/build.ps1 -Preset local-test
+pwsh -NoProfile -ExecutionPolicy Bypass -File tools/build/test.ps1 -Preset local-test
 ```
 
 记录实际通过数量和任何未运行边界；不得写“应当通过”。

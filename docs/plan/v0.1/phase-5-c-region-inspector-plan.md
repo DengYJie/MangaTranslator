@@ -24,7 +24,7 @@
 - P5-C 不启动 OCR、翻译、清除或排版后台任务；只预留 P5-D 采用命令所需的快照接口。
 - V0.1 只实现矩形 Region；不引入自动检测、多边形 Region、Split Curtain 或全局快捷键配置。
 - 下列提交步骤仅在执行者得到明确 Git 授权时执行；否则在验证通过后报告建议提交消息，不创建提交。
-- 构建与测试统一使用 `.agents/skills/manga-translator-build/scripts/{build,test}.ps1` 和已签入的 `local-test` preset。
+- 构建与测试统一使用 `tools/build/{build,test}.ps1` 和已签入的 `local-test` preset。
 
 ## File Structure
 
@@ -84,7 +84,7 @@ void openedSessionCarriesEditableAggregate() {
 - [ ] **Step 2: 运行聚焦测试确认失败**
 
 ```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .agents/skills/manga-translator-build/scripts/build.ps1 -Preset local-test -Target manga_tests_ui_home_view_model
+pwsh -NoProfile -ExecutionPolicy Bypass -File tools/build/build.ps1 -Preset local-test -Target manga_tests_ui_home_view_model
 ```
 
 Expected: 编译失败，`OpenedProjectSession` 和新信号不存在。
@@ -111,7 +111,7 @@ struct OpenedProjectSession {
 - [ ] **Step 5: 运行 Home 与 Editor ViewModel 测试**
 
 ```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .agents/skills/manga-translator-build/scripts/test.ps1 -Preset local-test -Regex "manga_tests_ui_(home|editor)_view_model"
+pwsh -NoProfile -ExecutionPolicy Bypass -File tools/build/test.ps1 -Preset local-test -Regex "manga_tests_ui_(home|editor)_view_model"
 ```
 
 Expected: 新旧用例全绿，打开结果的 `warnings` 和 `recoverySource` 仍完整保留供 P5-D 使用。
@@ -177,7 +177,7 @@ void ComicProjectTest::insertRegionAtOriginalOrderIsAtomic() {
 - [ ] **Step 2: 运行 Domain 测试确认失败**
 
 ```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .agents/skills/manga-translator-build/scripts/test.ps1 -Preset local-test -Regex manga_tests_domain
+pwsh -NoProfile -ExecutionPolicy Bypass -File tools/build/test.ps1 -Preset local-test -Regex manga_tests_domain
 ```
 
 - [ ] **Step 3: 实现原子插入**
@@ -193,7 +193,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .agents/skills/manga-tra
 `ApplyRegionSnapshotsUseCase` 先校验同页所有 RegionId 和目标值，再一次调用 `applyPageRegionEdits`，确保批量样式与多 Region 采用原子提交。它不接收固定 expected revision；命令首次 push 前由 ViewModel 校验，后续 undo/redo 的可执行性由栈顺序保证。任何失败返回 `internal.undo_invariant_broken`，交给 Task 5 停止继续重放。
 
 ```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .agents/skills/manga-translator-build/scripts/test.ps1 -Preset local-test -Regex manga_tests_application
+pwsh -NoProfile -ExecutionPolicy Bypass -File tools/build/test.ps1 -Preset local-test -Regex manga_tests_application
 ```
 
 - [ ] **Step 6: Commit（仅在获授权时）**
@@ -239,7 +239,7 @@ struct RegionProjection {
 - [ ] **Step 2: 运行确认失败**
 
 ```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .agents/skills/manga-translator-build/scripts/build.ps1 -Preset local-test -Target manga_tests_ui_editor_view_model
+pwsh -NoProfile -ExecutionPolicy Bypass -File tools/build/build.ps1 -Preset local-test -Target manga_tests_ui_editor_view_model
 ```
 
 - [ ] **Step 3: 实现集中投影刷新**
@@ -261,7 +261,7 @@ void setPreviewMode(PreviewMode mode);
 - [ ] **Step 5: 运行测试**
 
 ```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .agents/skills/manga-translator-build/scripts/test.ps1 -Preset local-test -Regex manga_tests_ui_editor_view_model
+pwsh -NoProfile -ExecutionPolicy Bypass -File tools/build/test.ps1 -Preset local-test -Regex manga_tests_ui_editor_view_model
 ```
 
 - [ ] **Step 6: Commit（仅在获授权时）**
@@ -298,7 +298,7 @@ git commit -m "feat(ui): project region selection into editor state"
 - [ ] **Step 2: 运行确认失败**
 
 ```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .agents/skills/manga-translator-build/scripts/build.ps1 -Preset local-test -Target manga_tests_ui_region_interaction
+pwsh -NoProfile -ExecutionPolicy Bypass -File tools/build/build.ps1 -Preset local-test -Target manga_tests_ui_region_interaction
 ```
 
 - [ ] **Step 3: 实现无 Widget 的 Graphics Item**
@@ -316,7 +316,7 @@ Tab/Shift+Tab 遍历 Region；方向键移动 1 source px；Shift+方向键调�
 - [ ] **Step 6: 运行画布测试**
 
 ```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .agents/skills/manga-translator-build/scripts/test.ps1 -Preset local-test -Regex "manga_tests_ui_(region_interaction|manga_canvas)"
+pwsh -NoProfile -ExecutionPolicy Bypass -File tools/build/test.ps1 -Preset local-test -Regex "manga_tests_ui_(region_interaction|manga_canvas)"
 ```
 
 - [ ] **Step 7: Commit（仅在获授权时）**
@@ -353,7 +353,7 @@ git commit -m "feat(manga): add rectangle region editing interactions"
 - [ ] **Step 2: 运行确认失败**
 
 ```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .agents/skills/manga-translator-build/scripts/build.ps1 -Preset local-test -Target manga_tests_ui_editor_commands
+pwsh -NoProfile -ExecutionPolicy Bypass -File tools/build/build.ps1 -Preset local-test -Target manga_tests_ui_editor_commands
 ```
 
 - [ ] **Step 3: 实现 Command Context 和命令**
@@ -377,7 +377,7 @@ Create、Delete、Move、Resize 不再直接调用 Domain；一次 release 只 p
 - [ ] **Step 6: 运行测试**
 
 ```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .agents/skills/manga-translator-build/scripts/test.ps1 -Preset local-test -Regex "manga_tests_ui_(editor_commands|editor_view_model)"
+pwsh -NoProfile -ExecutionPolicy Bypass -File tools/build/test.ps1 -Preset local-test -Regex "manga_tests_ui_(editor_commands|editor_view_model)"
 ```
 
 - [ ] **Step 7: Commit（仅在获授权时）**
@@ -415,7 +415,7 @@ git commit -m "feat(ui): add project undo history for region edits"
 - [ ] **Step 2: 运行确认失败**
 
 ```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .agents/skills/manga-translator-build/scripts/build.ps1 -Preset local-test -Target manga_tests_ui_inspector_state
+pwsh -NoProfile -ExecutionPolicy Bypass -File tools/build/build.ps1 -Preset local-test -Target manga_tests_ui_inspector_state
 ```
 
 - [ ] **Step 3: 实现 ViewModel 投影**
@@ -433,7 +433,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .agents/skills/manga-tra
 - [ ] **Step 6: 运行测试**
 
 ```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .agents/skills/manga-translator-build/scripts/test.ps1 -Preset local-test -Regex "manga_tests_ui_inspector_(state|panel)"
+pwsh -NoProfile -ExecutionPolicy Bypass -File tools/build/test.ps1 -Preset local-test -Regex "manga_tests_ui_inspector_(state|panel)"
 ```
 
 - [ ] **Step 7: Commit（仅在获授权时）**
@@ -470,7 +470,7 @@ git commit -m "feat(ui): add selection-driven region inspector"
 - [ ] **Step 2: 运行确认失败**
 
 ```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .agents/skills/manga-translator-build/scripts/build.ps1 -Preset local-test -Target manga_tests_ui_text_edit_session
+pwsh -NoProfile -ExecutionPolicy Bypass -File tools/build/build.ps1 -Preset local-test -Target manga_tests_ui_text_edit_session
 ```
 
 - [ ] **Step 3: 实现统一属性命令**
@@ -488,7 +488,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .agents/skills/manga-tra
 - [ ] **Step 6: 运行测试**
 
 ```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .agents/skills/manga-translator-build/scripts/test.ps1 -Preset local-test -Regex "manga_tests_ui_(text_edit_session|editor_commands|inspector)"
+pwsh -NoProfile -ExecutionPolicy Bypass -File tools/build/test.ps1 -Preset local-test -Regex "manga_tests_ui_(text_edit_session|editor_commands|inspector)"
 ```
 
 - [ ] **Step 7: Commit（仅在获授权时）**
@@ -539,7 +539,7 @@ void saveCompletionDoesNotCleanNewerRevision() {
 - [ ] **Step 2: 运行确认失败**
 
 ```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .agents/skills/manga-translator-build/scripts/build.ps1 -Preset local-test -Target manga_tests_ui_editor_save
+pwsh -NoProfile -ExecutionPolicy Bypass -File tools/build/build.ps1 -Preset local-test -Target manga_tests_ui_editor_save
 ```
 
 - [ ] **Step 3: 实现保存协议**
@@ -557,7 +557,7 @@ CommandBar 包含 Undo、Redo、Select/Pan/Create Region、Preview Selector、�
 - [ ] **Step 6: 运行测试**
 
 ```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .agents/skills/manga-translator-build/scripts/test.ps1 -Preset local-test -Regex "manga_tests_ui_(editor_save|editor_page|main_window)"
+pwsh -NoProfile -ExecutionPolicy Bypass -File tools/build/test.ps1 -Preset local-test -Regex "manga_tests_ui_(editor_save|editor_page|main_window)"
 ```
 
 - [ ] **Step 7: Commit（仅在获授权时）**
@@ -591,15 +591,15 @@ git commit -m "feat(ui): add editor save and close workflow"
 - [ ] **Step 3: 配置并构建**
 
 ```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .agents/skills/manga-translator-build/scripts/configure.ps1 -Preset local-test
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .agents/skills/manga-translator-build/scripts/build.ps1 -Preset local-test
+pwsh -NoProfile -ExecutionPolicy Bypass -File tools/build/build.ps1 -Preset local-test -Configure
+pwsh -NoProfile -ExecutionPolicy Bypass -File tools/build/build.ps1 -Preset local-test
 ```
 
 - [ ] **Step 4: 运行聚焦与全量测试**
 
 ```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .agents/skills/manga-translator-build/scripts/test.ps1 -Preset local-test -Regex "manga_tests_(domain|application|ui)"
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .agents/skills/manga-translator-build/scripts/test.ps1 -Preset local-test
+pwsh -NoProfile -ExecutionPolicy Bypass -File tools/build/test.ps1 -Preset local-test -Regex "manga_tests_(domain|application|ui)"
+pwsh -NoProfile -ExecutionPolicy Bypass -File tools/build/test.ps1 -Preset local-test
 ```
 
 - [ ] **Step 5: 执行 P5-C 人工检查并记录边界**
