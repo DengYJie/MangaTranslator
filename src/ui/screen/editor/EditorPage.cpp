@@ -1,6 +1,7 @@
 #include "ui/screen/editor/EditorPage.h"
 
 #include "ui/manga/MangaCanvas.h"
+#include "ui/screen/editor/EditorProcessingController.h"
 #include "ui/screen/editor/EditorState.h"
 #include "ui/screen/editor/EditorViewModel.h"
 #include "ui/widget/EditorCommandBar.h"

@@ -1,5 +1,6 @@
 #include "ui/widget/PageThumbnailDelegate.h"
 
+#include "ui/screen/editor/EditorState.h"
 #include "ui/widget/PageListModel.h"
 #include "ui/widget/PageThumbnailList.h"
 
@@ -95,24 +96,31 @@ void PageThumbnailDelegate::paint(QPainter* painter,
     painter->setPen(colors.textPrimary);
     painter->drawText(topRect, Qt::AlignVCenter | Qt::AlignLeft, tr("第 %1 页").arg(orderIndex + 1));
 
-    const int procStatusInt = index.data(PageListModel::ProcessingStatusRole).toInt();
-    if (procStatusInt == 1) { // Running
+    const auto procStatus =
+        static_cast<screen::editor::ProcessingStatus>(index.data(PageListModel::ProcessingStatusRole).toInt());
+    if (procStatus == screen::editor::ProcessingStatus::Queued) {
         QFont statusFont = option.font;
         statusFont.setPixelSize(11);
         painter->setFont(statusFont);
-        painter->setPen(colors.accent);
+        painter->setPen(colors.textSecondary);
+        painter->drawText(topRect, Qt::AlignVCenter | Qt::AlignRight, tr("排队中"));
+    } else if (procStatus == screen::editor::ProcessingStatus::Running) {
+        QFont statusFont = option.font;
+        statusFont.setPixelSize(11);
+        painter->setFont(statusFont);
+        painter->setPen(colors.accentDefault);
         painter->drawText(topRect, Qt::AlignVCenter | Qt::AlignRight, tr("处理中"));
-    } else if (procStatusInt == 2) { // NeedsReview
+    } else if (procStatus == screen::editor::ProcessingStatus::NeedsReview) {
         QFont statusFont = option.font;
         statusFont.setPixelSize(11);
         painter->setFont(statusFont);
-        painter->setPen(colors.warning);
+        painter->setPen(colors.systemCaution);
         painter->drawText(topRect, Qt::AlignVCenter | Qt::AlignRight, tr("待审阅"));
-    } else if (procStatusInt == 3) { // Failed
+    } else if (procStatus == screen::editor::ProcessingStatus::Failed) {
         QFont statusFont = option.font;
         statusFont.setPixelSize(11);
         painter->setFont(statusFont);
-        painter->setPen(colors.critical);
+        painter->setPen(colors.systemCritical);
         painter->drawText(topRect, Qt::AlignVCenter | Qt::AlignRight, tr("失败"));
     }
 
@@ -141,10 +149,9 @@ bool PageThumbnailDelegate::editorEvent(QEvent* event,
         auto status = static_cast<ThumbnailStatus>(index.data(PageListModel::ThumbnailStatusRole).toInt());
 
         if (status == ThumbnailStatus::Failed) {
-            QRect retryRect = retryHotspotRect(option.rect);
-            if (retryRect.contains(mouseEvent->pos())) {
+            if (retryHotspotRect(option.rect).contains(mouseEvent->pos())) {
                 auto pageId = index.data(PageListModel::PageIdRole).value<domain::PageId>();
-                emit m_list->thumbnailRequested(pageId, true);
+                Q_EMIT m_list->thumbnailRequested(pageId, true);
                 return true;
             }
         }

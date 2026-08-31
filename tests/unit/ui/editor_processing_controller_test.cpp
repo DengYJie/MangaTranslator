@@ -389,7 +389,7 @@ private Q_SLOTS:
     }
 
     void testSingleStageFailureHandling() {
-        m_layouter->failNext = true;
+        m_layout->failNext = true;
 
         auto session = createSessionWithRegions(1, 1);
         m_viewModel->openProjectSession(session);

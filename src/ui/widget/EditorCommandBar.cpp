@@ -1,5 +1,6 @@
 #include "ui/widget/EditorCommandBar.h"
 
+#include "ui/screen/editor/EditorProcessingController.h"
 #include "ui/screen/editor/EditorViewModel.h"
 
 #include <FluentQt/FluentQt.h>

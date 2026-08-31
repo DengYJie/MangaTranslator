@@ -75,7 +75,7 @@ void PageListModel::setThumbnailStatus(const domain::PageId& pageId, ThumbnailSt
     m_rows[row].thumbnailError = std::move(errorSummary);
 
     QModelIndex idx = index(row);
-    emit dataChanged(idx, idx, {ThumbnailStatusRole, ThumbnailErrorRole, Qt::ToolTipRole});
+    Q_EMIT dataChanged(idx, idx, {ThumbnailStatusRole, ThumbnailErrorRole, Qt::ToolTipRole});
 }
 
 int PageListModel::rowCount(const QModelIndex& parent) const {

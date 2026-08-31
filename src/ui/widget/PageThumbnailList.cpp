@@ -47,7 +47,7 @@ PageThumbnailList::PageThumbnailList(QWidget* parent)
 
     connect(m_view, &QListView::clicked, this, [this](const QModelIndex& index) {
         if (auto pageId = m_model->pageIdAt(index.row())) {
-            emit pageActivated(*pageId);
+            Q_EMIT pageActivated(*pageId);
         }
     });
 
@@ -131,7 +131,7 @@ void PageThumbnailList::requestVisibleThumbnails() {
 
         if (status == ThumbnailStatus::NotLoaded || evicted) {
             m_model->setThumbnailStatus(pageId, ThumbnailStatus::Loading);
-            emit thumbnailRequested(pageId, false);
+            Q_EMIT thumbnailRequested(pageId, false);
             hasLoading = true;
         } else if (status == ThumbnailStatus::Loading) {
             hasLoading = true;
@@ -178,7 +178,7 @@ int PageThumbnailList::thumbnailCacheTotalCostForTest() const {
 }
 
 void PageThumbnailList::requestThumbnailForTest(const domain::PageId& pageId, bool force) {
-    emit thumbnailRequested(pageId, force);
+    Q_EMIT thumbnailRequested(pageId, force);
 }
 
 void PageThumbnailList::setPageProcessingStatus(const domain::PageId& pageId, int status) {
