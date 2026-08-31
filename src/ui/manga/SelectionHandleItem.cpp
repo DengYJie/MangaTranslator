@@ -34,4 +34,8 @@ QPainterPath SelectionHandleItem::shape() const {
     return path;
 }
 
+void SelectionHandleItem::setFillColor(const QColor& color) {
+    setBrush(color);
+}
+
 } // namespace manga::ui::manga

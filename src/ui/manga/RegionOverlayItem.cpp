@@ -70,7 +70,7 @@ void RegionOverlayItem::setOrder(int order) {
     if (m_selected) {
         name += QStringLiteral(", selected");
     }
-    setAccessibleName(name);
+    setData(Qt::AccessibleDescriptionRole, name);
 }
 
 void RegionOverlayItem::setSelected(bool selected) {
@@ -80,11 +80,11 @@ void RegionOverlayItem::setSelected(bool selected) {
     }
 
     if (selected) {
-        QPen pen(QColor(0, 120, 215), 0);
+        QPen pen(m_selectedStroke, 0);
         pen.setCosmetic(true);
         setPen(pen);
     } else {
-        QPen pen(QColor(180, 180, 180, 160), 0);
+        QPen pen(m_unselectedStroke, 0);
         pen.setCosmetic(true);
         setPen(pen);
     }
@@ -94,7 +94,19 @@ void RegionOverlayItem::setSelected(bool selected) {
         if (selected) {
             name += QStringLiteral(", selected");
         }
-        setAccessibleName(name);
+        setData(Qt::AccessibleDescriptionRole, name);
+    }
+}
+
+void RegionOverlayItem::setColors(const QColor& selectedStroke,
+                                  const QColor& unselectedStroke,
+                                  const QColor& handleFill) {
+    m_selectedStroke = selectedStroke;
+    m_unselectedStroke = unselectedStroke;
+    m_handleFill = handleFill;
+    setSelected(m_selected);
+    for (auto* handle : m_handles) {
+        handle->setFillColor(handleFill);
     }
 }
 

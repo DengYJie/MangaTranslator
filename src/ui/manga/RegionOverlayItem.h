@@ -39,12 +39,18 @@ public:
     /// Sets the 1-based display order used for the accessible name.
     void setOrder(int order);
 
+    /// Updates overlay and handle colors from resolved FluentQt semantic tokens.
+    void setColors(const QColor& selectedStroke, const QColor& unselectedStroke, const QColor& handleFill);
+
 private:
     void setSelected(bool selected);
 
     ::manga::domain::RegionId m_id;
     bool m_selected{false};
     int m_order{0};
+    QColor m_selectedStroke{0, 120, 215};
+    QColor m_unselectedStroke{180, 180, 180, 160};
+    QColor m_handleFill{0, 120, 215};
     std::array<SelectionHandleItem*, 8> m_handles{};
 };
 

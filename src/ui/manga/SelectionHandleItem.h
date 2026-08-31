@@ -20,6 +20,9 @@ public:
     [[nodiscard]] QRectF boundingRect() const override;
     [[nodiscard]] QPainterPath shape() const override;
 
+    /// Updates the handle fill color from a resolved FluentQt semantic token.
+    void setFillColor(const QColor& color);
+
 private:
     canvas::HandlePosition m_position;
 };

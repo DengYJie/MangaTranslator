@@ -146,6 +146,9 @@ private:
     /// Cancels any in-progress gesture and restores the start geometry.
     void cancelGesture();
 
+    /// Propagates resolved FluentQt semantic colors to overlay items and the creation box.
+    void applyThemeColorsToItems();
+
     QGraphicsScene* m_scene{nullptr};         // owned via QGraphicsView::setScene
     QGraphicsPixmapItem* m_pageItem{nullptr}; // scene-owned
     fluent::basicinput::Button* m_placeholderAction{nullptr};

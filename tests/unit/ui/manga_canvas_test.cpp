@@ -422,35 +422,38 @@ private Q_SLOTS:
         canvas.setTool(Tool::Select);
 
         const RegionId id1 = RegionId::generate();
-        canvas.setRegions({{id1, {50, 50, 100, 100}, true}});
+        const RectGeometry regionGeom{50, 50, 100, 100};
+        canvas.setRegions({{id1, regionGeom, true}});
         QCoreApplication::processEvents();
 
         QSignalSpy spy(&canvas, &MangaCanvas::regionGeometryCommitted);
 
-        // Press near the south-east handle corner of the region.
-        const QPoint handleVp = canvas.mapFromScene(QPointF(150, 150));
+        // Compute the SE handle center in device pixels and use it directly as the
+        // mouse press position so the hit test deterministically finds the handle.
+        const double zoom = canvas.zoomFactor();
+        const double dpr = canvas.viewport()->devicePixelRatio();
+        const QRectF hitRect =
+            manga::ui::canvas::handleHitRect(manga::ui::canvas::HandlePosition::SouthEast, regionGeom, zoom, dpr);
+        const QPointF pressPos = hitRect.center();
+
         QWidget* vp = canvas.viewport();
 
-        QMouseEvent press(QEvent::MouseButtonPress, handleVp, Qt::LeftButton, Qt::LeftButton, {});
+        QMouseEvent press(QEvent::MouseButtonPress, pressPos, Qt::LeftButton, Qt::LeftButton, {});
         QApplication::sendEvent(vp, &press);
 
         // Drag further out to resize.
-        const QPoint endVp = canvas.mapFromScene(QPointF(180, 180));
-        QMouseEvent move(QEvent::MouseMove, endVp, Qt::NoButton, Qt::LeftButton, {});
+        const QPointF endPos = pressPos + QPointF(30, 30);
+        QMouseEvent move(QEvent::MouseMove, endPos, Qt::NoButton, Qt::LeftButton, {});
         QApplication::sendEvent(vp, &move);
         QCoreApplication::processEvents();
 
-        QMouseEvent release(QEvent::MouseButtonRelease, endVp, Qt::LeftButton, Qt::LeftButton, {});
+        QMouseEvent release(QEvent::MouseButtonRelease, endPos, Qt::LeftButton, Qt::LeftButton, {});
         QApplication::sendEvent(vp, &release);
         QCoreApplication::processEvents();
 
-        // The click may have been on the body (Move) or handle (Resize) depending on
-        // exact hit testing. Accept either but verify exactly one commit.
-        QVERIFY(spy.size() >= 1);
+        QCOMPARE(spy.size(), 1);
         const auto kind = spy.at(0).at(2).value<EditKind>();
-        // If the handle was hit, it should be Resize; if body, Move.
-        // Both are valid single-commit outcomes.
-        QVERIFY(kind == EditKind::Move || kind == EditKind::Resize);
+        QCOMPARE(kind, EditKind::Resize);
     }
 
     // Delete key emits regionDeleteRequested for selected ids only.

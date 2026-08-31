@@ -1,5 +1,7 @@
 #include "ui/manga/RegionInteraction.h"
 
+#include <QtGlobal>
+
 #include <algorithm>
 #include <cmath>
 
@@ -53,7 +55,7 @@ static QPointF handleAnchorPoint(HandlePosition pos, const domain::RectGeometry&
         case HandlePosition::West:
             return {left, cy};
     }
-    return {cx, cy};
+    Q_UNREACHABLE();
 }
 
 QRectF
@@ -66,6 +68,7 @@ handleHitRect(HandlePosition pos, const domain::RectGeometry& geometry, double z
     return QRectF(devicePos.x() - halfHit, devicePos.y() - halfHit, kHandleHitSizeDevicePx, kHandleHitSizeDevicePx);
 }
 
+// The caller must only query handles on selected regions.
 std::optional<HandlePosition> hitTestHandle(const QPointF& devicePoint,
                                             const domain::RectGeometry& geometry,
                                             double zoom,
@@ -101,6 +104,7 @@ moveRegion(const domain::RectGeometry& original, QPointF deltaSourcePx, const do
     return {.x = newX, .y = newY, .width = original.width, .height = original.height};
 }
 
+// Dragging past the opposite edge swaps edges by design and prevents region inversion.
 std::optional<domain::RectGeometry> resizeRegion(const domain::RectGeometry& original,
                                                  HandlePosition handle,
                                                  QPointF deltaSourcePx,

@@ -11,6 +11,7 @@
 #include <QMouseEvent>
 #include <QPainter>
 #include <QResizeEvent>
+#include <QSet>
 #include <QShowEvent>
 #include <QWheelEvent>
 
@@ -66,6 +67,8 @@ MangaCanvas::MangaCanvas(QWidget* parent) : QGraphicsView(parent) {
     m_creationBox->setBrush(QColor(0, 120, 215, 40));
     m_creationBox->setVisible(false);
     m_scene->addItem(m_creationBox);
+
+    applyThemeColorsToItems();
 }
 
 MangaCanvas::~MangaCanvas() = default;
@@ -74,6 +77,7 @@ void MangaCanvas::onThemeUpdated() {
     m_backgroundColor = kDefaultCanvasBackground;
     m_placeholderTextColor = kDefaultCanvasForeground;
     setBackgroundBrush(m_backgroundColor);
+    applyThemeColorsToItems();
     if (viewport()) {
         viewport()->update();
     }
@@ -220,6 +224,8 @@ void MangaCanvas::setTool(canvas::Tool tool) {
 }
 
 void MangaCanvas::setRegions(const QVector<canvas::RegionDisplay>& regions) {
+    cancelGesture();
+
     QSet<domain::RegionId> incomingIds;
     int order = 1;
     for (const auto& rd : regions) {
@@ -232,6 +238,8 @@ void MangaCanvas::setRegions(const QVector<canvas::RegionDisplay>& regions) {
             auto* item = new RegionOverlayItem(rd.id);
             item->updateFromDisplay(rd);
             item->setOrder(order);
+            const auto& colors = themeColorsRef();
+            item->setColors(colors.accentDefault, colors.strokeDefault, colors.accentDefault);
             m_scene->addItem(item);
             m_overlays.insert(rd.id, item);
         }
@@ -292,6 +300,24 @@ void MangaCanvas::cancelGesture() {
 
     m_gesture = {};
     Q_EMIT gestureCancelled();
+}
+
+void MangaCanvas::applyThemeColorsToItems() {
+    const auto& colors = themeColorsRef();
+
+    if (m_creationBox) {
+        QPen creationPen(colors.accentDefault, 0);
+        creationPen.setCosmetic(true);
+        creationPen.setStyle(Qt::DashLine);
+        m_creationBox->setPen(creationPen);
+        QColor fill = colors.accentDefault;
+        fill.setAlpha(40);
+        m_creationBox->setBrush(fill);
+    }
+
+    for (auto it = m_overlays.constBegin(); it != m_overlays.constEnd(); ++it) {
+        it.value()->setColors(colors.accentDefault, colors.strokeDefault, colors.accentDefault);
+    }
 }
 
 void MangaCanvas::wheelEvent(QWheelEvent* event) {
@@ -444,7 +470,7 @@ void MangaCanvas::mousePressEvent(QMouseEvent* event) {
     }
 
     const QPointF devicePt = event->position();
-    const QPointF scenePt = mapToScene(event->pos());
+    const QPointF scenePt = mapToScene(event->position().toPoint());
     const double dpr = viewport()->devicePixelRatio();
 
     if (m_tool == canvas::Tool::CreateRegion) {
@@ -534,7 +560,7 @@ void MangaCanvas::mouseMoveEvent(QMouseEvent* event) {
     const QPointF sourceDelta = canvas::viewToSource(viewDelta, m_zoomFactor);
 
     if (m_tool == canvas::Tool::CreateRegion) {
-        const QPointF scenePt = mapToScene(event->pos());
+        const QPointF scenePt = mapToScene(event->position().toPoint());
         const double x = std::min(m_gesture.startGeometry.x, scenePt.x());
         const double y = std::min(m_gesture.startGeometry.y, scenePt.y());
         const double w = std::abs(scenePt.x() - m_gesture.startGeometry.x);
