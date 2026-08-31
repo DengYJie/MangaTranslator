@@ -65,10 +65,25 @@ void HomeViewModel::handleOpenFinished() {
         Q_EMIT toastRequested(tr("已打开项目「%1」").arg(name), false);
         Q_EMIT projectOpened(session);
     } else {
-        const QString safeMessage = result.error().safeMessage;
-        const QString retryPath = m_pendingOpenPath;
-        updateState(
-            [&](HomeState& state) { state.notice = HomeNotice{HomeNotice::Severity::Error, safeMessage, retryPath}; });
+        const auto& error = result.error();
+        const auto presentation = m_recoveryPresenter.present(error, m_pendingOpenPath);
+        if (presentation) {
+            QString displayMsg = presentation->safeMessage;
+            if (presentation->occurrenceCount > 1) {
+                displayMsg = tr("%1 (%2 次)").arg(presentation->safeMessage).arg(presentation->occurrenceCount);
+            }
+            const QString retryPath = m_pendingOpenPath;
+            updateState([&](HomeState& state) {
+                state.notice = HomeNotice{
+                    .severity = HomeNotice::Severity::Error,
+                    .message = displayMsg,
+                    .retryPath = retryPath,
+                    .actionText = presentation->actionText,
+                    .action = presentation->action,
+                    .occurrenceCount = presentation->occurrenceCount,
+                };
+            });
+        }
     }
 }
 

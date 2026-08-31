@@ -35,16 +35,22 @@ class FakeProjectRepository final : public application::IProjectRepository {
 public:
     int openPageCount{0};
     bool failCreate{false};
+    std::optional<application::ApplicationError> failCreateError;
     QString lastCreatedPath;
     int saveCallCount{0};
     int closeCallCount{0};
 
     bool failOpen{false};
+    std::optional<application::ApplicationError> failOpenError;
     QString lastOpenedPath;
+    int openCallCount{0};
 
     QFuture<application::Result<application::ProjectDescriptor>>
     createProject(application::CreateProjectRequest request, application::OperationContext) override {
         if (failCreate) {
+            if (failCreateError) {
+                return application::makeFailedFuture<application::ProjectDescriptor>(*failCreateError);
+            }
             return application::makeFailedFuture<application::ProjectDescriptor>(application::makeApplicationError(
                 application::ErrorCategory::Persistence, "persistence.target_not_empty", "目标目录必须为空"));
         }
@@ -54,8 +60,12 @@ public:
     }
     QFuture<application::Result<application::OpenProjectResult>> openProject(application::OpenProjectRequest request,
                                                                              application::OperationContext) override {
+        ++openCallCount;
         lastOpenedPath = request.path;
         if (failOpen) {
+            if (failOpenError) {
+                return application::makeFailedFuture<application::OpenProjectResult>(*failOpenError);
+            }
             return application::makeFailedFuture<application::OpenProjectResult>(application::makeApplicationError(
                 application::ErrorCategory::Project, "test.open_failed", "无法打开项目"));
         }

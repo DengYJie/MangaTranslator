@@ -126,21 +126,21 @@ int Application::run() {
     ocrItem.text = QCoreApplication::translate("Application", "OCR");
     ocrItem.iconGlyph = QStringLiteral("\uE8C1");
     mainWindow->addNavigationItem(ocrItem, QStringLiteral("settings"));
-    mainWindow->registerRoute(QStringLiteral("settings/ocr"), nullptr, QStringLiteral("settings"));
+    mainWindow->registerRoute(QStringLiteral("settings/ocr"), settingsPage, QStringLiteral("settings"));
 
     ui::navigation::NavigationItemDescriptor translationItem;
     translationItem.routeKey = QStringLiteral("settings/ai-translation");
     translationItem.text = QCoreApplication::translate("Application", "AI 翻译");
     translationItem.iconGlyph = QStringLiteral("\uF2B7");
     mainWindow->addNavigationItem(translationItem, QStringLiteral("settings"));
-    mainWindow->registerRoute(QStringLiteral("settings/ai-translation"), nullptr, QStringLiteral("settings"));
+    mainWindow->registerRoute(QStringLiteral("settings/ai-translation"), settingsPage, QStringLiteral("settings"));
 
     ui::navigation::NavigationItemDescriptor appearanceItem;
     appearanceItem.routeKey = QStringLiteral("settings/appearance");
     appearanceItem.text = QCoreApplication::translate("Application", "外观");
     appearanceItem.iconGlyph = QStringLiteral("\uE790");
     mainWindow->addNavigationItem(appearanceItem, QStringLiteral("settings"));
-    mainWindow->registerRoute(QStringLiteral("settings/appearance"), nullptr, QStringLiteral("settings"));
+    mainWindow->registerRoute(QStringLiteral("settings/appearance"), settingsPage, QStringLiteral("settings"));
 
     // Main surface footer item for Settings
     ui::navigation::NavigationItemDescriptor settingsFooterItem;
@@ -367,6 +367,10 @@ int Application::run() {
     QObject::connect(homePage, &ui::screen::home::HomePage::importRequested, controller, [controller]() {
         controller->navigate(QStringLiteral("import"));
     });
+    QObject::connect(
+        homePage, &ui::screen::home::HomePage::settingsRequested, controller, [controller](const QString& routeKey) {
+            controller->navigate(routeKey.isEmpty() ? QStringLiteral("settings/general") : routeKey);
+        });
 
     // --- AppStatusTaskStrip Wiring ---
     if (auto* statusStrip = mainWindow->statusStrip()) {

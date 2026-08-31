@@ -17,6 +17,8 @@ add_library(manga_ui STATIC
     command/RegionPropertyCommand.h
     delegate/OperationRowDelegate.cpp
     delegate/OperationRowDelegate.h
+    error/RecoveryPresenter.cpp
+    error/RecoveryPresenter.h
     model/OperationListModel.cpp
     model/OperationListModel.h
     navigation/INavigationPresenter.h

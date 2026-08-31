@@ -177,9 +177,12 @@ bool NavigationWindow::registerRoute(const QString& routeKey, QWidget* page, con
     int index = -1;
     if (page) {
         auto* contentHost = m_navigationView->contentHost();
-        index = contentHost->count();
-        contentHost->insertPage(index, page);
-        m_indexToRouteMap.insert(index, routeKey);
+        index = contentHost->indexOf(page);
+        if (index < 0) {
+            index = contentHost->count();
+            contentHost->insertPage(index, page);
+            m_indexToRouteMap.insert(index, routeKey);
+        }
     }
 
     navigation::RouteDescriptor desc;

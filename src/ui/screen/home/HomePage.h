@@ -1,5 +1,6 @@
 #pragma once
 
+#include "application/error/ApplicationError.h"
 #include "ui/base/BasePage.h"
 
 class QBoxLayout;
@@ -38,6 +39,7 @@ public:
 
 Q_SIGNALS:
     void importRequested();
+    void settingsRequested(const QString& category);
 
 protected:
     void updateResponsiveLayout(int availableWidth) override;
@@ -60,6 +62,7 @@ private:
     // so allocating a fresh button per render would leak it.
     fluent::basicinput::Button* m_retryButton{nullptr};
     QString m_currentRetryPath;
+    application::RecoveryAction m_currentNoticeAction{application::RecoveryAction::None};
     QBoxLayout* m_contentLayout{nullptr}; // direction flips with the width breakpoint
     QWidget* m_mainArea{nullptr};
     QWidget* m_sideRail{nullptr};

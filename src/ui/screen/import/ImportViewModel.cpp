@@ -222,8 +222,10 @@ void ImportViewModel::handleCreateFinished() {
     if (!result.has_value()) {
         const auto& error = result.error();
         if (error.code == QLatin1String("persistence.target_not_empty")) {
-            updateState([&error](ImportState& state) {
-                state.locationError = error.safeMessage;
+            const auto presentation = m_recoveryPresenter.present(error, m_state.saveLocation);
+            const QString msg = presentation ? presentation->safeMessage : error.safeMessage;
+            updateState([&msg](ImportState& state) {
+                state.locationError = msg;
                 state.importInProgress = false;
             });
             m_stage = Stage::None;
@@ -380,10 +382,25 @@ void ImportViewModel::handleSaveFinished() {
 }
 
 void ImportViewModel::failToEditingState(const application::ApplicationError& error) {
-    updateState([&error](ImportState& state) {
-        state.notice = ImportNotice{ImportNotice::Severity::Error, error.safeMessage};
-        state.importInProgress = false;
-    });
+    const auto presentation = m_recoveryPresenter.present(error, m_state.saveLocation);
+    if (presentation) {
+        QString displayMsg = presentation->safeMessage;
+        if (presentation->occurrenceCount > 1) {
+            displayMsg = tr("%1 (%2 次)").arg(presentation->safeMessage).arg(presentation->occurrenceCount);
+        }
+        updateState([&](ImportState& state) {
+            state.notice = ImportNotice{
+                .severity = ImportNotice::Severity::Error,
+                .message = displayMsg,
+                .actionText = presentation->actionText,
+                .action = presentation->action,
+                .occurrenceCount = presentation->occurrenceCount,
+            };
+            state.importInProgress = false;
+        });
+    } else {
+        updateState([](ImportState& state) { state.importInProgress = false; });
+    }
     m_stage = Stage::None;
 }
 

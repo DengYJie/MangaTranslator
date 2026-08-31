@@ -1,5 +1,7 @@
 #include "ui/screen/settings/SettingsViewModel.h"
 
+#include "ui/error/RecoveryPresenter.h"
+
 #include <QColor>
 #include <QUrl>
 
@@ -172,7 +174,9 @@ void SettingsViewModel::setCredential(application::SecretBytes key) {
         application::SetCredentialUseCase useCase(m_credentialStore);
         const auto res = useCase.execute({m_state.draft.providerId, std::move(key)});
         if (!res) {
-            updateState([&res](SettingsState& state) { state.saveError = res.error().safeMessage; });
+            updateState([&res](SettingsState& state) {
+                state.saveError = ui::error::RecoveryPresenter::localizedSafeMessage(res.error());
+            });
         }
     }
     updateState([this](SettingsState& state) { refreshCredentialStatus(state); });
@@ -183,7 +187,9 @@ void SettingsViewModel::removeCredential() {
         application::ClearCredentialUseCase useCase(m_credentialStore);
         const auto res = useCase.execute({m_state.draft.providerId});
         if (!res) {
-            updateState([&res](SettingsState& state) { state.saveError = res.error().safeMessage; });
+            updateState([&res](SettingsState& state) {
+                state.saveError = ui::error::RecoveryPresenter::localizedSafeMessage(res.error());
+            });
         }
     }
     updateState([this](SettingsState& state) { refreshCredentialStatus(state); });
@@ -264,7 +270,7 @@ void SettingsViewModel::saveSettings() {
         Q_EMIT settingsSaved();
     } else {
         updateState([&result](SettingsState& state) {
-            state.saveError = result.error().safeMessage;
+            state.saveError = ui::error::RecoveryPresenter::localizedSafeMessage(result.error());
             state.isSaving = false;
         });
     }
@@ -423,7 +429,8 @@ void SettingsViewModel::validateOcrModelDirectory(SettingsState& state) {
         state.fieldErrors.remove(QStringLiteral("ocrModelDirectory"));
     } else {
         state.modelStatus = application::OcrModelStatus{.isValid = false, .modelDirectory = dir};
-        state.fieldErrors.insert(QStringLiteral("ocrModelDirectory"), result.error().safeMessage);
+        state.fieldErrors.insert(QStringLiteral("ocrModelDirectory"),
+                                 ui::error::RecoveryPresenter::localizedSafeMessage(result.error()));
     }
 }
 

@@ -835,10 +835,14 @@ void EditorViewModel::handlePageLoadFinished() {
         updateState([&](EditorState& s) {
             s.isPageLoading = false;
             if (error.category != application::ErrorCategory::Cancelled) {
-                EditorNotice notice;
-                notice.safeMessage = error.safeMessage;
-                notice.retryable = error.retryable || error.recovery == application::RecoveryAction::Retry;
-                s.notice = notice;
+                const auto presentation =
+                    m_recoveryPresenter.present(error, QString::fromStdString(m_state.currentPageId.toString()));
+                if (presentation) {
+                    EditorNotice notice;
+                    notice.safeMessage = presentation->safeMessage;
+                    notice.retryable = error.retryable || presentation->action == application::RecoveryAction::Retry;
+                    s.notice = notice;
+                }
             }
         });
     }

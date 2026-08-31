@@ -6,6 +6,7 @@
 #include "application/operation/OperationContext.h"
 #include "domain/model/ComicProject.h"
 #include "ui/base/BaseViewModel.h"
+#include "ui/error/RecoveryPresenter.h"
 #include "ui/screen/import/ImportState.h"
 
 #include <QFutureWatcher>
@@ -86,6 +87,7 @@ private:
     application::IProjectRepository* m_projectRepository; // non-owning
     application::IComicImporter* m_comicImporter;         // non-owning
     application::OperationRegistry* m_operationRegistry;  // non-owning
+    ui::error::RecoveryPresenter m_recoveryPresenter;
 
     QFutureWatcher<application::Result<application::ProjectDescriptor>> m_createWatcher;
     QFutureWatcher<application::Result<application::ImportImagesResult>> m_importWatcher;

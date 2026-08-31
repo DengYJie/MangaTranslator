@@ -1,5 +1,6 @@
 #pragma once
 
+#include "application/error/ApplicationError.h"
 #include "domain/model/ReadingDirection.h"
 
 #include <QString>
@@ -26,6 +27,9 @@ struct ImportNotice {
     };
     Severity severity{Severity::Info};
     QString message;
+    QString actionText;
+    application::RecoveryAction action{application::RecoveryAction::None};
+    int occurrenceCount{1};
     bool operator==(const ImportNotice&) const = default;
 };
 

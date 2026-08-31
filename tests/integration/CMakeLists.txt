@@ -18,3 +18,5 @@ set_tests_properties(manga_tests_integration PROPERTIES
     LABELS "integration"
     TIMEOUT 30
 )
+
+add_subdirectory(ui)

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "application/error/ApplicationError.h"
 #include "application/ports/IRecentProjectsStore.h"
 
 #include <QString>
@@ -18,6 +19,9 @@ struct HomeNotice {
     Severity severity{Severity::Info};
     QString message;
     QString retryPath; // Empty means no retry action.
+    QString actionText;
+    application::RecoveryAction action{application::RecoveryAction::None};
+    int occurrenceCount{1};
 
     bool operator==(const HomeNotice&) const = default;
 };

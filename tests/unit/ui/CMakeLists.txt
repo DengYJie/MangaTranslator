@@ -656,3 +656,26 @@ set_tests_properties(manga_tests_ui_settings_lifetime PROPERTIES
     LABELS "unit;ui"
     TIMEOUT 15
 )
+
+qt_add_executable(manga_tests_ui_recovery_presenter
+    recovery_presenter_test.cpp
+)
+manga_apply_project_options(manga_tests_ui_recovery_presenter)
+set_target_properties(manga_tests_ui_recovery_presenter PROPERTIES AUTOMOC ON)
+
+target_link_libraries(manga_tests_ui_recovery_presenter
+    PRIVATE
+        manga_ui
+        manga_application
+        manga_domain
+        Qt6::Test
+        Qt6::Widgets
+)
+
+manga_deploy_qt_runtime(manga_tests_ui_recovery_presenter)
+add_test(NAME manga_tests_ui_recovery_presenter COMMAND manga_tests_ui_recovery_presenter)
+set_tests_properties(manga_tests_ui_recovery_presenter PROPERTIES
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
+    LABELS "unit;ui"
+    TIMEOUT 15
+)

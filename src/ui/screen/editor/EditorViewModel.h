@@ -7,6 +7,7 @@
 #include "ui/base/BaseViewModel.h"
 #include "ui/command/EditorCommandContext.h"
 #include "ui/command/RegionPropertyCommand.h"
+#include "ui/error/RecoveryPresenter.h"
 #include "ui/manga/RegionInteraction.h"
 #include "ui/screen/editor/EditorState.h"
 #include "ui/screen/editor/TextEditSession.h"
@@ -267,6 +268,7 @@ private:
     quint64 m_saveToken{0};
     application::OperationId m_saveOperation{};
 
+    ui::error::RecoveryPresenter m_recoveryPresenter;
     EditorProcessingController* m_processingController{nullptr};
 };
 

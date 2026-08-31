@@ -3,6 +3,7 @@
 #include "application/dto/ProjectDto.h"
 #include "application/operation/AsyncResult.h"
 #include "ui/base/BaseViewModel.h"
+#include "ui/error/RecoveryPresenter.h"
 #include "ui/screen/home/HomeState.h"
 
 #include <QFutureWatcher>
@@ -49,6 +50,7 @@ private:
     application::IRecentProjectsStore* m_recentStore;     // non-owning
     application::IProjectRepository* m_projectRepository; // non-owning
     application::OperationRegistry* m_operationRegistry;  // non-owning
+    ui::error::RecoveryPresenter m_recoveryPresenter;
     QFutureWatcher<application::Result<application::OpenProjectResult>> m_openWatcher;
     quint64 m_openToken{0};
     QString m_pendingOpenPath;

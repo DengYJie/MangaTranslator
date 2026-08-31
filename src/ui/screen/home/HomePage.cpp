@@ -1,5 +1,6 @@
 #include "ui/screen/home/HomePage.h"
 
+#include "ui/error/RecoveryPresenter.h"
 #include "ui/screen/home/HomeState.h"
 #include "ui/screen/home/HomeViewModel.h"
 #include "ui/screen/home/RecentProjectCardDelegate.h"
@@ -7,9 +8,11 @@
 
 #include <FluentQt/FluentQt.h>
 #include <QBoxLayout>
+#include <QDesktopServices>
 #include <QFileDialog>
 #include <QLabel>
 #include <QStackedLayout>
+#include <QUrl>
 
 namespace manga::ui::screen::home {
 
@@ -74,10 +77,22 @@ void HomePage::buildUi() {
     m_infoBar->setIsClosable(true);
     connect(m_infoBar, &fluent::status_info::InfoBar::closed, this, [this]() { m_viewModel->dismissNotice(); });
     m_retryButton = new fluent::basicinput::Button(tr("重试"), this);
-    m_retryButton->hide(); // Hosted by the InfoBar only while a retryable notice is shown.
+    m_retryButton->hide(); // Hosted by the InfoBar only while an actionable notice is shown.
     connect(m_retryButton, &fluent::basicinput::Button::clicked, this, [this]() {
-        if (!m_currentRetryPath.isEmpty()) {
-            m_viewModel->openProjectPath(m_currentRetryPath);
+        if (m_currentNoticeAction == application::RecoveryAction::Retry) {
+            if (!m_currentRetryPath.isEmpty()) {
+                m_viewModel->openProjectPath(m_currentRetryPath);
+            }
+        } else if (m_currentNoticeAction == application::RecoveryAction::ChoosePath) {
+            m_viewModel->requestOpenProjectDialog();
+        } else if (m_currentNoticeAction == application::RecoveryAction::OpenSettings ||
+                   m_currentNoticeAction == application::RecoveryAction::Reauthenticate ||
+                   m_currentNoticeAction == application::RecoveryAction::LocateModel) {
+            Q_EMIT settingsRequested(ui::error::RecoveryPresenter::settingsRouteForAction(m_currentNoticeAction));
+        } else if (m_currentNoticeAction == application::RecoveryAction::FreeDiskSpace) {
+            if (!m_currentRetryPath.isEmpty()) {
+                QDesktopServices::openUrl(QUrl::fromLocalFile(m_currentRetryPath));
+            }
         }
     });
     rootLayout->addWidget(m_infoBar);
@@ -162,15 +177,20 @@ void HomePage::render(const HomeState& state) {
                                    : fluent::status_info::InfoBar::Informational);
         m_infoBar->setTitle(notice.severity == HomeNotice::Severity::Error ? tr("打开失败") : tr("提示"));
         m_infoBar->setMessage(notice.message);
-        if (!notice.retryPath.isEmpty()) {
-            m_currentRetryPath = notice.retryPath;
+        m_currentRetryPath = notice.retryPath;
+        m_currentNoticeAction = notice.action;
+        if (!notice.actionText.isEmpty()) {
+            m_retryButton->setText(notice.actionText);
+            m_retryButton->show();
             m_infoBar->setActionWidget(m_retryButton);
         } else {
-            m_currentRetryPath.clear();
+            m_retryButton->hide();
             m_infoBar->setActionWidget(nullptr);
         }
         m_infoBar->setIsOpen(true);
     } else {
+        m_currentRetryPath.clear();
+        m_currentNoticeAction = application::RecoveryAction::None;
         m_infoBar->setIsOpen(false);
         m_infoBar->setActionWidget(nullptr);
     }
@@ -201,10 +221,13 @@ void HomePage::showContextMenu(const QPoint& pos) {
     }
     fluent::menus_toolbars::FluentMenu menu(QString(), this);
     auto* openAction = menu.addAction(tr("打开"));
+    auto* showInFolderAction = menu.addAction(tr("在文件夹中显示"));
     auto* removeAction = menu.addAction(tr("从最近列表中移除"));
     const QAction* selected = menu.exec(m_gridView->viewport()->mapToGlobal(pos));
     if (selected == openAction) {
         m_viewModel->openProjectPath(path);
+    } else if (selected == showInFolderAction) {
+        QDesktopServices::openUrl(QUrl::fromLocalFile(path));
     } else if (selected == removeAction) {
         m_viewModel->removeRecent(path);
     }
