@@ -13,6 +13,9 @@
 #include "ui/screen/home/HomeViewModel.h"
 #include "ui/screen/import/ImportPage.h"
 #include "ui/screen/import/ImportViewModel.h"
+#include "ui/screen/settings/SettingsPage.h"
+#include "ui/screen/settings/SettingsState.h"
+#include "ui/screen/settings/SettingsViewModel.h"
 #include "ui/widget/AppStatusTaskStrip.h"
 #include "ui/window/MainWindow.h"
 
@@ -104,6 +107,78 @@ int Application::run() {
     mainWindow->addNavigationItem(editorItem, QStringLiteral("main"));
     mainWindow->registerRoute(QStringLiteral("editor"), editorPage, QStringLiteral("main"));
 
+    auto* settingsViewModel = new ui::screen::settings::SettingsViewModel(
+        m_context->appSettingsStore(), m_context->credentialStore(), m_context->ocrModelValidator(), mainWindow);
+    auto* settingsPage = new ui::screen::settings::SettingsPage(settingsViewModel);
+
+    auto* settingsPanel = new ui::navigation::NavigationPanel(mainWindow->navigationView());
+    mainWindow->registerSurface(QStringLiteral("settings"), settingsPanel);
+
+    ui::navigation::NavigationItemDescriptor generalItem;
+    generalItem.routeKey = QStringLiteral("settings/general");
+    generalItem.text = QCoreApplication::translate("Application", "常规");
+    generalItem.iconGlyph = QStringLiteral("\uE713");
+    mainWindow->addNavigationItem(generalItem, QStringLiteral("settings"));
+    mainWindow->registerRoute(QStringLiteral("settings/general"), settingsPage, QStringLiteral("settings"));
+
+    ui::navigation::NavigationItemDescriptor ocrItem;
+    ocrItem.routeKey = QStringLiteral("settings/ocr");
+    ocrItem.text = QCoreApplication::translate("Application", "OCR");
+    ocrItem.iconGlyph = QStringLiteral("\uE8C1");
+    mainWindow->addNavigationItem(ocrItem, QStringLiteral("settings"));
+    mainWindow->registerRoute(QStringLiteral("settings/ocr"), nullptr, QStringLiteral("settings"));
+
+    ui::navigation::NavigationItemDescriptor translationItem;
+    translationItem.routeKey = QStringLiteral("settings/ai-translation");
+    translationItem.text = QCoreApplication::translate("Application", "AI 翻译");
+    translationItem.iconGlyph = QStringLiteral("\uF2B7");
+    mainWindow->addNavigationItem(translationItem, QStringLiteral("settings"));
+    mainWindow->registerRoute(QStringLiteral("settings/ai-translation"), nullptr, QStringLiteral("settings"));
+
+    ui::navigation::NavigationItemDescriptor appearanceItem;
+    appearanceItem.routeKey = QStringLiteral("settings/appearance");
+    appearanceItem.text = QCoreApplication::translate("Application", "外观");
+    appearanceItem.iconGlyph = QStringLiteral("\uE790");
+    mainWindow->addNavigationItem(appearanceItem, QStringLiteral("settings"));
+    mainWindow->registerRoute(QStringLiteral("settings/appearance"), nullptr, QStringLiteral("settings"));
+
+    // Main surface footer item for Settings
+    ui::navigation::NavigationItemDescriptor settingsFooterItem;
+    settingsFooterItem.routeKey = QStringLiteral("settings/general");
+    settingsFooterItem.text = QCoreApplication::translate("Application", "设置");
+    settingsFooterItem.iconGlyph = QStringLiteral("\uE713");
+    settingsFooterItem.position = ui::navigation::NavigationItemPosition::Bottom;
+    mainWindow->addNavigationItem(settingsFooterItem, QStringLiteral("main"));
+
+    // Theme instant preview wiring
+    QObject::connect(settingsViewModel,
+                     &ui::screen::settings::SettingsViewModel::themePreviewRequested,
+                     mainWindow,
+                     [](application::AppTheme theme) {
+                         switch (theme) {
+                             case application::AppTheme::Light:
+                                 fluent::FluentElement::setTheme(fluent::FluentElement::Light);
+                                 break;
+                             case application::AppTheme::Dark:
+                                 fluent::FluentElement::setTheme(fluent::FluentElement::Dark);
+                                 break;
+                             case application::AppTheme::System:
+                                 break;
+                         }
+                     });
+
+    QObject::connect(controller,
+                     &ui::navigation::NavigationController::routeChanged,
+                     mainWindow,
+                     [settingsViewModel, mainWindow](const QString& routeKey) {
+                         if (const auto category = ui::screen::settings::settingsCategoryFromRouteKey(routeKey)) {
+                             settingsViewModel->setCurrentCategory(*category);
+                         }
+                         if (auto* panel = mainWindow->activeNavigationPanel()) {
+                             panel->setCurrentItem(routeKey);
+                         }
+                     });
+
     // --- Close/Navigation Interception Workflow ---
     auto pendingAction = std::make_shared<QString>(); // "" means window close, otherwise target route
 
@@ -115,22 +190,88 @@ int Application::run() {
         }
     };
 
-    QObject::connect(
-        mainWindow, &ui::window::MainWindow::closeRequested, mainWindow, [editorViewModel, pendingAction]() {
-            *pendingAction = QString();
-            editorViewModel->requestCloseProject();
-        });
-
     QObject::connect(mainWindow,
-                     &ui::window::MainWindow::navigationInterceptRequested,
+                     &ui::window::MainWindow::closeRequested,
                      mainWindow,
-                     [editorViewModel, pendingAction](const QString& routeKey) {
-                         *pendingAction = routeKey;
+                     [editorViewModel, settingsViewModel, pendingAction, mainWindow]() {
+                         *pendingAction = QString();
+                         if (mainWindow->activeNavigationSurfaceId() == QLatin1String("settings") &&
+                             settingsViewModel->isDirty()) {
+                             settingsViewModel->requestLeave([editorViewModel](bool proceed) {
+                                 if (proceed) {
+                                     editorViewModel->requestCloseProject();
+                                 }
+                             });
+                             return;
+                         }
                          editorViewModel->requestCloseProject();
                      });
 
     QObject::connect(
+        mainWindow,
+        &ui::window::MainWindow::navigationInterceptRequested,
+        mainWindow,
+        [editorViewModel, settingsViewModel, pendingAction, controller, mainWindow](const QString& routeKey) {
+            *pendingAction = routeKey;
+            if (routeKey.startsWith(QLatin1String("settings"))) {
+                if (editorViewModel->hasSession() && editorViewModel->state().saveState.isDirty) {
+                    editorViewModel->requestCloseProject();
+                } else {
+                    controller->navigate(routeKey);
+                }
+                return;
+            }
+
+            if (mainWindow->activeNavigationSurfaceId() == QLatin1String("settings") && settingsViewModel->isDirty()) {
+                settingsViewModel->requestLeave([editorViewModel, pendingAction, controller](bool proceed) {
+                    if (proceed) {
+                        if (editorViewModel->hasSession() && editorViewModel->state().saveState.isDirty) {
+                            editorViewModel->requestCloseProject();
+                        } else {
+                            controller->navigate(*pendingAction);
+                        }
+                    }
+                });
+                return;
+            }
+
+            editorViewModel->requestCloseProject();
+        });
+
+    QObject::connect(
         editorViewModel, &ui::screen::editor::EditorViewModel::projectClosed, mainWindow, handleProjectClose);
+
+    QObject::connect(
+        settingsViewModel,
+        &ui::screen::settings::SettingsViewModel::leaveDecisionRequested,
+        mainWindow,
+        [settingsViewModel, mainWindow](const std::function<void(bool proceed)>& callback) {
+            auto* dialog = new fluent::dialogs_flyouts::ContentDialog(mainWindow);
+            dialog->setAttribute(Qt::WA_DeleteOnClose);
+            dialog->setTitle(QCoreApplication::translate("Application", "保留未保存的设置？"));
+            dialog->setContent(
+                new QLabel(QCoreApplication::translate("Application", "设置中有未保存的更改，是否在离开前保存？")));
+            dialog->setPrimaryButtonText(QCoreApplication::translate("Application", "保存并离开"));
+            dialog->setSecondaryButtonText(QCoreApplication::translate("Application", "不保存"));
+            dialog->setCloseButtonText(QCoreApplication::translate("Application", "取消"));
+
+            QObject::connect(dialog,
+                             &fluent::dialogs_flyouts::ContentDialog::primaryButtonClicked,
+                             settingsViewModel,
+                             [settingsViewModel, callback]() { settingsViewModel->confirmLeaveWithSave(callback); });
+            QObject::connect(dialog,
+                             &fluent::dialogs_flyouts::ContentDialog::secondaryButtonClicked,
+                             settingsViewModel,
+                             [settingsViewModel, callback]() { settingsViewModel->confirmLeaveWithoutSave(callback); });
+            QObject::connect(
+                dialog, &fluent::dialogs_flyouts::ContentDialog::closeButtonClicked, settingsViewModel, [callback]() {
+                    if (callback) {
+                        callback(false);
+                    }
+                });
+
+            dialog->show();
+        });
 
     QObject::connect(editorViewModel,
                      &ui::screen::editor::EditorViewModel::closeDecisionRequested,
@@ -262,6 +403,13 @@ int Application::run() {
                              }
                              statusStrip->setDocumentStatus(docStatus);
                          });
+
+        QObject::connect(
+            editorViewModel, &ui::screen::editor::EditorViewModel::projectClosed, statusStrip, [statusStrip]() {
+                ui::widget::DocumentStatusSnapshot docStatus;
+                docStatus.status = ui::widget::DocumentSaveStatus::NoDocument;
+                statusStrip->setDocumentStatus(docStatus);
+            });
 
         QObject::connect(statusStrip,
                          &ui::widget::AppStatusTaskStrip::operationActivated,

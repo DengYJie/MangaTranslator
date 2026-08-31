@@ -80,6 +80,11 @@ add_library(manga_ui STATIC
     screen/import/ImportViewModel.h
     screen/import/PendingSourcesModel.cpp
     screen/import/PendingSourcesModel.h
+    screen/settings/SettingsPage.cpp
+    screen/settings/SettingsPage.h
+    screen/settings/SettingsState.h
+    screen/settings/SettingsViewModel.cpp
+    screen/settings/SettingsViewModel.h
     widget/AppStatusTaskStrip.cpp
     widget/AppStatusTaskStrip.h
     widget/EditorCommandBar.cpp
@@ -92,6 +97,10 @@ add_library(manga_ui STATIC
     widget/PageThumbnailDelegate.h
     widget/PageThumbnailList.cpp
     widget/PageThumbnailList.h
+    widget/SettingsGroup.cpp
+    widget/SettingsGroup.h
+    widget/SettingsRow.cpp
+    widget/SettingsRow.h
     window/MainWindow.cpp
     window/MainWindow.h
     window/NavigationWindow.cpp

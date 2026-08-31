@@ -569,3 +569,90 @@ set_tests_properties(manga_tests_ui_app_status_task_strip PROPERTIES
     LABELS "unit;ui"
     TIMEOUT 15
 )
+
+qt_add_executable(manga_tests_ui_settings_view_model
+    settings_view_model_test.cpp
+)
+manga_apply_project_options(manga_tests_ui_settings_view_model)
+set_target_properties(manga_tests_ui_settings_view_model PROPERTIES AUTOMOC ON)
+
+target_include_directories(manga_tests_ui_settings_view_model
+    PRIVATE
+        "${PROJECT_SOURCE_DIR}/tests"
+        "${PROJECT_SOURCE_DIR}/tests/unit"
+)
+
+target_link_libraries(manga_tests_ui_settings_view_model
+    PRIVATE
+        manga_ui
+        manga_application
+        manga_domain
+        Qt6::Test
+        Qt6::Widgets
+)
+
+manga_deploy_qt_runtime(manga_tests_ui_settings_view_model)
+add_test(NAME manga_tests_ui_settings_view_model COMMAND manga_tests_ui_settings_view_model)
+set_tests_properties(manga_tests_ui_settings_view_model PROPERTIES
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
+    LABELS "unit;ui"
+    TIMEOUT 15
+)
+
+qt_add_executable(manga_tests_ui_settings_page
+    settings_page_test.cpp
+)
+manga_apply_project_options(manga_tests_ui_settings_page)
+set_target_properties(manga_tests_ui_settings_page PROPERTIES AUTOMOC ON)
+
+target_include_directories(manga_tests_ui_settings_page
+    PRIVATE
+        "${PROJECT_SOURCE_DIR}/tests"
+        "${PROJECT_SOURCE_DIR}/tests/unit"
+)
+
+target_link_libraries(manga_tests_ui_settings_page
+    PRIVATE
+        manga_ui
+        manga_application
+        manga_domain
+        Qt6::Test
+        Qt6::Widgets
+)
+
+manga_deploy_qt_runtime(manga_tests_ui_settings_page)
+add_test(NAME manga_tests_ui_settings_page COMMAND manga_tests_ui_settings_page)
+set_tests_properties(manga_tests_ui_settings_page PROPERTIES
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
+    LABELS "unit;ui"
+    TIMEOUT 15
+)
+
+qt_add_executable(manga_tests_ui_settings_lifetime
+    settings_lifetime_test.cpp
+)
+manga_apply_project_options(manga_tests_ui_settings_lifetime)
+set_target_properties(manga_tests_ui_settings_lifetime PROPERTIES AUTOMOC ON)
+
+target_include_directories(manga_tests_ui_settings_lifetime
+    PRIVATE
+        "${PROJECT_SOURCE_DIR}/tests"
+        "${PROJECT_SOURCE_DIR}/tests/unit"
+)
+
+target_link_libraries(manga_tests_ui_settings_lifetime
+    PRIVATE
+        manga_ui
+        manga_application
+        manga_domain
+        Qt6::Test
+        Qt6::Widgets
+)
+
+manga_deploy_qt_runtime(manga_tests_ui_settings_lifetime)
+add_test(NAME manga_tests_ui_settings_lifetime COMMAND manga_tests_ui_settings_lifetime)
+set_tests_properties(manga_tests_ui_settings_lifetime PROPERTIES
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
+    LABELS "unit;ui"
+    TIMEOUT 15
+)
