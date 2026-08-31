@@ -124,6 +124,7 @@ private:
     fluent::textfields::Label* m_sourceMetaLabel{nullptr};
     fluent::textfields::TextEdit* m_translationEdit{nullptr};
     fluent::textfields::Label* m_translationMetaLabel{nullptr};
+    fluent::textfields::Label* m_clearStatusValue{nullptr};
     fluent::layout::Expander* m_candidatesExpander{nullptr};
     QListWidget* m_candidatesList{nullptr};
     fluent::basicinput::Button* m_adoptCandidateButton{nullptr};
@@ -141,6 +142,10 @@ private:
     fluent::basicinput::ComboBox* m_vAlignCombo{nullptr};
     fluent::layout::Field* m_lineSpacingField{nullptr};
     fluent::textfields::NumberBox* m_lineSpacingBox{nullptr};
+    fluent::layout::Field* m_marginTopField{nullptr};
+    fluent::layout::Field* m_marginRightField{nullptr};
+    fluent::layout::Field* m_marginBottomField{nullptr};
+    fluent::layout::Field* m_marginLeftField{nullptr};
     fluent::textfields::NumberBox* m_marginTopBox{nullptr};
     fluent::textfields::NumberBox* m_marginRightBox{nullptr};
     fluent::textfields::NumberBox* m_marginBottomBox{nullptr};

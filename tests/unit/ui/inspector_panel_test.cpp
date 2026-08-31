@@ -135,6 +135,37 @@ private Q_SLOTS:
         auto* orderLabel = panel.findChild<fluent::textfields::Label*>(QStringLiteral("inspectorRegionOrder"));
         QVERIFY(orderLabel != nullptr);
         QVERIFY(orderLabel->text().contains(QString::number(2)));
+
+        auto* clearStatus = panel.findChild<fluent::textfields::Label*>(QStringLiteral("inspectorClearStatus"));
+        QVERIFY(clearStatus != nullptr);
+        QCOMPARE(clearStatus->text(), QStringLiteral("未清除"));
+
+        auto clearedState = makeSingleState();
+        clearedState.isCleared = true;
+        panel.setInspectorState(InspectorState{clearedState});
+        QCOMPARE(clearStatus->text(), QStringLiteral("已清除"));
+    }
+
+    void marginValidationErrorClearsOnRegionSwitch() {
+        InspectorPanel panel;
+        panel.show();
+        panel.setInspectorState(InspectorState{makeSingleState()});
+
+        QSignalSpy spy(&panel, &InspectorPanel::fieldEditCommitted);
+        auto* marginBox = panel.findChild<fluent::textfields::NumberBox*>(QStringLiteral("inspectorMarginTop"));
+        auto* marginField = panel.findChild<fluent::layout::Field*>(QStringLiteral("inspectorMarginTopField"));
+        QVERIFY(marginBox != nullptr);
+        QVERIFY(marginField != nullptr);
+
+        marginBox->setText(QStringLiteral("abc"));
+        QTest::keyClick(marginBox, Qt::Key_Return);
+        QCOMPARE(spy.size(), 0);
+        QCOMPARE(marginField->validationState(), fluent::layout::Field::ValidationState::Error);
+
+        // Rendering another region must not leave the stale error behind.
+        panel.setInspectorState(InspectorState{makeSingleState()});
+        QCOMPARE(marginField->validationState(), fluent::layout::Field::ValidationState::None);
+        QVERIFY(marginField->validationMessage().isEmpty());
     }
 
     void numericEditEmitsFieldIntentWithStableIds() {

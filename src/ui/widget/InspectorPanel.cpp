@@ -33,6 +33,22 @@ QString percentText(double confidence) {
     return QString::number(qRound(confidence * 100.0)) + QStringLiteral("%");
 }
 
+// Orientation and alignment combo rows are inserted in domain enum ordinal order;
+// intent payloads carry the ordinal. These pins keep insertion order and domain
+// ordinals from drifting apart.
+static_assert(static_cast<int>(domain::TextOrientation::Horizontal) == 0 &&
+                  static_cast<int>(domain::TextOrientation::Vertical) == 1,
+              "orientation combo rows mirror TextOrientation ordinals");
+static_assert(static_cast<int>(domain::HorizontalAlignment::Left) == 0 &&
+                  static_cast<int>(domain::HorizontalAlignment::Center) == 1 &&
+                  static_cast<int>(domain::HorizontalAlignment::Right) == 2 &&
+                  static_cast<int>(domain::HorizontalAlignment::Justify) == 3,
+              "horizontal alignment combo rows mirror HorizontalAlignment ordinals");
+static_assert(static_cast<int>(domain::VerticalAlignment::Top) == 0 &&
+                  static_cast<int>(domain::VerticalAlignment::Middle) == 1 &&
+                  static_cast<int>(domain::VerticalAlignment::Bottom) == 2,
+              "vertical alignment combo rows mirror VerticalAlignment ordinals");
+
 } // namespace
 
 /// Encapsulated raw Qt control that paints one region content color as a swatch.
@@ -261,6 +277,19 @@ QWidget* InspectorPanel::buildSingleHost() {
     m_candidatesExpander->setContentWidget(candidatesContent, fluent::WidgetOwnership::Owned);
     translationLayout->addWidget(m_candidatesExpander);
 
+    // Read-only clear status display; clearing actions stay outside the Inspector.
+    auto* clearStatusRow = new QWidget();
+    auto* clearStatusLayout = new QHBoxLayout(clearStatusRow);
+    clearStatusLayout->setContentsMargins(0, 0, 0, 0);
+    clearStatusLayout->setSpacing(8);
+    auto* clearStatusCaption = new Label(tr("清除状态"));
+    clearStatusCaption->setTextColorRole(Label::TextColorRole::Secondary);
+    m_clearStatusValue = new Label();
+    m_clearStatusValue->setObjectName(QStringLiteral("inspectorClearStatus"));
+    clearStatusLayout->addWidget(clearStatusCaption);
+    clearStatusLayout->addWidget(m_clearStatusValue, 1);
+    translationLayout->addWidget(clearStatusRow);
+
     connect(m_candidatesList, &QListWidget::currentRowChanged, this, [this](int row) {
         m_adoptCandidateButton->setEnabled(row >= 0);
     });
@@ -402,6 +431,7 @@ QWidget* InspectorPanel::buildSingleHost() {
         {"下", InspectorField::MarginBottom},
         {"左", InspectorField::MarginLeft},
     };
+    fluent::layout::Field* marginFields[4] = {nullptr, nullptr, nullptr, nullptr};
     fluent::textfields::NumberBox* marginBoxes[4] = {nullptr, nullptr, nullptr, nullptr};
     int marginIndex = 0;
     for (const auto& [labelKey, marginField] : marginSpecs) {
@@ -413,6 +443,7 @@ QWidget* InspectorPanel::buildSingleHost() {
         box->setSpinButtonPlacementMode(NumberBox::SpinButtonPlacementMode::Hidden);
         field->setEditor(box, fluent::WidgetOwnership::Owned);
         marginsGrid->addWidget(field);
+        marginFields[marginIndex] = field;
         marginBoxes[marginIndex] = box;
         connect(box, &NumberBox::valueChanged, this, [this, field, marginField](double value) {
             if (!m_updating) {
@@ -421,10 +452,16 @@ QWidget* InspectorPanel::buildSingleHost() {
         });
         ++marginIndex;
     }
+    m_marginTopField = marginFields[0];
+    m_marginRightField = marginFields[1];
+    m_marginBottomField = marginFields[2];
+    m_marginLeftField = marginFields[3];
+    m_marginTopField->setObjectName(QStringLiteral("inspectorMarginTopField"));
     m_marginTopBox = marginBoxes[0];
     m_marginRightBox = marginBoxes[1];
     m_marginBottomBox = marginBoxes[2];
     m_marginLeftBox = marginBoxes[3];
+    m_marginTopBox->setObjectName(QStringLiteral("inspectorMarginTop"));
     typesetLayout->addWidget(marginsRow);
 
     m_textColorField = new Field();
@@ -818,6 +855,7 @@ void InspectorPanel::populateSingle(const screen::editor::SingleRegionInspectorS
     }
     m_candidatesExpander->setHeaderText(tr("候选译文 (%1)").arg(state.candidates.size()));
     m_adoptCandidateButton->setEnabled(m_candidatesList->currentRow() >= 0);
+    m_clearStatusValue->setText(state.isCleared ? tr("已清除") : tr("未清除"));
 
     if (m_fontFamilyCombo->findText(state.fontFamily) < 0 && !state.fontFamily.isEmpty()) {
         m_fontFamilyCombo->addItem(state.fontFamily);
@@ -837,6 +875,10 @@ void InspectorPanel::populateSingle(const screen::editor::SingleRegionInspectorS
     m_marginRightBox->setValue(state.margins.right);
     m_marginBottomBox->setValue(state.margins.bottom);
     m_marginLeftBox->setValue(state.margins.left);
+    clearFieldError(m_marginTopField);
+    clearFieldError(m_marginRightField);
+    clearFieldError(m_marginBottomField);
+    clearFieldError(m_marginLeftField);
 
     m_textColorHexEdit->setText(state.textColorHex);
     m_textColorSwatch->setSwatchColor(QColor(state.textColorHex));
@@ -1014,6 +1056,9 @@ void InspectorPanel::openColorFlyout(ColorSwatchButton* swatch,
                                      fluent::textfields::LineEdit* hexEdit,
                                      screen::editor::InspectorField field) {
     auto* flyout = new fluent::dialogs_flyouts::Flyout(this);
+    // Flyout is a light-dismiss popup that never self-deletes; destroy it on close.
+    // The hosted ColorPicker is a flyout child and dies with it.
+    flyout->setAttribute(Qt::WA_DeleteOnClose);
     auto* picker = new fluent::basicinput::ColorPicker(flyout);
     if (swatch->swatchColor().isValid()) {
         picker->setColor(swatch->swatchColor());
