@@ -2,6 +2,7 @@
 
 #include "application/ports/IAppSettingsStore.h"
 #include "ui/navigation/NavigationController.h"
+#include "ui/widget/AppStatusTaskStrip.h"
 #include "ui/window/TitleBar.h"
 
 #include <QCloseEvent>
@@ -30,6 +31,9 @@ MainWindow::MainWindow(application::IAppSettingsStore* settingsStore, QWidget* p
         // The offscreen platform has no compositor; translucent backdrops are meaningless there.
         setBackdropEffect(fluent::windowing::BackdropEffect::Solid);
     }
+    m_statusStrip = new widget::AppStatusTaskStrip(this);
+    layout()->addWidget(m_statusStrip);
+
     restoreWindowGeometry();
 }
 

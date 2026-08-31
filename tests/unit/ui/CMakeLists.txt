@@ -523,3 +523,49 @@ set_tests_properties(manga_tests_ui_editor_processing PROPERTIES
     LABELS "unit;ui"
     TIMEOUT 15
 )
+
+qt_add_executable(manga_tests_ui_operation_list_model
+    operation_list_model_test.cpp
+)
+manga_apply_project_options(manga_tests_ui_operation_list_model)
+set_target_properties(manga_tests_ui_operation_list_model PROPERTIES AUTOMOC ON)
+
+target_link_libraries(manga_tests_ui_operation_list_model
+    PRIVATE
+        manga_ui
+        manga_application
+        manga_domain
+        Qt6::Test
+        Qt6::Widgets
+)
+
+manga_deploy_qt_runtime(manga_tests_ui_operation_list_model)
+add_test(NAME manga_tests_ui_operation_list_model COMMAND manga_tests_ui_operation_list_model)
+set_tests_properties(manga_tests_ui_operation_list_model PROPERTIES
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
+    LABELS "unit;ui"
+    TIMEOUT 15
+)
+
+qt_add_executable(manga_tests_ui_app_status_task_strip
+    app_status_task_strip_test.cpp
+)
+manga_apply_project_options(manga_tests_ui_app_status_task_strip)
+set_target_properties(manga_tests_ui_app_status_task_strip PROPERTIES AUTOMOC ON)
+
+target_link_libraries(manga_tests_ui_app_status_task_strip
+    PRIVATE
+        manga_ui
+        manga_application
+        manga_domain
+        Qt6::Test
+        Qt6::Widgets
+)
+
+manga_deploy_qt_runtime(manga_tests_ui_app_status_task_strip)
+add_test(NAME manga_tests_ui_app_status_task_strip COMMAND manga_tests_ui_app_status_task_strip)
+set_tests_properties(manga_tests_ui_app_status_task_strip PROPERTIES
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
+    LABELS "unit;ui"
+    TIMEOUT 15
+)

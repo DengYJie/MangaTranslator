@@ -2,6 +2,7 @@
 
 #include "app/ApplicationContext.h"
 #include "application/ports/IAppSettingsStore.h"
+#include "application/workflow/OperationRegistry.h"
 #include "ui/navigation/NavigationController.h"
 #include "ui/navigation/NavigationPanel.h"
 #include "ui/navigation/NavigationTypes.h"
@@ -11,6 +12,7 @@
 #include "ui/screen/home/HomeViewModel.h"
 #include "ui/screen/import/ImportPage.h"
 #include "ui/screen/import/ImportViewModel.h"
+#include "ui/widget/AppStatusTaskStrip.h"
 #include "ui/window/MainWindow.h"
 
 #include <FluentQt/DialogsFlyouts.h>
@@ -219,6 +221,67 @@ int Application::run() {
     QObject::connect(homePage, &ui::screen::home::HomePage::importRequested, controller, [controller]() {
         controller->navigate(QStringLiteral("import"));
     });
+
+    // --- AppStatusTaskStrip Wiring ---
+    if (auto* statusStrip = mainWindow->statusStrip()) {
+        QObject::connect(m_context->operationRegistry(),
+                         &application::OperationRegistry::operationsChanged,
+                         statusStrip,
+                         &ui::widget::AppStatusTaskStrip::setOperations);
+
+        QObject::connect(statusStrip,
+                         &ui::widget::AppStatusTaskStrip::cancelRequested,
+                         m_context->operationRegistry(),
+                         &application::OperationRegistry::cancelOperation);
+
+        QObject::connect(editorViewModel,
+                         &ui::screen::editor::EditorViewModel::stateChanged,
+                         statusStrip,
+                         [statusStrip](const ui::screen::editor::EditorState& state) {
+                             ui::widget::DocumentStatusSnapshot docStatus;
+                             if (!state.projectId.isValid()) {
+                                 docStatus.status = ui::widget::DocumentSaveStatus::NoDocument;
+                             } else if (state.saveState.saveError.has_value()) {
+                                 docStatus.status = ui::widget::DocumentSaveStatus::SaveFailed;
+                                 docStatus.message = QCoreApplication::translate("Application", "保存失败");
+                                 docStatus.failureDetail = *state.saveState.saveError;
+                             } else if (state.saveState.isSaving) {
+                                 docStatus.status = ui::widget::DocumentSaveStatus::Saving;
+                                 docStatus.message = QCoreApplication::translate("Application", "正在保存");
+                             } else if (state.saveState.isDirty) {
+                                 docStatus.status = ui::widget::DocumentSaveStatus::Dirty;
+                                 docStatus.message = QCoreApplication::translate("Application", "有未保存更改");
+                             } else {
+                                 docStatus.status = ui::widget::DocumentSaveStatus::Saved;
+                                 docStatus.message = QCoreApplication::translate("Application", "所有更改已保存");
+                             }
+                             statusStrip->setDocumentStatus(docStatus);
+                         });
+
+        QObject::connect(statusStrip,
+                         &ui::widget::AppStatusTaskStrip::operationActivated,
+                         mainWindow,
+                         [editorViewModel, controller](const application::OperationId& /*id*/,
+                                                       const domain::ProjectId& projectId,
+                                                       const domain::PageId& pageId) {
+                             if (editorViewModel->hasSession() && editorViewModel->projectAggregate() &&
+                                 editorViewModel->projectAggregate()->id() == projectId) {
+                                 controller->navigate(QStringLiteral("editor"));
+                                 if (pageId.isValid()) {
+                                     editorViewModel->selectPage(pageId);
+                                 }
+                             }
+                         });
+
+        QObject::connect(statusStrip,
+                         &ui::widget::AppStatusTaskStrip::saveFailureDetailsRequested,
+                         mainWindow,
+                         [editorViewModel, controller]() {
+                             if (editorViewModel->hasSession()) {
+                                 controller->navigate(QStringLiteral("editor"));
+                             }
+                         });
+    }
 
     m_mainWindow = std::unique_ptr<ui::window::MainWindow>(mainWindow);
     controller->navigate(QStringLiteral("home"));

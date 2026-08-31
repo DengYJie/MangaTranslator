@@ -389,7 +389,8 @@ private Q_SLOTS:
     }
 
     void testSingleStageFailureHandling() {
-        m_layout->failNext = true;
+        m_layout->shouldFail = true;
+        m_layout->nextError = makeApplicationError(ErrorCategory::Internal, "internal.layout_failed", "Layout failed");
 
         auto session = createSessionWithRegions(1, 1);
         m_viewModel->openProjectSession(session);

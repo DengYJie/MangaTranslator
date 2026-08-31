@@ -10,6 +10,10 @@ namespace manga::ui::navigation {
 class NavigationController;
 }
 
+namespace manga::ui::widget {
+class AppStatusTaskStrip;
+}
+
 namespace manga::ui::window {
 
 /// Top-level shell window: NavigationWindow plus geometry persistence and
@@ -18,6 +22,10 @@ class MainWindow : public NavigationWindow {
     Q_OBJECT
 public:
     explicit MainWindow(application::IAppSettingsStore* settingsStore, QWidget* parent = nullptr);
+
+    [[nodiscard]] widget::AppStatusTaskStrip* statusStrip() const noexcept {
+        return m_statusStrip;
+    }
 
     /// Wires the controller to the title bar and panel intents. Non-owning.
     void setNavigationController(navigation::NavigationController* controller);
@@ -46,6 +54,7 @@ private:
 
     application::IAppSettingsStore* m_settingsStore;         // non-owning
     navigation::NavigationController* m_controller{nullptr}; // non-owning
+    widget::AppStatusTaskStrip* m_statusStrip{nullptr};
     bool m_forceClose{false};
 };
 

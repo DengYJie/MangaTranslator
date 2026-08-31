@@ -15,6 +15,10 @@ add_library(manga_ui STATIC
     command/RegionPropertyCommand.cpp
     command/ProcessingAdoptionCommands.cpp
     command/RegionPropertyCommand.h
+    delegate/OperationRowDelegate.cpp
+    delegate/OperationRowDelegate.h
+    model/OperationListModel.cpp
+    model/OperationListModel.h
     navigation/INavigationPresenter.h
     navigation/INavigationRegistrar.h
     navigation/NavigationController.cpp
@@ -76,6 +80,8 @@ add_library(manga_ui STATIC
     screen/import/ImportViewModel.h
     screen/import/PendingSourcesModel.cpp
     screen/import/PendingSourcesModel.h
+    widget/AppStatusTaskStrip.cpp
+    widget/AppStatusTaskStrip.h
     widget/EditorCommandBar.cpp
     widget/EditorCommandBar.h
     widget/InspectorPanel.cpp
