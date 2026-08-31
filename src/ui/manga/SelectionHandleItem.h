@@ -17,6 +17,9 @@ public:
         return m_position;
     }
 
+    [[nodiscard]] QRectF boundingRect() const override;
+    [[nodiscard]] QPainterPath shape() const override;
+
 private:
     canvas::HandlePosition m_position;
 };

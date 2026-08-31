@@ -136,6 +136,7 @@ private:
     void applyZoom(double factor);
     void emitViewTransform();
     void layoutPlaceholderButton();
+    void updateAccessibleDescription();
     void
     setContentStateInternal(ContentState state, const QString& message, const QString& actionText, bool clearImage);
 

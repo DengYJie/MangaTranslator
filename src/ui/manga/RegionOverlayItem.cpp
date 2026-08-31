@@ -64,7 +64,17 @@ void RegionOverlayItem::layoutHandles() {
     }
 }
 
+void RegionOverlayItem::setOrder(int order) {
+    m_order = order;
+    QString name = QStringLiteral("Region %1").arg(order);
+    if (m_selected) {
+        name += QStringLiteral(", selected");
+    }
+    setAccessibleName(name);
+}
+
 void RegionOverlayItem::setSelected(bool selected) {
+    m_selected = selected;
     for (auto* handle : m_handles) {
         handle->setVisible(selected);
     }
@@ -77,6 +87,14 @@ void RegionOverlayItem::setSelected(bool selected) {
         QPen pen(QColor(180, 180, 180, 160), 0);
         pen.setCosmetic(true);
         setPen(pen);
+    }
+
+    if (m_order > 0) {
+        QString name = QStringLiteral("Region %1").arg(m_order);
+        if (selected) {
+            name += QStringLiteral(", selected");
+        }
+        setAccessibleName(name);
     }
 }
 

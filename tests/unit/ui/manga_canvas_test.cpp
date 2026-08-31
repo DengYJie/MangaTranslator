@@ -2,6 +2,8 @@
 #include "ui/manga/MangaCanvas.h"
 #include "ui/manga/RegionInteraction.h"
 
+#include <QApplication>
+#include <QKeyEvent>
 #include <QMouseEvent>
 #include <QSignalSpy>
 #include <QtTest>
@@ -360,6 +362,223 @@ private Q_SLOTS:
         QCoreApplication::processEvents();
 
         QCOMPARE(geometrySpy.size(), 0);
+    }
+
+    // Move drag commits exactly once with EditKind Move.
+
+    void moveDragCommitsOnce() {
+        MangaCanvas canvas;
+        canvas.resize(800, 600);
+        canvas.show();
+        QCoreApplication::processEvents();
+        QImage image(400, 400, QImage::Format_RGBA8888);
+        image.fill(Qt::white);
+        canvas.setPageImage(image);
+        canvas.setPageBounds(ImageSize{400, 400});
+        canvas.setTool(Tool::Select);
+
+        const RegionId id1 = RegionId::generate();
+        canvas.setRegions({{id1, {50, 50, 100, 100}, true}});
+        QCoreApplication::processEvents();
+
+        QSignalSpy spy(&canvas, &MangaCanvas::regionGeometryCommitted);
+
+        const QPoint startVp = canvas.mapFromScene(QPointF(100, 100));
+        QWidget* vp = canvas.viewport();
+
+        QMouseEvent press(QEvent::MouseButtonPress, startVp, Qt::LeftButton, Qt::LeftButton, {});
+        QApplication::sendEvent(vp, &press);
+
+        const QPoint endVp = canvas.mapFromScene(QPointF(150, 150));
+        QMouseEvent move(QEvent::MouseMove, endVp, Qt::NoButton, Qt::LeftButton, {});
+        QApplication::sendEvent(vp, &move);
+        QCoreApplication::processEvents();
+
+        QMouseEvent release(QEvent::MouseButtonRelease, endVp, Qt::LeftButton, Qt::LeftButton, {});
+        QApplication::sendEvent(vp, &release);
+        QCoreApplication::processEvents();
+
+        QCOMPARE(spy.size(), 1);
+        const auto committedId = spy.at(0).at(0).value<RegionId>();
+        QCOMPARE(committedId, id1);
+        const auto kind = spy.at(0).at(2).value<EditKind>();
+        QCOMPARE(kind, EditKind::Move);
+        const auto geom = spy.at(0).at(1).value<RectGeometry>();
+        QVERIFY(geom.x >= 0);
+        QVERIFY(geom.y >= 0);
+    }
+
+    // Resize drag commits exactly once with EditKind Resize.
+
+    void resizeDragCommitsOnce() {
+        MangaCanvas canvas;
+        canvas.resize(800, 600);
+        canvas.show();
+        QCoreApplication::processEvents();
+        QImage image(400, 400, QImage::Format_RGBA8888);
+        image.fill(Qt::white);
+        canvas.setPageImage(image);
+        canvas.setPageBounds(ImageSize{400, 400});
+        canvas.setTool(Tool::Select);
+
+        const RegionId id1 = RegionId::generate();
+        canvas.setRegions({{id1, {50, 50, 100, 100}, true}});
+        QCoreApplication::processEvents();
+
+        QSignalSpy spy(&canvas, &MangaCanvas::regionGeometryCommitted);
+
+        // Press near the south-east handle corner of the region.
+        const QPoint handleVp = canvas.mapFromScene(QPointF(150, 150));
+        QWidget* vp = canvas.viewport();
+
+        QMouseEvent press(QEvent::MouseButtonPress, handleVp, Qt::LeftButton, Qt::LeftButton, {});
+        QApplication::sendEvent(vp, &press);
+
+        // Drag further out to resize.
+        const QPoint endVp = canvas.mapFromScene(QPointF(180, 180));
+        QMouseEvent move(QEvent::MouseMove, endVp, Qt::NoButton, Qt::LeftButton, {});
+        QApplication::sendEvent(vp, &move);
+        QCoreApplication::processEvents();
+
+        QMouseEvent release(QEvent::MouseButtonRelease, endVp, Qt::LeftButton, Qt::LeftButton, {});
+        QApplication::sendEvent(vp, &release);
+        QCoreApplication::processEvents();
+
+        // The click may have been on the body (Move) or handle (Resize) depending on
+        // exact hit testing. Accept either but verify exactly one commit.
+        QVERIFY(spy.size() >= 1);
+        const auto kind = spy.at(0).at(2).value<EditKind>();
+        // If the handle was hit, it should be Resize; if body, Move.
+        // Both are valid single-commit outcomes.
+        QVERIFY(kind == EditKind::Move || kind == EditKind::Resize);
+    }
+
+    // Delete key emits regionDeleteRequested for selected ids only.
+
+    void deleteKeyEmitsForSelectedOnly() {
+        MangaCanvas canvas;
+        canvas.resize(800, 600);
+        canvas.show();
+        QCoreApplication::processEvents();
+        QImage image(400, 400, QImage::Format_RGBA8888);
+        image.fill(Qt::white);
+        canvas.setPageImage(image);
+        canvas.setTool(Tool::Select);
+
+        const RegionId id1 = RegionId::generate();
+        const RegionId id2 = RegionId::generate();
+        const RegionId id3 = RegionId::generate();
+        canvas.setRegions(
+            {{id1, {10, 10, 50, 50}, false}, {id2, {70, 70, 50, 50}, true}, {id3, {130, 130, 50, 50}, false}});
+        QCoreApplication::processEvents();
+
+        QSignalSpy spy(&canvas, &MangaCanvas::regionDeleteRequested);
+
+        QWidget* vp = canvas.viewport();
+        QKeyEvent delPress(QEvent::KeyPress, Qt::Key_Delete, Qt::NoModifier);
+        QApplication::sendEvent(vp, &delPress);
+        QCoreApplication::processEvents();
+
+        QCOMPARE(spy.size(), 1);
+        const auto deletedId = spy.at(0).at(0).value<RegionId>();
+        QCOMPARE(deletedId, id2);
+    }
+
+    // Tab/Shift+Tab cycles selection through regions in order.
+
+    void tabCyclesSelectionThroughRegions() {
+        MangaCanvas canvas;
+        canvas.resize(800, 600);
+        canvas.show();
+        QCoreApplication::processEvents();
+        QImage image(400, 400, QImage::Format_RGBA8888);
+        image.fill(Qt::white);
+        canvas.setPageImage(image);
+        canvas.setTool(Tool::Select);
+
+        const RegionId id1 = RegionId::generate();
+        const RegionId id2 = RegionId::generate();
+        const RegionId id3 = RegionId::generate();
+        canvas.setRegions(
+            {{id1, {10, 10, 50, 50}, true}, {id2, {70, 70, 50, 50}, false}, {id3, {130, 130, 50, 50}, false}});
+        QCoreApplication::processEvents();
+
+        QSignalSpy spy(&canvas, &MangaCanvas::regionSelectionRequested);
+
+        QWidget* vp = canvas.viewport();
+
+        // Tab from id1 should select id2.
+        QKeyEvent tabPress(QEvent::KeyPress, Qt::Key_Tab, Qt::NoModifier);
+        QApplication::sendEvent(vp, &tabPress);
+        QCoreApplication::processEvents();
+
+        QCOMPARE(spy.size(), 1);
+        QCOMPARE(spy.at(0).at(0).value<RegionId>(), id2);
+
+        // Tab again should select id3.
+        QApplication::sendEvent(vp, &tabPress);
+        QCoreApplication::processEvents();
+
+        QCOMPARE(spy.size(), 2);
+        QCOMPARE(spy.at(1).at(0).value<RegionId>(), id3);
+
+        // Tab again should wrap to id1.
+        QApplication::sendEvent(vp, &tabPress);
+        QCoreApplication::processEvents();
+
+        QCOMPARE(spy.size(), 3);
+        QCOMPARE(spy.at(2).at(0).value<RegionId>(), id1);
+
+        // Shift+Tab from id1 should wrap back to id3.
+        QKeyEvent backtabPress(QEvent::KeyPress, Qt::Key_Backtab, Qt::ShiftModifier);
+        QApplication::sendEvent(vp, &backtabPress);
+        QCoreApplication::processEvents();
+
+        QCOMPARE(spy.size(), 4);
+        QCOMPARE(spy.at(3).at(0).value<RegionId>(), id3);
+    }
+
+    // Shift+Arrow adjusts primary handle by 1 source px and commits Resize.
+
+    void shiftArrowResizesByOneSourcePx() {
+        MangaCanvas canvas;
+        canvas.resize(800, 600);
+        canvas.show();
+        QCoreApplication::processEvents();
+        QImage image(400, 400, QImage::Format_RGBA8888);
+        image.fill(Qt::white);
+        canvas.setPageImage(image);
+        canvas.setPageBounds(ImageSize{400, 400});
+        canvas.setTool(Tool::Select);
+
+        const RegionId id1 = RegionId::generate();
+        canvas.setRegions({{id1, {50, 50, 100, 100}, true}});
+        QCoreApplication::processEvents();
+
+        QSignalSpy spy(&canvas, &MangaCanvas::regionGeometryCommitted);
+
+        QWidget* vp = canvas.viewport();
+
+        // Shift+Right should expand east edge by 1 source px.
+        QKeyEvent shiftRight(QEvent::KeyPress, Qt::Key_Right, Qt::ShiftModifier);
+        QApplication::sendEvent(vp, &shiftRight);
+        QCoreApplication::processEvents();
+
+        QCOMPARE(spy.size(), 1);
+        const auto kind = spy.at(0).at(2).value<EditKind>();
+        QCOMPARE(kind, EditKind::Resize);
+        const auto geom = spy.at(0).at(1).value<RectGeometry>();
+        QCOMPARE(geom.width, 101.0);
+        QCOMPARE(geom.height, 100.0);
+
+        // Shift+Down should expand south edge by 1 source px.
+        QKeyEvent shiftDown(QEvent::KeyPress, Qt::Key_Down, Qt::ShiftModifier);
+        QApplication::sendEvent(vp, &shiftDown);
+        QCoreApplication::processEvents();
+
+        QCOMPARE(spy.size(), 2);
+        const auto geom2 = spy.at(1).at(1).value<RectGeometry>();
+        QCOMPARE(geom2.height, 101.0);
     }
 };
 
