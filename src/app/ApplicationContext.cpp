@@ -1,5 +1,14 @@
 #include "app/ApplicationContext.h"
 
+#include "application/ports/IComicImporter.h"
+#include "application/ports/ICredentialStore.h"
+#include "application/ports/IDerivedAssetStore.h"
+#include "application/ports/IInpainter.h"
+#include "application/ports/IOcrEngine.h"
+#include "application/ports/IPageImageLoader.h"
+#include "application/ports/ITextLayouter.h"
+#include "application/ports/IThumbnailStore.h"
+#include "application/ports/ITranslator.h"
 #include "application/workflow/OperationRegistry.h"
 #include "data/derived/FileSystemThumbnailStore.h"
 #include "data/import/FileSystemComicImporter.h"
@@ -8,6 +17,8 @@
 #include "data/project/ProjectIoCoordinator.h"
 #include "data/settings/QSettingsAppSettingsStore.h"
 #include "data/settings/QSettingsRecentProjectsStore.h"
+
+#include <QThreadPool>
 
 namespace manga::app {
 
@@ -72,8 +83,15 @@ void ApplicationContext::shutdown() {
         return;
     }
     m_shutdown = true;
-    // Later phases cancel in-flight operations and close the open project session here
-    // before adapters are destroyed. Destruction order below is the teardown order.
+
+    if (m_operationRegistry) {
+        m_operationRegistry->cancelAll();
+    }
+
+    QThreadPool::globalInstance()->waitForDone(5000);
+
+    // Future executors and active I/O threads should be stopped here before destroying the pointers.
+    // Destruction order below is the teardown order.
     // m_production (holding ProjectIoCoordinator) is declared first and destroyed last,
     // ensuring adapters referencing it are destroyed beforehand.
 }

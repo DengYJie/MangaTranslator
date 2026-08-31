@@ -2,10 +2,16 @@
 #include "application/operation/AsyncResult.h"
 #include "application/ports/IAppSettingsStore.h"
 #include "application/ports/IComicImporter.h"
+#include "application/ports/ICredentialStore.h"
+#include "application/ports/IDerivedAssetStore.h"
+#include "application/ports/IInpainter.h"
+#include "application/ports/IOcrEngine.h"
 #include "application/ports/IPageImageLoader.h"
 #include "application/ports/IProjectRepository.h"
 #include "application/ports/IRecentProjectsStore.h"
+#include "application/ports/ITextLayouter.h"
 #include "application/ports/IThumbnailStore.h"
+#include "application/ports/ITranslator.h"
 
 #include <QtTest>
 

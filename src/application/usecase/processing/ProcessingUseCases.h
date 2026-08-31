@@ -42,7 +42,8 @@ public:
         if (m_engine == nullptr || m_registry == nullptr) {
             return makeFailedFuture<OcrResponse>(detail::unavailableDependency());
         }
-        if (!descriptor.projectId.isValid() || !request.pageId.isValid() || !request.regionId.isValid() ||
+        if (!descriptor.projectId.isValid() || !descriptor.pageId.isValid() || !descriptor.regionId.has_value() ||
+            !descriptor.regionId->isValid() || !request.pageId.isValid() || !request.regionId.isValid() ||
             request.image.isNull() || !request.rect.isValid() || request.language.empty()) {
             return makeFailedFuture<OcrResponse>(
                 detail::invalidProcessingInput("input.invalid_ocr_request", "OCR request is invalid"));
@@ -127,8 +128,10 @@ public:
             return makeFailedFuture<ClearResponse>(
                 detail::invalidProcessingInput("clear.disabled", "Region clearing is disabled"));
         }
-        if (!request.projectId.isValid() || !request.pageId.isValid() || !request.regionId.isValid() ||
-            request.pageImage.isNull() || !request.region.isValid() || !request.settings.isValid()) {
+        if (!descriptor.projectId.isValid() || !descriptor.pageId.isValid() || !descriptor.regionId.has_value() ||
+            !descriptor.regionId->isValid() || !request.projectId.isValid() || !request.pageId.isValid() ||
+            !request.regionId.isValid() || request.pageImage.isNull() || !request.region.isValid() ||
+            !request.settings.isValid()) {
             return makeFailedFuture<ClearResponse>(
                 detail::invalidProcessingInput("input.invalid_clear_request", "Clear request is invalid"));
         }
@@ -162,7 +165,8 @@ public:
         if (m_layouter == nullptr || m_registry == nullptr) {
             return makeFailedFuture<LayoutResponse>(detail::unavailableDependency());
         }
-        if (!descriptor.projectId.isValid() || !request.pageId.isValid() || !request.regionId.isValid() ||
+        if (!descriptor.projectId.isValid() || !descriptor.pageId.isValid() || !descriptor.regionId.has_value() ||
+            !descriptor.regionId->isValid() || !request.pageId.isValid() || !request.regionId.isValid() ||
             request.text.isEmpty() || !request.bounds.isValid() || !request.constraints.isValid() ||
             request.logicalDpi <= 0.0) {
             return makeFailedFuture<LayoutResponse>(

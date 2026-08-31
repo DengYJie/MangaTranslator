@@ -349,6 +349,23 @@ void OperationRegistry::cancelProject(domain::ProjectId projectId) {
     }
 }
 
+void OperationRegistry::cancelAll() {
+    bool changed = false;
+    {
+        QMutexLocker locker(&m_state->mutex);
+        for (auto& entry : m_state->operations) {
+            if (!isSettled(entry.state)) {
+                entry.state = OperationState::Cancelling;
+                entry.stopSource->request_stop();
+                changed = true;
+            }
+        }
+    }
+    if (changed) {
+        scheduleEmit(this);
+    }
+}
+
 void OperationRegistry::markRunning(OperationId id) {
     bool changed = false;
     {

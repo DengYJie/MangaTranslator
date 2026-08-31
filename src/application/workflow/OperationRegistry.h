@@ -43,6 +43,7 @@ public:
 
     void cancelOperation(OperationId id);
     void cancelProject(domain::ProjectId projectId);
+    void cancelAll();
 
     /// Transitions a queued operation to running. Safe to call from any thread.
     void markRunning(OperationId id);

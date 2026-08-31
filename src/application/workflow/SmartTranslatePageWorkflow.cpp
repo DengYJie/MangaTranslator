@@ -3,6 +3,7 @@
 #include "application/usecase/processing/ProcessingUseCases.h"
 #include "application/workflow/OperationRegistry.h"
 
+#include <QCoreApplication>
 #include <QPromise>
 #include <QSharedPointer>
 
@@ -107,7 +108,7 @@ private:
         req.regionId = target.regionId;
         req.image = m_pageImage;
         req.rect = target.geometry;
-        req.language = m_sourceLanguage.toStdString();
+        req.language = domain::LanguageCode::createUnchecked(m_sourceLanguage.toStdString());
 
         OperationDescriptor desc{
             OperationStage::Ocr, m_projectId, m_pageId, target.regionId, QStringLiteral("OCR"), true};
@@ -122,7 +123,7 @@ private:
             } else {
                 m_proposal.issues.append({target.regionId, QStringLiteral("Ocr"), res.error()});
             }
-            runOcrStep(index + 1);
+            QMetaObject::invokeMethod(qApp, [this, self, index]() { runOcrStep(index + 1); }, Qt::QueuedConnection);
         });
     }
 
@@ -133,8 +134,9 @@ private:
         }
 
         TranslationRequest req;
-        req.sourceLanguage = m_sourceLanguage.toStdString();
-        req.targetLanguage = m_targetLanguage.toStdString();
+        req.sourceLanguage = domain::LanguageCode::createUnchecked(m_sourceLanguage.toStdString());
+        req.targetLanguage = domain::LanguageCode::createUnchecked(m_targetLanguage.toStdString());
+        req.readingDirection = domain::ReadingDirection::RightToLeft;
 
         for (const auto& t : m_targets) {
             if (t.hasManualTranslation) {
@@ -146,7 +148,8 @@ private:
         }
 
         if (req.regions.isEmpty()) {
-            runClearStep(0);
+            QMetaObject::invokeMethod(
+                qApp, [this, self = shared_from_this()]() { runClearStep(0); }, Qt::QueuedConnection);
             return;
         }
 
@@ -159,17 +162,17 @@ private:
         future.then([this, self](Result<TranslationResponse> res) {
             if (res.has_value()) {
                 m_proposal.translation = res.value();
-                for (const auto& tr : res.value().regions) {
+                for (const auto& tr : res.value().items) {
                     for (auto& t : m_targets) {
                         if (t.regionId == tr.regionId) {
-                            t.effectiveTranslation = tr.translatedText;
+                            t.effectiveTranslation = tr.translation;
                         }
                     }
                 }
             } else {
                 m_proposal.issues.append({std::nullopt, QStringLiteral("Translate"), res.error()});
             }
-            runClearStep(0);
+            QMetaObject::invokeMethod(qApp, [this, self]() { runClearStep(0); }, Qt::QueuedConnection);
         });
     }
 
@@ -186,7 +189,8 @@ private:
 
         auto& target = m_targets[index];
         if (target.effectiveTranslation.isEmpty()) {
-            runClearStep(index + 1);
+            QMetaObject::invokeMethod(
+                qApp, [this, self = shared_from_this(), index]() { runClearStep(index + 1); }, Qt::QueuedConnection);
             return;
         }
 
@@ -196,8 +200,7 @@ private:
         req.regionId = target.regionId;
         req.pageImage = m_pageImage;
         req.region = target.geometry;
-        req.settings.enabled = true; // Wait, should we use global settings? The workflow isn't given settings. We might
-                                     // need to assume true for now.
+        req.settings.enabled = true;
 
         OperationDescriptor desc{
             OperationStage::Clear, m_projectId, m_pageId, target.regionId, QStringLiteral("Clear"), true};
@@ -211,7 +214,7 @@ private:
             } else {
                 m_proposal.issues.append({target.regionId, QStringLiteral("Clear"), res.error()});
             }
-            runClearStep(index + 1);
+            QMetaObject::invokeMethod(qApp, [this, self, index]() { runClearStep(index + 1); }, Qt::QueuedConnection);
         });
     }
 
@@ -228,7 +231,8 @@ private:
 
         auto& target = m_targets[index];
         if (target.effectiveTranslation.isEmpty()) {
-            runLayoutStep(index + 1);
+            QMetaObject::invokeMethod(
+                qApp, [this, self = shared_from_this(), index]() { runLayoutStep(index + 1); }, Qt::QueuedConnection);
             return;
         }
 
@@ -237,8 +241,9 @@ private:
         req.regionId = target.regionId;
         req.text = target.effectiveTranslation;
         req.bounds = target.geometry;
-        req.constraints = domain::LayoutConstraints{};
+        req.constraints = domain::TextLayout{};
         req.logicalDpi = 96.0;
+        req.contentRevision = target.contentRevision;
 
         OperationDescriptor desc{
             OperationStage::Layout, m_projectId, m_pageId, target.regionId, QStringLiteral("Layout"), true};
@@ -252,7 +257,7 @@ private:
             } else {
                 m_proposal.issues.append({target.regionId, QStringLiteral("Layout"), res.error()});
             }
-            runLayoutStep(index + 1);
+            QMetaObject::invokeMethod(qApp, [this, self, index]() { runLayoutStep(index + 1); }, Qt::QueuedConnection);
         });
     }
 
