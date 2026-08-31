@@ -2,6 +2,7 @@ param(
     [string]$Preset = 'local-test',
     [string]$Target = '',
     [switch]$Configure,
+    [switch]$ListTargets,
     [string]$LogFile = ''
 )
 # Build helper: enters the VS dev shell, optionally configures, builds, tees the full
@@ -61,6 +62,15 @@ $devShellModule = Join-Path $vsInstallPath 'Common7\Tools\Microsoft.VisualStudio
 Import-Module $devShellModule
 Enter-VsDevShell -VsInstallPath $vsInstallPath -SkipAutomaticLocation -DevCmdArguments '-arch=x64 -host_arch=x64' | Out-Null
 Set-Location $repoRoot
+
+# Lists buildable targets (requires a configured build/<preset>).
+# Filters ninja help down to real project targets, dropping CTest infra, autogen,
+# and timestamp pseudo-targets.
+if ($ListTargets) {
+    cmake --build --preset $Preset --target help 2>&1 | ForEach-Object { "$_" } |
+        Where-Object { $_ -match '^[A-Za-z][\w]*: phony$' -and $_ -notmatch '_autogen|_timestamp_deps|edit_cache|rebuild_cache|^Experimental|^Nightly|^Continuous|^(test|all):' }
+    exit $LASTEXITCODE
+}
 
 if ($Configure) {
     cmake @configureArgs 2>&1 | Tee-Object -FilePath $LogFile | Out-Null
