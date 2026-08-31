@@ -7,6 +7,9 @@
 namespace fluent::basicinput {
 class Button;
 }
+namespace fluent::textfields {
+class Label;
+}
 
 namespace manga::ui::screen::editor {
 class EditorViewModel;
@@ -38,6 +41,11 @@ private:
 
     fluent::basicinput::Button* m_undoButton{nullptr};
     fluent::basicinput::Button* m_redoButton{nullptr};
+    fluent::basicinput::Button* m_zoomOutButton{nullptr};
+    fluent::textfields::Label* m_zoomValueLabel{nullptr};
+    fluent::basicinput::Button* m_zoomInButton{nullptr};
+    fluent::basicinput::Button* m_fitToPageButton{nullptr};
+    fluent::basicinput::Button* m_actualSizeButton{nullptr};
     fluent::basicinput::Button* m_selectButton{nullptr};
     fluent::basicinput::Button* m_panButton{nullptr};
     fluent::basicinput::Button* m_createRegionButton{nullptr};

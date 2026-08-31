@@ -22,15 +22,26 @@ Import-Module $devShellModule
 Enter-VsDevShell -VsInstallPath $vsInstallPath -SkipAutomaticLocation -DevCmdArguments '-arch=x64 -host_arch=x64' | Out-Null
 Set-Location $repoRoot
 
-$testArgs = @('--preset', $Preset, '--output-on-failure')
+# --no-tests=error: a typo'd -Regex must fail loudly instead of passing silently.
+$testArgs = @('--preset', $Preset, '--output-on-failure', '--no-tests=error')
 if ($Regex) { $testArgs += @('-R', $Regex) }
 ctest @testArgs 2>&1 | Tee-Object -FilePath $LogFile | Out-Null
 $code = $LASTEXITCODE
 
-Get-Content $LogFile | Select-String -Pattern 'Test #|tests passed|tests failed|\*\*\*Failed|\*\*\*Timeout|Errors while running' | ForEach-Object { $_.Line }
+Get-Content $LogFile | Select-String -Pattern 'Test #|tests passed|tests failed|\*\*\*Failed|\*\*\*Timeout|\*\*\*Exception|\*\*\*SegFault|Errors while running|No tests were found' | ForEach-Object { $_.Line }
 if ($code -ne 0) {
     Write-Host '=== failing test output (from ctest log): ==='
-    Get-Content $LogFile | Select-String -Pattern 'FAIL!|ASSERT|QFATAL|QWARN|Critical|Error' | Select-Object -First 40 | ForEach-Object { $_.Line }
+    # FAIL! lines carry the assertion details; post-context captures Qt Test's
+    # Actual/Expected/Loc: lines that locate the failing source line.
+    $hits = @(Get-Content $LogFile | Select-String -Pattern 'FAIL!|QFATAL|ASSERT|Critical:|No tests were found' -Context 0, 3)
+    foreach ($h in ($hits | Select-Object -First 40)) {
+        Write-Host $h.Line
+        foreach ($c in $h.Context.PostContext) { Write-Host "    $c" }
+    }
+    if ($hits.Count -gt 40) {
+        Write-Host "... and $($hits.Count - 40) more failing assertions; see $LogFile"
+    }
+    Get-Content $LogFile | Select-String -Pattern '^Totals:' | Select-Object -Last 5 | ForEach-Object { $_.Line }
 }
 Write-Host "exit=$code log=$LogFile lasttest=$repoRoot/build/$Preset/Testing/Temporary/LastTest.log"
 exit $code

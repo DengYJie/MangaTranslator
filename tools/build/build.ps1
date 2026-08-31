@@ -10,6 +10,37 @@ param(
 # the repo root is found by walking up to the directory containing CMakeLists.txt.
 $ErrorActionPreference = 'Continue'
 
+# Prints matching log lines with a few lines of post-context (MSVC note:/see-reference
+# lines), capped by match count and total lines, and reports how many matches were
+# truncated.
+function Show-LogErrors {
+    param(
+        [string]$Log,
+        [string]$Pattern,
+        [int]$MaxMatches = 40,
+        [int]$ContextLines = 3,
+        [int]$MaxLines = 160
+    )
+    $hits = @(Get-Content $Log | Select-String -Pattern $Pattern -Context 0, $ContextLines)
+    $shownMatches = 0
+    $shownLines = 0
+    foreach ($h in $hits) {
+        if ($shownMatches -ge $MaxMatches -or $shownLines -ge $MaxLines) { break }
+        Write-Host $h.Line
+        $shownLines++
+        foreach ($c in $h.Context.PostContext) {
+            if ($shownLines -ge $MaxLines) { break }
+            Write-Host "    $c"
+            $shownLines++
+        }
+        $shownMatches++
+    }
+    $remaining = $hits.Count - $shownMatches
+    if ($remaining -gt 0) {
+        Write-Host "... and $remaining more matching errors; see $Log"
+    }
+}
+
 $repoRoot = $PSScriptRoot
 while ($repoRoot -and -not (Test-Path (Join-Path $repoRoot 'CMakeLists.txt'))) {
     $repoRoot = Split-Path $repoRoot -Parent
@@ -35,7 +66,7 @@ if ($Configure) {
     cmake @configureArgs 2>&1 | Tee-Object -FilePath $LogFile | Out-Null
     if ($LASTEXITCODE -ne 0) {
         Write-Host '=== configure failed, errors: ==='
-        Get-Content $LogFile | Select-String -Pattern 'CMake Error|CMake Warning \(dev\)|error' | Select-Object -First 40 | ForEach-Object { $_.Line }
+        Show-LogErrors -Log $LogFile -Pattern 'CMake Error' -MaxMatches 5 -ContextLines 10
         Write-Host "full log: $LogFile"
         exit $LASTEXITCODE
     }
@@ -46,10 +77,15 @@ if ($Target) { $buildArgs += @('--target', $Target) }
 cmake @buildArgs 2>&1 | Tee-Object -FilePath $LogFile | Out-Null
 $code = $LASTEXITCODE
 if ($code -ne 0) {
-    Write-Host '=== build failed, errors (first 40): ==='
-    Get-Content $LogFile | Select-String -Pattern 'error C\d+|error LNK\d+|fatal error|FAILED:|CMake Error' | Select-Object -First 40 | ForEach-Object { $_.Line }
+    Write-Host '=== build failed, errors (first 40, context preserved): ==='
+    Show-LogErrors -Log $LogFile -Pattern 'error C\d+|error LNK\d+|error MSB\d+|fatal error|FAILED:|CMake Error|ninja: build stopped'
 } else {
-    Get-Content $LogFile | Select-String -Pattern 'Built target|warning C\d+' | Select-Object -First 20 | ForEach-Object { $_.Line }
+    Get-Content $LogFile | Select-String -Pattern 'Built target' | ForEach-Object { $_.Line }
+    $warnings = @(Get-Content $LogFile | Select-String -Pattern 'warning C\d+|warning LNK\d+')
+    if ($warnings.Count -gt 0) {
+        Write-Host "=== $($warnings.Count) compiler/linker warnings (first 20): ==="
+        $warnings | Select-Object -First 20 | ForEach-Object { $_.Line }
+    }
 }
 Write-Host "exit=$code log=$LogFile"
 exit $code

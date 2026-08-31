@@ -35,6 +35,39 @@ EditorPage::EditorPage(EditorViewModel* viewModel, QWidget* parent) : base::Base
     connect(m_canvas, &ui::manga::MangaCanvas::viewTransformChanged, m_viewModel, &EditorViewModel::noteViewTransform);
     connect(m_canvas, &ui::manga::MangaCanvas::placeholderActionActivated, this, &EditorPage::handlePlaceholderAction);
 
+    connect(m_canvas,
+            &ui::manga::MangaCanvas::regionCreateCommitted,
+            m_viewModel,
+            [this](const domain::RectGeometry& geometry) { m_viewModel->createRegion(geometry); });
+    connect(m_canvas,
+            &ui::manga::MangaCanvas::regionSelectionRequested,
+            m_viewModel,
+            [this](const domain::RegionId& regionId, ui::manga::CanvasSelectionIntent intent) {
+                RegionSelectionMode mode = RegionSelectionMode::Replace;
+                switch (intent) {
+                    case ui::manga::CanvasSelectionIntent::Replace:
+                        mode = RegionSelectionMode::Replace;
+                        break;
+                    case ui::manga::CanvasSelectionIntent::Toggle:
+                        mode = RegionSelectionMode::Toggle;
+                        break;
+                    case ui::manga::CanvasSelectionIntent::Range:
+                        mode = RegionSelectionMode::Range;
+                        break;
+                }
+                m_viewModel->selectRegion(regionId, mode);
+            });
+    connect(m_canvas,
+            &ui::manga::MangaCanvas::regionGeometryCommitted,
+            m_viewModel,
+            [this](const domain::RegionId& regionId,
+                   const domain::RectGeometry& geometry,
+                   ui::manga::CanvasEditKind kind) { m_viewModel->commitRegionGeometry(regionId, geometry, kind); });
+    connect(m_canvas,
+            &ui::manga::MangaCanvas::regionDeleteRequested,
+            m_viewModel,
+            [this](const domain::RegionId& regionId) { m_viewModel->deleteRegions({regionId}); });
+
     connect(m_viewModel, &EditorViewModel::pageImageReady, this, &EditorPage::handlePageImageReady);
 
     connect(m_inspector,
@@ -70,6 +103,8 @@ EditorPage::EditorPage(EditorViewModel* viewModel, QWidget* parent) : base::Base
             m_viewModel->deleteRegions(selected);
         }
     });
+    connect(
+        m_commandBar, &widget::EditorCommandBar::commitRequested, m_viewModel, &EditorViewModel::sealTextEditSession);
 
     m_viewModel->observe(this, [this](const EditorState& state) { render(state); });
 
@@ -89,10 +124,6 @@ void EditorPage::buildUi() {
     layout->setContentsMargins(8, 8, 8, 8);
     layout->setSpacing(4);
 
-    m_commandBar = new widget::EditorCommandBar(m_viewModel, this);
-    m_commandBar->setObjectName(QStringLiteral("editorCommandBar"));
-    layout->addWidget(m_commandBar);
-
     m_splitter = new QSplitter(Qt::Horizontal, this);
     m_splitter->setHandleWidth(8);
     layout->addWidget(m_splitter);
@@ -107,8 +138,20 @@ void EditorPage::buildUi() {
     pagePaneLayout->addWidget(m_pageList);
     m_splitter->addWidget(pagePaneCard);
 
-    m_canvas = new ui::manga::MangaCanvas(m_splitter);
-    m_splitter->addWidget(m_canvas);
+    auto* canvasPaneCard = new fluent::layout::Card(m_splitter);
+    canvasPaneCard->setObjectName(QStringLiteral("editorCanvasPaneCard"));
+    canvasPaneCard->setAppearance(fluent::layout::Card::Layer);
+    auto* canvasPaneLayout = new QVBoxLayout(canvasPaneCard);
+    canvasPaneLayout->setContentsMargins(0, 0, 0, 0);
+    canvasPaneLayout->setSpacing(0);
+
+    m_commandBar = new widget::EditorCommandBar(m_viewModel, canvasPaneCard);
+    m_commandBar->setObjectName(QStringLiteral("editorCommandBar"));
+    canvasPaneLayout->addWidget(m_commandBar);
+
+    m_canvas = new ui::manga::MangaCanvas(canvasPaneCard);
+    canvasPaneLayout->addWidget(m_canvas, 1);
+    m_splitter->addWidget(canvasPaneCard);
 
     auto* inspectorCard = new fluent::layout::Card(m_splitter);
     inspectorCard->setObjectName(QStringLiteral("editorInspectorCard"));
@@ -141,6 +184,39 @@ void EditorPage::render(const EditorState& state) {
     m_pageList->setCurrentPageId(state.currentPageId);
 
     m_inspector->setInspectorState(state.inspector);
+
+    // Sync canvas tool and region projections from the authoritative State.
+    ui::manga::CanvasTool canvasTool = ui::manga::CanvasTool::Select;
+    switch (state.activeTool) {
+        case CanvasTool::Select:
+            canvasTool = ui::manga::CanvasTool::Select;
+            break;
+        case CanvasTool::Pan:
+            canvasTool = ui::manga::CanvasTool::Pan;
+            break;
+        case CanvasTool::CreateRegion:
+            canvasTool = ui::manga::CanvasTool::CreateRegion;
+            break;
+    }
+    m_canvas->setTool(canvasTool);
+
+    QVector<ui::manga::CanvasRegionDisplay> displayRegions;
+    displayRegions.reserve(state.regions.size());
+    for (const auto& rp : state.regions) {
+        ui::manga::CanvasRegionDisplay display;
+        display.id = rp.id;
+        display.geometry = rp.geometry;
+        display.selected = state.selectedRegionIds.contains(rp.id);
+        displayRegions.append(display);
+    }
+    m_canvas->setRegions(displayRegions);
+
+    for (const auto& p : state.pages) {
+        if (p.id == state.currentPageId) {
+            m_canvas->setPageBounds(p.imageSize);
+            break;
+        }
+    }
 
     if (!state.projectId.isValid()) {
         m_lastPlaceholder = ui::manga::MangaCanvas::ContentState::NoProject;

@@ -3,6 +3,7 @@
 #include "ui/screen/editor/EditorViewModel.h"
 
 #include <FluentQt/FluentQt.h>
+#include <FluentQt/TextFields.h>
 #include <QApplication>
 #include <QHBoxLayout>
 #include <QLineEdit>
@@ -23,6 +24,9 @@ EditorCommandBar::EditorCommandBar(EditorViewModel* viewModel, QWidget* parent)
 }
 
 bool EditorCommandBar::shouldIgnoreShortcut() const {
+    if (!m_viewModel->state().currentPageId.isValid()) {
+        return true;
+    }
     QWidget* fw = QApplication::focusWidget();
     return qobject_cast<QLineEdit*>(fw) || qobject_cast<QTextEdit*>(fw);
 }
@@ -34,6 +38,19 @@ void EditorCommandBar::buildUi() {
 
     m_undoButton = createIconButton(QStringLiteral("\uE7A7"), tr("Undo (Ctrl+Z)"), QStringLiteral("undoButton"));
     m_redoButton = createIconButton(QStringLiteral("\uE7A6"), tr("Redo (Ctrl+Y)"), QStringLiteral("redoButton"));
+
+    m_zoomOutButton = createIconButton(QStringLiteral("\uE71F"), tr("Zoom Out (-)"), QStringLiteral("zoomOutButton"));
+    m_zoomValueLabel = new fluent::textfields::Label(this);
+    m_zoomValueLabel->setObjectName(QStringLiteral("zoomValueLabel"));
+    m_zoomValueLabel->setFluentTypography(Typography::FontRole::Caption);
+    m_zoomValueLabel->setMinimumWidth(44);
+    m_zoomValueLabel->setAlignment(Qt::AlignCenter);
+    m_zoomInButton = createIconButton(QStringLiteral("\uE8A3"), tr("Zoom In (+)"), QStringLiteral("zoomInButton"));
+    m_fitToPageButton =
+        createIconButton(QStringLiteral("\uE9A1"), tr("Fit to Page (0)"), QStringLiteral("fitToPageButton"));
+    m_actualSizeButton =
+        createIconButton(QStringLiteral("\uE9A2"), tr("Actual Size (1)"), QStringLiteral("actualSizeButton"));
+
     m_selectButton = createIconButton(QStringLiteral("\uE8B0"), tr("Select (V)"), QStringLiteral("selectButton"));
     m_selectButton->setCheckable(true);
     m_panButton = createIconButton(QStringLiteral("\uE756"), tr("Pan (H)"), QStringLiteral("panButton"));
@@ -48,6 +65,12 @@ void EditorCommandBar::buildUi() {
     layout->addWidget(m_undoButton);
     layout->addWidget(m_redoButton);
     layout->addSpacing(8);
+    layout->addWidget(m_zoomOutButton);
+    layout->addWidget(m_zoomValueLabel);
+    layout->addWidget(m_zoomInButton);
+    layout->addWidget(m_fitToPageButton);
+    layout->addWidget(m_actualSizeButton);
+    layout->addSpacing(8);
     layout->addWidget(m_selectButton);
     layout->addWidget(m_panButton);
     layout->addWidget(m_createRegionButton);
@@ -58,6 +81,10 @@ void EditorCommandBar::buildUi() {
 
     connect(m_undoButton, &fluent::basicinput::Button::clicked, m_viewModel, &EditorViewModel::undo);
     connect(m_redoButton, &fluent::basicinput::Button::clicked, m_viewModel, &EditorViewModel::redo);
+    connect(m_zoomOutButton, &fluent::basicinput::Button::clicked, this, [this]() { Q_EMIT zoomOutRequested(); });
+    connect(m_zoomInButton, &fluent::basicinput::Button::clicked, this, [this]() { Q_EMIT zoomInRequested(); });
+    connect(m_fitToPageButton, &fluent::basicinput::Button::clicked, this, [this]() { Q_EMIT fitToPageRequested(); });
+    connect(m_actualSizeButton, &fluent::basicinput::Button::clicked, this, [this]() { Q_EMIT actualSizeRequested(); });
     connect(m_selectButton, &fluent::basicinput::Button::clicked, this, [this]() {
         m_viewModel->setActiveTool(CanvasTool::Select);
     });
@@ -92,9 +119,22 @@ void EditorCommandBar::render(const EditorState& state) {
     m_redoButton->setEnabled(state.canRedo);
     m_saveButton->setEnabled(state.saveState.isDirty && !state.saveState.isSaving);
 
+    m_zoomValueLabel->setText(QStringLiteral("%1%").arg(qRound(state.zoomFactor * 100.0)));
+
     m_selectButton->setChecked(state.activeTool == CanvasTool::Select);
     m_panButton->setChecked(state.activeTool == CanvasTool::Pan);
     m_createRegionButton->setChecked(state.activeTool == CanvasTool::CreateRegion);
+
+    // Disable viewport and canvas tools if no page is active
+    const bool hasPage = state.currentPageId.isValid();
+    m_zoomOutButton->setEnabled(hasPage);
+    m_zoomInButton->setEnabled(hasPage);
+    m_fitToPageButton->setEnabled(hasPage);
+    m_actualSizeButton->setEnabled(hasPage);
+    m_selectButton->setEnabled(hasPage);
+    m_panButton->setEnabled(hasPage);
+    m_createRegionButton->setEnabled(hasPage);
+    m_previewSelectorButton->setEnabled(hasPage);
 }
 
 void EditorCommandBar::setupShortcuts() {

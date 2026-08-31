@@ -49,6 +49,8 @@ MangaCanvas::MangaCanvas(QWidget* parent) : QGraphicsView(parent) {
     setRenderHint(QPainter::SmoothPixmapTransform);
     setFrameShape(QFrame::NoFrame);
     setAlignment(Qt::AlignCenter);
+    setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
 
     m_placeholderAction = new fluent::basicinput::Button(viewport());
     m_placeholderAction->hide();

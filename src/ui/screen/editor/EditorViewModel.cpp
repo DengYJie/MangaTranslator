@@ -353,10 +353,15 @@ void EditorViewModel::requestThumbnail(const domain::PageId& pageId, bool force)
 
 void EditorViewModel::noteViewTransform(double zoom, const QPointF& centerOnPage) {
     if (m_hasSession && m_state.currentPageId.isValid()) {
+        const double clampedZoom = std::clamp(zoom, 0.05, 16.0);
         ViewTransform transform;
-        transform.zoom = std::clamp(zoom, 0.05, 16.0);
+        transform.zoom = clampedZoom;
         transform.centerOnPage = centerOnPage;
         m_viewTransforms.insert(QString::fromStdString(m_state.currentPageId.toString()), transform);
+
+        if (qAbs(m_state.zoomFactor - clampedZoom) > 0.001) {
+            updateState([clampedZoom](EditorState& s) { s.zoomFactor = clampedZoom; });
+        }
     }
 }
 
