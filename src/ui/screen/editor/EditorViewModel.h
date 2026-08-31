@@ -3,6 +3,7 @@
 #include "application/dto/ImportDto.h"
 #include "application/dto/ProjectDto.h"
 #include "application/operation/AsyncResult.h"
+#include "application/usecase/apply/PrepareProcessingAdoptionUseCases.h"
 #include "ui/base/BaseViewModel.h"
 #include "ui/command/EditorCommandContext.h"
 #include "ui/command/RegionPropertyCommand.h"
@@ -99,6 +100,10 @@ public:
     /// Adopts a translation candidate as its own undoable command. Never merges with
     /// manual translation edits.
     void adoptCandidate(const domain::PageId& pageId, const domain::RegionId& regionId, const QString& candidateId);
+
+    application::Result<void> adoptProcessingProposal(const application::PreparedProcessingAdoption& prepared);
+    void rejectProcessingProposal(application::OperationId operationId);
+
     /// Seals the active text merge batch (FocusOut from an Inspector text control).
     void sealTextEditSession();
     /// Seals the active text merge batch before a project save to preserve undo boundaries.

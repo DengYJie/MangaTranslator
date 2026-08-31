@@ -11,6 +11,10 @@ namespace fluent::textfields {
 class Label;
 }
 
+namespace fluent::textfields {
+class Label;
+}
+
 namespace manga::ui::screen::editor {
 class EditorViewModel;
 }

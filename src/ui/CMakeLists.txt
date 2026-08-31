@@ -13,6 +13,7 @@ add_library(manga_ui STATIC
     command/RegionCommands.cpp
     command/RegionCommands.h
     command/RegionPropertyCommand.cpp
+    command/ProcessingAdoptionCommands.cpp
     command/RegionPropertyCommand.h
     navigation/INavigationPresenter.h
     navigation/INavigationRegistrar.h

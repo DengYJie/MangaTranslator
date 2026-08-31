@@ -475,3 +475,23 @@ set_tests_properties(manga_tests_integration_ui_editor_region_workflow PROPERTIE
     LABELS "integration;ui"
     TIMEOUT 30
 )
+qt_add_executable(manga_tests_ui_processing_adoption
+    processing_adoption_commands_test.cpp
+)
+manga_apply_project_options(manga_tests_ui_processing_adoption)
+set_target_properties(manga_tests_ui_processing_adoption PROPERTIES AUTOMOC ON)
+
+target_link_libraries(manga_tests_ui_processing_adoption
+    PRIVATE
+        manga_ui
+        Qt6::Test
+        Qt6::Widgets
+)
+
+manga_deploy_qt_runtime(manga_tests_ui_processing_adoption)
+add_test(NAME manga_tests_ui_processing_adoption COMMAND manga_tests_ui_processing_adoption)
+set_tests_properties(manga_tests_ui_processing_adoption PROPERTIES
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
+    LABELS "unit;ui"
+    TIMEOUT 15
+)

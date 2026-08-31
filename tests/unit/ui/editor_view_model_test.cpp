@@ -823,6 +823,53 @@ private slots:
         QVERIFY(viewModel.state().undoHistoryFaulted);
         QVERIFY(viewModel.state().regions.isEmpty());
     }
+
+    void testProcessingAdoptionCrossPageNavigates() {
+        Fixture f;
+        EditorViewModel viewModel(&f.thumbnailStore, &f.imageLoader, &f.registry);
+        auto session = makeSession(2, 1);
+        viewModel.openProjectSession(session);
+        QTRY_VERIFY_WITH_TIMEOUT(!viewModel.state().isPageLoading, 2000);
+
+        auto page1 = session.project.pages()[0].id();
+        auto page2 = session.project.pages()[1].id();
+        auto region2 = session.project.pages()[1].regions()[0].id();
+
+        viewModel.selectPage(page1);
+        QCOMPARE(viewModel.state().currentPageId, page1);
+
+        application::PreparedProcessingAdoption prepared;
+        prepared.stage = application::OperationStage::Ocr;
+        application::PreparedRegionChange change;
+        change.pageId = page2;
+        change.regionId = region2;
+        change.expectedRevision = session.project.pages()[1].regions()[0].contentRevision();
+        change.before.regionId = region2;
+        change.after.regionId = region2;
+        change.after.source = domain::TextContent{};
+        change.after.source->setOcrResult("Cross Page", 1.0);
+        prepared.changes.append(change);
+
+        auto result = viewModel.adoptProcessingProposal(prepared);
+        QVERIFY(result.has_value());
+
+        QCOMPARE(viewModel.state().currentPageId, page2);
+        QCOMPARE(viewModel.state().selectedRegionIds.size(), 1);
+        QCOMPARE(viewModel.state().selectedRegionIds.first(), region2);
+
+        // Switch to page 1, then undo should switch back to page 2
+        viewModel.selectPage(page1);
+        QCOMPARE(viewModel.state().currentPageId, page1);
+
+        viewModel.undo();
+        QCOMPARE(viewModel.state().currentPageId, page2);
+
+        viewModel.selectPage(page1);
+        viewModel.redo();
+        QCOMPARE(viewModel.state().currentPageId, page2);
+
+        viewModel.rejectProcessingProposal({});
+    }
 };
 
 QTEST_GUILESS_MAIN(EditorViewModelTest)

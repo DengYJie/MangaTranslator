@@ -7,6 +7,7 @@
 #include "LayoutRegionUseCaseTest.h"
 #include "LoadPageImageUseCaseTest.h"
 #include "OperationRegistryTest.h"
+#include "PrepareProcessingAdoptionTest.h"
 #include "ProjectUseCasesTest.h"
 #include "RecognizeRegionUseCaseTest.h"
 #include "RegionUseCasesTest.h"
@@ -97,6 +98,10 @@ int main(int argc, char* argv[]) {
     {
         OperationRegistryTest suite;
         runSuite("OperationRegistryTest", &suite);
+    }
+    {
+        PrepareProcessingAdoptionTest suite;
+        runSuite("PrepareProcessingAdoptionTest", &suite);
     }
 
     return status;

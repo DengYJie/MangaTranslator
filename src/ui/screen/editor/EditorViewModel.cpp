@@ -8,6 +8,7 @@
 #include "application/usecase/region/RegionUseCases.h"
 #include "application/usecase/thumbnail/ThumbnailUseCases.h"
 #include "application/workflow/OperationRegistry.h"
+#include "ui/command/ProcessingAdoptionCommands.h"
 #include "ui/command/RegionCommands.h"
 #include "ui/command/RegionPropertyCommand.h"
 
@@ -1226,6 +1227,95 @@ void EditorViewModel::pushPreparedCommand(QUndoCommand* cmd) {
     refreshUndoState();
 }
 
+application::Result<void>
+EditorViewModel::adoptProcessingProposal(const application::PreparedProcessingAdoption& prepared) {
+    if (!m_hasSession || !m_undoStack) {
+        return std::unexpected(application::detail::applyError(
+            application::ErrorCategory::Internal, "internal.no_session", "No active session"));
+    }
+
+    // push 前在同一 GUI event 再做最终 snapshot 校验
+    domain::PageId targetPageId;
+    QVector<domain::RegionId> targetRegionIds;
+    if (!prepared.changes.isEmpty()) {
+        targetPageId = prepared.changes.first().pageId;
+        for (const auto& c : prepared.changes)
+            targetRegionIds.append(c.regionId);
+    } else if (prepared.clearAssetChange) {
+        targetPageId = prepared.clearAssetChange->pageId;
+        targetRegionIds.append(prepared.clearAssetChange->regionId);
+    }
+
+    for (const auto& change : prepared.changes) {
+        const auto* page = m_openedSession->project.findPage(change.pageId);
+        if (!page) {
+            return std::unexpected(application::detail::applyError(
+                application::ErrorCategory::Project, "project.page_not_found", "Page not found"));
+        }
+        const auto* region = page->findRegion(change.regionId);
+        if (!region) {
+            return std::unexpected(application::detail::applyError(
+                application::ErrorCategory::Project, "project.region_not_found", "Region not found"));
+        }
+        if (region->isLocked()) {
+            return std::unexpected(application::detail::applyError(
+                application::ErrorCategory::Input, "input.manual_override", "Region is locked"));
+        }
+
+        // Wait, checking contentRevision is the best way to verify if it has changed since Prepare UseCase.
+        if (region->contentRevision() != change.expectedRevision) {
+            return std::unexpected(application::detail::applyError(
+                application::ErrorCategory::Input, "input.stale_revision", "Stale revision"));
+        }
+    }
+
+    if (prepared.clearAssetChange) {
+        const auto& c = *prepared.clearAssetChange;
+        const auto* page = m_openedSession->project.findPage(c.pageId);
+        if (!page) {
+            return std::unexpected(application::detail::applyError(
+                application::ErrorCategory::Project, "project.page_not_found", "Page not found"));
+        }
+        const auto* region = page->findRegion(c.regionId);
+        // Is region valid? Wait, before state is enough?
+        // Wait, if contentRevision didn't change, we are good.
+        if (!region || region->isLocked() || region->isCleared() != c.beforeState) {
+            return std::unexpected(application::detail::applyError(
+                application::ErrorCategory::Input, "input.stale_revision", "Stale clear state"));
+        }
+    }
+
+    sealActiveTextSession();
+
+    if (targetPageId.isValid() && targetPageId != m_state.currentPageId) {
+        selectPage(targetPageId);
+    }
+
+    auto* cmd = new command::ProcessingAdoptionCommand(m_commandContext.get(), prepared);
+    m_undoStack->push(cmd);
+
+    if (!targetRegionIds.isEmpty()) {
+        updateState([&](EditorState& s) {
+            s.selectedRegionIds = targetRegionIds;
+            s.primaryRegionId = targetRegionIds.first();
+            s.inspectorMode = targetRegionIds.size() > 1 ? InspectorMode::Multi : InspectorMode::Single;
+            updateInspectorProjection(s);
+        });
+    }
+
+    const auto* top =
+        dynamic_cast<const command::ProcessingAdoptionCommand*>(m_undoStack->command(m_undoStack->index() - 1));
+    if (top != nullptr && top->hasFaulted()) {
+        m_undoHistoryFaulted = true;
+    }
+
+    rebuildCurrentPageProjection();
+    refreshUndoState();
+    return {};
+}
+
+void EditorViewModel::rejectProcessingProposal([[maybe_unused]] application::OperationId operationId) {}
+
 void EditorViewModel::cancelProjectTasks() {
     if (!m_hasSession) {
         return;
@@ -1248,10 +1338,17 @@ void EditorViewModel::undo() {
 
     // The just-undone command sits at the stack index after undo.
     const auto* affected = dynamic_cast<const command::RegionCommand*>(m_undoStack->command(m_undoStack->index()));
+    const auto* affectedAdoption =
+        dynamic_cast<const command::ProcessingAdoptionCommand*>(m_undoStack->command(m_undoStack->index()));
     if (affected != nullptr && affected->hasFaulted()) {
         m_undoHistoryFaulted = true;
     } else if (affected != nullptr && affected->pageId().isValid() && affected->pageId() != m_state.currentPageId) {
         selectPage(affected->pageId());
+    } else if (affectedAdoption != nullptr && affectedAdoption->hasFaulted()) {
+        m_undoHistoryFaulted = true;
+    } else if (affectedAdoption != nullptr && affectedAdoption->pageId().isValid() &&
+               affectedAdoption->pageId() != m_state.currentPageId) {
+        selectPage(affectedAdoption->pageId());
     }
 
     rebuildCurrentPageProjection();
@@ -1270,12 +1367,23 @@ void EditorViewModel::redo() {
 
     // Peek at the command that will be redone to get its page target.
     const auto* pendingCmd = dynamic_cast<const command::RegionCommand*>(m_undoStack->command(m_undoStack->index()));
-    const domain::PageId targetPage = pendingCmd != nullptr ? pendingCmd->pageId() : domain::PageId{};
+    const auto* pendingAdoption =
+        dynamic_cast<const command::ProcessingAdoptionCommand*>(m_undoStack->command(m_undoStack->index()));
+    domain::PageId targetPage;
+    if (pendingCmd != nullptr) {
+        targetPage = pendingCmd->pageId();
+    } else if (pendingAdoption != nullptr) {
+        targetPage = pendingAdoption->pageId();
+    }
 
     m_undoStack->redo();
 
     const auto* done = dynamic_cast<const command::RegionCommand*>(m_undoStack->command(m_undoStack->index() - 1));
+    const auto* doneAdoption =
+        dynamic_cast<const command::ProcessingAdoptionCommand*>(m_undoStack->command(m_undoStack->index() - 1));
     if (done != nullptr && done->hasFaulted()) {
+        m_undoHistoryFaulted = true;
+    } else if (doneAdoption != nullptr && doneAdoption->hasFaulted()) {
         m_undoHistoryFaulted = true;
     } else if (targetPage.isValid() && targetPage != m_state.currentPageId) {
         selectPage(targetPage);
