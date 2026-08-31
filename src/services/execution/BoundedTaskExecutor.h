@@ -44,6 +44,12 @@ namespace detail {
     return QStringLiteral("internal.unexpected_exception");
 }
 
+[[nodiscard]] inline application::ApplicationError cancelledUserError() {
+    return application::makeApplicationError(application::ErrorCategory::Cancelled,
+                                             QStringLiteral("cancelled.user_requested"),
+                                             QStringLiteral("The task was cancelled"));
+}
+
 } // namespace detail
 
 /// Queue selection for submitted tasks: Interactive serves the current page's user-triggered
@@ -114,57 +120,61 @@ application::Result<QFuture<application::Result<T>>> BoundedTaskExecutor::submit
     auto promise = std::make_shared<QPromise<application::Result<T>>>();
     promise->start();
     auto future = promise->future();
+    const auto reporter = context.progressReporter;
+    const auto cancelled = detail::cancelledUserError();
 
-    if (context.stopToken.stop_requested()) {
-        promise->addResult(
-            std::unexpected(application::makeApplicationError(application::ErrorCategory::Cancelled,
-                                                              QStringLiteral("cancelled.user_requested"),
-                                                              QStringLiteral("The task was cancelled"))));
-        promise->finish();
-        return future;
-    }
-
-    auto cancelComplete = [promise]() {
-        promise->addResult(
-            std::unexpected(application::makeApplicationError(application::ErrorCategory::Cancelled,
-                                                              QStringLiteral("cancelled.user_requested"),
-                                                              QStringLiteral("The task was cancelled"))));
+    auto cancelComplete = [promise, reporter, cancelled]() {
+        if (reporter) {
+            reporter->markFinished(cancelled);
+        }
+        promise->addResult(std::unexpected(cancelled));
         promise->finish();
     };
 
+    if (context.stopToken.stop_requested()) {
+        cancelComplete();
+        return future;
+    }
+
     auto run = [state = m_state,
                 pool = &m_pool,
-                this,
                 promise,
                 context,
                 stage,
                 cancelComplete,
+                reporter,
                 work = std::forward<Fn>(work)]() mutable {
-        // QPromise has no text-only progress API; stage text is carried by callers that use
-        // setProgressValueAndText through their own promise when needed.
-        application::TaskProgress progress([promise](qint64 from, qint64 to) { promise->setProgressRange(from, to); },
-                                           [promise](qint64 value) { promise->setProgressValue(value); },
-                                           {},
-                                           [timer = std::make_shared<QElapsedTimer>()]() {
-                                               // Throttle to one publication per 50 ms (P4 contract); final values
-                                               // bypass this gate via TaskProgress.
-                                               if (!timer->isValid()) {
-                                                   timer->start();
-                                                   return true;
-                                               }
-                                               if (timer->elapsed() < 50) {
-                                                   return false;
-                                               }
-                                               timer->restart();
-                                               return true;
-                                           });
-
         // Pre-run cancellation checkpoint.
         if (context.stopToken.stop_requested()) {
             cancelComplete();
             BoundedTaskExecutor::taskFinished(state, pool);
             return;
         }
+
+        if (reporter) {
+            reporter->markRunning();
+        }
+
+        application::TaskProgress progress(
+            [promise, reporter](qint64 from, qint64 to) {
+                promise->setProgressRange(from, to);
+                if (reporter) {
+                    reporter->setRange(to);
+                }
+            },
+            [promise, reporter](qint64 value) {
+                promise->setProgressValue(value);
+                if (reporter) {
+                    reporter->setValue(value);
+                }
+            },
+            [reporter](QString text) {
+                if (reporter) {
+                    reporter->setStatusText(std::move(text));
+                }
+            },
+            []() { return true; });
+
         std::optional<application::Result<T>> outcome;
         try {
             outcome = work(context, progress);
@@ -185,12 +195,23 @@ application::Result<QFuture<application::Result<T>>> BoundedTaskExecutor::submit
                                                   QStringLiteral("internal.unexpected_exception"),
                                                   QStringLiteral("An unexpected internal error occurred")));
         }
+
         // Post-run cancellation checkpoint: a stop observed after the work completed
         // discards the result, so cancelled tasks never publish partial output.
         if (context.stopToken.stop_requested()) {
             cancelComplete();
             BoundedTaskExecutor::taskFinished(state, pool);
             return;
+        }
+
+        if (outcome->has_value()) {
+            if (reporter) {
+                reporter->markFinished(std::nullopt);
+            }
+        } else {
+            if (reporter) {
+                reporter->markFinished(outcome->error());
+            }
         }
         promise->addResult(std::move(*outcome));
         promise->finish();
@@ -285,6 +306,9 @@ application::Result<QFuture<application::Result<T>>> BoundedTaskExecutor::submit
     }
 
     if (!rejection.code.isEmpty()) {
+        if (reporter) {
+            reporter->markFinished(rejection);
+        }
         promise->addResult(std::unexpected(rejection));
         promise->finish();
         return std::unexpected(std::move(rejection));

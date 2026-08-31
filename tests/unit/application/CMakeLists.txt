@@ -27,6 +27,8 @@ qt_add_executable(manga_tests_application
     TaskProgressTest.h
     CredentialUseCasesTest.cpp
     CredentialUseCasesTest.h
+    OperationRegistryTest.cpp
+    OperationRegistryTest.h
     ThumbnailUseCasesTest.cpp
     ThumbnailUseCasesTest.h
 )

@@ -21,4 +21,5 @@ private slots:
     void testConcurrentCallbackAndShutdown();
     void testPreCancelledTaskCompletesImmediatelyWithoutConsumingCapacity();
     void testConcurrentCancelDuringSubmissionDoesNotLeakQueueSlot();
+    void testReporterReceivesRunningAndFinished();
 };

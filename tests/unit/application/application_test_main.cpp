@@ -6,6 +6,7 @@
 #include "ImportImagesUseCaseTest.h"
 #include "LayoutRegionUseCaseTest.h"
 #include "LoadPageImageUseCaseTest.h"
+#include "OperationRegistryTest.h"
 #include "ProjectUseCasesTest.h"
 #include "RecognizeRegionUseCaseTest.h"
 #include "RegionUseCasesTest.h"
@@ -92,6 +93,10 @@ int main(int argc, char* argv[]) {
     {
         ThumbnailUseCasesTest suite;
         runSuite("ThumbnailUseCasesTest", &suite);
+    }
+    {
+        OperationRegistryTest suite;
+        runSuite("OperationRegistryTest", &suite);
     }
 
     return status;

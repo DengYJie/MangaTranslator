@@ -1,5 +1,6 @@
 #include "BoundedTaskExecutorTest.h"
 
+#include "application/operation/OperationProgressReporter.h"
 #include "services/execution/BoundedTaskExecutor.h"
 
 #include <QSemaphore>
@@ -563,6 +564,39 @@ void BoundedTaskExecutorTest::testConcurrentCancelDuringSubmissionDoesNotLeakQue
         f.waitForFinished();
     }
     blockerSubmit->waitForFinished();
+}
+
+void BoundedTaskExecutorTest::testReporterReceivesRunningAndFinished() {
+    BoundedTaskExecutor executor(1);
+    application::OperationContext context = makeContext();
+
+    bool runningCalled = false;
+    bool finishedCalled = false;
+    std::optional<application::ApplicationError> capturedError;
+    auto reporter = std::make_shared<application::OperationProgressReporter>(
+        [](qint64 /*completed*/, qint64 /*total*/, const QString& /*text*/, bool /*force*/) {},
+        [&runningCalled]() { runningCalled = true; },
+        [&finishedCalled, &capturedError](std::optional<application::ApplicationError> error,
+                                          const QString& /*reasonCode*/) {
+            finishedCalled = true;
+            capturedError = std::move(error);
+        });
+    context.progressReporter = reporter;
+
+    auto task = executor.submit<int>(application::OperationStage::Ocr,
+                                     TaskQueue::Interactive,
+                                     context,
+                                     [](const application::OperationContext&, application::TaskProgress& progress) {
+                                         progress.setRange(0, 100);
+                                         progress.setValue(50);
+                                         return application::Result<int>(42);
+                                     });
+    QVERIFY(task.has_value());
+    task->waitForFinished();
+
+    QVERIFY(runningCalled);
+    QVERIFY(finishedCalled);
+    QVERIFY(!capturedError.has_value());
 }
 
 #include "moc_BoundedTaskExecutorTest.cpp"

@@ -52,8 +52,8 @@ void RecognizeRegionUseCaseTest::testCancellation() {
     QCOMPARE(registry.inFlightCount(), 1);
 
     useCase.cancel(operationId);
-    QCOMPARE(registry.inFlightCount(), 0);
     engine.complete();
+    QCOMPARE(registry.inFlightCount(), 0);
 
     QVERIFY(future.isFinished());
     QVERIFY(!future.result().has_value());
