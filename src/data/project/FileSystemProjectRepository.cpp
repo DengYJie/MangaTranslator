@@ -40,9 +40,7 @@ application::ApplicationError makeCancelledError(QStringView what) {
 }
 
 application::ApplicationError makeLockedError() {
-    return application::makeApplicationError(application::ErrorCategory::Persistence,
-                                             QStringLiteral("persistence.locked"),
-                                             QStringLiteral("The project is already opened by another instance"));
+    return toProjectLockError(QLockFile::LockFailedError);
 }
 
 application::ApplicationError makeTargetNotEmptyError() {
@@ -69,7 +67,11 @@ application::ApplicationError makeRecoveryFailedError(const QString& diagnostic)
 std::expected<QByteArray, application::ApplicationError> readFileBytes(const QString& path) {
     QFile file(path);
     if (!file.open(QIODevice::ReadOnly)) {
-        return std::unexpected(toPersistenceError(file.error()));
+        const QFileDevice::FileError fileError = file.error();
+        if (fileError == QFileDevice::PermissionsError || fileError == QFileDevice::OpenError) {
+            return std::unexpected(toPersistenceError(QFileDevice::PermissionsError));
+        }
+        return std::unexpected(toPersistenceError(fileError));
     }
     QByteArray bytes = file.readAll();
     if (file.error() != QFileDevice::NoError) {
@@ -409,7 +411,7 @@ FileSystemProjectRepository::createProject(application::CreateProjectRequest req
             auto lock = std::make_unique<QLockFile>(canonicalRoot + QLatin1Char('/') + kLockFileName);
             lock->setStaleLockTime(0);
             if (!lock->tryLock(0)) {
-                return std::unexpected(makeLockedError());
+                return std::unexpected(toProjectLockError(lock->error()));
             }
 
             domain::ComicProject project(request.name.trimmed().toStdString(), domain::ProjectId::generate());
@@ -514,9 +516,14 @@ FileSystemProjectRepository::openProject(application::OpenProjectRequest request
             auto lock = std::make_unique<QLockFile>(canonicalRoot + QLatin1Char('/') + kLockFileName);
             lock->setStaleLockTime(0);
             if (!lock->tryLock(0)) {
-                return std::unexpected(makeLockedError());
+                return std::unexpected(toProjectLockError(lock->error()));
             }
             const QString projectJsonPath = canonicalRoot + QLatin1Char('/') + kProjectFileName;
+            const QFileInfo projectJsonInfo(projectJsonPath);
+            if (!projectJsonInfo.exists() || !projectJsonInfo.isFile()) {
+                lock.reset();
+                return std::unexpected(notAProjectError());
+            }
             auto bytes = readFileBytes(projectJsonPath);
             if (!bytes) {
                 lock.reset();
@@ -587,7 +594,7 @@ FileSystemProjectRepository::recoverProject(application::OpenProjectRequest requ
                 auto lock = std::make_unique<QLockFile>(canonicalRoot + QLatin1Char('/') + kLockFileName);
                 lock->setStaleLockTime(0);
                 if (!lock->tryLock(0)) {
-                    return std::unexpected(makeLockedError());
+                    return std::unexpected(toProjectLockError(lock->error()));
                 }
                 session = std::make_shared<RepositorySession>();
                 session->canonicalRoot = canonicalRoot;
@@ -841,7 +848,7 @@ FileSystemProjectRepository::saveProjectAs(application::SaveAsProjectRequest req
             auto newLock = std::make_unique<QLockFile>(canonicalNew + QLatin1Char('/') + kLockFileName);
             newLock->setStaleLockTime(0);
             if (!newLock->tryLock(0)) {
-                return std::unexpected(makeLockedError());
+                return std::unexpected(toProjectLockError(newLock->error()));
             }
             if (context.stopToken.stop_requested()) {
                 return std::unexpected(makeCancelledError(u"Project save as"));

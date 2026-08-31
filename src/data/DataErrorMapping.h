@@ -4,6 +4,7 @@
 #include "domain/validation/ValidationResult.h"
 
 #include <QFileDevice>
+#include <QLockFile>
 
 namespace manga::data {
 
@@ -13,7 +14,13 @@ namespace manga::data {
 /// Maps Qt file-device failures to stable persistence error codes.
 [[nodiscard]] application::ApplicationError toPersistenceError(QFileDevice::FileError fileError);
 
+/// Maps Qt lock-file failures to stable persistence error codes.
+[[nodiscard]] application::ApplicationError toProjectLockError(QLockFile::LockError error);
+
 /// Creates a persistence.not_found error for missing files and directories.
 [[nodiscard]] application::ApplicationError fileNotFoundError();
+
+/// Creates a project.not_a_project error for existing directories missing project.json.
+[[nodiscard]] application::ApplicationError notAProjectError();
 
 } // namespace manga::data

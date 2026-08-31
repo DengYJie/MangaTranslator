@@ -50,6 +50,11 @@ private slots:
     void saveIgnoresStopRequestAfterTransactionStart();
     void saveResultDoesNotClearEditsMadeDuringSave();
     void errorsAndWarningsDoNotLeakPathsOrUserContent();
+    void openNonExistentDirectoryReturnsNotFound();
+    void openDirectoryWithoutProjectJsonReturnsNotAProject();
+    void openProjectJsonPermissionDeniedReturnsPermissionDenied();
+    void openWriteProtectedProjectReturnsReadOnly();
+    void projectLockErrorMapping();
 
 private:
     [[nodiscard]] QString newRoot();

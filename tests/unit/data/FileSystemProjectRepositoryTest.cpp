@@ -1,5 +1,6 @@
-﻿#include "FileSystemProjectRepositoryTest.h"
+#include "FileSystemProjectRepositoryTest.h"
 
+#include "data/DataErrorMapping.h"
 #include "data/project/FileSystemProjectRepository.h"
 #include "data/project/PathSafety.h"
 #include "data/project/ProjectIoCoordinator.h"
@@ -904,6 +905,150 @@ void FileSystemProjectRepositoryTest::errorsAndWarningsDoNotLeakPathsOrUserConte
         leak(escapeError.diagnostic, "escape diagnostic");
         QCOMPARE(escapeError.code, QStringLiteral("project.invalid_semantic"));
     }
+}
+
+void FileSystemProjectRepositoryTest::openNonExistentDirectoryReturnsNotFound() {
+    const QString nonExistent = m_tempDir.path() + QStringLiteral("/non_existent_project_dir");
+    const auto error = openProjectError(nonExistent);
+    QCOMPARE(error.code, QStringLiteral("persistence.not_found"));
+    QVERIFY(error.category == application::ErrorCategory::Persistence);
+    QVERIFY(error.recovery == application::RecoveryAction::ChoosePath);
+    QVERIFY(!error.safeMessage.isEmpty());
+}
+
+void FileSystemProjectRepositoryTest::openDirectoryWithoutProjectJsonReturnsNotAProject() {
+    const QString root = newRoot();
+    QVERIFY(QDir().mkpath(root));
+
+    // Existing directory without project.json must return project.not_a_project
+    const auto error = openProjectError(root);
+    QCOMPARE(error.code, QStringLiteral("project.not_a_project"));
+    QVERIFY(error.category == application::ErrorCategory::Project);
+    QVERIFY(error.recovery == application::RecoveryAction::ChoosePath);
+    QVERIFY(!error.safeMessage.isEmpty());
+    // Acquired session lock must be released on failure
+    QVERIFY(!QFileInfo::exists(root + QStringLiteral("/.mangatranslator.lock")));
+
+    // When project.json exists as a directory rather than a regular file, still return project.not_a_project
+    QVERIFY(QDir().mkpath(root + QStringLiteral("/project.json")));
+    const auto dirError = openProjectError(root);
+    QCOMPARE(dirError.code, QStringLiteral("project.not_a_project"));
+    QVERIFY(dirError.category == application::ErrorCategory::Project);
+    QVERIFY(dirError.recovery == application::RecoveryAction::ChoosePath);
+    QVERIFY(!QFileInfo::exists(root + QStringLiteral("/.mangatranslator.lock")));
+}
+
+void FileSystemProjectRepositoryTest::openProjectJsonPermissionDeniedReturnsPermissionDenied() {
+    const QString root = newRoot();
+    auto descriptor = createProject(root);
+    QVERIFY(descriptor.has_value());
+    application::CloseProjectRequest request;
+    request.projectId = descriptor->id;
+    QVERIFY(await(m_repository->closeProject(request, {})).has_value());
+
+    const QString projectJsonPath = root + QStringLiteral("/project.json");
+#ifdef Q_OS_WIN
+    const QStringList denyArgs{
+        QDir::toNativeSeparators(projectJsonPath), QStringLiteral("/deny"), QStringLiteral("*S-1-1-0:(RD)")};
+    if (QProcess::execute(QStringLiteral("icacls"), denyArgs) != 0) {
+        QSKIP("modifying ACLs is not permitted in this environment");
+    }
+    const auto restore = [&projectJsonPath] {
+        QProcess::execute(QStringLiteral("icacls"),
+                          QStringList{QDir::toNativeSeparators(projectJsonPath), QStringLiteral("/reset")});
+    };
+#else
+    const auto restore = [&projectJsonPath] {
+        QFile::setPermissions(projectJsonPath,
+                              QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ReadUser |
+                                  QFileDevice::WriteUser);
+    };
+    if (!QFile::setPermissions(projectJsonPath, QFileDevice::Permissions{})) {
+        QSKIP("permission manipulation is not supported on this platform");
+    }
+#endif
+
+    const auto error = openProjectError(root);
+    restore();
+
+    QCOMPARE(error.code, QStringLiteral("persistence.permission_denied"));
+    QVERIFY(error.category == application::ErrorCategory::Persistence);
+    QVERIFY(error.recovery == application::RecoveryAction::ChoosePath);
+    // Lock must be released on failure
+    QVERIFY(!QFileInfo::exists(root + QStringLiteral("/.mangatranslator.lock")));
+
+    // Project is readable and openable again after restoring access
+    auto reopened = openProject(root);
+    QVERIFY(reopened.has_value());
+}
+
+void FileSystemProjectRepositoryTest::openWriteProtectedProjectReturnsReadOnly() {
+    const QString root = newRoot();
+    auto descriptor = createProject(root);
+    QVERIFY(descriptor.has_value());
+    application::CloseProjectRequest request;
+    request.projectId = descriptor->id;
+    QVERIFY(await(m_repository->closeProject(request, {})).has_value());
+
+#ifdef Q_OS_WIN
+    // Deny write on directory so creating .mangatranslator.lock fails with PermissionError
+    const QStringList denyArgs{
+        QDir::toNativeSeparators(root), QStringLiteral("/deny"), QStringLiteral("*S-1-1-0:(WD)")};
+    if (QProcess::execute(QStringLiteral("icacls"), denyArgs) != 0) {
+        QSKIP("modifying ACLs is not permitted in this environment");
+    }
+    const auto restore = [&root] {
+        QProcess::execute(QStringLiteral("icacls"),
+                          QStringList{QDir::toNativeSeparators(root), QStringLiteral("/reset")});
+    };
+#else
+    const auto restore = [&root] {
+        QFile::setPermissions(root,
+                              QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ReadUser |
+                                  QFileDevice::WriteUser | QFileDevice::ExeOwner | QFileDevice::ExeUser |
+                                  QFileDevice::ReadGroup | QFileDevice::WriteGroup | QFileDevice::ExeGroup);
+    };
+    if (!QFile::setPermissions(root,
+                               QFileDevice::ReadOwner | QFileDevice::ReadUser | QFileDevice::ExeOwner |
+                                   QFileDevice::ExeUser | QFileDevice::ReadGroup | QFileDevice::ExeGroup)) {
+        QSKIP("write-protecting a directory is not supported on this platform");
+    }
+#endif
+
+    const auto error = openProjectError(root);
+    restore();
+
+    QCOMPARE(error.code, QStringLiteral("persistence.read_only"));
+    QVERIFY(error.category == application::ErrorCategory::Persistence);
+    QVERIFY(error.recovery == application::RecoveryAction::ChoosePath);
+
+    // After restoring permissions, opening succeeds
+    auto reopened = openProject(root);
+    QVERIFY(reopened.has_value());
+}
+
+void FileSystemProjectRepositoryTest::projectLockErrorMapping() {
+    const auto locked = toProjectLockError(QLockFile::LockFailedError);
+    QCOMPARE(locked.code, QStringLiteral("persistence.locked"));
+    QVERIFY(locked.category == application::ErrorCategory::Persistence);
+    QVERIFY(locked.recovery == application::RecoveryAction::Retry);
+    QVERIFY(locked.retryable);
+    QVERIFY(locked.safeMessage.contains(QStringLiteral("another instance")));
+
+    const auto readOnly = toProjectLockError(QLockFile::PermissionError);
+    QCOMPARE(readOnly.code, QStringLiteral("persistence.read_only"));
+    QVERIFY(readOnly.category == application::ErrorCategory::Persistence);
+    QVERIFY(readOnly.recovery == application::RecoveryAction::ChoosePath);
+    QVERIFY(!readOnly.retryable);
+    QVERIFY(!readOnly.safeMessage.isEmpty());
+
+    const auto unknown = toProjectLockError(QLockFile::UnknownError);
+    QCOMPARE(unknown.code, QStringLiteral("persistence.io"));
+    QVERIFY(unknown.category == application::ErrorCategory::Persistence);
+    QVERIFY(unknown.recovery == application::RecoveryAction::Retry);
+    QVERIFY(unknown.retryable);
+    QVERIFY(!unknown.safeMessage.isEmpty());
+    QVERIFY(unknown.diagnostic.contains(QStringLiteral("QLockFile::LockError")));
 }
 
 #include "moc_FileSystemProjectRepositoryTest.cpp"
