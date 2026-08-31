@@ -804,6 +804,25 @@ private slots:
         viewModel.redo();
         QCOMPARE(viewModel.state().regions.size(), regionCountAfterFault);
     }
+
+    void createReplayFaultSetsHistoryFaulted() {
+        Fixture f;
+        EditorViewModel viewModel(&f.thumbnailStore, &f.imageLoader, &f.registry);
+        viewModel.openProjectSession(makeSession(1, 0));
+        QTRY_VERIFY_WITH_TIMEOUT(!viewModel.state().isPageLoading, 2000);
+
+        viewModel.createRegion(domain::RectGeometry{100.0, 100.0, 50.0, 50.0});
+        QVERIFY(viewModel.state().canUndo);
+        const auto regionId = viewModel.state().regions.first().id;
+
+        QVERIFY(viewModel.removeRegionForTest(regionId));
+        viewModel.undo(); // Create replay removes a region that no longer exists.
+        QVERIFY(viewModel.state().undoHistoryFaulted);
+
+        viewModel.redo(); // No-op while faulted.
+        QVERIFY(viewModel.state().undoHistoryFaulted);
+        QVERIFY(viewModel.state().regions.isEmpty());
+    }
 };
 
 QTEST_GUILESS_MAIN(EditorViewModelTest)

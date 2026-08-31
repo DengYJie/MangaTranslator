@@ -114,8 +114,7 @@ struct EditorState {
     /// Inspector mode derived from selection count.
     InspectorMode inspectorMode{InspectorMode::Page};
 
-    /// Top-level undo/redo booleans mirroring the stack. Always false until
-    /// the undo command integration wires them.
+    /// Mirrors undo and redo availability on the project stack.
     bool canUndo{false};
     bool canRedo{false};
     /// Set true when a command replay reports internal.undo_invariant_broken.

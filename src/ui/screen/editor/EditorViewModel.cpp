@@ -684,8 +684,12 @@ void EditorViewModel::createRegion(const domain::RectGeometry& geometry) {
     const int orderIndex = page ? static_cast<int>(page->regions().size()) : 0;
 
     sealActiveTextSession();
-    m_undoStack->push(new command::CreateRegionCommand(
-        m_commandContext.get(), m_state.currentPageId, regionId, geometry, orderIndex));
+    auto* cmd =
+        new command::CreateRegionCommand(m_commandContext.get(), m_state.currentPageId, regionId, geometry, orderIndex);
+    m_undoStack->push(cmd);
+    if (cmd->hasFaulted()) {
+        m_undoHistoryFaulted = true;
+    }
 
     rebuildCurrentPageProjection();
     refreshUndoState();
@@ -719,7 +723,11 @@ void EditorViewModel::deleteRegions(const QVector<domain::RegionId>& regionIds) 
     std::sort(entries.begin(), entries.end(), [](const auto& a, const auto& b) { return a.orderIndex < b.orderIndex; });
 
     sealActiveTextSession();
-    m_undoStack->push(new command::DeleteRegionsCommand(m_commandContext.get(), m_state.currentPageId, entries));
+    auto* cmd = new command::DeleteRegionsCommand(m_commandContext.get(), m_state.currentPageId, entries);
+    m_undoStack->push(cmd);
+    if (cmd->hasFaulted()) {
+        m_undoHistoryFaulted = true;
+    }
 
     rebuildCurrentPageProjection();
     refreshUndoState();
@@ -774,28 +782,12 @@ void EditorViewModel::undo() {
     sealActiveTextSession();
     m_undoStack->undo();
 
-    // Check for fault on the most recent command.
-    const auto* cmd = dynamic_cast<const command::RegionGeometryCommand*>(m_undoStack->command(m_undoStack->index()));
-    if (cmd != nullptr && cmd->hasFaulted()) {
+    // The just-undone command sits at the stack index after undo.
+    const auto* affected = dynamic_cast<const command::RegionCommand*>(m_undoStack->command(m_undoStack->index()));
+    if (affected != nullptr && affected->hasFaulted()) {
         m_undoHistoryFaulted = true;
-    }
-
-    // Navigate to the affected page if different from current.
-    if (!m_undoHistoryFaulted) {
-        const auto* indexCmd = m_undoStack->command(m_undoStack->index());
-        if (indexCmd != nullptr) {
-            domain::PageId targetPage;
-            if (const auto* create = dynamic_cast<const command::CreateRegionCommand*>(indexCmd)) {
-                targetPage = create->pageId();
-            } else if (const auto* del = dynamic_cast<const command::DeleteRegionsCommand*>(indexCmd)) {
-                targetPage = del->pageId();
-            } else if (const auto* geom = dynamic_cast<const command::RegionGeometryCommand*>(indexCmd)) {
-                targetPage = geom->pageId();
-            }
-            if (targetPage.isValid() && targetPage != m_state.currentPageId) {
-                selectPage(targetPage);
-            }
-        }
+    } else if (affected != nullptr && affected->pageId().isValid() && affected->pageId() != m_state.currentPageId) {
+        selectPage(affected->pageId());
     }
 
     rebuildCurrentPageProjection();
@@ -812,31 +804,16 @@ void EditorViewModel::redo() {
 
     sealActiveTextSession();
 
-    // Peek at the command that will be redone to get its pageId.
-    const int redoIndex = m_undoStack->index();
-    const auto* pendingCmd = m_undoStack->command(redoIndex);
-    domain::PageId targetPage;
-    if (pendingCmd != nullptr) {
-        if (const auto* create = dynamic_cast<const command::CreateRegionCommand*>(pendingCmd)) {
-            targetPage = create->pageId();
-        } else if (const auto* del = dynamic_cast<const command::DeleteRegionsCommand*>(pendingCmd)) {
-            targetPage = del->pageId();
-        } else if (const auto* geom = dynamic_cast<const command::RegionGeometryCommand*>(pendingCmd)) {
-            targetPage = geom->pageId();
-        }
-    }
+    // Peek at the command that will be redone to get its page target.
+    const auto* pendingCmd = dynamic_cast<const command::RegionCommand*>(m_undoStack->command(m_undoStack->index()));
+    const domain::PageId targetPage = pendingCmd != nullptr ? pendingCmd->pageId() : domain::PageId{};
 
     m_undoStack->redo();
 
-    // Check for fault on the just-redone command.
-    const auto* cmd =
-        dynamic_cast<const command::RegionGeometryCommand*>(m_undoStack->command(m_undoStack->index() - 1));
-    if (cmd != nullptr && cmd->hasFaulted()) {
+    const auto* done = dynamic_cast<const command::RegionCommand*>(m_undoStack->command(m_undoStack->index() - 1));
+    if (done != nullptr && done->hasFaulted()) {
         m_undoHistoryFaulted = true;
-    }
-
-    // Navigate to the affected page if different from current.
-    if (!m_undoHistoryFaulted && targetPage.isValid() && targetPage != m_state.currentPageId) {
+    } else if (targetPage.isValid() && targetPage != m_state.currentPageId) {
         selectPage(targetPage);
     }
 

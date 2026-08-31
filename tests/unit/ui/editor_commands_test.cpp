@@ -182,6 +182,39 @@ private slots:
         cmd.redo();
         QVERIFY(cmd.hasFaulted());
     }
+
+    void createCommandUndoAfterExternalRemovalFaults() {
+        auto project = makeProject();
+        const auto pageId = firstPageId(project);
+        EditorCommandContext context(&project);
+
+        const auto regionId = domain::RegionId::generate();
+        domain::RectGeometry geom{100.0, 100.0, 50.0, 50.0};
+        CreateRegionCommand cmd(&context, pageId, regionId, geom, 0);
+        cmd.redo();
+        QCOMPARE(project.findPage(pageId)->regions().size(), 1);
+
+        QVERIFY(context.removeRegion(pageId, regionId).has_value());
+        cmd.undo(); // Removal replays against a missing region.
+        QVERIFY(cmd.hasFaulted());
+    }
+
+    void deleteCommandUndoFailsWhenRegionReappears() {
+        auto project = makeProject(1200, 1800, 1);
+        const auto pageId = firstPageId(project);
+        const auto regionId = regionAt(project, 0, 0);
+        const auto snapshot = *project.findPage(pageId)->findRegion(regionId);
+        EditorCommandContext context(&project);
+
+        QVector<DeleteRegionsCommand::RegionEntry> entries{{snapshot, 0}};
+        DeleteRegionsCommand cmd(&context, pageId, entries);
+        cmd.redo();
+        QCOMPARE(project.findPage(pageId)->regions().size(), 0);
+
+        QVERIFY(context.insertRegion(pageId, snapshot, 0).has_value());
+        cmd.undo(); // Reinsertion collides with the reappeared region id.
+        QVERIFY(cmd.hasFaulted());
+    }
 };
 
 QTEST_GUILESS_MAIN(EditorCommandsTest)

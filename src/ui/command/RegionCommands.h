@@ -8,9 +8,31 @@
 
 namespace manga::ui::command {
 
+/// Shared base for region history commands. Commands own a stable page target for
+/// undo/redo navigation and a sticky fault flag set when a domain replay fails.
+class RegionCommand : public QUndoCommand {
+public:
+    ~RegionCommand() override = default;
+
+    [[nodiscard]] virtual domain::PageId pageId() const noexcept = 0;
+    [[nodiscard]] bool hasFaulted() const noexcept {
+        return m_faulted;
+    }
+
+protected:
+    using QUndoCommand::QUndoCommand;
+
+    void markFaulted() {
+        m_faulted = true;
+    }
+
+private:
+    bool m_faulted{false};
+};
+
 /// Creates a single region on first redo; removes it on undo.
 /// The RegionId is generated before construction so undo/redo keeps the same identity.
-class CreateRegionCommand : public QUndoCommand {
+class CreateRegionCommand : public RegionCommand {
 public:
     CreateRegionCommand(EditorCommandContext* context,
                         domain::PageId pageId,
@@ -21,7 +43,7 @@ public:
     void undo() override;
     void redo() override;
 
-    [[nodiscard]] domain::PageId pageId() const noexcept {
+    [[nodiscard]] domain::PageId pageId() const noexcept override {
         return m_pageId;
     }
     [[nodiscard]] domain::RegionId regionId() const noexcept {
@@ -39,7 +61,7 @@ private:
 
 /// Deletes a batch of regions on first redo; reinserts them on undo.
 /// Snapshots (full TextRegion + orderIndex) are captured at construction time sorted by order.
-class DeleteRegionsCommand : public QUndoCommand {
+class DeleteRegionsCommand : public RegionCommand {
 public:
     /// Each entry pairs a full TextRegion snapshot with its original orderIndex.
     struct RegionEntry {
@@ -52,7 +74,7 @@ public:
     void undo() override;
     void redo() override;
 
-    [[nodiscard]] domain::PageId pageId() const noexcept {
+    [[nodiscard]] domain::PageId pageId() const noexcept override {
         return m_pageId;
     }
 
@@ -64,7 +86,7 @@ private:
 };
 
 /// Stores before/after geometry for one region; applies via context applySnapshots.
-class RegionGeometryCommand : public QUndoCommand {
+class RegionGeometryCommand : public RegionCommand {
 public:
     RegionGeometryCommand(EditorCommandContext* context,
                           domain::PageId pageId,
@@ -76,17 +98,11 @@ public:
     void undo() override;
     void redo() override;
 
-    [[nodiscard]] int id() const override;
-    [[nodiscard]] domain::PageId pageId() const noexcept {
+    [[nodiscard]] domain::PageId pageId() const noexcept override {
         return m_pageId;
     }
     [[nodiscard]] domain::RegionId regionId() const noexcept {
         return m_regionId;
-    }
-
-    /// Returns true if the last redo or undo reported an internal failure.
-    [[nodiscard]] bool hasFaulted() const noexcept {
-        return m_faulted;
     }
 
 private:
@@ -96,7 +112,6 @@ private:
     domain::RectGeometry m_before;
     domain::RectGeometry m_after;
     canvas::EditKind m_kind;
-    bool m_faulted{false};
 };
 
 } // namespace manga::ui::command
