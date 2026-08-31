@@ -1,10 +1,14 @@
 #include "ui/manga/MangaCanvas.h"
 
+#include "ui/manga/RegionOverlayItem.h"
+
 #include <FluentQt/BasicInput.h>
 #include <QCoreApplication>
 #include <QGraphicsPixmapItem>
+#include <QGraphicsRectItem>
 #include <QGraphicsScene>
 #include <QKeyEvent>
+#include <QMouseEvent>
 #include <QPainter>
 #include <QResizeEvent>
 #include <QShowEvent>
@@ -14,9 +18,12 @@
 
 namespace manga::ui::manga {
 
+using ::manga::domain::ImageSize;
+using ::manga::domain::RectGeometry;
+using ::manga::domain::RegionId;
+
 namespace {
 constexpr double kZoomLevels[] = {0.05, 0.10, 0.25, 0.50, 0.75, 1.0, 1.5, 2.0, 4.0, 8.0, 16.0};
-// The document workspace remains dark in both application themes so page edges stay visible.
 const QColor kDefaultCanvasBackground(QStringLiteral("#202124"));
 const QColor kDefaultCanvasForeground(QStringLiteral("#F3F3F3"));
 } // namespace
@@ -36,6 +43,16 @@ MangaCanvas::MangaCanvas(QWidget* parent) : QGraphicsView(parent) {
     m_backgroundColor = kDefaultCanvasBackground;
     m_placeholderTextColor = kDefaultCanvasForeground;
     setBackgroundBrush(m_backgroundColor);
+
+    m_creationBox = new QGraphicsRectItem();
+    m_creationBox->setZValue(canvas::kZToolCreation);
+    QPen creationPen(QColor(0, 120, 215), 0);
+    creationPen.setCosmetic(true);
+    creationPen.setStyle(Qt::DashLine);
+    m_creationBox->setPen(creationPen);
+    m_creationBox->setBrush(QColor(0, 120, 215, 40));
+    m_creationBox->setVisible(false);
+    m_scene->addItem(m_creationBox);
 }
 
 MangaCanvas::~MangaCanvas() = default;
@@ -127,7 +144,7 @@ void MangaCanvas::applyZoom(double factor) {
 
 void MangaCanvas::zoomIn() {
     for (double level : kZoomLevels) {
-        if (level > m_zoomFactor + 0.001) { // fuzzy compare margin
+        if (level > m_zoomFactor + 0.001) {
             applyZoom(level);
             return;
         }
@@ -174,12 +191,88 @@ void MangaCanvas::centerOnPage(const QPointF& scenePos) {
     emitViewTransform();
 }
 
+void MangaCanvas::setTool(canvas::Tool tool) {
+    m_tool = tool;
+    switch (tool) {
+        case canvas::Tool::Pan:
+            setDragMode(ScrollHandDrag);
+            break;
+        case canvas::Tool::Select:
+            setDragMode(NoDrag);
+            break;
+        case canvas::Tool::CreateRegion:
+            setDragMode(NoDrag);
+            break;
+    }
+}
+
+void MangaCanvas::setRegions(const QVector<canvas::RegionDisplay>& regions) {
+    QSet<domain::RegionId> incomingIds;
+    for (const auto& rd : regions) {
+        incomingIds.insert(rd.id);
+        auto it = m_overlays.find(rd.id);
+        if (it != m_overlays.end()) {
+            it.value()->updateFromDisplay(rd);
+        } else {
+            auto* item = new RegionOverlayItem(rd.id);
+            item->updateFromDisplay(rd);
+            m_scene->addItem(item);
+            m_overlays.insert(rd.id, item);
+        }
+    }
+
+    auto it = m_overlays.begin();
+    while (it != m_overlays.end()) {
+        if (!incomingIds.contains(it.key())) {
+            m_scene->removeItem(it.value());
+            delete it.value();
+            it = m_overlays.erase(it);
+        } else {
+            ++it;
+        }
+    }
+}
+
 QWidget* MangaCanvas::placeholderActionButtonForTest() const {
     return m_placeholderAction;
 }
 
 bool MangaCanvas::hasPageImageForTest() const {
     return !m_pagePixmap.isNull();
+}
+
+int MangaCanvas::regionOverlayCountForTest() const {
+    return m_overlays.size();
+}
+
+RegionOverlayItem* MangaCanvas::overlayItemAtScenePos(const QPointF& scenePos) const {
+    const QList<QGraphicsItem*> items = m_scene->items(scenePos);
+    for (auto* item : items) {
+        if (auto* overlay = dynamic_cast<RegionOverlayItem*>(item)) {
+            return overlay;
+        }
+    }
+    return nullptr;
+}
+
+void MangaCanvas::cancelGesture() {
+    if (!m_gesture.active) {
+        return;
+    }
+
+    if (m_gesture.activeHandle.has_value() || !m_gesture.targetRegionId.value.isNil()) {
+        auto it = m_overlays.find(m_gesture.targetRegionId);
+        if (it != m_overlays.end()) {
+            it.value()->setTransientGeometry(m_gesture.startGeometry);
+        }
+    }
+
+    if (m_creationBox) {
+        m_creationBox->setVisible(false);
+    }
+
+    m_gesture = {};
+    Q_EMIT gestureCancelled();
 }
 
 void MangaCanvas::wheelEvent(QWheelEvent* event) {
@@ -208,6 +301,122 @@ void MangaCanvas::wheelEvent(QWheelEvent* event) {
 }
 
 void MangaCanvas::keyPressEvent(QKeyEvent* event) {
+    if (event->key() == Qt::Key_Escape && m_gesture.active) {
+        cancelGesture();
+        event->accept();
+        return;
+    }
+
+    if (m_tool == canvas::Tool::Select) {
+        if (event->key() == Qt::Key_Delete) {
+            for (auto it = m_overlays.constBegin(); it != m_overlays.constEnd(); ++it) {
+                if (it.value()->isSelected() || true) {
+                    // Emit delete for the first selected region found via keyboard focus.
+                    // For now, emit for any region that has visible handles (selected).
+                }
+            }
+            // Find a selected region to delete.
+            for (auto it = m_overlays.constBegin(); it != m_overlays.constEnd(); ++it) {
+                const auto geom = it.value()->currentGeometry();
+                // Check selection by looking at handle visibility.
+                // A simpler approach: track selected IDs or check pen color.
+                // Use the first region with visible handles.
+                bool hasVisibleHandle = false;
+                for (int i = 0; i < 8; ++i) {
+                    if (it.value()->childItems()[i] && it.value()->childItems()[i]->isVisible()) {
+                        hasVisibleHandle = true;
+                        break;
+                    }
+                }
+                if (hasVisibleHandle) {
+                    Q_EMIT regionDeleteRequested(it.key());
+                    event->accept();
+                    return;
+                }
+            }
+            event->accept();
+            return;
+        }
+
+        if (event->key() == Qt::Key_Tab || event->key() == Qt::Key_Backtab) {
+            if (m_overlays.isEmpty()) {
+                event->accept();
+                return;
+            }
+            // Cycle through overlays. Find current selected index.
+            QList<domain::RegionId> ids = m_overlays.keys();
+            int currentIndex = -1;
+            for (int i = 0; i < ids.size(); ++i) {
+                auto* overlay = m_overlays[ids[i]];
+                bool hasVisibleHandle = false;
+                for (auto* child : overlay->childItems()) {
+                    if (child->isVisible()) {
+                        hasVisibleHandle = true;
+                        break;
+                    }
+                }
+                if (hasVisibleHandle) {
+                    currentIndex = i;
+                    break;
+                }
+            }
+
+            int nextIndex;
+            if (event->key() == Qt::Key_Backtab) {
+                nextIndex = (currentIndex <= 0) ? ids.size() - 1 : currentIndex - 1;
+            } else {
+                nextIndex = (currentIndex >= ids.size() - 1) ? 0 : currentIndex + 1;
+            }
+
+            // Deselect all, select next.
+            QVector<canvas::RegionDisplay> updated;
+            for (auto it = m_overlays.constBegin(); it != m_overlays.constEnd(); ++it) {
+                auto geom = it.value()->currentGeometry();
+                bool sel = (it.key() == ids[nextIndex]);
+                updated.append({it.key(), geom, sel});
+            }
+            setRegions(updated);
+            Q_EMIT regionSelectionRequested(ids[nextIndex], canvas::SelectionIntent::Replace);
+            event->accept();
+            return;
+        }
+
+        // Arrow keys move selected region by 1 source px.
+        if (event->key() == Qt::Key_Up || event->key() == Qt::Key_Down || event->key() == Qt::Key_Left ||
+            event->key() == Qt::Key_Right) {
+            for (auto it = m_overlays.constBegin(); it != m_overlays.constEnd(); ++it) {
+                bool hasVisibleHandle = false;
+                for (auto* child : it.value()->childItems()) {
+                    if (child->isVisible()) {
+                        hasVisibleHandle = true;
+                        break;
+                    }
+                }
+                if (!hasVisibleHandle) {
+                    continue;
+                }
+
+                const double step = 1.0;
+                QPointF delta{0, 0};
+                if (event->key() == Qt::Key_Up) {
+                    delta.setY(-step);
+                } else if (event->key() == Qt::Key_Down) {
+                    delta.setY(step);
+                } else if (event->key() == Qt::Key_Left) {
+                    delta.setX(-step);
+                } else {
+                    delta.setX(step);
+                }
+
+                const auto newGeom = canvas::moveRegion(it.value()->currentGeometry(), delta, m_pageBounds);
+                it.value()->setTransientGeometry(newGeom);
+                Q_EMIT regionGeometryCommitted(it.key(), newGeom, canvas::EditKind::Move);
+                event->accept();
+                return;
+            }
+        }
+    }
+
     if (event->key() == Qt::Key_Plus || event->key() == Qt::Key_Equal) {
         zoomIn();
         event->accept();
@@ -223,6 +432,187 @@ void MangaCanvas::keyPressEvent(QKeyEvent* event) {
     } else {
         QGraphicsView::keyPressEvent(event);
     }
+}
+
+void MangaCanvas::mousePressEvent(QMouseEvent* event) {
+    if (event->button() != Qt::LeftButton) {
+        QGraphicsView::mousePressEvent(event);
+        return;
+    }
+
+    if (m_tool == canvas::Tool::Pan) {
+        QGraphicsView::mousePressEvent(event);
+        return;
+    }
+
+    const QPointF devicePt = event->position();
+    const QPointF scenePt = mapToScene(event->pos());
+    const double dpr = viewport()->devicePixelRatio();
+
+    if (m_tool == canvas::Tool::CreateRegion) {
+        m_gesture.active = true;
+        m_gesture.dragging = false;
+        m_gesture.pressDevicePx = devicePt;
+        m_gesture.startGeometry = {scenePt.x(), scenePt.y(), 0, 0};
+        m_gesture.targetRegionId = {};
+        m_gesture.activeHandle = std::nullopt;
+
+        m_creationBox->setRect(scenePt.x(), scenePt.y(), 0, 0);
+        m_creationBox->setVisible(true);
+        event->accept();
+        return;
+    }
+
+    // Select tool: check handle hit first, then region body.
+    // Convert press to device coords for handle hit testing.
+    // We need to find which region's handle was clicked.
+    for (auto it = m_overlays.constBegin(); it != m_overlays.constEnd(); ++it) {
+        auto* overlay = it.value();
+        const auto geom = overlay->currentGeometry();
+
+        // Test handles first (only on selected regions).
+        bool isSelected = false;
+        for (auto* child : overlay->childItems()) {
+            if (child->isVisible()) {
+                isSelected = true;
+                break;
+            }
+        }
+
+        if (isSelected) {
+            const auto hitHandle = canvas::hitTestHandle(devicePt, geom, m_zoomFactor, dpr);
+            if (hitHandle.has_value()) {
+                m_gesture.active = true;
+                m_gesture.dragging = false;
+                m_gesture.pressDevicePx = devicePt;
+                m_gesture.startGeometry = geom;
+                m_gesture.targetRegionId = it.key();
+                m_gesture.activeHandle = hitHandle;
+                event->accept();
+                return;
+            }
+        }
+    }
+
+    // Test region body click.
+    auto* clickedOverlay = overlayItemAtScenePos(scenePt);
+    if (clickedOverlay) {
+        const auto modifiers = event->modifiers();
+        auto intent = canvas::SelectionIntent::Replace;
+        if (modifiers & Qt::ControlModifier) {
+            intent = canvas::SelectionIntent::Toggle;
+        } else if (modifiers & Qt::ShiftModifier) {
+            intent = canvas::SelectionIntent::Range;
+        }
+
+        Q_EMIT regionSelectionRequested(clickedOverlay->regionId(), intent);
+
+        // Start potential move gesture.
+        m_gesture.active = true;
+        m_gesture.dragging = false;
+        m_gesture.pressDevicePx = devicePt;
+        m_gesture.startGeometry = clickedOverlay->currentGeometry();
+        m_gesture.targetRegionId = clickedOverlay->regionId();
+        m_gesture.activeHandle = std::nullopt;
+        event->accept();
+        return;
+    }
+
+    // Clicked empty space with Select tool: deselect all.
+    if (m_tool == canvas::Tool::Select) {
+        Q_EMIT regionSelectionRequested(domain::RegionId{}, canvas::SelectionIntent::Replace);
+    }
+
+    QGraphicsView::mousePressEvent(event);
+}
+
+void MangaCanvas::mouseMoveEvent(QMouseEvent* event) {
+    if (!m_gesture.active) {
+        QGraphicsView::mouseMoveEvent(event);
+        return;
+    }
+
+    const QPointF devicePt = event->position();
+    const QPointF deviceDelta = devicePt - m_gesture.pressDevicePx;
+
+    if (!m_gesture.dragging && !canvas::exceedsDragThreshold(deviceDelta)) {
+        event->accept();
+        return;
+    }
+    m_gesture.dragging = true;
+
+    const double dpr = viewport()->devicePixelRatio();
+    const QPointF viewDelta = canvas::deviceToView(deviceDelta, dpr);
+    const QPointF sourceDelta = canvas::viewToSource(viewDelta, m_zoomFactor);
+
+    if (m_tool == canvas::Tool::CreateRegion) {
+        const QPointF scenePt = mapToScene(event->pos());
+        const double x = std::min(m_gesture.startGeometry.x, scenePt.x());
+        const double y = std::min(m_gesture.startGeometry.y, scenePt.y());
+        const double w = std::abs(scenePt.x() - m_gesture.startGeometry.x);
+        const double h = std::abs(scenePt.y() - m_gesture.startGeometry.y);
+        m_creationBox->setRect(x, y, w, h);
+        event->accept();
+        return;
+    }
+
+    if (m_gesture.activeHandle.has_value()) {
+        const auto result =
+            canvas::resizeRegion(m_gesture.startGeometry, *m_gesture.activeHandle, sourceDelta, m_pageBounds);
+        if (result.has_value()) {
+            auto it = m_overlays.find(m_gesture.targetRegionId);
+            if (it != m_overlays.end()) {
+                it.value()->setTransientGeometry(*result);
+            }
+        }
+        event->accept();
+        return;
+    }
+
+    // Move gesture.
+    const auto newGeom = canvas::moveRegion(m_gesture.startGeometry, sourceDelta, m_pageBounds);
+    auto it = m_overlays.find(m_gesture.targetRegionId);
+    if (it != m_overlays.end()) {
+        it.value()->setTransientGeometry(newGeom);
+    }
+    event->accept();
+}
+
+void MangaCanvas::mouseReleaseEvent(QMouseEvent* event) {
+    if (event->button() != Qt::LeftButton || !m_gesture.active) {
+        QGraphicsView::mouseReleaseEvent(event);
+        return;
+    }
+
+    if (m_tool == canvas::Tool::CreateRegion) {
+        if (m_gesture.dragging && m_creationBox) {
+            const QRectF r = m_creationBox->rect();
+            const domain::RectGeometry geom{r.x(), r.y(), r.width(), r.height()};
+            if (geom.width >= canvas::kMinRegionDimension && geom.height >= canvas::kMinRegionDimension) {
+                Q_EMIT regionCreateCommitted(geom);
+            }
+            // Below minimum size discards silently.
+        }
+        m_creationBox->setVisible(false);
+        m_gesture = {};
+        event->accept();
+        return;
+    }
+
+    if (m_gesture.dragging) {
+        auto it = m_overlays.find(m_gesture.targetRegionId);
+        if (it != m_overlays.end()) {
+            const auto finalGeom = it.value()->currentGeometry();
+            if (!finalGeom.approxEquals(m_gesture.startGeometry)) {
+                const auto kind =
+                    m_gesture.activeHandle.has_value() ? canvas::EditKind::Resize : canvas::EditKind::Move;
+                Q_EMIT regionGeometryCommitted(m_gesture.targetRegionId, finalGeom, kind);
+            }
+        }
+    }
+
+    m_gesture = {};
+    event->accept();
 }
 
 void MangaCanvas::resizeEvent(QResizeEvent* event) {
@@ -289,7 +679,7 @@ void MangaCanvas::layoutPlaceholderButton() {
     int y = (viewport()->height() - m_placeholderAction->height()) / 2;
 
     if (!m_placeholderMessage.isEmpty()) {
-        y += 40; // Offset below text
+        y += 40;
     }
 
     m_placeholderAction->move(x, y);

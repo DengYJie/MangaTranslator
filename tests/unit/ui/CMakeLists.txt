@@ -322,3 +322,24 @@ set_tests_properties(manga_tests_ui_import_page PROPERTIES
     LABELS "unit;ui"
     TIMEOUT 15
 )
+
+qt_add_executable(manga_tests_ui_region_interaction
+    region_interaction_test.cpp
+)
+manga_apply_project_options(manga_tests_ui_region_interaction)
+set_target_properties(manga_tests_ui_region_interaction PROPERTIES AUTOMOC ON)
+
+target_link_libraries(manga_tests_ui_region_interaction
+    PRIVATE
+        manga_ui_manga
+        Qt6::Test
+        Qt6::Widgets
+)
+
+manga_deploy_qt_runtime(manga_tests_ui_region_interaction)
+add_test(NAME manga_tests_ui_region_interaction COMMAND manga_tests_ui_region_interaction)
+set_tests_properties(manga_tests_ui_region_interaction PROPERTIES
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
+    LABELS "unit;ui"
+    TIMEOUT 15
+)

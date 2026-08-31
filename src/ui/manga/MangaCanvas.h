@@ -1,16 +1,21 @@
 #pragma once
 
+#include "ui/base/DomainMetaTypes.h"
 #include "ui/manga/CanvasZOrder.h"
+#include "ui/manga/RegionInteraction.h"
 
 #include <FluentQt/Foundation.h>
 #include <QGraphicsView>
 #include <QImage>
+#include <QMap>
 #include <QPixmap>
 
 class QGraphicsPixmapItem;
+class QGraphicsRectItem;
 class QResizeEvent;
 class QWheelEvent;
 class QKeyEvent;
+class QMouseEvent;
 
 namespace fluent::basicinput {
 class Button;
@@ -18,9 +23,21 @@ class Button;
 
 namespace manga::ui::manga {
 
-/// Manga page viewport: original image layer, pan/zoom and placeholder states.
-/// P5-B scope: no region overlay, no tools beyond pan. Scene coordinates are
-/// source image pixels; the page pixmap lives at (0,0) with kZPageOriginal.
+class RegionOverlayItem;
+
+// Type aliases for MOC-compatible signal parameter types.
+using CanvasTool = canvas::Tool;
+using CanvasSelectionIntent = canvas::SelectionIntent;
+using CanvasEditKind = canvas::EditKind;
+using CanvasHandlePosition = canvas::HandlePosition;
+using CanvasRegionDisplay = canvas::RegionDisplay;
+using SourceRectGeometry = domain::RectGeometry;
+using SourceRegionId = domain::RegionId;
+using SourceImageSize = domain::ImageSize;
+
+/// Manga page viewport: original image layer, pan/zoom, region overlays, and
+/// tool-driven interaction. Scene coordinates are source image pixels; the page
+/// pixmap lives at (0,0) with kZPageOriginal.
 class MangaCanvas : public QGraphicsView, public fluent::FluentElement, public fluent::QMLPlus {
     Q_OBJECT
 public:
@@ -63,14 +80,46 @@ public:
     [[nodiscard]] QPointF viewCenterOnPage() const;
     void centerOnPage(const QPointF& scenePos);
 
+    /// Sets the active canvas tool. Pan keeps ScrollHandDrag; Select switches to
+    /// NoDrag for item interaction; CreateRegion enables creation gesture.
+    void setTool(CanvasTool tool);
+    [[nodiscard]] CanvasTool tool() const noexcept {
+        return m_tool;
+    }
+
+    /// Reconciles overlay items with the given region projections. Creates, updates,
+    /// or removes items to match. Items hold geometry and selection state only.
+    void setRegions(const QVector<CanvasRegionDisplay>& regions);
+
+    /// Sets the page bounds used for clamping region geometry during move/resize.
+    void setPageBounds(SourceImageSize bounds) noexcept {
+        m_pageBounds = bounds;
+    }
+
     /// Test-only observation hooks.
     [[nodiscard]] QWidget* placeholderActionButtonForTest() const;
     [[nodiscard]] bool hasPageImageForTest() const;
+    [[nodiscard]] int regionOverlayCountForTest() const;
 
 Q_SIGNALS:
     void zoomChanged(double factor);
     void viewTransformChanged(double zoom, const QPointF& centerOnPage);
     void placeholderActionActivated();
+
+    /// Emitted when a create-region gesture completes with a valid rectangle.
+    void regionCreateCommitted(SourceRectGeometry geometry);
+
+    /// Emitted when a region is clicked to request selection change.
+    void regionSelectionRequested(SourceRegionId id, CanvasSelectionIntent intent);
+
+    /// Emitted when a move or resize gesture completes with changed geometry.
+    void regionGeometryCommitted(SourceRegionId id, SourceRectGeometry geometry, CanvasEditKind kind);
+
+    /// Emitted when an in-progress gesture is cancelled (Escape key).
+    void gestureCancelled();
+
+    /// Emitted when Delete is pressed with a selected region.
+    void regionDeleteRequested(SourceRegionId id);
 
 protected:
     void wheelEvent(QWheelEvent* event) override;
@@ -79,6 +128,9 @@ protected:
     void showEvent(QShowEvent* event) override;
     void drawForeground(QPainter* painter, const QRectF& rect) override;
     void scrollContentsBy(int dx, int dy) override;
+    void mousePressEvent(QMouseEvent* event) override;
+    void mouseMoveEvent(QMouseEvent* event) override;
+    void mouseReleaseEvent(QMouseEvent* event) override;
 
 private:
     void applyZoom(double factor);
@@ -86,6 +138,12 @@ private:
     void layoutPlaceholderButton();
     void
     setContentStateInternal(ContentState state, const QString& message, const QString& actionText, bool clearImage);
+
+    /// Returns the overlay item under the given scene position, or nullptr.
+    [[nodiscard]] RegionOverlayItem* overlayItemAtScenePos(const QPointF& scenePos) const;
+
+    /// Cancels any in-progress gesture and restores the start geometry.
+    void cancelGesture();
 
     QGraphicsScene* m_scene{nullptr};         // owned via QGraphicsView::setScene
     QGraphicsPixmapItem* m_pageItem{nullptr}; // scene-owned
@@ -96,6 +154,24 @@ private:
     double m_zoomFactor{1.0};
     QColor m_backgroundColor;
     QColor m_placeholderTextColor;
+
+    CanvasTool m_tool{CanvasTool::Pan};
+    SourceImageSize m_pageBounds{};
+    QMap<SourceRegionId, RegionOverlayItem*> m_overlays;
+
+    /// Transient creation box shown during a create-region drag.
+    QGraphicsRectItem* m_creationBox{nullptr}; // scene-owned
+
+    /// Gesture tracking state for move/resize/create drags.
+    struct GestureState {
+        bool active{false};
+        bool dragging{false};
+        QPointF pressDevicePx;
+        SourceRectGeometry startGeometry;
+        SourceRegionId targetRegionId{};
+        std::optional<CanvasHandlePosition> activeHandle;
+    };
+    GestureState m_gesture;
 };
 
 } // namespace manga::ui::manga
