@@ -1,4 +1,4 @@
-# Build and generated output
+﻿# Build and generated output
 /build/
 /out/
 /dist/
@@ -28,6 +28,7 @@
 /.continue/
 /.gemini/
 /.aider/
+/.qoder/
 /.aider*
 /.omo/
 *.conversation

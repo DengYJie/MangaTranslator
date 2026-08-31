@@ -209,7 +209,57 @@ Minor 问题只有在不影响数据安全、任务完成和可访问性时才�
 - [ ] 完成源图不变、恢复、只读/磁盘不足、Secret/日志隐私和包内容审计。
 - [ ] 清零 blocker/major，记录 Minor owner/版本，由发布负责人批准候选。
 
-## 13. 退出条件
+### 初验演示
+
+- [ ] 按 §14 完成初验 PPT 和演示脚本，素材全部来自同一发布候选的证据包。
+- [ ] 初验前在干净环境按演示脚本完整彩排一次，录屏备用（防止现场环境故障）。
+
+## 13. 候选证据包
+
+每个候选的所有证据归档到 `build/release-evidence/<candidate-id>/`（不入 Git，仅 SHA-256 清单入库）：
+
+```text
+<candidate-id>/
+├── build/            # CMake cache 摘要、工具链版本、依赖清单与 revision
+├── tests/            # ctest 输出、p4-model 结果、场景↔测试名映射表
+├── package/          # staging 文件清单、ZIP/EXE SHA-256、依赖审计结果
+├── clean-env/        # 干净 VM/目录验证记录（每步结果 + 截图）
+├── visual/           # full-profile 视觉矩阵截图（复用 P5-D 证据）
+├── performance/      # 固定测试机 wall-clock/fps/内存记录与采样方法
+├── security/         # 源图 SHA-256 前后对照、隐私审计、故障注入清单
+└── acceptance/       # 初验 PPT、演示脚本、彩排录屏、评审记录与批准结论
+```
+
+候选编号规则：`v<PROJECT_VERSION>-rc<N>`（N 从 1 递增）。任何阻断修复后 N+1，旧候选证据保留但标记 superseded。
+
+## 14. 项目初验演示（PPT）
+
+初验面向评审者介绍项目全貌。PPT 无固定模板，按本节大纲组织即可；核心原则是**全部素材来自真实证据包和设计文档，不为演示单独编造内容**。建议 12–15 页、讲解 8–10 分钟 + 现场演示 3–5 分钟。
+
+### 14.1 页面大纲
+
+1. **封面**：项目名称、V0.1 版本号、候选编号、日期、汇报人。
+2. **项目概述**：一句话定位（漫画翻译桌面工作台）与要解决的问题（机器结果不可靠，人工校对与排版才是瓶颈）；目标用户与典型场景。
+3. **设计思路**：以"当前漫画页"为 Hero Surface 的工作台定位；自动结果始终是候选、人工显式采用；MVVM + 单向数据流。素材：`docs/architecture-design.md`、`docs/plan/v0.1/phase-5-ui-editor-supplement.md` §1。
+4. **开发过程**：P0–P7 分阶段契约先行；每阶段 TDD 与冻结契约；子代理执行 + 独立评审的工作流；prek/CI 质量门。素材：`docs/plan/v0.1/README.md` 阶段图、CI 通过记录。
+5. **技术栈**：C++23、Qt 6.11 Widgets、FluentQt（公共 API）、QWindowKit（窗口边框）、ONNX Runtime、CMake presets + vcpkg。说明每个选择的理由与替代方案。
+6. **算法与处理管线**：固定流水线 OCR → 翻译 → 清除 → 排版；清除/排版的两阶段采用协议（先原子落盘不可变资产，Undo/Redo 只切引用不执行 I/O）；OpenAI-compatible 协议解析与 429/Retry-After 重试策略；共享渲染核心保证 UI 预览与导出逐像素同源。素材：`docs/v0.2-technical-decisions.md` 对照表、P6-E04 一致性测试。
+7. **功能演示**（现场或录屏）：创建项目 → 导入图片文件夹 → 手工 Region → OCR 候选 → 采用 → 翻译 → 清除 → 排版调整 → Undo/Redo → 保存 → 关闭重开 → 导出 PNG。即 P6-E01/E04 主线的用户视角版本。
+8. **界面**：Home/Editor/Settings 的 Light/Dark 截图；响应式断点（Wide/Narrow）对比；空态、错误态、加载态。素材：视觉证据矩阵，不单独摆拍。
+9. **创新点**：候选-人工字段级保护；generation + operationId 的迟到结果失效语义；内容寻址派生资产；冻结契约驱动的多代理协作开发。
+10. **难点与解决**：FluentQt 窗口实现缺陷 → 评估并迁移 QtWindowKit 外壳；异步完成与 GUI 线程归属；Undo 栈游标与 Domain Dirty 的一致性；打包依赖审计。
+11. **测试与质量**：测试金字塔（unit/contract/integration/app smoke）数量与场景映射表；干净机首次启动矩阵；源图 SHA-256 不变证据。
+12. **总结与展望**：V0.1 交付清单与已知限制；V0.2（自动检测、CBZ/PDF、页面级流水线）与 V0.3（LaMa 等生成式修复）路线；Koharu 参考边界。
+13. **Q&A**：预留。
+
+### 14.2 演示规则
+
+- 演示数据使用 `tests/fixtures/` 中已登记来源与许可证的素材，不使用用户漫画或来源不明图片。
+- 现场演示断网进行；OCR 演示使用固定模型包；翻译演示使用 loopback mock 或明确声明的测试 Provider，不暴露真实凭据。
+- PPT 中所有性能数字必须出自 `performance/` 证据目录，标注测试机配置；不允许引用开发机一次运行的印象数据。
+- 评审记录（问题、结论、整改项）归档到 `acceptance/`，整改项按 §10 缺陷规则分级回流到责任阶段。
+
+## 15. 退出条件
 
 - P6 主线在同一 Release 候选上通过，全部自动测试和真实 OCR 作业通过。
 - Windows 10 22H2、Windows 11 x64 与干净目录首次启动矩阵通过。
