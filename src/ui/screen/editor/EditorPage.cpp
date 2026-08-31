@@ -90,6 +90,44 @@ EditorPage::EditorPage(EditorViewModel* viewModel, QWidget* parent) : base::Base
             &widget::InspectorPanel::textEditingSessionFinished,
             m_viewModel,
             &EditorViewModel::sealTextEditSession);
+    connect(m_inspector,
+            &widget::InspectorPanel::ocrRequested,
+            this,
+            [this](const domain::PageId& pageId, const QVector<domain::RegionId>& regionIds) {
+                if (auto* ctrl = m_viewModel->processingController()) {
+                    for (const auto& rId : regionIds) {
+                        ctrl->recognizeRegion(pageId, rId);
+                    }
+                }
+            });
+    connect(m_inspector,
+            &widget::InspectorPanel::translateRequested,
+            this,
+            [this](const domain::PageId& pageId, const QVector<domain::RegionId>& /*regionIds*/) {
+                if (auto* ctrl = m_viewModel->processingController()) {
+                    ctrl->smartTranslatePage(pageId);
+                }
+            });
+    connect(m_inspector,
+            &widget::InspectorPanel::clearRequested,
+            this,
+            [this](const domain::PageId& pageId, const QVector<domain::RegionId>& regionIds) {
+                if (auto* ctrl = m_viewModel->processingController()) {
+                    for (const auto& rId : regionIds) {
+                        ctrl->clearRegion(pageId, rId);
+                    }
+                }
+            });
+    connect(m_inspector,
+            &widget::InspectorPanel::layoutRequested,
+            this,
+            [this](const domain::PageId& pageId, const QVector<domain::RegionId>& regionIds) {
+                if (auto* ctrl = m_viewModel->processingController()) {
+                    for (const auto& rId : regionIds) {
+                        ctrl->layoutRegion(pageId, rId);
+                    }
+                }
+            });
 
     connect(m_commandBar, &widget::EditorCommandBar::zoomInRequested, m_canvas, &ui::manga::MangaCanvas::zoomIn);
     connect(m_commandBar, &widget::EditorCommandBar::zoomOutRequested, m_canvas, &ui::manga::MangaCanvas::zoomOut);
@@ -182,6 +220,9 @@ void EditorPage::render(const EditorState& state) {
     m_pageList->model()->setPages(entries);
 
     m_pageList->setCurrentPageId(state.currentPageId);
+    if (state.currentPageId.isValid()) {
+        m_pageList->setPageProcessingStatus(state.currentPageId, static_cast<int>(state.processing.status));
+    }
 
     m_inspector->setInspectorState(state.inspector);
 

@@ -62,6 +62,7 @@ void EditorCommandBar::buildUi() {
         QStringLiteral("\uE890"), tr("Preview Original/Translation (Space)"), QStringLiteral("previewSelectorButton"));
     m_smartTranslateButton =
         createIconButton(QStringLiteral("\uE774"), tr("智能翻译 (Ctrl+T)"), QStringLiteral("smartTranslateButton"));
+    m_smartTranslateButton->setFluentStyle(fluent::basicinput::Button::Accent);
     m_adoptButton = createIconButton(QStringLiteral("\uE73E"), tr("采纳建议"), QStringLiteral("adoptButton"));
     m_adoptButton->setFluentStyle(fluent::basicinput::Button::Accent);
     m_adoptButton->setVisible(false);
@@ -171,6 +172,10 @@ void EditorCommandBar::render(const EditorState& state) {
         m_smartTranslateButton->setEnabled(true);
         m_smartTranslateButton->setIconGlyph(QStringLiteral("\uE711"));
         m_smartTranslateButton->setToolTip(tr("取消处理"));
+    } else if (hasPage && !hasRegions) {
+        m_smartTranslateButton->setEnabled(false);
+        m_smartTranslateButton->setIconGlyph(QStringLiteral("\uE774"));
+        m_smartTranslateButton->setToolTip(tr("当前页无文本区域，请先创建或检测区域"));
     } else {
         m_smartTranslateButton->setEnabled(hasPage && hasRegions);
         m_smartTranslateButton->setIconGlyph(QStringLiteral("\uE774"));

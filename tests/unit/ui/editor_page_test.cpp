@@ -159,6 +159,46 @@ private Q_SLOTS:
         QVERIFY(adoptBtn->isVisible());
         QVERIFY(rejectBtn->isVisible());
     }
+
+    void commandBarVisualStylingAndTooltip() {
+        test::FakeThumbnailStore thumbnails;
+        test::FakePageImageLoader images;
+        application::OperationRegistry registry;
+        ui::screen::editor::EditorViewModel viewModel(&thumbnails, &images, &registry);
+        ui::screen::editor::EditorPage page(&viewModel);
+
+        auto* commandBar = page.findChild<QWidget*>(QStringLiteral("editorCommandBar"));
+        auto* translateBtn = commandBar->findChild<fluent::basicinput::Button*>(QStringLiteral("smartTranslateButton"));
+        QVERIFY(translateBtn != nullptr);
+        QCOMPARE(translateBtn->fluentStyle(), fluent::basicinput::Button::Accent);
+
+        // Open session with page containing 0 regions
+        auto session = makeSession(1);
+        viewModel.openProjectSession(session);
+
+        // Page has 0 regions -> button should be disabled with descriptive tooltip
+        QVERIFY(!translateBtn->isEnabled());
+        QVERIFY(translateBtn->toolTip().contains(QStringLiteral("无文本区域")) ||
+                translateBtn->toolTip().contains(QStringLiteral("区域")));
+    }
+
+    void inspectorActionButtonsExist() {
+        test::FakeThumbnailStore thumbnails;
+        test::FakePageImageLoader images;
+        application::OperationRegistry registry;
+        ui::screen::editor::EditorViewModel viewModel(&thumbnails, &images, &registry);
+        ui::screen::editor::EditorPage page(&viewModel);
+
+        auto* ocrBtn = page.findChild<fluent::basicinput::Button*>(QStringLiteral("inspectorSingleOcr"));
+        auto* trBtn = page.findChild<fluent::basicinput::Button*>(QStringLiteral("inspectorSingleTranslate"));
+        auto* clearBtn = page.findChild<fluent::basicinput::Button*>(QStringLiteral("inspectorSingleClear"));
+        auto* layoutBtn = page.findChild<fluent::basicinput::Button*>(QStringLiteral("inspectorSingleLayout"));
+
+        QVERIFY(ocrBtn != nullptr);
+        QVERIFY(trBtn != nullptr);
+        QVERIFY(clearBtn != nullptr);
+        QVERIFY(layoutBtn != nullptr);
+    }
 };
 
 QTEST_MAIN(EditorPageTest)

@@ -36,6 +36,7 @@ public:
         AspectRatioRole,
         ThumbnailStatusRole,
         ThumbnailErrorRole,
+        ProcessingStatusRole,
     };
 
     explicit PageListModel(QObject* parent = nullptr);
@@ -45,6 +46,7 @@ public:
     [[nodiscard]] std::optional<domain::PageId> pageIdAt(int row) const;
     [[nodiscard]] int rowForPageId(const domain::PageId& pageId) const;
     void setThumbnailStatus(const domain::PageId& pageId, ThumbnailStatus status, QString errorSummary = {});
+    void setProcessingStatus(const domain::PageId& pageId, int status);
 
     [[nodiscard]] int rowCount(const QModelIndex& parent = {}) const override;
     [[nodiscard]] QVariant data(const QModelIndex& index, int role) const override;
@@ -54,6 +56,7 @@ private:
         PageListEntry entry;
         ThumbnailStatus thumbnailStatus{ThumbnailStatus::NotLoaded};
         QString thumbnailError;
+        int processingStatus{0};
         bool operator==(const Row&) const = default;
     };
     QVector<Row> m_rows;

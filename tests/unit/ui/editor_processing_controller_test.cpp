@@ -363,6 +363,48 @@ private Q_SLOTS:
         m_controller->adoptProposal(pageId);
         QVERIFY(!m_controller->hasProposal(pageId));
     }
+
+    void testClearRegionAsyncAdoption() {
+        auto session = createSessionWithRegions(1, 1);
+        m_viewModel->openProjectSession(session);
+        const auto pageId = m_viewModel->state().currentPageId;
+        const auto regionId = m_viewModel->state().regions.at(0).id;
+
+        m_controller->clearRegion(pageId, regionId);
+        while (m_controller->hasActiveOperation(pageId)) {
+            QCoreApplication::processEvents(QEventLoop::AllEvents, 50);
+        }
+
+        // Drains adoption preparation future
+        for (int i = 0; i < 20; ++i) {
+            QCoreApplication::processEvents(QEventLoop::AllEvents, 50);
+        }
+
+        QVERIFY(m_controller->hasProposal(pageId));
+        const int initialUndo = m_viewModel->undoStackCountForTest();
+        m_controller->adoptProposal(pageId);
+        QVERIFY(!m_controller->hasProposal(pageId));
+        // Verify undo command was created
+        QCOMPARE(m_viewModel->undoStackCountForTest(), initialUndo + 1);
+    }
+
+    void testSingleStageFailureHandling() {
+        m_layouter->failNext = true;
+
+        auto session = createSessionWithRegions(1, 1);
+        m_viewModel->openProjectSession(session);
+        const auto pageId = m_viewModel->state().currentPageId;
+        const auto regionId = m_viewModel->state().regions.at(0).id;
+
+        m_controller->layoutRegion(pageId, regionId);
+        while (m_controller->hasActiveOperation(pageId)) {
+            QCoreApplication::processEvents(QEventLoop::AllEvents, 50);
+        }
+
+        QVERIFY(!m_controller->hasProposal(pageId));
+        QCOMPARE(m_viewModel->state().processing.status, ProcessingStatus::Failed);
+        QVERIFY(m_viewModel->state().processing.failedRegionIds.contains(regionId));
+    }
 };
 
 QTEST_MAIN(EditorProcessingControllerTest)

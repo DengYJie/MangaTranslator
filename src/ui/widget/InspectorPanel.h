@@ -72,6 +72,10 @@ Q_SIGNALS:
                                     const domain::RegionId& regionId,
                                     const QString& candidateId);
     void deleteRegionsRequested(const domain::PageId& pageId, const QVector<domain::RegionId>& regionIds);
+    void ocrRequested(const domain::PageId& pageId, const QVector<domain::RegionId>& regionIds);
+    void translateRequested(const domain::PageId& pageId, const QVector<domain::RegionId>& regionIds);
+    void clearRequested(const domain::PageId& pageId, const QVector<domain::RegionId>& regionIds);
+    void layoutRequested(const domain::PageId& pageId, const QVector<domain::RegionId>& regionIds);
     /// A text control lost focus; the ViewModel seals the active text merge batch.
     void textEditingSessionFinished();
 
@@ -173,8 +177,17 @@ private:
     fluent::textfields::NumberBox* m_regionHeightBox{nullptr};
     fluent::textfields::Label* m_regionOrderLabel{nullptr};
 
+    fluent::basicinput::Button* m_singleOcrButton{nullptr};
+    fluent::basicinput::Button* m_singleTranslateButton{nullptr};
+    fluent::basicinput::Button* m_singleClearButton{nullptr};
+    fluent::basicinput::Button* m_singleLayoutButton{nullptr};
+
     // Multi host: safe intersection only.
     fluent::textfields::Label* m_multiHintLabel{nullptr};
+    fluent::basicinput::Button* m_multiOcrButton{nullptr};
+    fluent::basicinput::Button* m_multiTranslateButton{nullptr};
+    fluent::basicinput::Button* m_multiClearButton{nullptr};
+    fluent::basicinput::Button* m_multiLayoutButton{nullptr};
     fluent::basicinput::ComboBox* m_multiFontFamilyCombo{nullptr};
     fluent::basicinput::ComboBox* m_multiFontWeightCombo{nullptr};
     fluent::layout::Field* m_multiFontSizeField{nullptr};

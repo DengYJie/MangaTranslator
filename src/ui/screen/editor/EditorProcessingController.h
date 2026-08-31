@@ -139,12 +139,13 @@ private:
                                       QFutureWatcher<application::Result<application::PageProcessingProposal>>* watcher,
                                       QVector<domain::RegionId> targetRegions,
                                       QHash<domain::RegionId, quint64> expectedRevisions);
-    void handleSingleStageFinished(const WatcherKey& key,
-                                   application::OperationId operationId,
-                                   quint64 sessionGen,
-                                   application::OperationStage stage,
-                                   const domain::RegionId& regionId,
-                                   quint64 expectedRev);
+    void prepareAdoptionAsync(const WatcherKey& key,
+                              const application::PrepareProcessingAdoptionRequest& prepReq,
+                              quint64 sessionGen);
+    void handlePrepareAdoptionFinished(
+        const WatcherKey& key,
+        quint64 sessionGen,
+        QFutureWatcher<application::Result<application::PreparedProcessingAdoption>>* watcher);
 
     EditorViewModel* m_viewModel{nullptr};                  // non-owning
     application::OperationRegistry* m_registry{nullptr};    // non-owning

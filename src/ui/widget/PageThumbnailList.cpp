@@ -181,4 +181,10 @@ void PageThumbnailList::requestThumbnailForTest(const domain::PageId& pageId, bo
     emit thumbnailRequested(pageId, force);
 }
 
+void PageThumbnailList::setPageProcessingStatus(const domain::PageId& pageId, int status) {
+    if (m_model != nullptr) {
+        m_model->setProcessingStatus(pageId, status);
+    }
+}
+
 } // namespace manga::ui::widget

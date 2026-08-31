@@ -323,6 +323,45 @@ QWidget* InspectorPanel::buildSingleHost() {
     clearStatusLayout->addWidget(m_clearStatusValue, 1);
     translationLayout->addWidget(clearStatusRow);
 
+    auto* singleActionsRow = new QWidget();
+    auto* singleActionsLayout = new QHBoxLayout(singleActionsRow);
+    singleActionsLayout->setContentsMargins(0, 4, 0, 4);
+    singleActionsLayout->setSpacing(8);
+    m_singleOcrButton = new Button(tr("OCR"));
+    m_singleOcrButton->setObjectName(QStringLiteral("inspectorSingleOcr"));
+    m_singleTranslateButton = new Button(tr("翻译"));
+    m_singleTranslateButton->setObjectName(QStringLiteral("inspectorSingleTranslate"));
+    m_singleClearButton = new Button(tr("涂抹"));
+    m_singleClearButton->setObjectName(QStringLiteral("inspectorSingleClear"));
+    m_singleLayoutButton = new Button(tr("排版"));
+    m_singleLayoutButton->setObjectName(QStringLiteral("inspectorSingleLayout"));
+    singleActionsLayout->addWidget(m_singleOcrButton);
+    singleActionsLayout->addWidget(m_singleTranslateButton);
+    singleActionsLayout->addWidget(m_singleClearButton);
+    singleActionsLayout->addWidget(m_singleLayoutButton);
+    translationLayout->addWidget(singleActionsRow);
+
+    connect(m_singleOcrButton, &Button::clicked, this, [this]() {
+        if (m_currentPageId.isValid() && !m_currentRegionIds.isEmpty()) {
+            Q_EMIT ocrRequested(m_currentPageId, m_currentRegionIds);
+        }
+    });
+    connect(m_singleTranslateButton, &Button::clicked, this, [this]() {
+        if (m_currentPageId.isValid() && !m_currentRegionIds.isEmpty()) {
+            Q_EMIT translateRequested(m_currentPageId, m_currentRegionIds);
+        }
+    });
+    connect(m_singleClearButton, &Button::clicked, this, [this]() {
+        if (m_currentPageId.isValid() && !m_currentRegionIds.isEmpty()) {
+            Q_EMIT clearRequested(m_currentPageId, m_currentRegionIds);
+        }
+    });
+    connect(m_singleLayoutButton, &Button::clicked, this, [this]() {
+        if (m_currentPageId.isValid() && !m_currentRegionIds.isEmpty()) {
+            Q_EMIT layoutRequested(m_currentPageId, m_currentRegionIds);
+        }
+    });
+
     connect(m_candidatesList, &QListWidget::currentRowChanged, this, [this](int row) {
         m_adoptCandidateButton->setEnabled(row >= 0);
     });
@@ -628,6 +667,45 @@ QWidget* InspectorPanel::buildMultiHost() {
     m_multiHintLabel->setTextColorRole(Label::TextColorRole::Secondary);
     m_multiHintLabel->setWordWrap(true);
     layout->addWidget(m_multiHintLabel);
+
+    auto* multiActionsRow = new QWidget();
+    auto* multiActionsLayout = new QHBoxLayout(multiActionsRow);
+    multiActionsLayout->setContentsMargins(0, 4, 0, 4);
+    multiActionsLayout->setSpacing(8);
+    m_multiOcrButton = new Button(tr("批量OCR"));
+    m_multiOcrButton->setObjectName(QStringLiteral("inspectorMultiOcr"));
+    m_multiTranslateButton = new Button(tr("批量翻译"));
+    m_multiTranslateButton->setObjectName(QStringLiteral("inspectorMultiTranslate"));
+    m_multiClearButton = new Button(tr("批量涂抹"));
+    m_multiClearButton->setObjectName(QStringLiteral("inspectorMultiClear"));
+    m_multiLayoutButton = new Button(tr("批量排版"));
+    m_multiLayoutButton->setObjectName(QStringLiteral("inspectorMultiLayout"));
+    multiActionsLayout->addWidget(m_multiOcrButton);
+    multiActionsLayout->addWidget(m_multiTranslateButton);
+    multiActionsLayout->addWidget(m_multiClearButton);
+    multiActionsLayout->addWidget(m_multiLayoutButton);
+    layout->addWidget(multiActionsRow);
+
+    connect(m_multiOcrButton, &Button::clicked, this, [this]() {
+        if (m_currentPageId.isValid() && !m_currentRegionIds.isEmpty()) {
+            Q_EMIT ocrRequested(m_currentPageId, m_currentRegionIds);
+        }
+    });
+    connect(m_multiTranslateButton, &Button::clicked, this, [this]() {
+        if (m_currentPageId.isValid() && !m_currentRegionIds.isEmpty()) {
+            Q_EMIT translateRequested(m_currentPageId, m_currentRegionIds);
+        }
+    });
+    connect(m_multiClearButton, &Button::clicked, this, [this]() {
+        if (m_currentPageId.isValid() && !m_currentRegionIds.isEmpty()) {
+            Q_EMIT clearRequested(m_currentPageId, m_currentRegionIds);
+        }
+    });
+    connect(m_multiLayoutButton, &Button::clicked, this, [this]() {
+        if (m_currentPageId.isValid() && !m_currentRegionIds.isEmpty()) {
+            Q_EMIT layoutRequested(m_currentPageId, m_currentRegionIds);
+        }
+    });
 
     auto* fontFamilyField = new Field();
     fontFamilyField->setLabelText(tr("字体"));

@@ -105,6 +105,8 @@ QVariant PageListModel::data(const QModelIndex& index, int role) const {
             return static_cast<int>(row.thumbnailStatus);
         case ThumbnailErrorRole:
             return row.thumbnailError;
+        case ProcessingStatusRole:
+            return row.processingStatus;
         case Qt::AccessibleTextRole:
             return tr("第 %1 页，%2").arg(row.entry.orderIndex + 1).arg(row.entry.displayName);
         case Qt::ToolTipRole:
@@ -116,6 +118,19 @@ QVariant PageListModel::data(const QModelIndex& index, int role) const {
             break;
     }
     return {};
+}
+
+void PageListModel::setProcessingStatus(const domain::PageId& pageId, int status) {
+    int row = rowForPageId(pageId);
+    if (row < 0) {
+        return;
+    }
+    if (m_rows[row].processingStatus == status) {
+        return;
+    }
+    m_rows[row].processingStatus = status;
+    QModelIndex idx = index(row);
+    Q_EMIT dataChanged(idx, idx, {ProcessingStatusRole});
 }
 
 } // namespace manga::ui::widget

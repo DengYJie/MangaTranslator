@@ -95,6 +95,27 @@ void PageThumbnailDelegate::paint(QPainter* painter,
     painter->setPen(colors.textPrimary);
     painter->drawText(topRect, Qt::AlignVCenter | Qt::AlignLeft, tr("第 %1 页").arg(orderIndex + 1));
 
+    const int procStatusInt = index.data(PageListModel::ProcessingStatusRole).toInt();
+    if (procStatusInt == 1) { // Running
+        QFont statusFont = option.font;
+        statusFont.setPixelSize(11);
+        painter->setFont(statusFont);
+        painter->setPen(colors.accent);
+        painter->drawText(topRect, Qt::AlignVCenter | Qt::AlignRight, tr("处理中"));
+    } else if (procStatusInt == 2) { // NeedsReview
+        QFont statusFont = option.font;
+        statusFont.setPixelSize(11);
+        painter->setFont(statusFont);
+        painter->setPen(colors.warning);
+        painter->drawText(topRect, Qt::AlignVCenter | Qt::AlignRight, tr("待审阅"));
+    } else if (procStatusInt == 3) { // Failed
+        QFont statusFont = option.font;
+        statusFont.setPixelSize(11);
+        painter->setFont(statusFont);
+        painter->setPen(colors.critical);
+        painter->drawText(topRect, Qt::AlignVCenter | Qt::AlignRight, tr("失败"));
+    }
+
     QString displayName = index.data(PageListModel::DisplayNameRole).toString();
     painter->setFont(option.font);
     painter->setPen(colors.textSecondary);

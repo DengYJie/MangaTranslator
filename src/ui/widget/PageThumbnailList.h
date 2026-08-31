@@ -43,6 +43,7 @@ public:
     void markThumbnailFailed(const domain::PageId& pageId, const QString& safeMessage);
     /// Generation bump: in-flight binds are discarded, Loading rows return to NotLoaded.
     void resetLoadingThumbnails();
+    void setPageProcessingStatus(const domain::PageId& pageId, int status);
 
     [[nodiscard]] const QPixmap* thumbnail(const domain::PageId& pageId) const; // delegate lookup
     [[nodiscard]] int thumbnailCacheTotalCostForTest() const;
