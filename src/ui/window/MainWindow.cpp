@@ -38,7 +38,13 @@ void MainWindow::setNavigationController(navigation::NavigationController* contr
         return;
     }
     connect(this, &NavigationWindow::backRequested, m_controller, &navigation::NavigationController::goBack);
-    connect(this, &NavigationWindow::navigationRequested, m_controller, &navigation::NavigationController::navigate);
+    connect(this, &NavigationWindow::navigationRequested, this, [this](const QString& routeKey) {
+        if (receivers(SIGNAL(navigationInterceptRequested(QString))) > 0) {
+            Q_EMIT navigationInterceptRequested(routeKey);
+        } else {
+            m_controller->navigate(routeKey);
+        }
+    });
     connect(m_controller, &navigation::NavigationController::canGoBackChanged, this, [this](bool canGoBack) {
         titleBar()->setBackButtonVisible(canGoBack);
     });
@@ -89,7 +95,24 @@ void MainWindow::saveWindowGeometry() {
     }
 }
 
+void MainWindow::forceClose() {
+    m_forceClose = true;
+    close();
+}
+
+void MainWindow::forceNavigate(const QString& routeKey) {
+    if (m_controller) {
+        m_controller->navigate(routeKey);
+    }
+}
+
 void MainWindow::closeEvent(QCloseEvent* event) {
+    if (!m_forceClose && receivers(SIGNAL(closeRequested())) > 0) {
+        event->ignore();
+        Q_EMIT closeRequested();
+        return;
+    }
+
     saveWindowGeometry();
     NavigationWindow::closeEvent(event);
 }

@@ -95,6 +95,92 @@ int Application::run() {
     mainWindow->addNavigationItem(editorItem, QStringLiteral("main"));
     mainWindow->registerRoute(QStringLiteral("editor"), editorPage, QStringLiteral("main"));
 
+    // --- Close/Navigation Interception Workflow ---
+    auto pendingAction = std::make_shared<QString>(); // "" means window close, otherwise target route
+
+    auto handleProjectClose = [mainWindow, controller, pendingAction]() {
+        if (pendingAction->isEmpty()) {
+            mainWindow->forceClose();
+        } else {
+            mainWindow->forceNavigate(*pendingAction);
+        }
+    };
+
+    QObject::connect(
+        mainWindow, &ui::window::MainWindow::closeRequested, mainWindow, [editorViewModel, pendingAction]() {
+            *pendingAction = QString();
+            editorViewModel->requestCloseProject();
+        });
+
+    QObject::connect(mainWindow,
+                     &ui::window::MainWindow::navigationInterceptRequested,
+                     mainWindow,
+                     [editorViewModel, pendingAction](const QString& routeKey) {
+                         *pendingAction = routeKey;
+                         editorViewModel->requestCloseProject();
+                     });
+
+    QObject::connect(
+        editorViewModel, &ui::screen::editor::EditorViewModel::projectClosed, mainWindow, handleProjectClose);
+
+    QObject::connect(editorViewModel,
+                     &ui::screen::editor::EditorViewModel::closeDecisionRequested,
+                     mainWindow,
+                     [editorViewModel, mainWindow, handleProjectClose](
+                         const manga::ui::screen::editor::ProjectCloseSummary& summary) {
+                         auto* dialog = new fluent::ContentDialog(mainWindow);
+                         dialog->setTitle(summary.projectName);
+                         dialog->setContent(summary.safeMessage);
+                         dialog->setPrimaryButtonText(QCoreApplication::translate("Application", "保存并关闭"));
+                         dialog->setSecondaryButtonText(QCoreApplication::translate("Application", "不保存"));
+                         dialog->setCloseButtonText(QCoreApplication::translate("Application", "取消"));
+
+                         QObject::connect(
+                             dialog,
+                             &fluent::ContentDialog::primaryButtonClicked,
+                             editorViewModel,
+                             [editorViewModel, mainWindow, handleProjectClose]() {
+                                 // When saving finishes, EditorViewModel emits saveCompleted. We connect a one-off
+                                 // lambda to catch it.
+                                 auto* connection = new QMetaObject::Connection();
+                                 *connection = QObject::connect(
+                                     editorViewModel,
+                                     &ui::screen::editor::EditorViewModel::saveCompleted,
+                                     mainWindow,
+                                     [editorViewModel, handleProjectClose, connection]() {
+                                         QObject::disconnect(*connection);
+                                         delete connection;
+                                         editorViewModel->confirmDiscardAndClose(); // Force closes session after save
+                                     });
+                                 // Also need to handle fail, but prompt says "失败留在编辑器", so we do nothing on fail
+                                 // except disconnect
+                                 auto* failConnection = new QMetaObject::Connection();
+                                 *failConnection = QObject::connect(editorViewModel,
+                                                                    &ui::screen::editor::EditorViewModel::saveFailed,
+                                                                    mainWindow,
+                                                                    [connection, failConnection]() {
+                                                                        QObject::disconnect(*connection);
+                                                                        QObject::disconnect(*failConnection);
+                                                                        delete connection;
+                                                                        delete failConnection;
+                                                                    });
+
+                                 editorViewModel->saveProject();
+                             });
+
+                         QObject::connect(dialog,
+                                          &fluent::ContentDialog::secondaryButtonClicked,
+                                          editorViewModel,
+                                          &ui::screen::editor::EditorViewModel::confirmDiscardAndClose);
+                         QObject::connect(dialog,
+                                          &fluent::ContentDialog::closeButtonClicked,
+                                          editorViewModel,
+                                          &ui::screen::editor::EditorViewModel::cancelClose);
+
+                         dialog->show();
+                     });
+    // --- End Close/Navigation Interception Workflow ---
+
     QObject::connect(homeViewModel,
                      &ui::screen::home::HomeViewModel::projectOpened,
                      editorViewModel,

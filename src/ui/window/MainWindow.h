@@ -22,6 +22,21 @@ public:
     /// Wires the controller to the title bar and panel intents. Non-owning.
     void setNavigationController(navigation::NavigationController* controller);
 
+    /// Call to force close the window bypassing interceptors
+    void forceClose();
+
+    /// Call to force navigation bypassing interceptors
+    void forceNavigate(const QString& routeKey);
+
+Q_SIGNALS:
+    /// Emitted when the user attempts to close the window.
+    /// If connected, receivers must call forceClose() later to actually close.
+    void closeRequested();
+
+    /// Emitted when the user attempts to navigate to a route.
+    /// If connected, receivers must call forceNavigate(routeKey) later to actually navigate.
+    void navigationInterceptRequested(const QString& routeKey);
+
 protected:
     void closeEvent(QCloseEvent* event) override;
 
@@ -31,6 +46,7 @@ private:
 
     application::IAppSettingsStore* m_settingsStore;         // non-owning
     navigation::NavigationController* m_controller{nullptr}; // non-owning
+    bool m_forceClose{false};
 };
 
 } // namespace manga::ui::window
