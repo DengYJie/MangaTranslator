@@ -9,8 +9,9 @@ namespace manga::ui::manga {
 class MangaCanvas;
 }
 namespace manga::ui::widget {
+class InspectorPanel;
 class PageThumbnailList;
-}
+} // namespace manga::ui::widget
 
 namespace manga::ui::screen::editor {
 
@@ -18,8 +19,8 @@ class EditorViewModel;
 struct EditorState;
 struct PageImageDelivery;
 
-/// Editor skeleton page: page thumbnail pane plus the manga canvas workspace.
-/// Inspector, command bar and region editing arrive with P5-C.
+/// Editor skeleton page: page thumbnail pane, manga canvas workspace and the
+/// selection-driven inspector column.
 class EditorPage : public base::BasePage {
     Q_OBJECT
 public:
@@ -31,6 +32,9 @@ public:
     }
     [[nodiscard]] ui::widget::PageThumbnailList* pageListForTest() const {
         return m_pageList;
+    }
+    [[nodiscard]] ui::widget::InspectorPanel* inspectorForTest() const {
+        return m_inspector;
     }
 
 Q_SIGNALS:
@@ -47,6 +51,7 @@ private:
     QSplitter* m_splitter{nullptr};
     ui::widget::PageThumbnailList* m_pageList{nullptr};
     ui::manga::MangaCanvas* m_canvas{nullptr};
+    ui::widget::InspectorPanel* m_inspector{nullptr};
     ui::manga::MangaCanvas::ContentState m_lastPlaceholder{ui::manga::MangaCanvas::ContentState::NoProject};
 };
 

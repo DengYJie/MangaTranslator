@@ -48,6 +48,7 @@ add_library(manga_ui STATIC
     screen/editor/EditorState.h
     screen/editor/EditorViewModel.cpp
     screen/editor/EditorViewModel.h
+    screen/editor/InspectorState.h
     screen/home/HomePage.cpp
     screen/home/HomePage.h
     screen/home/HomeState.h
@@ -68,6 +69,8 @@ add_library(manga_ui STATIC
     screen/import/ImportViewModel.h
     screen/import/PendingSourcesModel.cpp
     screen/import/PendingSourcesModel.h
+    widget/InspectorPanel.cpp
+    widget/InspectorPanel.h
     widget/PageListModel.cpp
     widget/PageListModel.h
     widget/PageThumbnailDelegate.cpp

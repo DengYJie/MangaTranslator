@@ -1,0 +1,355 @@
+#include "ui/widget/InspectorPanel.h"
+
+#include <FluentQt/BasicInput.h>
+#include <FluentQt/Layout.h>
+#include <FluentQt/TextFields.h>
+#include <QListWidget>
+#include <QSignalSpy>
+#include <QtTest>
+
+using namespace manga;
+using manga::ui::screen::editor::InspectorField;
+using manga::ui::screen::editor::InspectorMode;
+using manga::ui::screen::editor::InspectorState;
+using manga::ui::screen::editor::MultiRegionInspectorState;
+using manga::ui::screen::editor::PageInspectorState;
+using manga::ui::screen::editor::SingleRegionInspectorState;
+using manga::ui::widget::InspectorPanel;
+
+namespace {
+
+SingleRegionInspectorState makeSingleState() {
+    SingleRegionInspectorState state;
+    state.pageId = domain::PageId::generate();
+    state.regionId = domain::RegionId::generate();
+    state.sourceText = QStringLiteral("source text");
+    state.sourceType = domain::TextSourceType::OcrAuto;
+    state.sourceConfidence = 0.75;
+    state.manualTranslation = QStringLiteral("manual override");
+    state.hasManualTranslation = true;
+    state.effectiveTranslation = QStringLiteral("manual override");
+    state.candidates = {
+        {QStringLiteral("c1"), QStringLiteral("candidate one"), 0.8, QStringLiteral("provider-a"), false},
+        {QStringLiteral("c2"), QStringLiteral("candidate two"), 0.6, QStringLiteral("provider-b"), true}};
+    state.geometry = domain::RectGeometry{20.0, 30.0, 80.0, 40.0};
+    state.orderIndex = 1;
+    state.fontFamily = QStringLiteral("Comic Sans");
+    state.fontSizePt = 18.0;
+    state.fontWeight = 700;
+    state.letterSpacingEm = 0.05;
+    state.orientation = domain::TextOrientation::Vertical;
+    state.horizontalAlignment = domain::HorizontalAlignment::Left;
+    state.verticalAlignment = domain::VerticalAlignment::Top;
+    state.lineSpacing = 1.5;
+    state.margins = domain::Margins{1.0, 2.0, 3.0, 4.0};
+    state.textColorHex = QStringLiteral("#112233");
+    state.strokeColorHex = QStringLiteral("#AABBCC");
+    state.strokeWidthPx = 2.5;
+    return state;
+}
+
+} // namespace
+
+class InspectorPanelTest : public QObject {
+    Q_OBJECT
+private Q_SLOTS:
+    void initTestCase() {
+        qRegisterMetaType<domain::PageId>();
+        qRegisterMetaType<domain::RegionId>();
+        qRegisterMetaType<QVector<domain::RegionId>>();
+        qRegisterMetaType<InspectorField>();
+    }
+
+    void pageSummaryRendersProjectedValues() {
+        InspectorPanel panel;
+        panel.show();
+
+        PageInspectorState state;
+        state.pageNumber = 2;
+        state.pageCount = 5;
+        state.imageSize = domain::ImageSize{1200, 1800};
+        state.readingDirection = domain::ReadingDirection::RightToLeft;
+        state.regionCount = 4;
+        state.ocrCompletedCount = 3;
+        state.translatedCount = 2;
+        panel.setInspectorState(InspectorState{state});
+
+        QCOMPARE(panel.modeForTest(), InspectorMode::Page);
+        QVERIFY(panel.pageHostForTest()->isVisibleTo(&panel));
+        QVERIFY(!panel.singleHostForTest()->isVisibleTo(&panel));
+        QVERIFY(!panel.multiHostForTest()->isVisibleTo(&panel));
+
+        auto* summary = panel.findChild<fluent::textfields::Label*>(QStringLiteral("inspectorPageSummary"));
+        QVERIFY(summary != nullptr);
+        QVERIFY(summary->text().contains(QStringLiteral("2 / 5")));
+        QVERIFY(summary->text().contains(QStringLiteral("1200 × 1800")));
+        QVERIFY(summary->text().contains(QString::number(4)));
+        auto* guidance = panel.findChild<fluent::textfields::Label*>(QStringLiteral("inspectorPageGuidance"));
+        QVERIFY(guidance != nullptr);
+        QVERIFY(!guidance->text().isEmpty());
+    }
+
+    void singleStatePopulatesAllFields() {
+        InspectorPanel panel;
+        panel.show();
+        const auto state = makeSingleState();
+        panel.setInspectorState(InspectorState{state});
+
+        QCOMPARE(panel.modeForTest(), InspectorMode::Single);
+        QVERIFY(panel.singleHostForTest()->isVisibleTo(&panel));
+
+        auto* sourceEdit = panel.findChild<fluent::textfields::TextEdit*>(QStringLiteral("inspectorSourceEdit"));
+        QVERIFY(sourceEdit != nullptr);
+        QCOMPARE(sourceEdit->toPlainText(), QStringLiteral("source text"));
+        auto* translationEdit =
+            panel.findChild<fluent::textfields::TextEdit*>(QStringLiteral("inspectorTranslationEdit"));
+        QVERIFY(translationEdit != nullptr);
+        QCOMPARE(translationEdit->toPlainText(), QStringLiteral("manual override"));
+
+        auto* candidates = panel.findChild<QListWidget*>(QStringLiteral("inspectorCandidatesList"));
+        QVERIFY(candidates != nullptr);
+        QCOMPARE(candidates->count(), 2);
+        QCOMPARE(candidates->item(0)->data(Qt::UserRole).toString(), QStringLiteral("c1"));
+        QCOMPARE(candidates->currentRow(), 1);
+
+        auto* fontFamily = panel.findChild<fluent::basicinput::ComboBox*>(QStringLiteral("inspectorFontFamily"));
+        QVERIFY(fontFamily != nullptr);
+        QCOMPARE(fontFamily->currentText(), QStringLiteral("Comic Sans"));
+        auto* fontWeight = panel.findChild<fluent::basicinput::ComboBox*>(QStringLiteral("inspectorFontWeight"));
+        QVERIFY(fontWeight != nullptr);
+        QCOMPARE(fontWeight->currentText(), QStringLiteral("700"));
+        auto* fontSize = panel.findChild<fluent::textfields::NumberBox*>(QStringLiteral("inspectorFontSize"));
+        QVERIFY(fontSize != nullptr);
+        QCOMPARE(fontSize->value(), 18.0);
+        auto* orientation = panel.findChild<fluent::basicinput::ComboBox*>(QStringLiteral("inspectorOrientation"));
+        QVERIFY(orientation != nullptr);
+        QCOMPARE(orientation->currentIndex(), static_cast<int>(domain::TextOrientation::Vertical));
+        auto* hAlign = panel.findChild<fluent::basicinput::ComboBox*>(QStringLiteral("inspectorHAlign"));
+        QVERIFY(hAlign != nullptr);
+        QCOMPARE(hAlign->currentIndex(), static_cast<int>(domain::HorizontalAlignment::Left));
+
+        auto* hexEdit = panel.findChild<fluent::textfields::LineEdit*>(QStringLiteral("inspectorTextColorHex"));
+        QVERIFY(hexEdit != nullptr);
+        QCOMPARE(hexEdit->text(), QStringLiteral("#112233"));
+
+        auto* orderLabel = panel.findChild<fluent::textfields::Label*>(QStringLiteral("inspectorRegionOrder"));
+        QVERIFY(orderLabel != nullptr);
+        QVERIFY(orderLabel->text().contains(QString::number(2)));
+    }
+
+    void numericEditEmitsFieldIntentWithStableIds() {
+        InspectorPanel panel;
+        panel.show();
+        const auto state = makeSingleState();
+        panel.setInspectorState(InspectorState{state});
+
+        QSignalSpy spy(&panel, &InspectorPanel::fieldEditCommitted);
+        auto* fontSize = panel.findChild<fluent::textfields::NumberBox*>(QStringLiteral("inspectorFontSize"));
+        QVERIFY(fontSize != nullptr);
+        fontSize->setValue(20.0);
+
+        QCOMPARE(spy.size(), 1);
+        const auto args = spy.takeFirst();
+        QCOMPARE(args.at(0).value<domain::PageId>(), state.pageId);
+        QCOMPARE(args.at(1).value<QVector<domain::RegionId>>(), QVector<domain::RegionId>({state.regionId}));
+        QCOMPARE(args.at(2).value<InspectorField>(), InspectorField::FontSizePt);
+        QCOMPARE(args.at(3).toDouble(), 20.0);
+    }
+
+    void invalidNumericKeepsTextShowsErrorAndSkipsIntent() {
+        InspectorPanel panel;
+        panel.show();
+        panel.setInspectorState(InspectorState{makeSingleState()});
+
+        QSignalSpy spy(&panel, &InspectorPanel::fieldEditCommitted);
+        auto* fontSize = panel.findChild<fluent::textfields::NumberBox*>(QStringLiteral("inspectorFontSize"));
+        auto* fontSizeField = panel.findChild<fluent::layout::Field*>(QStringLiteral("inspectorFontSizeField"));
+        QVERIFY(fontSize != nullptr);
+        QVERIFY(fontSizeField != nullptr);
+
+        fontSize->setText(QStringLiteral("abc"));
+        QTest::keyClick(fontSize, Qt::Key_Return);
+
+        QCOMPARE(spy.size(), 0);
+        QCOMPARE(fontSize->text(), QStringLiteral("abc"));
+        QCOMPARE(fontSizeField->validationState(), fluent::layout::Field::ValidationState::Error);
+        QVERIFY(!fontSizeField->validationMessage().isEmpty());
+
+        // A valid commit clears the error and emits again.
+        fontSize->setText(QStringLiteral("24"));
+        QTest::keyClick(fontSize, Qt::Key_Return);
+        QCOMPARE(spy.size(), 1);
+        QCOMPARE(fontSizeField->validationState(), fluent::layout::Field::ValidationState::None);
+    }
+
+    void invalidHexKeepsTextShowsErrorAndSkipsIntent() {
+        InspectorPanel panel;
+        panel.show();
+        panel.setInspectorState(InspectorState{makeSingleState()});
+
+        QSignalSpy spy(&panel, &InspectorPanel::fieldEditCommitted);
+        auto* hexEdit = panel.findChild<fluent::textfields::LineEdit*>(QStringLiteral("inspectorTextColorHex"));
+        auto* colorField = panel.findChild<fluent::layout::Field*>(QStringLiteral("inspectorTextColorField"));
+        QVERIFY(hexEdit != nullptr);
+        QVERIFY(colorField != nullptr);
+
+        hexEdit->setText(QStringLiteral("ZZZZZZ"));
+        QTest::keyClick(hexEdit, Qt::Key_Return);
+
+        QCOMPARE(spy.size(), 0);
+        QCOMPARE(hexEdit->text(), QStringLiteral("ZZZZZZ"));
+        QCOMPARE(colorField->validationState(), fluent::layout::Field::ValidationState::Error);
+
+        hexEdit->setText(QStringLiteral("#a1b2c3"));
+        QTest::keyClick(hexEdit, Qt::Key_Return);
+        QCOMPARE(spy.size(), 1);
+        QCOMPARE(spy.first().at(2).value<InspectorField>(), InspectorField::TextColorHex);
+        QCOMPARE(spy.first().at(3).toString(), QStringLiteral("#A1B2C3"));
+        QCOMPARE(colorField->validationState(), fluent::layout::Field::ValidationState::None);
+    }
+
+    void candidateAdoptionEmitsStableIds() {
+        InspectorPanel panel;
+        panel.show();
+        const auto state = makeSingleState();
+        panel.setInspectorState(InspectorState{state});
+
+        QSignalSpy spy(&panel, &InspectorPanel::candidateAdoptionRequested);
+        auto* candidates = panel.findChild<QListWidget*>(QStringLiteral("inspectorCandidatesList"));
+        auto* adopt = panel.findChild<fluent::basicinput::Button*>(QStringLiteral("inspectorAdoptCandidate"));
+        QVERIFY(candidates != nullptr);
+        QVERIFY(adopt != nullptr);
+
+        candidates->setCurrentRow(0);
+        QVERIFY(adopt->isEnabled());
+        QTest::mouseClick(adopt, Qt::LeftButton);
+
+        QCOMPARE(spy.size(), 1);
+        const auto args = spy.takeFirst();
+        QCOMPARE(args.at(0).value<domain::PageId>(), state.pageId);
+        QCOMPARE(args.at(1).value<domain::RegionId>(), state.regionId);
+        QCOMPARE(args.at(2).toString(), QStringLiteral("c1"));
+    }
+
+    void multiStateShowsMixedPlaceholdersNotFirstValue() {
+        InspectorPanel panel;
+        panel.show();
+
+        MultiRegionInspectorState state;
+        state.pageId = domain::PageId::generate();
+        state.regionIds = {domain::RegionId::generate(), domain::RegionId::generate(), domain::RegionId::generate()};
+        state.fontFamily = QStringLiteral("Comic Sans");
+        // fontSizePt, colors, orientation stay mixed (nullopt).
+        panel.setInspectorState(InspectorState{state});
+
+        QCOMPARE(panel.modeForTest(), InspectorMode::Multi);
+        QVERIFY(panel.multiHostForTest()->isVisibleTo(&panel));
+
+        auto* subtitle = panel.findChild<fluent::textfields::Label*>(QStringLiteral("inspectorHeaderSubtitle"));
+        QVERIFY(subtitle != nullptr);
+        QVERIFY(subtitle->text().contains(QString::number(3)));
+
+        auto* fontFamily = panel.findChild<fluent::basicinput::ComboBox*>(QStringLiteral("inspectorMultiFontFamily"));
+        QVERIFY(fontFamily != nullptr);
+        QCOMPARE(fontFamily->currentText(), QStringLiteral("Comic Sans"));
+
+        auto* fontSize = panel.findChild<fluent::textfields::NumberBox*>(QStringLiteral("inspectorMultiFontSize"));
+        QVERIFY(fontSize != nullptr);
+        QVERIFY(fontSize->text().isEmpty());
+        QVERIFY(!fontSize->placeholderText().isEmpty());
+
+        auto* hexEdit = panel.findChild<fluent::textfields::LineEdit*>(QStringLiteral("inspectorMultiTextColorHex"));
+        QVERIFY(hexEdit != nullptr);
+        QVERIFY(hexEdit->text().isEmpty());
+        QVERIFY(!hexEdit->placeholderText().isEmpty());
+
+        auto* weight = panel.findChild<fluent::basicinput::ComboBox*>(QStringLiteral("inspectorMultiFontWeight"));
+        QVERIFY(weight != nullptr);
+        QCOMPARE(weight->currentIndex(), -1);
+    }
+
+    void multiBatchEditEmitsAllSelectedIds() {
+        InspectorPanel panel;
+        panel.show();
+
+        MultiRegionInspectorState state;
+        state.pageId = domain::PageId::generate();
+        state.regionIds = {domain::RegionId::generate(), domain::RegionId::generate()};
+        panel.setInspectorState(InspectorState{state});
+
+        QSignalSpy spy(&panel, &InspectorPanel::fieldEditCommitted);
+        auto* fontSize = panel.findChild<fluent::textfields::NumberBox*>(QStringLiteral("inspectorMultiFontSize"));
+        QVERIFY(fontSize != nullptr);
+        fontSize->setValue(16.0);
+
+        QCOMPARE(spy.size(), 1);
+        QCOMPARE(spy.first().at(1).value<QVector<domain::RegionId>>(), state.regionIds);
+        QCOMPARE(spy.first().at(2).value<InspectorField>(), InspectorField::FontSizePt);
+    }
+
+    void multiDeleteEmitsStableIds() {
+        InspectorPanel panel;
+        panel.show();
+
+        MultiRegionInspectorState state;
+        state.pageId = domain::PageId::generate();
+        state.regionIds = {domain::RegionId::generate(), domain::RegionId::generate()};
+        panel.setInspectorState(InspectorState{state});
+
+        QSignalSpy spy(&panel, &InspectorPanel::deleteRegionsRequested);
+        auto* deleteButton = panel.findChild<fluent::basicinput::Button*>(QStringLiteral("inspectorMultiDelete"));
+        QVERIFY(deleteButton != nullptr);
+        QTest::mouseClick(deleteButton, Qt::LeftButton);
+
+        QCOMPARE(spy.size(), 1);
+        QCOMPARE(spy.first().at(0).value<domain::PageId>(), state.pageId);
+        QCOMPARE(spy.first().at(1).value<QVector<domain::RegionId>>(), state.regionIds);
+    }
+
+    void lockedSingleRegionDisablesEditingButAllowsViewing() {
+        InspectorPanel panel;
+        panel.show();
+        auto state = makeSingleState();
+        state.isLocked = true;
+        panel.setInspectorState(InspectorState{state});
+
+        auto* sourceEdit = panel.findChild<fluent::textfields::TextEdit*>(QStringLiteral("inspectorSourceEdit"));
+        auto* translationEdit =
+            panel.findChild<fluent::textfields::TextEdit*>(QStringLiteral("inspectorTranslationEdit"));
+        auto* fontSize = panel.findChild<fluent::textfields::NumberBox*>(QStringLiteral("inspectorFontSize"));
+        QVERIFY(sourceEdit != nullptr);
+        QVERIFY(translationEdit != nullptr);
+        QVERIFY(fontSize != nullptr);
+        QVERIFY(sourceEdit->isReadOnly());
+        QVERIFY(translationEdit->isReadOnly());
+        QVERIFY(!fontSize->isEnabled());
+        // Values remain visible.
+        QCOMPARE(sourceEdit->toPlainText(), QStringLiteral("source text"));
+    }
+
+    void hostSwitchingIsExclusive() {
+        InspectorPanel panel;
+        panel.show();
+
+        panel.setInspectorState(InspectorState{makeSingleState()});
+        QVERIFY(panel.singleHostForTest()->isVisibleTo(&panel));
+        QVERIFY(!panel.pageHostForTest()->isVisibleTo(&panel));
+
+        MultiRegionInspectorState multi;
+        multi.pageId = domain::PageId::generate();
+        multi.regionIds = {domain::RegionId::generate(), domain::RegionId::generate()};
+        panel.setInspectorState(InspectorState{multi});
+        QVERIFY(panel.multiHostForTest()->isVisibleTo(&panel));
+        QVERIFY(!panel.singleHostForTest()->isVisibleTo(&panel));
+
+        PageInspectorState pageState;
+        pageState.pageNumber = 1;
+        pageState.pageCount = 1;
+        panel.setInspectorState(InspectorState{pageState});
+        QVERIFY(panel.pageHostForTest()->isVisibleTo(&panel));
+        QVERIFY(!panel.multiHostForTest()->isVisibleTo(&panel));
+    }
+};
+
+QTEST_MAIN(InspectorPanelTest)
+#include "inspector_panel_test.moc"

@@ -118,6 +118,10 @@ private:
     /// Called after openProjectSession, selectPage, and synchronous mutations.
     void rebuildCurrentPageProjection();
 
+    /// Recomputes s.inspector from the current selection and the session aggregate.
+    /// Caller must invoke inside an updateState lambda after selection/page fields are set.
+    void updateInspectorProjection(EditorState& s) const;
+
     /// Hook for future text editing sessions. Currently a no-op placeholder.
     void sealActiveTextSession() {}
 

@@ -4,6 +4,7 @@
 #include "domain/model/Geometry.h"
 #include "domain/model/Uuid.h"
 #include "ui/base/DomainMetaTypes.h"
+#include "ui/screen/editor/InspectorState.h"
 
 #include <QImage>
 #include <QPointF>
@@ -113,6 +114,8 @@ struct EditorState {
     PreviewMode previewMode{PreviewMode::Original};
     /// Inspector mode derived from selection count.
     InspectorMode inspectorMode{InspectorMode::Page};
+    /// Inspector surface projection driven by selectedRegionIds.
+    InspectorState inspector;
 
     /// Mirrors undo and redo availability on the project stack.
     bool canUndo{false};

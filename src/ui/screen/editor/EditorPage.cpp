@@ -3,6 +3,7 @@
 #include "ui/manga/MangaCanvas.h"
 #include "ui/screen/editor/EditorState.h"
 #include "ui/screen/editor/EditorViewModel.h"
+#include "ui/widget/InspectorPanel.h"
 #include "ui/widget/PageListModel.h"
 #include "ui/widget/PageThumbnailList.h"
 
@@ -34,6 +35,17 @@ EditorPage::EditorPage(EditorViewModel* viewModel, QWidget* parent) : base::Base
     connect(m_canvas, &ui::manga::MangaCanvas::placeholderActionActivated, this, &EditorPage::handlePlaceholderAction);
 
     connect(m_viewModel, &EditorViewModel::pageImageReady, this, &EditorPage::handlePageImageReady);
+
+    // Inspector deletion intent reuses the existing region lifecycle command path.
+    // Text and layout edit intents are not consumed by the ViewModel yet.
+    connect(m_inspector,
+            &widget::InspectorPanel::deleteRegionsRequested,
+            m_viewModel,
+            [this](const domain::PageId& pageId, const QVector<domain::RegionId>& regionIds) {
+                if (pageId == m_viewModel->state().currentPageId) {
+                    m_viewModel->deleteRegions(regionIds);
+                }
+            });
 
     m_viewModel->observe(this, [this](const EditorState& state) { render(state); });
 
@@ -70,13 +82,25 @@ void EditorPage::buildUi() {
     m_canvas = new ui::manga::MangaCanvas(m_splitter);
     m_splitter->addWidget(m_canvas);
 
+    auto* inspectorCard = new fluent::layout::Card(m_splitter);
+    inspectorCard->setObjectName(QStringLiteral("editorInspectorCard"));
+    inspectorCard->setAppearance(fluent::layout::Card::Layer);
+    auto* inspectorLayout = new QVBoxLayout(inspectorCard);
+    inspectorLayout->setContentsMargins(0, 0, 0, 0);
+    inspectorLayout->setSpacing(0);
+    m_inspector = new widget::InspectorPanel(inspectorCard);
+    inspectorLayout->addWidget(m_inspector);
+    m_splitter->addWidget(inspectorCard);
+
     m_splitter->setCollapsible(0, false);
     m_splitter->setCollapsible(1, false);
+    m_splitter->setCollapsible(2, false);
 
-    // Initial width 232 px for page list
-    m_splitter->setSizes({232, 10000});
+    // Page list 232 px, inspector 352 px, canvas takes the remainder.
+    m_splitter->setSizes({232, 10000, 352});
     m_splitter->setStretchFactor(0, 0);
     m_splitter->setStretchFactor(1, 1);
+    m_splitter->setStretchFactor(2, 0);
 }
 
 void EditorPage::render(const EditorState& state) {
@@ -89,6 +113,8 @@ void EditorPage::render(const EditorState& state) {
     m_pageList->model()->setPages(entries); // Model 自带相等短路
 
     m_pageList->setCurrentPageId(state.currentPageId);
+
+    m_inspector->setInspectorState(state.inspector);
 
     if (!state.projectId.isValid()) {
         m_lastPlaceholder = ui::manga::MangaCanvas::ContentState::NoProject;

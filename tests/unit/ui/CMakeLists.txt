@@ -344,6 +344,27 @@ set_tests_properties(manga_tests_ui_region_interaction PROPERTIES
     TIMEOUT 15
 )
 
+qt_add_executable(manga_tests_ui_inspector_panel
+    inspector_panel_test.cpp
+)
+manga_apply_project_options(manga_tests_ui_inspector_panel)
+set_target_properties(manga_tests_ui_inspector_panel PROPERTIES AUTOMOC ON)
+
+target_link_libraries(manga_tests_ui_inspector_panel
+    PRIVATE
+        manga_ui
+        Qt6::Test
+        Qt6::Widgets
+)
+
+manga_deploy_qt_runtime(manga_tests_ui_inspector_panel)
+add_test(NAME manga_tests_ui_inspector_panel COMMAND manga_tests_ui_inspector_panel)
+set_tests_properties(manga_tests_ui_inspector_panel PROPERTIES
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
+    LABELS "unit;ui"
+    TIMEOUT 15
+)
+
 qt_add_executable(manga_tests_ui_editor_commands
     editor_commands_test.cpp
 )
@@ -360,6 +381,27 @@ target_link_libraries(manga_tests_ui_editor_commands
 manga_deploy_qt_runtime(manga_tests_ui_editor_commands)
 add_test(NAME manga_tests_ui_editor_commands COMMAND manga_tests_ui_editor_commands)
 set_tests_properties(manga_tests_ui_editor_commands PROPERTIES
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
+    LABELS "unit;ui"
+    TIMEOUT 15
+)
+
+qt_add_executable(manga_tests_ui_inspector_state
+    inspector_state_test.cpp
+)
+manga_apply_project_options(manga_tests_ui_inspector_state)
+set_target_properties(manga_tests_ui_inspector_state PROPERTIES AUTOMOC ON)
+
+target_link_libraries(manga_tests_ui_inspector_state
+    PRIVATE
+        manga_ui
+        Qt6::Test
+        Qt6::Widgets
+)
+
+manga_deploy_qt_runtime(manga_tests_ui_inspector_state)
+add_test(NAME manga_tests_ui_inspector_state COMMAND manga_tests_ui_inspector_state)
+set_tests_properties(manga_tests_ui_inspector_state PROPERTIES
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
     LABELS "unit;ui"
     TIMEOUT 15
