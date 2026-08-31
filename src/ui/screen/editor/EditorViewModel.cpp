@@ -1225,7 +1225,9 @@ void EditorViewModel::cancelProjectTasks() {
     if (!m_hasSession) {
         return;
     }
-    ++m_viewState.viewGeneration;
+    const auto viewGen = m_state.viewGeneration + 1;
+    updateState([&](EditorState& s) { s.viewGeneration = viewGen; });
+    Q_EMIT thumbnailsInvalidated();
 }
 
 void EditorViewModel::undo() {

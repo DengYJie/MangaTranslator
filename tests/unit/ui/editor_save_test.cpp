@@ -67,6 +67,7 @@ private Q_SLOTS:
         domain::TextRegion region(domain::RegionId::generate(), {10, 10, 100, 100}, 0);
         page.addRegion(region);
         session.project.addPage(page);
+        session.project.markCleanIfRevision(session.project.revision());
 
         viewModel.openProjectSession(session);
         viewModel.selectPage(page.id());
@@ -94,6 +95,99 @@ private Q_SLOTS:
         QTRY_VERIFY(!viewModel.state().saveState.isSaving);
         QVERIFY(viewModel.state().saveState.isDirty);
         QVERIFY(!viewModel.undoStackIsCleanForTest());
+    }
+
+    void cleanSave() {
+        test::FakeThumbnailStore thumbnails;
+        test::FakePageImageLoader images;
+        application::OperationRegistry registry;
+        DelayProjectRepository repository;
+        EditorViewModel viewModel(&thumbnails, &images, &registry, &repository);
+        application::OpenedProjectSession session;
+        session.project = domain::ComicProject("Demo");
+        session.projectRootPath = QStringLiteral("D:/manga/demo");
+        domain::ComicPage page(domain::PageId::generate(), "page1.png", {1000, 1500}, 0);
+        session.project.addPage(page);
+        session.project.markCleanIfRevision(session.project.revision());
+
+        viewModel.openProjectSession(session);
+        viewModel.selectPage(page.id());
+
+        // Dirty it
+        viewModel.createRegion(domain::RectGeometry(10, 10, 100, 100));
+        QVERIFY(viewModel.state().saveState.isDirty);
+
+        viewModel.saveProject();
+        QVERIFY(viewModel.state().saveState.isSaving);
+        const quint64 rev = viewModel.currentProjectRevision();
+        repository.savePromise->addResult(application::SaveProjectResult{rev});
+        repository.savePromise->finish();
+
+        QTRY_VERIFY(!viewModel.state().saveState.isSaving);
+        QVERIFY(!viewModel.state().saveState.isDirty);
+        QVERIFY(viewModel.undoStackIsCleanForTest());
+    }
+
+    void saveFailureKeepsDirty() {
+        test::FakeThumbnailStore thumbnails;
+        test::FakePageImageLoader images;
+        application::OperationRegistry registry;
+        DelayProjectRepository repository;
+        EditorViewModel viewModel(&thumbnails, &images, &registry, &repository);
+        application::OpenedProjectSession session;
+        session.project = domain::ComicProject("Demo");
+        session.projectRootPath = QStringLiteral("D:/manga/demo");
+        domain::ComicPage page(domain::PageId::generate(), "page1.png", {1000, 1500}, 0);
+        session.project.addPage(page);
+        session.project.markCleanIfRevision(session.project.revision());
+
+        viewModel.openProjectSession(session);
+        viewModel.selectPage(page.id());
+
+        viewModel.createRegion(domain::RectGeometry(10, 10, 100, 100));
+        QVERIFY(viewModel.state().saveState.isDirty);
+
+        viewModel.saveProject();
+        QVERIFY(viewModel.state().saveState.isSaving);
+
+        repository.savePromise->addResult(std::unexpected(
+            application::makeApplicationError(application::ErrorCategory::Persistence, "test", "fail")));
+        repository.savePromise->finish();
+
+        QTRY_VERIFY(!viewModel.state().saveState.isSaving);
+        QVERIFY(viewModel.state().saveState.isDirty);
+    }
+
+    void saveSealsTextEdit() {
+        test::FakeThumbnailStore thumbnails;
+        test::FakePageImageLoader images;
+        application::OperationRegistry registry;
+        DelayProjectRepository repository;
+        EditorViewModel viewModel(&thumbnails, &images, &registry, &repository);
+        // Force the clock to not advance, so normally it would merge
+        viewModel.setTextEditClockForTest([]() { return 1000; });
+        application::OpenedProjectSession session;
+        session.project = domain::ComicProject("Demo");
+        session.projectRootPath = QStringLiteral("D:/manga/demo");
+        domain::ComicPage page(domain::PageId::generate(), "page1.png", {1000, 1500}, 0);
+        domain::TextRegion region(domain::RegionId::generate(), {10, 10, 100, 100}, 0);
+        page.addRegion(region);
+        session.project.addPage(page);
+        session.project.markCleanIfRevision(session.project.revision());
+
+        viewModel.openProjectSession(session);
+        viewModel.selectPage(page.id());
+        viewModel.selectRegion(region.id(), RegionSelectionMode::Replace);
+
+        viewModel.commitInspectorFieldEdit(
+            page.id(), {region.id()}, InspectorField::ManualTranslation, QStringLiteral("A"));
+        QCOMPARE(viewModel.undoStackCountForTest(), 1);
+
+        viewModel.saveProject();
+
+        viewModel.commitInspectorFieldEdit(
+            page.id(), {region.id()}, InspectorField::ManualTranslation, QStringLiteral("B"));
+        QCOMPARE(viewModel.undoStackCountForTest(), 2); // Did not merge because save sealed it
     }
 };
 

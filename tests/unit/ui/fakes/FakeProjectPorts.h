@@ -75,10 +75,11 @@ public:
         return application::makeFailedFuture<application::OpenProjectResult>(
             application::makeApplicationError(application::ErrorCategory::Project, "test.recover_failed", "stub"));
     }
-    QFuture<application::Result<application::SaveProjectResult>> saveProject(application::SaveProjectRequest,
+    QFuture<application::Result<application::SaveProjectResult>> saveProject(application::SaveProjectRequest request,
                                                                              application::OperationContext) override {
         ++saveCallCount;
-        return application::makeReadyFuture<application::SaveProjectResult>(application::SaveProjectResult{1});
+        return application::makeReadyFuture<application::SaveProjectResult>(
+            application::SaveProjectResult{request.project.revision()});
     }
     QFuture<application::Result<application::SaveAsProjectResult>>
     saveProjectAs(application::SaveAsProjectRequest, application::OperationContext) override {

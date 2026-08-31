@@ -4,6 +4,7 @@
 #include "ui/manga/MangaCanvas.h"
 #include "ui/screen/editor/EditorViewModel.h"
 
+#include <QApplication>
 #include <QGraphicsProxyWidget>
 #include <QGraphicsScene>
 #include <QImage>
@@ -39,6 +40,7 @@ void EditorRegionWorkflowTest::testWorkflow() {
     auto page2 = PageId::generate();
     session.project.addPage(ComicPage(page1, "page1.png", ImageSize{1200, 1800}, 0));
     session.project.addPage(ComicPage(page2, "page2.png", ImageSize{1200, 1800}, 1));
+    session.project.markCleanIfRevision(session.project.revision());
 
     vm.openProjectSession(std::move(session));
     QCOMPARE(vm.state().currentPageId, page1);
@@ -87,6 +89,7 @@ void EditorRegionWorkflowTest::testWorkflow() {
 
     // Save
     vm.saveProject();
+    QCoreApplication::processEvents();
     QVERIFY(!vm.state().saveState.isDirty);
 
     // New edit
@@ -104,7 +107,7 @@ void EditorRegionWorkflowTest::testWorkflow() {
 }
 
 void EditorRegionWorkflowTest::testPerformance() {
-    // 构造 300 Region 页面
+    // Construct page with 300 regions
     application::OperationRegistry registry;
     test::FakeThumbnailStore thumbStore;
     test::FakePageImageLoader imageLoader;
@@ -137,7 +140,7 @@ void EditorRegionWorkflowTest::testPerformance() {
     }
     canvas.setRegions(displayRegions);
 
-    // 断言 scene item 数量线性且无 QWidget-per-region
+    // Assert scene items scale linearly and there are no QWidget-per-region items
     int itemCount = canvas.scene()->items().size();
     QVERIFY(itemCount > 300 && itemCount < 300 * 10);
 
@@ -163,10 +166,46 @@ void EditorRegionWorkflowTest::testPerformance() {
     int elapsed = timer.elapsed();
     qDebug() << "Pan/Zoom time for 300 regions:" << elapsed << "ms";
 
-    // pan/zoom 时 Domain 查询计数、布局调用计数、I/O 调用计数均为 0
+    // Assert that Domain queries, layout calls, and I/O calls are 0 during pan/zoom
     QCOMPARE(imageLoader.callCount, ioCountBefore);
     QCOMPARE(thumbStore.readCount, readCountBefore);
 }
 
-QTEST_MAIN(EditorRegionWorkflowTest)
+int main(int argc, char* argv[]) {
+    FILE* f = fopen("test_trace.log", "w");
+    if (f) {
+        fprintf(f, "ENTERING MAIN\n");
+        fflush(f);
+    }
+    try {
+        QApplication app(argc, argv);
+        if (f) {
+            fprintf(f, "QAPP CREATED\n");
+            fflush(f);
+        }
+        EditorRegionWorkflowTest tc;
+        if (f) {
+            fprintf(f, "TEST OBJECT CREATED\n");
+            fflush(f);
+        }
+        int ret = QTest::qExec(&tc, argc, argv);
+        if (f) {
+            fprintf(f, "QEXEC RETURNED %d\n", ret);
+            fclose(f);
+        }
+        return ret;
+    } catch (const std::exception& e) {
+        if (f) {
+            fprintf(f, "Exception: %s\n", e.what());
+            fclose(f);
+        }
+        return 1;
+    } catch (...) {
+        if (f) {
+            fprintf(f, "Unknown exception\n");
+            fclose(f);
+        }
+        return 1;
+    }
+}
 #include "editor_region_workflow_test.moc"
