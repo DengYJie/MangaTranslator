@@ -2,6 +2,7 @@
 #include "application/workflow/OperationRegistry.h"
 #include "fakes/FakeImagePorts.h"
 #include "ui/base/DomainMetaTypes.h"
+#include "ui/manga/RegionInteraction.h"
 #include "ui/screen/editor/EditorState.h"
 #include "ui/screen/editor/EditorViewModel.h"
 
@@ -9,6 +10,7 @@
 #include <QtTest>
 
 using namespace manga;
+using manga::ui::canvas::EditKind;
 using manga::ui::screen::editor::CanvasTool;
 using manga::ui::screen::editor::DocumentSaveState;
 using manga::ui::screen::editor::EditorViewModel;
@@ -577,6 +579,230 @@ private slots:
         QCOMPARE(viewModel.state().previewMode, PreviewMode::Translated);
         viewModel.setPreviewMode(PreviewMode::Compare);
         QCOMPARE(viewModel.state().previewMode, PreviewMode::Compare);
+    }
+
+    // ---- Undo/redo command integration tests ----
+
+    void createRegionPushesCommandAndFlipsCanUndo() {
+        Fixture f;
+        EditorViewModel viewModel(&f.thumbnailStore, &f.imageLoader, &f.registry);
+        auto session = makeSession(1, 0);
+        session.project.markClean();
+        viewModel.openProjectSession(std::move(session));
+        QTRY_VERIFY_WITH_TIMEOUT(!viewModel.state().isPageLoading, 2000);
+
+        QVERIFY(!viewModel.state().canUndo);
+        QVERIFY(!viewModel.state().canRedo);
+
+        domain::RectGeometry geom{100.0, 100.0, 50.0, 50.0};
+        viewModel.createRegion(geom);
+
+        QVERIFY(viewModel.state().canUndo);
+        QVERIFY(!viewModel.state().canRedo);
+        QCOMPARE(viewModel.state().regions.size(), 1);
+        QCOMPARE(viewModel.state().saveState.undoText, QStringLiteral("Create Region"));
+        QVERIFY(viewModel.state().saveState.isDirty);
+    }
+
+    void undoCreateRemovesRegionAndFlipsCanRedo() {
+        Fixture f;
+        EditorViewModel viewModel(&f.thumbnailStore, &f.imageLoader, &f.registry);
+        auto session = makeSession(1, 0);
+        viewModel.openProjectSession(std::move(session));
+        QTRY_VERIFY_WITH_TIMEOUT(!viewModel.state().isPageLoading, 2000);
+
+        domain::RectGeometry geom{100.0, 100.0, 50.0, 50.0};
+        viewModel.createRegion(geom);
+        QCOMPARE(viewModel.state().regions.size(), 1);
+
+        viewModel.undo();
+        QVERIFY(!viewModel.state().canUndo);
+        QVERIFY(viewModel.state().canRedo);
+        QCOMPARE(viewModel.state().regions.size(), 0);
+        QCOMPARE(viewModel.state().saveState.redoText, QStringLiteral("Create Region"));
+
+        viewModel.redo();
+        QVERIFY(viewModel.state().canUndo);
+        QVERIFY(!viewModel.state().canRedo);
+        QCOMPARE(viewModel.state().regions.size(), 1);
+    }
+
+    void deleteRegionsPushesBatchCommand() {
+        Fixture f;
+        EditorViewModel viewModel(&f.thumbnailStore, &f.imageLoader, &f.registry);
+        auto session = makeSession(1, 3);
+        viewModel.openProjectSession(std::move(session));
+        QTRY_VERIFY_WITH_TIMEOUT(!viewModel.state().isPageLoading, 2000);
+
+        QVector<domain::RegionId> ids;
+        for (const auto& rp : viewModel.state().regions) {
+            ids.append(rp.id);
+        }
+        viewModel.deleteRegions(ids);
+
+        QVERIFY(viewModel.state().canUndo);
+        QCOMPARE(viewModel.state().regions.size(), 0);
+        QCOMPARE(viewModel.state().saveState.undoText, QStringLiteral("Delete Regions"));
+
+        viewModel.undo();
+        QCOMPARE(viewModel.state().regions.size(), 3);
+    }
+
+    void commitRegionGeometryPushesCommand() {
+        Fixture f;
+        EditorViewModel viewModel(&f.thumbnailStore, &f.imageLoader, &f.registry);
+        auto session = makeSession(1, 1);
+        viewModel.openProjectSession(std::move(session));
+        QTRY_VERIFY_WITH_TIMEOUT(!viewModel.state().isPageLoading, 2000);
+
+        const auto r0 = viewModel.state().regions.first().id;
+        const auto oldGeom = viewModel.state().regions.first().geometry;
+        domain::RectGeometry newGeom{200.0, 200.0, 80.0, 40.0};
+
+        viewModel.commitRegionGeometry(r0, newGeom, EditKind::Move);
+
+        QVERIFY(viewModel.state().canUndo);
+        QCOMPARE(viewModel.state().regions.first().geometry, newGeom);
+
+        viewModel.undo();
+        QCOMPARE(viewModel.state().regions.first().geometry, oldGeom);
+    }
+
+    void noOpGeometryDoesNotPushCommand() {
+        Fixture f;
+        EditorViewModel viewModel(&f.thumbnailStore, &f.imageLoader, &f.registry);
+        auto session = makeSession(1, 1);
+        viewModel.openProjectSession(std::move(session));
+        QTRY_VERIFY_WITH_TIMEOUT(!viewModel.state().isPageLoading, 2000);
+
+        const auto r0 = viewModel.state().regions.first().id;
+        const auto currentGeom = viewModel.state().regions.first().geometry;
+
+        // Same geometry is a no-op.
+        viewModel.commitRegionGeometry(r0, currentGeom, EditKind::Move);
+        QVERIFY(!viewModel.state().canUndo);
+    }
+
+    void boundsValidationRejectsCreateRegion() {
+        Fixture f;
+        EditorViewModel viewModel(&f.thumbnailStore, &f.imageLoader, &f.registry);
+        auto session = makeSession(1, 0);
+        viewModel.openProjectSession(std::move(session));
+        QTRY_VERIFY_WITH_TIMEOUT(!viewModel.state().isPageLoading, 2000);
+
+        // Exceeds page bounds (1200x1800).
+        domain::RectGeometry bad{1100.0, 1700.0, 200.0, 200.0};
+        viewModel.createRegion(bad);
+        QVERIFY(!viewModel.state().canUndo);
+        QCOMPARE(viewModel.state().regions.size(), 0);
+    }
+
+    void smallRegionRejectedByCreateRegion() {
+        Fixture f;
+        EditorViewModel viewModel(&f.thumbnailStore, &f.imageLoader, &f.registry);
+        auto session = makeSession(1, 0);
+        viewModel.openProjectSession(std::move(session));
+        QTRY_VERIFY_WITH_TIMEOUT(!viewModel.state().isPageLoading, 2000);
+
+        // Below minimum dimension (8x8).
+        domain::RectGeometry tiny{100.0, 100.0, 4.0, 4.0};
+        viewModel.createRegion(tiny);
+        QVERIFY(!viewModel.state().canUndo);
+        QCOMPARE(viewModel.state().regions.size(), 0);
+    }
+
+    void crossPageUndoNavigatesToAffectedPage() {
+        Fixture f;
+        EditorViewModel viewModel(&f.thumbnailStore, &f.imageLoader, &f.registry);
+        auto session = makeSession(2, 0);
+        viewModel.openProjectSession(std::move(session));
+        QTRY_VERIFY_WITH_TIMEOUT(!viewModel.state().isPageLoading, 2000);
+
+        const auto firstPage = viewModel.state().currentPageId;
+
+        // Create region on first page.
+        domain::RectGeometry geom{100.0, 100.0, 50.0, 50.0};
+        viewModel.createRegion(geom);
+        QCOMPARE(viewModel.state().regions.size(), 1);
+
+        // Switch to second page.
+        const auto secondPage = viewModel.state().pages[1].id;
+        viewModel.selectPage(secondPage);
+        QTRY_VERIFY_WITH_TIMEOUT(!viewModel.state().isPageLoading, 2000);
+        QCOMPARE(viewModel.state().currentPageId, secondPage);
+        QCOMPARE(viewModel.state().regions.size(), 0);
+
+        // Undo should navigate back to first page.
+        viewModel.undo();
+        QCOMPARE(viewModel.state().currentPageId, firstPage);
+        QCOMPARE(viewModel.state().regions.size(), 0);
+    }
+
+    void closeResetsStackState() {
+        Fixture f;
+        EditorViewModel viewModel(&f.thumbnailStore, &f.imageLoader, &f.registry);
+        auto session = makeSession(1, 0);
+        viewModel.openProjectSession(std::move(session));
+        QTRY_VERIFY_WITH_TIMEOUT(!viewModel.state().isPageLoading, 2000);
+
+        domain::RectGeometry geom{100.0, 100.0, 50.0, 50.0};
+        viewModel.createRegion(geom);
+        QVERIFY(viewModel.state().canUndo);
+
+        viewModel.closeProjectSession();
+        QVERIFY(!viewModel.state().canUndo);
+        QVERIFY(!viewModel.state().canRedo);
+        QVERIFY(!viewModel.state().undoHistoryFaulted);
+    }
+
+    void equalStateSuppressionHoldsForUndoIntents() {
+        Fixture f;
+        EditorViewModel viewModel(&f.thumbnailStore, &f.imageLoader, &f.registry);
+        auto session = makeSession(1, 0);
+        viewModel.openProjectSession(std::move(session));
+        QTRY_VERIFY_WITH_TIMEOUT(!viewModel.state().isPageLoading, 2000);
+
+        QSignalSpy spy(&viewModel, &EditorViewModel::stateChanged);
+        const int countBefore = spy.size();
+
+        // Undo with nothing to undo should not emit.
+        viewModel.undo();
+        QCOMPARE(spy.size(), countBefore);
+
+        // Redo with nothing to redo should not emit.
+        viewModel.redo();
+        QCOMPARE(spy.size(), countBefore);
+    }
+
+    void faultedHistoryBlocksSubsequentUndoRedo() {
+        Fixture f;
+        EditorViewModel viewModel(&f.thumbnailStore, &f.imageLoader, &f.registry);
+        auto session = makeSession(1, 1);
+        viewModel.openProjectSession(std::move(session));
+        QTRY_VERIFY_WITH_TIMEOUT(!viewModel.state().isPageLoading, 2000);
+
+        const auto r0 = viewModel.state().regions.first().id;
+        const auto oldGeom = viewModel.state().regions.first().geometry;
+        domain::RectGeometry newGeom{200.0, 200.0, 80.0, 40.0};
+
+        // Push a geometry command.
+        viewModel.commitRegionGeometry(r0, newGeom, EditKind::Move);
+        QVERIFY(viewModel.state().canUndo);
+        QVERIFY(!viewModel.state().undoHistoryFaulted);
+
+        // Remove the region via test hook so replay will fail.
+        QVERIFY(viewModel.removeRegionForTest(r0));
+
+        // Undo should detect the fault.
+        viewModel.undo();
+        QVERIFY(viewModel.state().undoHistoryFaulted);
+
+        // Subsequent undo/redo are no-ops while faulted.
+        const int regionCountAfterFault = viewModel.state().regions.size();
+        viewModel.undo();
+        QCOMPARE(viewModel.state().regions.size(), regionCountAfterFault);
+        viewModel.redo();
+        QCOMPARE(viewModel.state().regions.size(), regionCountAfterFault);
     }
 };
 

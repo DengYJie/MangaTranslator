@@ -7,6 +7,7 @@
 #include "application/usecase/region/RegionUseCases.h"
 #include "application/usecase/thumbnail/ThumbnailUseCases.h"
 #include "application/workflow/OperationRegistry.h"
+#include "ui/command/RegionCommands.h"
 
 #include <QFileInfo>
 
@@ -65,6 +66,11 @@ void EditorViewModel::openProjectSession(application::OpenedProjectSession sessi
     m_hasSession = true;
     m_viewTransforms.clear();
 
+    // Create undo infrastructure after aggregate is stored.
+    m_undoStack = std::make_unique<QUndoStack>();
+    m_commandContext = std::make_unique<command::EditorCommandContext>(&m_openedSession->project);
+    m_undoHistoryFaulted = false;
+
     updateState([this](EditorState& s) {
         s.projectId = m_session.projectId;
         s.projectName = m_session.projectName;
@@ -114,6 +120,11 @@ void EditorViewModel::closeProjectSession() {
         m_pageLoadOperation = application::OperationId{};
     }
     invalidateRequests();
+
+    // Destroy undo infrastructure before releasing the aggregate.
+    m_undoStack.reset();
+    m_commandContext.reset();
+    m_undoHistoryFaulted = false;
 
     m_hasSession = false;
     m_session = application::ProjectSessionDescriptor{};
@@ -652,6 +663,205 @@ const application::PageDescriptor* EditorViewModel::findPage(const domain::PageI
         }
     }
     return nullptr;
+}
+
+void EditorViewModel::createRegion(const domain::RectGeometry& geometry) {
+    if (!m_hasSession || !m_undoStack || !m_commandContext || !m_state.currentPageId.isValid()) {
+        return;
+    }
+
+    // Validate geometry: >= 8x8 inside page bounds.
+    const auto pageSize = m_commandContext->pageSize(m_state.currentPageId);
+    if (!geometry.isValid() || !geometry.isWithinBounds(pageSize)) {
+        return;
+    }
+    if (geometry.width < canvas::kMinRegionDimension || geometry.height < canvas::kMinRegionDimension) {
+        return;
+    }
+
+    const auto regionId = domain::RegionId::generate();
+    const auto* page = m_openedSession->project.findPage(m_state.currentPageId);
+    const int orderIndex = page ? static_cast<int>(page->regions().size()) : 0;
+
+    sealActiveTextSession();
+    m_undoStack->push(new command::CreateRegionCommand(
+        m_commandContext.get(), m_state.currentPageId, regionId, geometry, orderIndex));
+
+    rebuildCurrentPageProjection();
+    refreshUndoState();
+}
+
+void EditorViewModel::deleteRegions(const QVector<domain::RegionId>& regionIds) {
+    if (!m_hasSession || !m_undoStack || !m_commandContext || !m_state.currentPageId.isValid() || regionIds.isEmpty()) {
+        return;
+    }
+
+    // Capture snapshots sorted by orderIndex.
+    QVector<command::DeleteRegionsCommand::RegionEntry> entries;
+    const auto* page = m_openedSession->project.findPage(m_state.currentPageId);
+    if (page == nullptr) {
+        return;
+    }
+    for (const auto& id : regionIds) {
+        const auto* region = page->findRegion(id);
+        if (region != nullptr) {
+            command::DeleteRegionsCommand::RegionEntry entry;
+            entry.region = *region;
+            entry.orderIndex = region->orderIndex();
+            entries.append(entry);
+        }
+    }
+    if (entries.isEmpty()) {
+        return;
+    }
+
+    // Sort by orderIndex ascending.
+    std::sort(entries.begin(), entries.end(), [](const auto& a, const auto& b) { return a.orderIndex < b.orderIndex; });
+
+    sealActiveTextSession();
+    m_undoStack->push(new command::DeleteRegionsCommand(m_commandContext.get(), m_state.currentPageId, entries));
+
+    rebuildCurrentPageProjection();
+    refreshUndoState();
+}
+
+void EditorViewModel::commitRegionGeometry(const domain::RegionId& regionId,
+                                           const domain::RectGeometry& newGeometry,
+                                           canvas::EditKind kind) {
+    if (!m_hasSession || !m_undoStack || !m_commandContext || !m_state.currentPageId.isValid()) {
+        return;
+    }
+
+    const auto beforeOpt = m_commandContext->regionGeometry(m_state.currentPageId, regionId);
+    if (!beforeOpt.has_value()) {
+        return;
+    }
+    const auto& before = *beforeOpt;
+
+    // No-op if geometry is identical.
+    if (before == newGeometry) {
+        return;
+    }
+
+    // Validate new geometry.
+    const auto pageSize = m_commandContext->pageSize(m_state.currentPageId);
+    if (!newGeometry.isValid() || !newGeometry.isWithinBounds(pageSize)) {
+        return;
+    }
+
+    sealActiveTextSession();
+    auto* cmd = new command::RegionGeometryCommand(
+        m_commandContext.get(), m_state.currentPageId, regionId, before, newGeometry, kind);
+    m_undoStack->push(cmd);
+
+    // Check for fault after push (redo was called automatically).
+    if (cmd->hasFaulted()) {
+        m_undoHistoryFaulted = true;
+    }
+
+    rebuildCurrentPageProjection();
+    refreshUndoState();
+}
+
+void EditorViewModel::undo() {
+    if (!m_hasSession || !m_undoStack || m_undoHistoryFaulted) {
+        return;
+    }
+    if (!m_undoStack->canUndo()) {
+        return;
+    }
+
+    sealActiveTextSession();
+    m_undoStack->undo();
+
+    // Check for fault on the most recent command.
+    const auto* cmd = dynamic_cast<const command::RegionGeometryCommand*>(m_undoStack->command(m_undoStack->index()));
+    if (cmd != nullptr && cmd->hasFaulted()) {
+        m_undoHistoryFaulted = true;
+    }
+
+    // Navigate to the affected page if different from current.
+    if (!m_undoHistoryFaulted) {
+        const auto* indexCmd = m_undoStack->command(m_undoStack->index());
+        if (indexCmd != nullptr) {
+            domain::PageId targetPage;
+            if (const auto* create = dynamic_cast<const command::CreateRegionCommand*>(indexCmd)) {
+                targetPage = create->pageId();
+            } else if (const auto* del = dynamic_cast<const command::DeleteRegionsCommand*>(indexCmd)) {
+                targetPage = del->pageId();
+            } else if (const auto* geom = dynamic_cast<const command::RegionGeometryCommand*>(indexCmd)) {
+                targetPage = geom->pageId();
+            }
+            if (targetPage.isValid() && targetPage != m_state.currentPageId) {
+                selectPage(targetPage);
+            }
+        }
+    }
+
+    rebuildCurrentPageProjection();
+    refreshUndoState();
+}
+
+void EditorViewModel::redo() {
+    if (!m_hasSession || !m_undoStack || m_undoHistoryFaulted) {
+        return;
+    }
+    if (!m_undoStack->canRedo()) {
+        return;
+    }
+
+    sealActiveTextSession();
+
+    // Peek at the command that will be redone to get its pageId.
+    const int redoIndex = m_undoStack->index();
+    const auto* pendingCmd = m_undoStack->command(redoIndex);
+    domain::PageId targetPage;
+    if (pendingCmd != nullptr) {
+        if (const auto* create = dynamic_cast<const command::CreateRegionCommand*>(pendingCmd)) {
+            targetPage = create->pageId();
+        } else if (const auto* del = dynamic_cast<const command::DeleteRegionsCommand*>(pendingCmd)) {
+            targetPage = del->pageId();
+        } else if (const auto* geom = dynamic_cast<const command::RegionGeometryCommand*>(pendingCmd)) {
+            targetPage = geom->pageId();
+        }
+    }
+
+    m_undoStack->redo();
+
+    // Check for fault on the just-redone command.
+    const auto* cmd =
+        dynamic_cast<const command::RegionGeometryCommand*>(m_undoStack->command(m_undoStack->index() - 1));
+    if (cmd != nullptr && cmd->hasFaulted()) {
+        m_undoHistoryFaulted = true;
+    }
+
+    // Navigate to the affected page if different from current.
+    if (!m_undoHistoryFaulted && targetPage.isValid() && targetPage != m_state.currentPageId) {
+        selectPage(targetPage);
+    }
+
+    rebuildCurrentPageProjection();
+    refreshUndoState();
+}
+
+void EditorViewModel::refreshUndoState() {
+    updateState([this](EditorState& s) {
+        if (m_undoStack) {
+            s.canUndo = m_undoStack->canUndo();
+            s.canRedo = m_undoStack->canRedo();
+            s.saveState.undoText = m_undoStack->canUndo() ? m_undoStack->undoText() : QStringLiteral("Undo");
+            s.saveState.redoText = m_undoStack->canRedo() ? m_undoStack->redoText() : QStringLiteral("Redo");
+        } else {
+            s.canUndo = false;
+            s.canRedo = false;
+            s.saveState.undoText = QStringLiteral("Undo");
+            s.saveState.redoText = QStringLiteral("Redo");
+        }
+        s.undoHistoryFaulted = m_undoHistoryFaulted;
+        if (m_openedSession) {
+            s.saveState.isDirty = m_openedSession->project.isDirty();
+        }
+    });
 }
 
 } // namespace manga::ui::screen::editor

@@ -8,6 +8,10 @@ add_library(manga_ui STATIC
     base/BasePage.h
     base/BaseViewModel.h
     base/DomainMetaTypes.h
+    command/EditorCommandContext.cpp
+    command/EditorCommandContext.h
+    command/RegionCommands.cpp
+    command/RegionCommands.h
     navigation/INavigationPresenter.h
     navigation/INavigationRegistrar.h
     navigation/NavigationController.cpp

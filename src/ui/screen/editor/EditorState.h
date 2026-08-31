@@ -118,6 +118,9 @@ struct EditorState {
     /// the undo command integration wires them.
     bool canUndo{false};
     bool canRedo{false};
+    /// Set true when a command replay reports internal.undo_invariant_broken.
+    /// While faulted, further undo/redo intents are no-ops until the session resets.
+    bool undoHistoryFaulted{false};
     /// Document save state projection.
     DocumentSaveState saveState;
 

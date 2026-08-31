@@ -4,11 +4,15 @@
 #include "application/dto/ProjectDto.h"
 #include "application/operation/AsyncResult.h"
 #include "ui/base/BaseViewModel.h"
+#include "ui/command/EditorCommandContext.h"
+#include "ui/manga/RegionInteraction.h"
 #include "ui/screen/editor/EditorState.h"
 
 #include <QFutureWatcher>
 #include <QHash>
+#include <QUndoStack>
 
+#include <memory>
 #include <optional>
 
 namespace manga::application {
@@ -56,6 +60,20 @@ public:
     /// Sets the preview mode for comparing original and translated content.
     void setPreviewMode(PreviewMode mode);
 
+    /// Creates a region on the current page. Validates geometry (>= 8x8 inside page bounds)
+    /// and generates RegionId before pushing the command.
+    void createRegion(const domain::RectGeometry& geometry);
+    /// Deletes the given regions from the current page as one undo step.
+    void deleteRegions(const QVector<domain::RegionId>& regionIds);
+    /// Commits a geometry change for one region. No-op if delta is zero or geometry invalid.
+    void commitRegionGeometry(const domain::RegionId& regionId,
+                              const domain::RectGeometry& newGeometry,
+                              canvas::EditKind kind);
+    /// Undoes the last command. No-op when faulted or stack empty.
+    void undo();
+    /// Redoes the last undone command. No-op when faulted or stack empty.
+    void redo();
+
     /// Test-only hook: removes a region via RemoveRegionUseCase and rebuilds projection.
     /// Production intents must not use this method.
     [[nodiscard]] bool removeRegionForTest(const domain::RegionId& regionId);
@@ -100,6 +118,12 @@ private:
     /// Called after openProjectSession, selectPage, and synchronous mutations.
     void rebuildCurrentPageProjection();
 
+    /// Hook for future text editing sessions. Currently a no-op placeholder.
+    void sealActiveTextSession() {}
+
+    /// Refreshes canUndo/canRedo/undoText/redoText and undoHistoryFaulted into State from the stack.
+    void refreshUndoState();
+
     application::IThumbnailStore* m_thumbnailStore;      // non-owning, may be null in tests
     application::IPageImageLoader* m_pageImageLoader;    // non-owning, may be null in tests
     application::OperationRegistry* m_operationRegistry; // non-owning
@@ -113,6 +137,12 @@ private:
     std::optional<application::OpenedProjectSession> m_openedSession;
     bool m_hasSession{false};
     QHash<QString, ViewTransform> m_viewTransforms; // key: PageId string
+
+    /// Undo stack and command context. Created in openProjectSession after aggregate stored,
+    /// destroyed in closeProjectSession before releasing aggregate.
+    std::unique_ptr<QUndoStack> m_undoStack;
+    std::unique_ptr<command::EditorCommandContext> m_commandContext;
+    bool m_undoHistoryFaulted{false};
 
     QFutureWatcher<application::Result<QImage>> m_pageLoadWatcher;
     quint64 m_pageLoadToken{0};
