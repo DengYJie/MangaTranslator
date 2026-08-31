@@ -11,6 +11,7 @@ class MangaCanvas;
 namespace manga::ui::widget {
 class InspectorPanel;
 class PageThumbnailList;
+class EditorCommandBar;
 } // namespace manga::ui::widget
 
 namespace manga::ui::screen::editor {
@@ -48,6 +49,7 @@ private:
     void handlePlaceholderAction();
 
     EditorViewModel* m_viewModel; // non-owning
+    ui::widget::EditorCommandBar* m_commandBar{nullptr};
     QSplitter* m_splitter{nullptr};
     ui::widget::PageThumbnailList* m_pageList{nullptr};
     ui::manga::MangaCanvas* m_canvas{nullptr};

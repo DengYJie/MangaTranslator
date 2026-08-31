@@ -3,6 +3,7 @@
 #include "ui/manga/MangaCanvas.h"
 #include "ui/screen/editor/EditorState.h"
 #include "ui/screen/editor/EditorViewModel.h"
+#include "ui/widget/EditorCommandBar.h"
 #include "ui/widget/InspectorPanel.h"
 #include "ui/widget/PageListModel.h"
 #include "ui/widget/PageThumbnailList.h"
@@ -36,9 +37,6 @@ EditorPage::EditorPage(EditorViewModel* viewModel, QWidget* parent) : base::Base
 
     connect(m_viewModel, &EditorViewModel::pageImageReady, this, &EditorPage::handlePageImageReady);
 
-    // Inspector intents: deletion reuses the region lifecycle command path; text and
-    // style edits flow through the merge-aware property commands; FocusOut of an
-    // Inspector text control seals the active text merge batch.
     connect(m_inspector,
             &widget::InspectorPanel::deleteRegionsRequested,
             m_viewModel,
@@ -60,6 +58,19 @@ EditorPage::EditorPage(EditorViewModel* viewModel, QWidget* parent) : base::Base
             m_viewModel,
             &EditorViewModel::sealTextEditSession);
 
+    connect(m_commandBar, &widget::EditorCommandBar::zoomInRequested, m_canvas, &ui::manga::MangaCanvas::zoomIn);
+    connect(m_commandBar, &widget::EditorCommandBar::zoomOutRequested, m_canvas, &ui::manga::MangaCanvas::zoomOut);
+    connect(m_commandBar, &widget::EditorCommandBar::fitToPageRequested, m_canvas, &ui::manga::MangaCanvas::fitToPage);
+    connect(m_commandBar, &widget::EditorCommandBar::actualSizeRequested, m_canvas, [this]() {
+        m_canvas->setZoomFactor(1.0);
+    });
+    connect(m_commandBar, &widget::EditorCommandBar::deleteSelectedRegionsRequested, this, [this]() {
+        const auto& selected = m_viewModel->state().selectedRegionIds;
+        if (!selected.isEmpty()) {
+            m_viewModel->deleteRegions(selected);
+        }
+    });
+
     m_viewModel->observe(this, [this](const EditorState& state) { render(state); });
 
     auto* pageUpShortcut = new QShortcut(QKeySequence(Qt::Key_PageUp), this);
@@ -76,7 +87,10 @@ EditorPage::EditorPage(EditorViewModel* viewModel, QWidget* parent) : base::Base
 void EditorPage::buildUi() {
     auto* layout = new QVBoxLayout(this);
     layout->setContentsMargins(8, 8, 8, 8);
-    layout->setSpacing(0);
+    layout->setSpacing(4);
+
+    m_commandBar = new widget::EditorCommandBar(m_viewModel, this);
+    layout->addWidget(m_commandBar);
 
     m_splitter = new QSplitter(Qt::Horizontal, this);
     m_splitter->setHandleWidth(8);
@@ -109,7 +123,6 @@ void EditorPage::buildUi() {
     m_splitter->setCollapsible(1, false);
     m_splitter->setCollapsible(2, false);
 
-    // Page list 232 px, inspector 352 px, canvas takes the remainder.
     m_splitter->setSizes({232, 10000, 352});
     m_splitter->setStretchFactor(0, 0);
     m_splitter->setStretchFactor(1, 1);
@@ -117,13 +130,12 @@ void EditorPage::buildUi() {
 }
 
 void EditorPage::render(const EditorState& state) {
-    // convert and set pages
     QVector<widget::PageListEntry> entries;
     entries.reserve(state.pages.size());
     for (const auto& p : state.pages) {
         entries.append({p.id, p.orderIndex, p.displayName, p.aspectRatio()});
     }
-    m_pageList->model()->setPages(entries); // Model 自带相等短路
+    m_pageList->model()->setPages(entries);
 
     m_pageList->setCurrentPageId(state.currentPageId);
 
@@ -150,7 +162,6 @@ void EditorPage::render(const EditorState& state) {
         }
         m_canvas->setContentState(m_lastPlaceholder, displayName, QString());
     }
-    // Image state is not transitioned here, it is driven by pageImageReady signal.
 }
 
 void EditorPage::handlePageImageReady(const PageImageDelivery& delivery) {

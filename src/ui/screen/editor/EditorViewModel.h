@@ -21,12 +21,19 @@
 namespace manga::application {
 class IPageImageLoader;
 class IThumbnailStore;
+class IProjectRepository;
 class LoadOrGenerateThumbnailUseCase;
 class LoadPageImageUseCase;
 class OperationRegistry;
 } // namespace manga::application
 
 namespace manga::ui::screen::editor {
+
+struct ProjectCloseSummary {
+    QString projectName;
+    bool isDirty{false};
+    QString safeMessage;
+};
 
 /// Drives the editor skeleton: project session, current page image loading and the
 /// thumbnail pipeline (max 4 concurrent, generation-checked late results).
@@ -38,6 +45,7 @@ public:
     EditorViewModel(application::IThumbnailStore* thumbnailStore,
                     application::IPageImageLoader* pageImageLoader,
                     application::OperationRegistry* operationRegistry,
+                    application::IProjectRepository* projectRepository = nullptr,
                     QObject* parent = nullptr);
     ~EditorViewModel() override;
 
@@ -92,6 +100,11 @@ public:
     /// Seals the active text merge batch before a project save to preserve undo boundaries.
     void prepareForSave();
 
+    void saveProject();
+    void requestCloseProject();
+    void confirmDiscardAndClose();
+    void cancelClose();
+
     /// Test-only hook: removes a region via RemoveRegionUseCase and rebuilds projection.
     /// Production intents must not use this method.
     [[nodiscard]] bool removeRegionForTest(const domain::RegionId& regionId);
@@ -102,6 +115,10 @@ public:
     /// Test-only hook: replaces the text session clock with a controllable source.
     void setTextEditClockForTest(TextEditSession::Clock clock) {
         m_textEditSession = std::make_unique<TextEditSession>(std::move(clock));
+    }
+    /// Test-only hook: queries undo stack clean state.
+    [[nodiscard]] bool undoStackIsCleanForTest() const noexcept {
+        return m_undoStack ? m_undoStack->isClean() : true;
     }
 
     /// Returns the project revision for change tracking; 0 means no active session.
@@ -116,6 +133,11 @@ Q_SIGNALS:
     void thumbnailFailed(const domain::PageId& pageId, const QString& safeMessage);
     /// viewGeneration bumped: in-flight thumbnail binds are discarded, rows must re-request.
     void thumbnailsInvalidated();
+
+    void closeDecisionRequested(const ProjectCloseSummary& summary);
+    void saveCompleted(const QString& revisionId);
+    void saveFailed(const application::ApplicationError& error);
+    void projectClosed();
 
 protected:
     void emitStateChanged() override {
@@ -138,6 +160,7 @@ private:
     void handleThumbnailFinished(const domain::PageId& pageId);
     void pumpThumbnailQueue();
     void cancelThumbnailRequests();
+    void handleSaveFinished();
     [[nodiscard]] const application::PageDescriptor* findPage(const domain::PageId& pageId) const;
 
     /// Rebuilds current page region projections from m_openedSession->project only.
@@ -168,9 +191,10 @@ private:
     /// Refreshes canUndo/canRedo/undoText/redoText and undoHistoryFaulted into State from the stack.
     void refreshUndoState();
 
-    application::IThumbnailStore* m_thumbnailStore;      // non-owning, may be null in tests
-    application::IPageImageLoader* m_pageImageLoader;    // non-owning, may be null in tests
-    application::OperationRegistry* m_operationRegistry; // non-owning
+    application::IThumbnailStore* m_thumbnailStore;       // non-owning, may be null in tests
+    application::IPageImageLoader* m_pageImageLoader;     // non-owning, may be null in tests
+    application::OperationRegistry* m_operationRegistry;  // non-owning
+    application::IProjectRepository* m_projectRepository; // non-owning
     // Member lifetime is required: LoadOrGenerateThumbnailUseCase continuations capture `this`.
     std::unique_ptr<application::LoadOrGenerateThumbnailUseCase> m_thumbnailUseCase;
     std::unique_ptr<application::LoadPageImageUseCase> m_pageLoadUseCase;
@@ -199,6 +223,10 @@ private:
     QHash<QString, ThumbnailTicket> m_thumbnailInFlight; // key: PageId string
     QVector<domain::PageId> m_thumbnailQueue;
     QHash<QString, QFutureWatcher<application::Result<QImage>>*> m_thumbnailWatchers;
+
+    QFutureWatcher<application::Result<application::SaveProjectResult>> m_saveWatcher;
+    quint64 m_saveToken{0};
+    application::OperationId m_saveOperation{};
 };
 
 } // namespace manga::ui::screen::editor

@@ -4,6 +4,7 @@
 #include "application/ports/IPageImageLoader.h"
 #include "application/ports/IThumbnailStore.h"
 #include "application/usecase/import/ImportUseCases.h"
+#include "application/usecase/project/ProjectUseCases.h"
 #include "application/usecase/region/RegionUseCases.h"
 #include "application/usecase/thumbnail/ThumbnailUseCases.h"
 #include "application/workflow/OperationRegistry.h"
@@ -98,10 +99,11 @@ bool applyStyleFieldValue(domain::TextLayout& layout, InspectorField field, cons
 EditorViewModel::EditorViewModel(application::IThumbnailStore* thumbnailStore,
                                  application::IPageImageLoader* pageImageLoader,
                                  application::OperationRegistry* operationRegistry,
+                                 application::IProjectRepository* projectRepository,
                                  QObject* parent)
     : base::BaseViewModel<EditorViewModel, EditorState>(parent), m_thumbnailStore(thumbnailStore),
       m_pageImageLoader(pageImageLoader), m_operationRegistry(operationRegistry),
-      m_textEditSession(std::make_unique<TextEditSession>()) {
+      m_projectRepository(projectRepository), m_textEditSession(std::make_unique<TextEditSession>()) {
     if (m_thumbnailStore && m_pageImageLoader) {
         m_thumbnailUseCase =
             std::make_unique<application::LoadOrGenerateThumbnailUseCase>(m_thumbnailStore, m_pageImageLoader);
@@ -114,6 +116,10 @@ EditorViewModel::EditorViewModel(application::IThumbnailStore* thumbnailStore,
             &QFutureWatcher<application::Result<QImage>>::finished,
             this,
             &EditorViewModel::handlePageLoadFinished);
+    connect(&m_saveWatcher,
+            &QFutureWatcher<application::Result<application::SaveProjectResult>>::finished,
+            this,
+            &EditorViewModel::handleSaveFinished);
 }
 
 EditorViewModel::~EditorViewModel() {
@@ -204,11 +210,21 @@ void EditorViewModel::closeProjectSession() {
     }
     invalidateRequests();
 
-    // Destroy undo infrastructure before releasing the aggregate.
+    // Stop accepting commands by destroying undo infrastructure before releasing the aggregate.
     m_undoStack.reset();
     m_commandContext.reset();
     m_undoHistoryFaulted = false;
     m_textEditSession->reset();
+
+    // Call repository close
+    if (m_hasSession && m_openedSession && m_projectRepository && m_operationRegistry) {
+        auto context = m_operationRegistry->createOperation(m_state.projectSessionGeneration, m_state.viewGeneration);
+        application::CloseProjectUseCase useCase(m_projectRepository);
+        application::CloseProjectRequest request;
+        request.projectId = m_session.projectId;
+        request.projectRoot = m_session.projectRootPath;
+        useCase.execute(request, context); // Fire and forget
+    }
 
     m_hasSession = false;
     m_session = application::ProjectSessionDescriptor{};
@@ -1255,5 +1271,82 @@ void EditorViewModel::refreshUndoState() {
         }
     });
 }
+
+void EditorViewModel::saveProject() {
+    if (!m_hasSession || !m_openedSession || !m_projectRepository || !m_operationRegistry) {
+        return;
+    }
+
+    if (m_saveOperation.isValid()) {
+        return; // Already saving
+    }
+
+    sealActiveTextSession();
+
+    updateState([this](EditorState& s) { s.saveState.isSaving = true; });
+
+    auto context = m_operationRegistry->createOperation(m_state.projectSessionGeneration, m_state.viewGeneration);
+    m_saveOperation = context.operationId;
+    m_saveToken = beginRequest();
+
+    application::SaveProjectUseCase useCase(m_projectRepository);
+    application::SaveProjectRequest request;
+    request.project = m_openedSession->project; // copy aggregate snapshot
+
+    m_saveWatcher.setFuture(useCase.execute(request, context));
+}
+
+void EditorViewModel::handleSaveFinished() {
+    if (!isRequestCurrent(m_saveToken)) {
+        return;
+    }
+
+    auto result = m_saveWatcher.result();
+    m_saveOperation = application::OperationId{};
+
+    if (result.has_value()) {
+        const auto& saveResult = result.value();
+        bool cleanMarked = m_openedSession->project.markCleanIfRevision(saveResult.savedRevision);
+
+        if (cleanMarked && m_undoStack) {
+            m_undoStack->setClean();
+        }
+
+        updateState([this](EditorState& s) { s.saveState.isSaving = false; });
+
+        refreshUndoState();
+        Q_EMIT saveCompleted(QString::fromStdString(std::to_string(saveResult.savedRevision)));
+    } else {
+        updateState([this](EditorState& s) { s.saveState.isSaving = false; });
+        Q_EMIT saveFailed(result.error());
+    }
+}
+
+void EditorViewModel::requestCloseProject() {
+    if (!m_hasSession || !m_openedSession) {
+        Q_EMIT projectClosed();
+        return;
+    }
+
+    if (m_openedSession->project.isDirty()) {
+        ProjectCloseSummary summary;
+        summary.projectName = m_session.projectName;
+        summary.isDirty = true;
+        summary.safeMessage = QCoreApplication::translate("EditorViewModel", "项目有未保存的修改，是否保存并关闭？");
+        Q_EMIT closeDecisionRequested(summary);
+    } else {
+        closeProjectSession();
+        Q_EMIT projectClosed();
+    }
+}
+
+void EditorViewModel::confirmDiscardAndClose() {
+    if (m_hasSession) {
+        closeProjectSession();
+    }
+    Q_EMIT projectClosed();
+}
+
+void EditorViewModel::cancelClose() {}
 
 } // namespace manga::ui::screen::editor

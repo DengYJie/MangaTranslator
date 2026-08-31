@@ -1,4 +1,4 @@
-﻿#include "app/Application.h"
+#include "app/Application.h"
 
 #include "app/ApplicationContext.h"
 #include "application/ports/IAppSettingsStore.h"
@@ -81,8 +81,11 @@ int Application::run() {
     mainWindow->addNavigationItem(homeItem, QStringLiteral("main"));
     mainWindow->registerRoute(QStringLiteral("home"), homePage, QStringLiteral("main"));
 
-    auto* editorViewModel = new ui::screen::editor::EditorViewModel(
-        m_context->thumbnailStore(), m_context->pageImageLoader(), m_context->operationRegistry(), mainWindow);
+    auto* editorViewModel = new ui::screen::editor::EditorViewModel(m_context->thumbnailStore(),
+                                                                    m_context->pageImageLoader(),
+                                                                    m_context->operationRegistry(),
+                                                                    m_context->projectRepository(),
+                                                                    mainWindow);
     auto* editorPage = new ui::screen::editor::EditorPage(editorViewModel);
 
     ui::navigation::NavigationItemDescriptor editorItem;
