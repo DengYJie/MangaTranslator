@@ -11,6 +11,7 @@ class IComicImporter;
 class IPageImageLoader;
 class IThumbnailStore;
 class IOcrEngine;
+class IOcrModelValidator;
 class ITranslator;
 class IInpainter;
 class ITextLayouter;
@@ -45,7 +46,8 @@ public:
                        std::unique_ptr<application::IInpainter> inpainter,
                        std::unique_ptr<application::ITextLayouter> textLayouter,
                        std::unique_ptr<application::IDerivedAssetStore> derivedAssetStore,
-                       std::unique_ptr<application::ICredentialStore> credentialStore);
+                       std::unique_ptr<application::ICredentialStore> credentialStore,
+                       std::unique_ptr<application::IOcrModelValidator> ocrModelValidator);
     ~ApplicationContext();
 
     ApplicationContext(const ApplicationContext&) = delete;
@@ -91,6 +93,9 @@ public:
     [[nodiscard]] application::ICredentialStore* credentialStore() const {
         return m_credentialStore.get();
     }
+    [[nodiscard]] application::IOcrModelValidator* ocrModelValidator() const {
+        return m_ocrModelValidator.get();
+    }
 
     /// Deterministic reverse-order teardown entry point. Idempotent.
     void shutdown();
@@ -113,6 +118,7 @@ private:
     std::unique_ptr<application::ITextLayouter> m_textLayouter;
     std::unique_ptr<application::IDerivedAssetStore> m_derivedAssetStore;
     std::unique_ptr<application::ICredentialStore> m_credentialStore;
+    std::unique_ptr<application::IOcrModelValidator> m_ocrModelValidator;
     bool m_shutdown{false};
 };
 

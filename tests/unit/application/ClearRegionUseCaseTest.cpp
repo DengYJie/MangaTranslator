@@ -10,6 +10,21 @@ using namespace manga::application;
 using namespace manga::application::test;
 using namespace manga::domain;
 
+namespace {
+
+OperationDescriptor clearDescriptor(const ClearRequest& req) {
+    return OperationDescriptor{
+        .stage = OperationStage::Clear,
+        .projectId = req.projectId,
+        .pageId = req.pageId,
+        .regionId = req.regionId,
+        .displayTarget = QStringLiteral("Test Region"),
+        .cancellable = true,
+    };
+}
+
+} // namespace
+
 void ClearRegionUseCaseTest::testSuccessfulClear() {
     FakeInpainter inpainter;
     OperationRegistry registry;
@@ -26,7 +41,7 @@ void ClearRegionUseCaseTest::testSuccessfulClear() {
     inpainter.nextResponse.regionId = req.regionId;
 
     OperationId opId;
-    auto future = useCase.execute(req, 1, opId);
+    auto future = useCase.execute(req, clearDescriptor(req), 1, opId);
 
     QVERIFY(future.isFinished());
     QVERIFY(future.result().has_value());
@@ -51,7 +66,7 @@ void ClearRegionUseCaseTest::testClearFailure() {
     req.contentRevision = 10;
 
     OperationId opId;
-    auto future = useCase.execute(req, 1, opId);
+    auto future = useCase.execute(req, clearDescriptor(req), 1, opId);
 
     QVERIFY(future.isFinished());
     QVERIFY(!future.result().has_value());
@@ -69,7 +84,7 @@ void ClearRegionUseCaseTest::testInvalidRequestDoesNotCallInpainter() {
     request.region = {10, 10, 50, 50};
 
     OperationId operationId;
-    const auto result = useCase.execute(request, 1, operationId).result();
+    const auto result = useCase.execute(request, clearDescriptor(request), 1, operationId).result();
 
     QVERIFY(!result.has_value());
     QCOMPARE(result.error().category, ErrorCategory::Input);
@@ -94,7 +109,7 @@ void ClearRegionUseCaseTest::testDisabledClearingNeverReachesInpainter() {
     req.settings.enabled = false;
 
     OperationId opId;
-    auto future = useCase.execute(req, 1, opId);
+    auto future = useCase.execute(req, clearDescriptor(req), 1, opId);
 
     QVERIFY(future.isFinished());
     QVERIFY(!future.result().has_value());
@@ -119,7 +134,7 @@ void ClearRegionUseCaseTest::testCancellation() {
     req.contentRevision = 10;
 
     OperationId opId;
-    auto future = useCase.execute(req, 1, opId);
+    auto future = useCase.execute(req, clearDescriptor(req), 1, opId);
 
     registry.cancelOperation(opId);
     inpainter.complete();

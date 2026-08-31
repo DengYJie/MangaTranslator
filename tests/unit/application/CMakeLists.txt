@@ -35,6 +35,8 @@ qt_add_executable(manga_tests_application
     ThumbnailUseCasesTest.h
     PrepareProcessingAdoptionTest.cpp
     PrepareProcessingAdoptionTest.h
+    AppSettingsUseCasesTest.cpp
+    AppSettingsUseCasesTest.h
 )
 manga_apply_project_options(manga_tests_application)
 set_target_properties(manga_tests_application PROPERTIES AUTOMOC ON WIN32_EXECUTABLE FALSE)

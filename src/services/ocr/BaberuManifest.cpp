@@ -22,9 +22,18 @@ static bool isSafeRelativePath(const QString& path) {
     return true;
 }
 
+static application::ApplicationError
+makeModelError(const QString& code, const QString& safeMessage, const QString& diagnostic) {
+    auto error = application::makeApplicationError(
+        application::ErrorCategory::Model, code, safeMessage, application::RecoveryAction::LocateModel);
+    // The directory path and backend detail stay in the diagnostic; only safeMessage may reach the screen.
+    error.diagnostic = diagnostic;
+    return error;
+}
+
 static application::ApplicationError makeIncompatibleError(const QString& detail) {
-    return application::makeApplicationError(
-        application::ErrorCategory::Model, QStringLiteral("model.incompatible"), detail);
+    return makeModelError(
+        QStringLiteral("model.incompatible"), QStringLiteral("OCR model is incompatible or corrupt"), detail);
 }
 
 static application::Result<void>
@@ -55,25 +64,34 @@ static application::Result<void> checkSha256(const QString& sha256, const QStrin
     return {};
 }
 
+/// Reads a required text member. Blank or wrongly typed values fail closed so retained identity
+/// fields always describe the bundle that was validated.
+static application::Result<QString> requireStringField(const QJsonObject& obj, const QString& key) {
+    const QJsonValue value = obj.value(key);
+    if (!value.isString() || value.toString().trimmed().isEmpty()) {
+        return std::unexpected<application::ApplicationError>(
+            makeIncompatibleError(QStringLiteral("Missing or invalid field: ") + key));
+    }
+    return value.toString();
+}
+
 } // namespace
 
 application::Result<OcrModelManifest> loadAndValidateManifest(const QString& modelDir) {
     QDir dir(modelDir);
     if (!dir.exists()) {
         return std::unexpected<application::ApplicationError>(
-            application::makeApplicationError(application::ErrorCategory::Model,
-                                              QStringLiteral("model.missing"),
-                                              QStringLiteral("Model directory not found"),
-                                              application::RecoveryAction::LocateModel));
+            makeModelError(QStringLiteral("model.missing"),
+                           QStringLiteral("Model directory not found"),
+                           QStringLiteral("Directory does not exist: ") + modelDir));
     }
 
     QFile manifestFile(dir.filePath(QStringLiteral("manifest.json")));
     if (!manifestFile.open(QIODevice::ReadOnly)) {
         return std::unexpected<application::ApplicationError>(
-            application::makeApplicationError(application::ErrorCategory::Model,
-                                              QStringLiteral("model.missing"),
-                                              QStringLiteral("manifest.json not found"),
-                                              application::RecoveryAction::LocateModel));
+            makeModelError(QStringLiteral("model.missing"),
+                           QStringLiteral("manifest.json not found"),
+                           QStringLiteral("manifest.json not found in ") + modelDir));
     }
 
     QJsonParseError parseError;
@@ -124,11 +142,18 @@ application::Result<OcrModelManifest> loadAndValidateManifest(const QString& mod
                                QStringLiteral("source"));
         !res.has_value())
         return std::unexpected<application::ApplicationError>(res.error());
-    if (!sourceObj.contains(QStringLiteral("repository")) || !sourceObj.contains(QStringLiteral("revision")) ||
-        !sourceObj.contains(QStringLiteral("license"))) {
-        return std::unexpected<application::ApplicationError>(
-            makeIncompatibleError(QStringLiteral("Missing required field in source")));
-    }
+    auto repository = requireStringField(sourceObj, QStringLiteral("repository"));
+    if (!repository.has_value())
+        return std::unexpected<application::ApplicationError>(repository.error());
+    auto revision = requireStringField(sourceObj, QStringLiteral("revision"));
+    if (!revision.has_value())
+        return std::unexpected<application::ApplicationError>(revision.error());
+    auto license = requireStringField(sourceObj, QStringLiteral("license"));
+    if (!license.has_value())
+        return std::unexpected<application::ApplicationError>(license.error());
+    m.source.repository = *repository;
+    m.source.revision = *revision;
+    m.source.license = *license;
 
     QJsonObject runtime = obj.value(QStringLiteral("runtime")).toObject();
     if (auto res = checkUnknownFields(
@@ -142,10 +167,9 @@ application::Result<OcrModelManifest> loadAndValidateManifest(const QString& mod
         return std::unexpected<application::ApplicationError>(
             makeIncompatibleError(QStringLiteral("Invalid or missing opset")));
     }
-    if (!runtime.value(QStringLiteral("minimumOnnxRuntime")).isString()) {
-        return std::unexpected<application::ApplicationError>(
-            makeIncompatibleError(QStringLiteral("minimumOnnxRuntime must be string")));
-    }
+    auto minimumOnnxRuntime = requireStringField(runtime, QStringLiteral("minimumOnnxRuntime"));
+    if (!minimumOnnxRuntime.has_value())
+        return std::unexpected<application::ApplicationError>(minimumOnnxRuntime.error());
     if (auto res = checkEnum(runtime.value(QStringLiteral("executionProvider")).toString(),
                              {QStringLiteral("cpu"),
                               QStringLiteral("CPUExecutionProvider"),
@@ -155,6 +179,10 @@ application::Result<OcrModelManifest> loadAndValidateManifest(const QString& mod
                              QStringLiteral("runtime.executionProvider"));
         !res.has_value())
         return std::unexpected<application::ApplicationError>(res.error());
+
+    m.runtime.opset = opset;
+    m.runtime.minimumOnnxRuntime = *minimumOnnxRuntime;
+    m.runtime.executionProvider = runtime.value(QStringLiteral("executionProvider")).toString();
 
     QJsonArray graphsArray = obj.value(QStringLiteral("graphs")).toArray();
     if (graphsArray.size() != 3) {
@@ -378,20 +406,18 @@ application::Result<OcrModelManifest> loadAndValidateManifest(const QString& mod
         QFile f(absPath);
         if (!f.open(QIODevice::ReadOnly)) {
             return std::unexpected<application::ApplicationError>(
-                application::makeApplicationError(application::ErrorCategory::Model,
-                                                  QStringLiteral("model.missing"),
-                                                  QStringLiteral("Required file not found: ") + check.relPath,
-                                                  application::RecoveryAction::LocateModel));
+                makeModelError(QStringLiteral("model.missing"),
+                               QStringLiteral("Required file not found: ") + check.relPath,
+                               QStringLiteral("File not found at ") + absPath));
         }
         QCryptographicHash hasher(QCryptographicHash::Sha256);
         hasher.addData(&f);
         QString actualHash = QString::fromLatin1(hasher.result().toHex());
         if (actualHash.compare(check.expectedHash, Qt::CaseInsensitive) != 0) {
-            return std::unexpected<application::ApplicationError>(
-                application::makeApplicationError(application::ErrorCategory::Model,
-                                                  QStringLiteral("model.hash_mismatch"),
-                                                  QStringLiteral("Hash mismatch for: ") + check.relPath,
-                                                  application::RecoveryAction::LocateModel));
+            return std::unexpected<application::ApplicationError>(makeModelError(
+                QStringLiteral("model.hash_mismatch"),
+                QStringLiteral("Hash mismatch for: ") + check.relPath,
+                QStringLiteral("Expected %1 but got %2 for %3").arg(check.expectedHash, actualHash, absPath)));
         }
     }
 

@@ -5,6 +5,7 @@
 #include "application/ports/IDerivedAssetStore.h"
 #include "application/ports/IInpainter.h"
 #include "application/ports/IOcrEngine.h"
+#include "application/ports/IOcrModelValidator.h"
 #include "application/ports/IPageImageLoader.h"
 #include "application/ports/ITextLayouter.h"
 #include "application/ports/IThumbnailStore.h"
@@ -17,6 +18,8 @@
 #include "data/project/ProjectIoCoordinator.h"
 #include "data/settings/QSettingsAppSettingsStore.h"
 #include "data/settings/QSettingsRecentProjectsStore.h"
+#include "network/credentials/WindowsCredentialStore.h"
+#include "services/ocr/OcrModelValidator.h"
 
 #include <QThreadPool>
 
@@ -36,6 +39,9 @@ ApplicationContext::ApplicationContext()
     m_thumbnailStore = std::make_unique<data::FileSystemThumbnailStore>(m_production->ioCoordinator.get());
     m_pageImageLoader = std::make_unique<data::FileSystemPageImageLoader>(m_production->ioCoordinator.get());
     m_comicImporter = std::make_unique<data::FileSystemComicImporter>(m_production->ioCoordinator.get());
+    // Credential material stays in Windows Credential Manager; QSettings only holds non-secret settings.
+    m_credentialStore = std::make_unique<network::WindowsCredentialStore>();
+    m_ocrModelValidator = std::make_unique<services::OcrModelValidator>();
 }
 
 ApplicationContext::ApplicationContext(std::unique_ptr<application::IProjectRepository> projectRepository,
@@ -44,6 +50,7 @@ ApplicationContext::ApplicationContext(std::unique_ptr<application::IProjectRepo
     : ApplicationContext(std::move(projectRepository),
                          std::move(recentProjectsStore),
                          std::move(appSettingsStore),
+                         nullptr,
                          nullptr,
                          nullptr,
                          nullptr,
@@ -65,14 +72,16 @@ ApplicationContext::ApplicationContext(std::unique_ptr<application::IProjectRepo
                                        std::unique_ptr<application::IInpainter> inpainter,
                                        std::unique_ptr<application::ITextLayouter> textLayouter,
                                        std::unique_ptr<application::IDerivedAssetStore> derivedAssetStore,
-                                       std::unique_ptr<application::ICredentialStore> credentialStore)
+                                       std::unique_ptr<application::ICredentialStore> credentialStore,
+                                       std::unique_ptr<application::IOcrModelValidator> ocrModelValidator)
     : m_projectRepository(std::move(projectRepository)), m_recentProjectsStore(std::move(recentProjectsStore)),
       m_appSettingsStore(std::move(appSettingsStore)),
       m_operationRegistry(std::make_unique<application::OperationRegistry>()),
       m_thumbnailStore(std::move(thumbnailStore)), m_pageImageLoader(std::move(pageImageLoader)),
       m_comicImporter(std::move(comicImporter)), m_ocrEngine(std::move(ocrEngine)), m_translator(std::move(translator)),
       m_inpainter(std::move(inpainter)), m_textLayouter(std::move(textLayouter)),
-      m_derivedAssetStore(std::move(derivedAssetStore)), m_credentialStore(std::move(credentialStore)) {}
+      m_derivedAssetStore(std::move(derivedAssetStore)), m_credentialStore(std::move(credentialStore)),
+      m_ocrModelValidator(std::move(ocrModelValidator)) {}
 
 ApplicationContext::~ApplicationContext() {
     shutdown();

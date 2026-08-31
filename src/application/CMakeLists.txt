@@ -6,6 +6,7 @@ add_library(manga_application STATIC
     usecase/region/RegionUseCases.cpp
     usecase/text/TextUseCases.cpp
     usecase/apply/PrepareProcessingAdoptionUseCases.cpp
+    usecase/settings/AppSettingsUseCases.cpp
 )
 manga_apply_project_options(manga_application)
 set_target_properties(manga_application PROPERTIES AUTOMOC ON)

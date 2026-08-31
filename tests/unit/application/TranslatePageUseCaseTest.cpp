@@ -20,6 +20,17 @@ TranslationRequest validTranslationRequest() {
     return request;
 }
 
+OperationDescriptor translationDescriptor(const ProjectId& projectId, const PageId& pageId) {
+    return OperationDescriptor{
+        .stage = OperationStage::Translate,
+        .projectId = projectId,
+        .pageId = pageId,
+        .regionId = std::nullopt,
+        .displayTarget = QStringLiteral("Test Page"),
+        .cancellable = true,
+    };
+}
+
 } // namespace
 
 void TranslatePageUseCaseTest::testSuccessfulTranslation() {
@@ -34,7 +45,7 @@ void TranslatePageUseCaseTest::testSuccessfulTranslation() {
     translator.nextResponse.items.push_back({RegionId::generate(), "src", "trans", {}});
 
     OperationId opId;
-    auto future = useCase.execute(req, projectId, pageId, 1, opId);
+    auto future = useCase.execute(req, translationDescriptor(projectId, pageId), 1, opId);
 
     QVERIFY(future.isFinished());
     QVERIFY(future.result().has_value());
@@ -52,8 +63,10 @@ void TranslatePageUseCaseTest::testTranslatorFailure() {
     TranslatePageUseCase useCase(&translator, &registry);
 
     auto req = validTranslationRequest();
+    const auto projectId = ProjectId::generate();
+    const auto pageId = PageId::generate();
     OperationId opId;
-    auto future = useCase.execute(req, ProjectId::generate(), PageId::generate(), 1, opId);
+    auto future = useCase.execute(req, translationDescriptor(projectId, pageId), 1, opId);
 
     QVERIFY(future.isFinished());
     QVERIFY(!future.result().has_value());
@@ -68,8 +81,10 @@ void TranslatePageUseCaseTest::testInvalidRequestDoesNotCallTranslator() {
     auto request = validTranslationRequest();
     request.regions.append(request.regions.front());
 
+    const auto projectId = ProjectId::generate();
+    const auto pageId = PageId::generate();
     OperationId operationId;
-    const auto result = useCase.execute(request, ProjectId::generate(), PageId::generate(), 1, operationId).result();
+    const auto result = useCase.execute(request, translationDescriptor(projectId, pageId), 1, operationId).result();
 
     QVERIFY(!result.has_value());
     QCOMPARE(result.error().category, ErrorCategory::Input);
@@ -85,8 +100,10 @@ void TranslatePageUseCaseTest::testCancellation() {
     TranslatePageUseCase useCase(&translator, &registry);
 
     auto req = validTranslationRequest();
+    const auto projectId = ProjectId::generate();
+    const auto pageId = PageId::generate();
     OperationId opId;
-    auto future = useCase.execute(req, ProjectId::generate(), PageId::generate(), 1, opId);
+    auto future = useCase.execute(req, translationDescriptor(projectId, pageId), 1, opId);
     QCOMPARE(registry.inFlightCount(), 1);
 
     registry.cancelOperation(opId);

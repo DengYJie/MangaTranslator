@@ -20,6 +20,17 @@ OcrRequest validRequest() {
     return request;
 }
 
+OperationDescriptor validDescriptor(const OcrRequest& req) {
+    return OperationDescriptor{
+        .stage = OperationStage::Ocr,
+        .projectId = manga::domain::ProjectId::generate(),
+        .pageId = req.pageId,
+        .regionId = req.regionId,
+        .displayTarget = QStringLiteral("Test Region"),
+        .cancellable = true,
+    };
+}
+
 } // namespace
 
 void RecognizeRegionUseCaseTest::testSuccessfulRecognition() {
@@ -29,8 +40,9 @@ void RecognizeRegionUseCaseTest::testSuccessfulRecognition() {
     engine.nextResponse.confidence = 0.9;
     RecognizeRegionUseCase useCase(&engine, &registry);
 
+    const auto req = validRequest();
     OperationId operationId;
-    const auto future = useCase.execute(validRequest(), manga::domain::ProjectId::generate(), 1, operationId);
+    const auto future = useCase.execute(req, validDescriptor(req), 1, operationId);
 
     QVERIFY(future.isFinished());
     QVERIFY(future.result().has_value());
@@ -46,8 +58,9 @@ void RecognizeRegionUseCaseTest::testCancellation() {
     OperationRegistry registry;
     RecognizeRegionUseCase useCase(&engine, &registry);
 
+    const auto req = validRequest();
     OperationId operationId;
-    const auto future = useCase.execute(validRequest(), manga::domain::ProjectId::generate(), 1, operationId);
+    const auto future = useCase.execute(req, validDescriptor(req), 1, operationId);
     QVERIFY(!future.isFinished());
     QCOMPARE(registry.inFlightCount(), 1);
 
@@ -71,8 +84,9 @@ void RecognizeRegionUseCaseTest::testEngineFailure() {
     OperationRegistry registry;
     RecognizeRegionUseCase useCase(&engine, &registry);
 
+    const auto req = validRequest();
     OperationId operationId;
-    const auto future = useCase.execute(validRequest(), manga::domain::ProjectId::generate(), 1, operationId);
+    const auto future = useCase.execute(req, validDescriptor(req), 1, operationId);
 
     QVERIFY(future.isFinished());
     QVERIFY(!future.result().has_value());
@@ -88,7 +102,7 @@ void RecognizeRegionUseCaseTest::testInvalidRequestDoesNotCallEngine() {
     request.image = {};
 
     OperationId operationId;
-    const auto future = useCase.execute(request, manga::domain::ProjectId::generate(), 1, operationId);
+    const auto future = useCase.execute(request, validDescriptor(request), 1, operationId);
 
     QVERIFY(future.isFinished());
     QVERIFY(!future.result().has_value());

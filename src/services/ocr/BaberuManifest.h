@@ -52,11 +52,25 @@ struct OcrGenerationManifest {
     int contentRunCap{12};
 };
 
+struct OcrSourceManifest {
+    QString repository;
+    QString revision;
+    QString license;
+};
+
+struct OcrRuntimeManifest {
+    int opset{0};
+    QString minimumOnnxRuntime;
+    QString executionProvider;
+};
+
 struct OcrModelManifest {
     int manifestVersion{1};
     QString id;
     QString version;
     QString modelDir; // The absolute path where this manifest was loaded from
+    OcrSourceManifest source;
+    OcrRuntimeManifest runtime;
     OcrInputManifest input;
     OcrNormalizationManifest normalization;
     OcrGenerationManifest generation;

@@ -1,3 +1,4 @@
+#include "AppSettingsUseCasesTest.h"
 #include "ApplicationUseCasesTest.h"
 #include "ApplyResultUseCaseTest.h"
 #include "ClearRegionUseCaseTest.h"
@@ -102,6 +103,10 @@ int main(int argc, char* argv[]) {
     {
         PrepareProcessingAdoptionTest suite;
         runSuite("PrepareProcessingAdoptionTest", &suite);
+    }
+    {
+        AppSettingsUseCasesTest suite;
+        runSuite("AppSettingsUseCasesTest", &suite);
     }
 
     return status;

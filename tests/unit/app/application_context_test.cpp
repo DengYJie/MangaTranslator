@@ -6,6 +6,7 @@
 #include "application/ports/IDerivedAssetStore.h"
 #include "application/ports/IInpainter.h"
 #include "application/ports/IOcrEngine.h"
+#include "application/ports/IOcrModelValidator.h"
 #include "application/ports/IPageImageLoader.h"
 #include "application/ports/IProjectRepository.h"
 #include "application/ports/IRecentProjectsStore.h"
@@ -97,11 +98,34 @@ public:
     }
 };
 
+class StubCredentialStore final : public manga::application::ICredentialStore {
+public:
+    Result<bool> hasApiKey(const QString&) override {
+        return true;
+    }
+    Result<SecretBytes> readApiKey(const QString&) override {
+        return SecretBytes{};
+    }
+    Result<void> writeApiKey(const QString&, SecretBytes) override {
+        return {};
+    }
+    Result<void> deleteApiKey(const QString&) override {
+        return {};
+    }
+};
+
+class StubOcrModelValidator final : public manga::application::IOcrModelValidator {
+public:
+    Result<OcrModelStatus> validate(const QString&) override {
+        return OcrModelStatus{.isValid = true};
+    }
+};
+
 } // namespace
 
 class ApplicationContextTest : public QObject {
     Q_OBJECT
-private slots:
+private Q_SLOTS:
     void injectedPortsAreExposed() {
         auto repository = std::make_unique<StubProjectRepository>();
         auto recents = std::make_unique<StubRecentProjectsStore>();
@@ -148,19 +172,61 @@ private slots:
                                                nullptr,
                                                nullptr,
                                                nullptr,
+                                               nullptr,
                                                nullptr);
         QCOMPARE(context.thumbnailStore(), thumbnailsPtr);
         QCOMPARE(context.pageImageLoader(), imagesPtr);
         QCOMPARE(context.comicImporter(), importerPtr);
     }
 
+    void injectedCredentialAndOcrValidatorPortsAreExposed() {
+        auto repository = std::make_unique<StubProjectRepository>();
+        auto recents = std::make_unique<StubRecentProjectsStore>();
+        auto settings = std::make_unique<StubAppSettingsStore>();
+        auto credentials = std::make_unique<StubCredentialStore>();
+        auto validator = std::make_unique<StubOcrModelValidator>();
+        auto* credentialsPtr = credentials.get();
+        auto* validatorPtr = validator.get();
+
+        manga::app::ApplicationContext context(std::move(repository),
+                                               std::move(recents),
+                                               std::move(settings),
+                                               nullptr,
+                                               nullptr,
+                                               nullptr,
+                                               nullptr,
+                                               nullptr,
+                                               nullptr,
+                                               nullptr,
+                                               nullptr,
+                                               std::move(credentials),
+                                               std::move(validator));
+        QCOMPARE(context.credentialStore(), credentialsPtr);
+        QCOMPARE(context.ocrModelValidator(), validatorPtr);
+    }
+
+    void productionContextInstantiatesAdapters() {
+        manga::app::ApplicationContext context;
+        QVERIFY(context.projectRepository() != nullptr);
+        QVERIFY(context.recentProjectsStore() != nullptr);
+        QVERIFY(context.appSettingsStore() != nullptr);
+        QVERIFY(context.thumbnailStore() != nullptr);
+        QVERIFY(context.pageImageLoader() != nullptr);
+        QVERIFY(context.comicImporter() != nullptr);
+        QVERIFY(context.credentialStore() != nullptr);
+        QVERIFY(context.ocrModelValidator() != nullptr);
+        QVERIFY(context.operationRegistry() != nullptr);
+    }
+
     void legacyThreeArgInjectionLeavesImagePortsNull() {
         manga::app::ApplicationContext context(std::make_unique<StubProjectRepository>(),
                                                std::make_unique<StubRecentProjectsStore>(),
                                                std::make_unique<StubAppSettingsStore>());
-        QVERIFY(context.thumbnailStore() == nullptr); // 编辑器必须容忍空端口（测试注入场景）
+        QVERIFY(context.thumbnailStore() == nullptr); // Editors must tolerate unbound ports in injected test wiring.
         QVERIFY(context.pageImageLoader() == nullptr);
         QVERIFY(context.comicImporter() == nullptr);
+        QVERIFY(context.credentialStore() == nullptr);
+        QVERIFY(context.ocrModelValidator() == nullptr);
     }
 };
 

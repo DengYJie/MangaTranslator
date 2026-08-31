@@ -10,6 +10,21 @@ using namespace manga::application;
 using namespace manga::application::test;
 using namespace manga::domain;
 
+namespace {
+
+OperationDescriptor layoutDescriptor(const LayoutRequest& req, const ProjectId& projectId) {
+    return OperationDescriptor{
+        .stage = OperationStage::Layout,
+        .projectId = projectId,
+        .pageId = req.pageId,
+        .regionId = req.regionId,
+        .displayTarget = QStringLiteral("Test Region"),
+        .cancellable = true,
+    };
+}
+
+} // namespace
+
 void LayoutRegionUseCaseTest::testSuccessfulLayout() {
     FakeTextLayouter layouter;
     OperationRegistry registry;
@@ -29,7 +44,7 @@ void LayoutRegionUseCaseTest::testSuccessfulLayout() {
     layouter.nextResponse.regionId = req.regionId;
 
     OperationId opId;
-    auto future = useCase.execute(req, projectId, 1, opId);
+    auto future = useCase.execute(req, layoutDescriptor(req, projectId), 1, opId);
 
     QVERIFY(future.isFinished());
     QVERIFY(future.result().has_value());
@@ -57,7 +72,7 @@ void LayoutRegionUseCaseTest::testLayoutFailure() {
     req.contentRevision = 10;
 
     OperationId opId;
-    auto future = useCase.execute(req, projectId, 1, opId);
+    auto future = useCase.execute(req, layoutDescriptor(req, projectId), 1, opId);
 
     QVERIFY(future.isFinished());
     QVERIFY(!future.result().has_value());
@@ -76,8 +91,9 @@ void LayoutRegionUseCaseTest::testInvalidRequestDoesNotCallLayouter() {
     request.constraints.lineSpacing = 1.0;
     request.logicalDpi = 96.0;
 
+    const auto projectId = ProjectId::generate();
     OperationId operationId;
-    const auto result = useCase.execute(request, ProjectId::generate(), 1, operationId).result();
+    const auto result = useCase.execute(request, layoutDescriptor(request, projectId), 1, operationId).result();
 
     QVERIFY(!result.has_value());
     QCOMPARE(result.error().category, ErrorCategory::Input);
@@ -104,7 +120,7 @@ void LayoutRegionUseCaseTest::testCancellation() {
     req.contentRevision = 10;
 
     OperationId opId;
-    auto future = useCase.execute(req, projectId, 1, opId);
+    auto future = useCase.execute(req, layoutDescriptor(req, projectId), 1, opId);
 
     registry.cancelOperation(opId);
     layouter.complete();

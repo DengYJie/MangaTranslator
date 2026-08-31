@@ -2,6 +2,7 @@
 
 #include "app/ApplicationContext.h"
 #include "application/ports/IAppSettingsStore.h"
+#include "application/usecase/settings/AppSettingsUseCases.h"
 #include "application/workflow/OperationRegistry.h"
 #include "ui/navigation/NavigationController.h"
 #include "ui/navigation/NavigationPanel.h"
@@ -55,14 +56,18 @@ Application::~Application() {
 }
 
 void Application::applyThemeFromSettings() {
-    const auto value = m_context->appSettingsStore()->readSetting(QStringLiteral("ui/theme"));
-    const QString theme = value ? value->toString() : QStringLiteral("system");
-    if (theme == QLatin1String("light")) {
-        fluent::FluentElement::setTheme(fluent::FluentElement::Light);
-    } else if (theme == QLatin1String("dark")) {
-        fluent::FluentElement::setTheme(fluent::FluentElement::Dark);
+    const application::LoadAppSettingsUseCase loadSettings(m_context->appSettingsStore());
+    switch (loadSettings.execute().theme) {
+        case application::AppTheme::Light:
+            fluent::FluentElement::setTheme(fluent::FluentElement::Light);
+            break;
+        case application::AppTheme::Dark:
+            fluent::FluentElement::setTheme(fluent::FluentElement::Dark);
+            break;
+        case application::AppTheme::System:
+            // FluentQt publishes only Light and Dark, so System keeps its default resolution.
+            break;
     }
-    // "system" leaves the FluentQt default; following OS changes arrives with the settings page.
 }
 
 int Application::run() {

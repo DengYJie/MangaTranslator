@@ -6,6 +6,8 @@ qt_add_executable(manga_tests_services
     BaberuOcrTest.cpp
     BaberuOcrIntegrationTest.h
     BaberuOcrIntegrationTest.cpp
+    OcrModelValidatorTest.h
+    OcrModelValidatorTest.cpp
     QtTextLayouterTest.cpp
 )
 manga_apply_project_options(manga_tests_services)
