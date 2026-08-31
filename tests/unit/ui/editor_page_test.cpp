@@ -115,6 +115,16 @@ private Q_SLOTS:
         QTest::mouseClick(page.canvasForTest()->placeholderActionButtonForTest(), Qt::LeftButton);
         QCOMPARE(spy.size(), 1);
     }
+    void commandBarIsIntegrated() {
+        test::FakeThumbnailStore thumbnails;
+        test::FakePageImageLoader images;
+        application::OperationRegistry registry;
+        ui::screen::editor::EditorViewModel viewModel(&thumbnails, &images, &registry);
+        ui::screen::editor::EditorPage page(&viewModel);
+
+        auto* commandBar = page.findChild<QWidget*>(QStringLiteral("editorCommandBar"));
+        QVERIFY(commandBar != nullptr);
+    }
 };
 
 QTEST_MAIN(EditorPageTest)

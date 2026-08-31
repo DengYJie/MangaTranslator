@@ -135,38 +135,36 @@ int Application::run() {
                          dialog->setSecondaryButtonText(QCoreApplication::translate("Application", "不保存"));
                          dialog->setCloseButtonText(QCoreApplication::translate("Application", "取消"));
 
-                         QObject::connect(
-                             dialog,
-                             &fluent::ContentDialog::primaryButtonClicked,
-                             editorViewModel,
-                             [editorViewModel, mainWindow, handleProjectClose]() {
-                                 // When saving finishes, EditorViewModel emits saveCompleted. We connect a one-off
-                                 // lambda to catch it.
-                                 auto* connection = new QMetaObject::Connection();
-                                 *connection = QObject::connect(
-                                     editorViewModel,
-                                     &ui::screen::editor::EditorViewModel::saveCompleted,
-                                     mainWindow,
-                                     [editorViewModel, handleProjectClose, connection]() {
-                                         QObject::disconnect(*connection);
-                                         delete connection;
-                                         editorViewModel->confirmDiscardAndClose(); // Force closes session after save
-                                     });
-                                 // Also need to handle fail, but prompt says "失败留在编辑器", so we do nothing on fail
-                                 // except disconnect
-                                 auto* failConnection = new QMetaObject::Connection();
-                                 *failConnection = QObject::connect(editorViewModel,
-                                                                    &ui::screen::editor::EditorViewModel::saveFailed,
-                                                                    mainWindow,
-                                                                    [connection, failConnection]() {
-                                                                        QObject::disconnect(*connection);
-                                                                        QObject::disconnect(*failConnection);
-                                                                        delete connection;
-                                                                        delete failConnection;
-                                                                    });
+                         QObject::connect(dialog,
+                                          &fluent::ContentDialog::primaryButtonClicked,
+                                          editorViewModel,
+                                          [editorViewModel, mainWindow, handleProjectClose]() {
+                                              // When saving finishes, EditorViewModel emits saveCompleted. We connect a
+                                              // one-off lambda to catch it.
+                                              auto saveConn = std::make_shared<QMetaObject::Connection>();
+                                              auto failConn = std::make_shared<QMetaObject::Connection>();
 
-                                 editorViewModel->saveProject();
-                             });
+                                              *saveConn = QObject::connect(
+                                                  editorViewModel,
+                                                  &ui::screen::editor::EditorViewModel::saveCompleted,
+                                                  mainWindow,
+                                                  [editorViewModel, handleProjectClose, saveConn, failConn]() {
+                                                      QObject::disconnect(*saveConn);
+                                                      QObject::disconnect(*failConn);
+                                                      editorViewModel->confirmDiscardAndClose();
+                                                  });
+
+                                              *failConn =
+                                                  QObject::connect(editorViewModel,
+                                                                   &ui::screen::editor::EditorViewModel::saveFailed,
+                                                                   mainWindow,
+                                                                   [saveConn, failConn]() {
+                                                                       QObject::disconnect(*saveConn);
+                                                                       QObject::disconnect(*failConn);
+                                                                   });
+
+                                              editorViewModel->saveProject();
+                                          });
 
                          QObject::connect(dialog,
                                           &fluent::ContentDialog::secondaryButtonClicked,

@@ -68,8 +68,8 @@ void EditorCommandBar::buildUi() {
         m_viewModel->setActiveTool(CanvasTool::CreateRegion);
     });
     connect(m_previewSelectorButton, &fluent::basicinput::Button::clicked, this, [this]() {
-        auto mode = m_viewModel->state().previewMode == PreviewMode::Original ? PreviewMode::Translation
-                                                                              : PreviewMode::Original;
+        auto mode =
+            m_viewModel->state().previewMode == PreviewMode::Original ? PreviewMode::Translated : PreviewMode::Original;
         m_viewModel->setPreviewMode(mode);
     });
     connect(m_saveButton, &fluent::basicinput::Button::clicked, m_viewModel, &EditorViewModel::saveProject);
@@ -81,9 +81,7 @@ EditorCommandBar::createIconButton(const QString& glyph, const QString& tooltip,
     btn->setObjectName(name);
     btn->setFluentStyle(fluent::basicinput::Button::Subtle);
     btn->setFluentLayout(fluent::basicinput::Button::IconOnly);
-    fluent::Icon icon;
-    icon.setGlyph(glyph);
-    btn->setIcon(icon);
+    btn->setIconGlyph(glyph);
     btn->setToolTip(tooltip);
     btn->setAccessibleName(tooltip);
     return btn;
@@ -92,7 +90,7 @@ EditorCommandBar::createIconButton(const QString& glyph, const QString& tooltip,
 void EditorCommandBar::render(const EditorState& state) {
     m_undoButton->setEnabled(state.canUndo);
     m_redoButton->setEnabled(state.canRedo);
-    m_saveButton->setEnabled(state.saveState.isDirty && !state.isSaving);
+    m_saveButton->setEnabled(state.saveState.isDirty && !state.saveState.isSaving);
 
     m_selectButton->setChecked(state.activeTool == CanvasTool::Select);
     m_panButton->setChecked(state.activeTool == CanvasTool::Pan);
@@ -114,8 +112,8 @@ void EditorCommandBar::setupShortcuts() {
     makeGlobal(QStringLiteral("R"), [this]() { m_viewModel->setActiveTool(CanvasTool::CreateRegion); });
     makeGlobal(QStringLiteral("H"), [this]() { m_viewModel->setActiveTool(CanvasTool::Pan); });
     makeGlobal(QStringLiteral("Space"), [this]() {
-        auto mode = m_viewModel->state().previewMode == PreviewMode::Original ? PreviewMode::Translation
-                                                                              : PreviewMode::Original;
+        auto mode =
+            m_viewModel->state().previewMode == PreviewMode::Original ? PreviewMode::Translated : PreviewMode::Original;
         m_viewModel->setPreviewMode(mode);
     });
     makeGlobal(QStringLiteral("+"), [this]() { Q_EMIT zoomInRequested(); });

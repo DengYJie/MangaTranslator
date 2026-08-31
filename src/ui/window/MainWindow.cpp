@@ -7,6 +7,7 @@
 #include <QCloseEvent>
 #include <QGuiApplication>
 #include <QKeySequence>
+#include <QMetaMethod>
 #include <QScreen>
 #include <QShortcut>
 
@@ -39,7 +40,7 @@ void MainWindow::setNavigationController(navigation::NavigationController* contr
     }
     connect(this, &NavigationWindow::backRequested, m_controller, &navigation::NavigationController::goBack);
     connect(this, &NavigationWindow::navigationRequested, this, [this](const QString& routeKey) {
-        if (receivers(SIGNAL(navigationInterceptRequested(QString))) > 0) {
+        if (isSignalConnected(QMetaMethod::fromSignal(&MainWindow::navigationInterceptRequested))) {
             Q_EMIT navigationInterceptRequested(routeKey);
         } else {
             m_controller->navigate(routeKey);
@@ -107,7 +108,7 @@ void MainWindow::forceNavigate(const QString& routeKey) {
 }
 
 void MainWindow::closeEvent(QCloseEvent* event) {
-    if (!m_forceClose && receivers(SIGNAL(closeRequested())) > 0) {
+    if (!m_forceClose && isSignalConnected(QMetaMethod::fromSignal(&MainWindow::closeRequested))) {
         event->ignore();
         Q_EMIT closeRequested();
         return;

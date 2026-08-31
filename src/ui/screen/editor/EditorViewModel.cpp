@@ -210,6 +210,8 @@ void EditorViewModel::closeProjectSession() {
     }
     invalidateRequests();
 
+    // P5-D 项目任务取消钩子（当前为空实现）
+
     // Stop accepting commands by destroying undo infrastructure before releasing the aggregate.
     m_undoStack.reset();
     m_commandContext.reset();
@@ -1281,7 +1283,7 @@ void EditorViewModel::saveProject() {
         return; // Already saving
     }
 
-    sealActiveTextSession();
+    prepareForSave();
 
     updateState([this](EditorState& s) { s.saveState.isSaving = true; });
 

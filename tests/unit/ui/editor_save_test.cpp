@@ -93,6 +93,7 @@ private Q_SLOTS:
 
         QTRY_VERIFY(!viewModel.state().saveState.isSaving);
         QVERIFY(viewModel.state().saveState.isDirty);
+        QVERIFY(!viewModel.undoStackIsCleanForTest());
     }
 };
 

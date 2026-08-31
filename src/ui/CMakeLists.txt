@@ -73,6 +73,8 @@ add_library(manga_ui STATIC
     screen/import/ImportViewModel.h
     screen/import/PendingSourcesModel.cpp
     screen/import/PendingSourcesModel.h
+    widget/EditorCommandBar.cpp
+    widget/EditorCommandBar.h
     widget/InspectorPanel.cpp
     widget/InspectorPanel.h
     widget/PageListModel.cpp

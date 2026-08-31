@@ -95,6 +95,23 @@ private slots:
         controller.goBack();
         QVERIFY(!window.titleBar()->isBackButtonVisible());
     }
+
+    void closeInterceptionEmitsSignal() {
+        FakeSettingsStore settings;
+        manga::ui::window::MainWindow window(&settings);
+        window.show();
+        QCoreApplication::processEvents();
+
+        QSignalSpy spy(&window, &manga::ui::window::MainWindow::closeRequested);
+        QObject::connect(&window, &manga::ui::window::MainWindow::closeRequested, []() {});
+
+        window.close();
+        QCOMPARE(spy.count(), 1);
+        QVERIFY(window.isVisible());
+
+        window.forceClose();
+        QVERIFY(!window.isVisible());
+    }
 };
 
 QTEST_MAIN(MainWindowTest)

@@ -90,6 +90,7 @@ void EditorPage::buildUi() {
     layout->setSpacing(4);
 
     m_commandBar = new widget::EditorCommandBar(m_viewModel, this);
+    m_commandBar->setObjectName(QStringLiteral("editorCommandBar"));
     layout->addWidget(m_commandBar);
 
     m_splitter = new QSplitter(Qt::Horizontal, this);
