@@ -495,3 +495,31 @@ set_tests_properties(manga_tests_ui_processing_adoption PROPERTIES
     LABELS "unit;ui"
     TIMEOUT 15
 )
+
+qt_add_executable(manga_tests_ui_editor_processing
+    editor_processing_controller_test.cpp
+)
+manga_apply_project_options(manga_tests_ui_editor_processing)
+set_target_properties(manga_tests_ui_editor_processing PROPERTIES AUTOMOC ON)
+
+target_include_directories(manga_tests_ui_editor_processing
+    PRIVATE
+        "${PROJECT_SOURCE_DIR}/tests/unit/application"
+)
+
+target_link_libraries(manga_tests_ui_editor_processing
+    PRIVATE
+        manga_ui
+        manga_application
+        manga_domain
+        Qt6::Test
+        Qt6::Widgets
+)
+
+manga_deploy_qt_runtime(manga_tests_ui_editor_processing)
+add_test(NAME manga_tests_ui_editor_processing COMMAND manga_tests_ui_editor_processing)
+set_tests_properties(manga_tests_ui_editor_processing PROPERTIES
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
+    LABELS "unit;ui"
+    TIMEOUT 15
+)

@@ -48,6 +48,8 @@ add_library(manga_ui STATIC
     navigation/NavigationWidget.h
     screen/editor/EditorPage.cpp
     screen/editor/EditorPage.h
+    screen/editor/EditorProcessingController.cpp
+    screen/editor/EditorProcessingController.h
     screen/editor/EditorState.h
     screen/editor/EditorViewModel.cpp
     screen/editor/EditorViewModel.h
@@ -114,4 +116,3 @@ target_link_libraries(manga_ui
         FluentQt::FluentQt
         QWindowKit::Widgets
 )
-# P5-C Integration: EditorViewModel hooks added

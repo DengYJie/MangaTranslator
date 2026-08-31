@@ -11,6 +11,7 @@
 #include "ui/command/ProcessingAdoptionCommands.h"
 #include "ui/command/RegionCommands.h"
 #include "ui/command/RegionPropertyCommand.h"
+#include "ui/screen/editor/EditorProcessingController.h"
 
 #include <QFileInfo>
 
@@ -230,6 +231,10 @@ void EditorViewModel::closeProjectSession() {
         useCase.execute(request, context); // Fire and forget
     }
 
+    if (m_processingController != nullptr) {
+        m_processingController->reset();
+    }
+
     m_hasSession = false;
     m_session = application::ProjectSessionDescriptor{};
     m_openedSession.reset();
@@ -273,6 +278,10 @@ void EditorViewModel::selectPage(const domain::PageId& pageId) {
     });
 
     rebuildCurrentPageProjection();
+
+    if (m_processingController != nullptr) {
+        m_processingController->handlePageSwitched(pageId);
+    }
 
     Q_EMIT thumbnailsInvalidated();
 
@@ -1489,5 +1498,13 @@ void EditorViewModel::confirmDiscardAndClose() {
 }
 
 void EditorViewModel::cancelClose() {}
+
+void EditorViewModel::setProcessingController(EditorProcessingController* controller) {
+    m_processingController = controller;
+}
+
+void EditorViewModel::updateProcessingState(const EditorProcessingState& processingState) {
+    updateState([&](EditorState& s) { s.processing = processingState; });
+}
 
 } // namespace manga::ui::screen::editor

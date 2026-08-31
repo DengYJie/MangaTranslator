@@ -54,6 +54,9 @@ private:
     fluent::basicinput::Button* m_panButton{nullptr};
     fluent::basicinput::Button* m_createRegionButton{nullptr};
     fluent::basicinput::Button* m_previewSelectorButton{nullptr};
+    fluent::basicinput::Button* m_smartTranslateButton{nullptr};
+    fluent::basicinput::Button* m_adoptButton{nullptr};
+    fluent::basicinput::Button* m_rejectButton{nullptr};
     fluent::basicinput::Button* m_saveButton{nullptr};
 };
 

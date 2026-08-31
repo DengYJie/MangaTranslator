@@ -30,6 +30,8 @@ class OperationRegistry;
 
 namespace manga::ui::screen::editor {
 
+class EditorProcessingController;
+
 struct ProjectCloseSummary {
     QString projectName;
     bool isDirty{false};
@@ -135,6 +137,34 @@ public:
         return m_openedSession ? m_openedSession->project.revision() : 0;
     }
 
+    void setProcessingController(EditorProcessingController* controller);
+    [[nodiscard]] EditorProcessingController* processingController() const noexcept {
+        return m_processingController;
+    }
+    void updateProcessingState(const EditorProcessingState& processingState);
+    void setNotice(const std::optional<EditorNotice>& notice) {
+        updateState([&](EditorState& s) { s.notice = notice; });
+    }
+
+    [[nodiscard]] domain::ComicProject* projectAggregate() noexcept {
+        return m_openedSession ? &m_openedSession->project : nullptr;
+    }
+    [[nodiscard]] const domain::ComicProject* projectAggregate() const noexcept {
+        return m_openedSession ? &m_openedSession->project : nullptr;
+    }
+    [[nodiscard]] QString projectRootPath() const noexcept {
+        return m_openedSession ? m_openedSession->projectRootPath : QString();
+    }
+    [[nodiscard]] bool hasSession() const noexcept {
+        return m_hasSession;
+    }
+    [[nodiscard]] quint64 projectSessionGeneration() const noexcept {
+        return m_state.projectSessionGeneration;
+    }
+    [[nodiscard]] quint64 viewGeneration() const noexcept {
+        return m_state.viewGeneration;
+    }
+
 Q_SIGNALS:
     void stateChanged(const EditorState& state);
     void pageImageReady(const PageImageDelivery& delivery);
@@ -236,6 +266,8 @@ private:
     QFutureWatcher<application::Result<application::SaveProjectResult>> m_saveWatcher;
     quint64 m_saveToken{0};
     application::OperationId m_saveOperation{};
+
+    EditorProcessingController* m_processingController{nullptr};
 };
 
 } // namespace manga::ui::screen::editor

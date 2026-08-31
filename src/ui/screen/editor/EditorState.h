@@ -1,6 +1,8 @@
 #pragma once
 
 #include "application/dto/ProjectDto.h"
+#include "application/operation/OperationId.h"
+#include "application/operation/OperationStage.h"
 #include "domain/model/Geometry.h"
 #include "domain/model/Uuid.h"
 #include "ui/base/DomainMetaTypes.h"
@@ -90,6 +92,49 @@ struct DocumentSaveState {
     bool operator==(const DocumentSaveState&) const = default;
 };
 
+/// Processing status for background tasks and proposals.
+enum class ProcessingStatus {
+    Idle,
+    Queued,
+    Running,
+    NeedsReview,
+    Completed,
+    Failed,
+    Cancelled
+};
+
+/// Region-level processing status projection.
+struct RegionProcessingStatus {
+    domain::RegionId regionId;
+    ProcessingStatus status{ProcessingStatus::Idle};
+    application::OperationStage stage{application::OperationStage::Ocr};
+    QString errorSummary;
+    bool hasConflict{false};
+
+    bool operator==(const RegionProcessingStatus&) const = default;
+};
+
+/// Projection of asynchronous processing, review, and proposal state.
+/// Holds only operation IDs, target IDs, stage/status, safe issue summaries,
+/// and proposal availability. Never stores raw result images.
+struct EditorProcessingState {
+    domain::PageId activePageId{};
+    application::OperationId activeOperationId{};
+    application::OperationStage stage{application::OperationStage::Ocr};
+    ProcessingStatus status{ProcessingStatus::Idle};
+    bool isRunning{false};
+    bool hasProposal{false};
+    QString safeMessage;
+    QVector<domain::RegionId> targetRegionIds;
+    QVector<domain::RegionId> needsReviewRegionIds;
+    QVector<domain::RegionId> failedRegionIds;
+    QVector<domain::RegionId> runningRegionIds;
+    QVector<domain::RegionId> conflictRegionIds;
+    QVector<RegionProcessingStatus> regionStatuses;
+
+    bool operator==(const EditorProcessingState&) const = default;
+};
+
 /// Frozen editor state snapshot. All value-typed, no domain pointers or pixmaps.
 struct EditorState {
     domain::ProjectId projectId{}; // nil = no project open
@@ -125,6 +170,8 @@ struct EditorState {
     bool undoHistoryFaulted{false};
     /// Document save state projection.
     DocumentSaveState saveState;
+    /// Asynchronous processing and review workflow state projection.
+    EditorProcessingState processing;
 
     bool operator==(const EditorState&) const = default;
 };

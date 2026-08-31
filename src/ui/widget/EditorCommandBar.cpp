@@ -60,6 +60,13 @@ void EditorCommandBar::buildUi() {
     m_createRegionButton->setCheckable(true);
     m_previewSelectorButton = createIconButton(
         QStringLiteral("\uE890"), tr("Preview Original/Translation (Space)"), QStringLiteral("previewSelectorButton"));
+    m_smartTranslateButton =
+        createIconButton(QStringLiteral("\uE774"), tr("智能翻译 (Ctrl+T)"), QStringLiteral("smartTranslateButton"));
+    m_adoptButton = createIconButton(QStringLiteral("\uE73E"), tr("采纳建议"), QStringLiteral("adoptButton"));
+    m_adoptButton->setFluentStyle(fluent::basicinput::Button::Accent);
+    m_adoptButton->setVisible(false);
+    m_rejectButton = createIconButton(QStringLiteral("\uE711"), tr("拒绝建议"), QStringLiteral("rejectButton"));
+    m_rejectButton->setVisible(false);
     m_saveButton = createIconButton(QStringLiteral("\uE74E"), tr("Save (Ctrl+S)"), QStringLiteral("saveButton"));
 
     layout->addWidget(m_undoButton);
@@ -76,6 +83,9 @@ void EditorCommandBar::buildUi() {
     layout->addWidget(m_createRegionButton);
     layout->addSpacing(8);
     layout->addWidget(m_previewSelectorButton);
+    layout->addWidget(m_smartTranslateButton);
+    layout->addWidget(m_adoptButton);
+    layout->addWidget(m_rejectButton);
     layout->addStretch();
     layout->addWidget(m_saveButton);
 
@@ -98,6 +108,26 @@ void EditorCommandBar::buildUi() {
         auto mode =
             m_viewModel->state().previewMode == PreviewMode::Original ? PreviewMode::Translated : PreviewMode::Original;
         m_viewModel->setPreviewMode(mode);
+    });
+    connect(m_smartTranslateButton, &fluent::basicinput::Button::clicked, this, [this]() {
+        if (auto* ctrl = m_viewModel->processingController()) {
+            const auto& state = m_viewModel->state();
+            if (state.processing.isRunning) {
+                ctrl->cancelPageOperations(state.currentPageId);
+            } else if (state.currentPageId.isValid()) {
+                ctrl->smartTranslatePage(state.currentPageId);
+            }
+        }
+    });
+    connect(m_adoptButton, &fluent::basicinput::Button::clicked, this, [this]() {
+        if (auto* ctrl = m_viewModel->processingController()) {
+            ctrl->adoptProposal(m_viewModel->state().currentPageId);
+        }
+    });
+    connect(m_rejectButton, &fluent::basicinput::Button::clicked, this, [this]() {
+        if (auto* ctrl = m_viewModel->processingController()) {
+            ctrl->rejectProposal(m_viewModel->state().currentPageId);
+        }
     });
     connect(m_saveButton, &fluent::basicinput::Button::clicked, m_viewModel, &EditorViewModel::saveProject);
 }
@@ -127,6 +157,7 @@ void EditorCommandBar::render(const EditorState& state) {
 
     // Disable viewport and canvas tools if no page is active
     const bool hasPage = state.currentPageId.isValid();
+    const bool hasRegions = !state.regions.isEmpty();
     m_zoomOutButton->setEnabled(hasPage);
     m_zoomInButton->setEnabled(hasPage);
     m_fitToPageButton->setEnabled(hasPage);
@@ -135,6 +166,19 @@ void EditorCommandBar::render(const EditorState& state) {
     m_panButton->setEnabled(hasPage);
     m_createRegionButton->setEnabled(hasPage);
     m_previewSelectorButton->setEnabled(hasPage);
+
+    if (state.processing.isRunning) {
+        m_smartTranslateButton->setEnabled(true);
+        m_smartTranslateButton->setIconGlyph(QStringLiteral("\uE711"));
+        m_smartTranslateButton->setToolTip(tr("取消处理"));
+    } else {
+        m_smartTranslateButton->setEnabled(hasPage && hasRegions);
+        m_smartTranslateButton->setIconGlyph(QStringLiteral("\uE774"));
+        m_smartTranslateButton->setToolTip(tr("智能翻译 (Ctrl+T)"));
+    }
+
+    m_adoptButton->setVisible(state.processing.hasProposal);
+    m_rejectButton->setVisible(state.processing.hasProposal);
 }
 
 void EditorCommandBar::setupShortcuts() {
@@ -164,6 +208,14 @@ void EditorCommandBar::setupShortcuts() {
     makeGlobal(QStringLiteral("Delete"), [this]() { Q_EMIT deleteSelectedRegionsRequested(); });
     makeGlobal(QStringLiteral("Return"), [this]() { Q_EMIT commitRequested(); });
     makeGlobal(QStringLiteral("Enter"), [this]() { Q_EMIT commitRequested(); });
+    makeGlobal(QStringLiteral("Ctrl+T"), [this]() {
+        if (auto* ctrl = m_viewModel->processingController()) {
+            const auto& state = m_viewModel->state();
+            if (!state.processing.isRunning && state.currentPageId.isValid() && !state.regions.isEmpty()) {
+                ctrl->smartTranslatePage(state.currentPageId);
+            }
+        }
+    });
 
     auto* sSave = new QShortcut(QKeySequence::Save, this);
     sSave->setContext(Qt::ApplicationShortcut);
