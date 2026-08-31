@@ -4,9 +4,12 @@
 
 #include <QApplication>
 #include <QKeyEvent>
+#include <QList>
 #include <QMouseEvent>
 #include <QSignalSpy>
 #include <QtTest>
+
+#include <algorithm>
 
 using manga::domain::ImageSize;
 using manga::domain::RectGeometry;
@@ -499,9 +502,14 @@ private Q_SLOTS:
         canvas.setPageImage(image);
         canvas.setTool(Tool::Select);
 
-        const RegionId id1 = RegionId::generate();
-        const RegionId id2 = RegionId::generate();
-        const RegionId id3 = RegionId::generate();
+        // The canvas stores overlays in a QMap keyed by RegionId, so the Tab cycle follows
+        // RegionId sort order rather than insertion order. Sort the generated ids to make
+        // the expected cycle deterministic.
+        QList<RegionId> ids{RegionId::generate(), RegionId::generate(), RegionId::generate()};
+        std::sort(ids.begin(), ids.end());
+        const RegionId id1 = ids[0];
+        const RegionId id2 = ids[1];
+        const RegionId id3 = ids[2];
         canvas.setRegions(
             {{id1, {10, 10, 50, 50}, true}, {id2, {70, 70, 50, 50}, false}, {id3, {130, 130, 50, 50}, false}});
         QCoreApplication::processEvents();
