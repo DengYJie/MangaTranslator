@@ -223,6 +223,24 @@ private Q_SLOTS:
         QCOMPARE(viewModel.undoStackCountForTest(), 2);
     }
 
+    void saveSealsBatch() {
+        Fixture f;
+        EditorViewModel viewModel(&f.thumbnailStore, &f.imageLoader, &f.registry);
+        viewModel.setTextEditClockForTest([&f]() { return f.clock.nowMs; });
+        const auto session = makeSession(1, 1);
+        viewModel.openProjectSession(session);
+        const auto pageId = pageAt(session, 0);
+        const auto regionId = regionAt(session, 0, 0);
+        viewModel.selectRegion(regionId, RegionSelectionMode::Replace);
+
+        viewModel.commitInspectorFieldEdit(pageId, {regionId}, InspectorField::ManualTranslation, QStringLiteral("A"));
+        viewModel.prepareForSave(); // Simulates save action sealing the batch
+        f.clock.advance(50);
+        viewModel.commitInspectorFieldEdit(pageId, {regionId}, InspectorField::ManualTranslation, QStringLiteral("AB"));
+
+        QCOMPARE(viewModel.undoStackCountForTest(), 2);
+    }
+
     void selectionChangeSealsBatch() {
         Fixture f;
         EditorViewModel viewModel(&f.thumbnailStore, &f.imageLoader, &f.registry);

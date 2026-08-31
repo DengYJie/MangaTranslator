@@ -1027,6 +1027,10 @@ void EditorViewModel::sealTextEditSession() {
     sealActiveTextSession();
 }
 
+void EditorViewModel::prepareForSave() {
+    sealActiveTextSession();
+}
+
 void EditorViewModel::pushPropertyCommand(command::RegionPropertyCommand* cmd) {
     m_undoStack->push(cmd);
     // A merged push deletes cmd; read fault state from the surviving stack top.

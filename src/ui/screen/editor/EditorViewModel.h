@@ -89,6 +89,8 @@ public:
     void adoptCandidate(const domain::PageId& pageId, const domain::RegionId& regionId, const QString& candidateId);
     /// Seals the active text merge batch (FocusOut from an Inspector text control).
     void sealTextEditSession();
+    /// Seals the active text merge batch before a project save to preserve undo boundaries.
+    void prepareForSave();
 
     /// Test-only hook: removes a region via RemoveRegionUseCase and rebuilds projection.
     /// Production intents must not use this method.
