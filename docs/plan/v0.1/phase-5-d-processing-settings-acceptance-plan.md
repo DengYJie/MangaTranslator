@@ -26,6 +26,16 @@
 - 新增可见字符串必须可翻译，使用稳定词汇：排队中、处理中、正在停止、已完成、失败、已取消、未保存、正在保存、已保存。
 - 下列提交步骤仅在执行者得到明确 Git 授权时执行；否则报告建议提交消息。
 
+## 前置契约：V0.2 / Koharu 铺垫（不增任务、不加工期）
+
+以下条目来自 Koharu 工作流语义（[Process Pages](https://koharu.rs/workflow/process-pages/)、[Review Text and Layers](https://koharu.rs/workflow/review-text/)）与 V0.2 冻结契约（`docs/plan/v0.2/phase-0-contracts.md`、`docs/v0.2-technical-decisions.md` §1.1/§3.3/§3.4/§4）。它们只是词汇与语义对齐，执行对应任务时一并满足，不改变任何任务的范围或交付物。反向边界同样有效：不得向 V0.1 的 Domain、Schema 或 `OcrResponse` 回灌 `ITextDetector`、Mask、Bubble/Panel 或 `ModelProfile`。
+
+1. **任务状态词汇（Task 2）**：`OperationState` 取值必须与 V0.2 冻结的 `pending/running/succeeded/skipped/blocked/failed/cancelled/stale` 保持一一可映射（Queued→pending、Running→running、Completed→succeeded、Failed/Cancelled 同名）；`skipped` 必须携带稳定原因码（`no_regions`/`no_source_text`/`empty_mask`），不得伪装为成功；`stale` 与 `failed` 分开表示。
+2. **调度语义（Task 3）**：阶段无适用输入时显式 skipped 并带原因码；同一项目会话同时只允许一个 pipeline invocation；每个阶段完成即提交候选，后续阶段失败不得抹掉较早候选；停止后不启动新阶段，未提交的原生推理结果丢弃。
+3. **采用即宏命令（Task 4，既有条目，此处冻结为验收点）**：一次采用只产生一个 `QUndoStack` 宏命令，对应 Koharu 的 "one pipeline invocation is one undo group"。
+4. **Baberu Manifest 扩展字段（Task 7）**：校验并保留 `source.repository`、`source.revision`、`source.license`、`runtime.opset`、`runtime.minimumOnnxRuntime`、`runtime.executionProvider`。这是 V0.2-P0 §1.1 的基线校正项，提前到本任务完成。
+5. **设置契约（Task 7/8）**：OCR 分类固定显示 Baberu 身份与模型校验状态，不出现单选项引擎选择器或自动横竖排开关；OpenAI-compatible 的默认模型使用可编辑模型 ID，模型列表仅在 Provider 明确支持时作为可选增强，不得成为配置前置；OCR 请求语言取项目源语言快照，全局默认语言只用于新建项目。
+
 ## Executable Settings Scope
 
 | 分类 | P5-D 交付 | 运行时效果 | 明确不显示 |
@@ -153,6 +163,7 @@ struct OperationSnapshot {
 
 - Produces `OperationRegistry::createOperation(descriptor, sessionGeneration, viewGeneration)`、`snapshot()`、`cancelOperation()`、`cancelProject()`、`markFinished()` 和 Qt Signal `operationsChanged(QVector<OperationSnapshot>)`。
 - 最多保留 32 条 settled 摘要或 10 分钟，以先到者为准；active operation 不受 settled 上限删除。
+- 前置契约第 1 条：`OperationState` 必须与 V0.2 冻结状态集合一一可映射；`skipped` 带稳定原因码、`stale` 与 `failed` 分离的表达方式在本任务定型（测试覆盖命名映射与 skipped 原因码）。
 
 - [ ] **Step 1: 写线程安全与状态序列失败测试**
 
@@ -202,6 +213,7 @@ git commit -m "feat(application): publish observable operation progress"
 **Interfaces:**
 - ApplicationContext exposes injected/production `IOcrEngine`、`ITranslator`、`IInpainter`、`ITextLayouter`、`IDerivedAssetStore`、`ICredentialStore` and executor ownership without exposing concrete adapters to UI。
 - Produces `PageProcessingProposal` containing per-stage result, target identity/revision snapshot and skipped reason; it never mutates `ComicProject`。
+- 前置契约第 2 条：阶段无适用输入时显式 skipped（带原因码），同一项目会话同时只允许一个 pipeline invocation，阶段完成即提交候选，后续阶段失败保留较早候选。Step 1 的"无 Region 不启动"用例升级为断言 skipped 原因码 `no_regions`。
 
 ```cpp
 struct RegionProcessingTarget {
@@ -492,6 +504,7 @@ struct AppSettingsSnapshot {
 - `LoadAppSettingsUseCase` supplies defaults and validates/clamps persisted values。
 - `SaveAppSettingsUseCase` validates whole snapshot before writing namespaced keys；partial write failure cannot occur because current store is synchronous/infallible, but invalid input writes nothing。
 - `IOcrModelValidator::validate(directory) -> Result<OcrModelStatus>`，services adapter wraps existing manifest validation。
+- 前置契约第 4 条：Manifest 校验扩展为保留 `source.repository`、`source.revision`、`source.license`、`runtime.opset`、`runtime.minimumOnnxRuntime`、`runtime.executionProvider`（V0.2-P0 §1.1 基线校正项）；`OcrModelStatus`/校验结果类型携带这些身份字段，供诊断与模型状态显示。未知字段、缺失字段和不兼容 runtime 继续失败关闭。
 
 - [ ] **Step 1: 写 typed settings 失败测试**
 
@@ -550,6 +563,7 @@ git commit -m "feat(application): add typed executable app settings"
 
 **Interfaces:**
 - Categories: `General`、`Ocr`、`AiTranslation`、`Appearance`；只注册这四项。
+- 前置契约第 5 条：OCR 分类固定显示 Baberu 身份与模型校验状态，不渲染引擎选择器或自动横竖排开关；AI 翻译分类的默认模型是可编辑模型 ID，不做远端模型枚举前置；OCR 语言行标注其作用于新建项目（既有 Region 的请求语言来自项目源语言快照）。
 - State 保存 persisted snapshot、draft、field errors、Dirty categories、credential status、model status、当前 category 和滚动位置；不保存 Secret。
 - Secret 仅存在短生命周期 `SecretBytes` 提交参数，提交后立即清零。
 
