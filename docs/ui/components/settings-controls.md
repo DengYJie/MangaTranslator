@@ -84,17 +84,6 @@ Header 始终显示，子选项展开。行为参考 WinUI 3 `Expander`：Chevro
 
 行本身不额外画大焦点框；具体输入控件显示标准焦点。若整行是 Button，则行显示完整焦点框。
 
-### Dirty
-
-- 标题旁小型圆点或 `已修改` 次级状态。
-- 不能只改背景色。
-- Dirty 指示不进入每行 Tab 顺序。
-
-### Saving
-
-- 对应控件暂时禁用或保持可编辑取决于保存模型。
-- 行末小型 ProgressRing；组级保存时优先在页面动作区显示，不让每行都转圈。
-
 ### Error
 
 - 控件边界 Critical。
@@ -141,20 +130,20 @@ Header 始终显示，子选项展开。行为参考 WinUI 3 `Expander`：Chevro
 
 ## 8. 编辑提交
 
-- TextBox：IME composition 期间不提交；失焦、Enter 或防抖后更新当前草稿。
-- ComboBox/ToggleSwitch：选择立即更新当前草稿。
-- NumberBox：保留非法编辑文本并显示错误；只有合法值更新草稿。
+- TextBox：IME composition 期间不提交；失焦、Enter 或防抖后更新持久状态。
+- ComboBox/ToggleSwitch：选择立即更新持久状态。
+- NumberBox：保留非法编辑文本并显示错误；合法值立即更新持久状态。
 - Slider + NumberBox：拖动 Slider 节流预览，松手提交；NumberBox 精确输入同步 Slider。
-- PasswordBox：只产生“替换密钥草稿”，不包含旧真实值。
+- PasswordBox：只产生“替换密钥输入”，不包含旧真实值。
 
-所有设置修改先进入可撤销的页面草稿；只有明确保存后才成为持久设置，标记为立即生效的安全预览项除外。
+所有设置修改都通过 ViewModel 立即写入设置存储。写入失败时保留错误状态并由页面显示 InfoBar。
 
 ## 9. 无障碍
 
 - 标题作为输入的 Name，说明作为 HelpText/Description，错误作为错误描述。
 - 行装饰图标不进入 Tab 顺序。
 - Expandable Header 暴露 expanded/collapsed State。
-- Dirty、Error、Disabled Reason 被屏幕阅读器读出。
+- Error、Disabled Reason 被屏幕阅读器读出。
 - Vertical/Horizontal 模式保持相同焦点顺序。
 - 高对比度下 Group 与输入边界使用系统语义色。
 
@@ -164,5 +153,5 @@ Header 始终显示，子选项展开。行为参考 WinUI 3 `Expander`：Chevro
 - ComboBox、PasswordBox、NumberBox、ToggleSwitch 和 Button 对齐一致。
 - 680 px 附近切换布局不丢焦点。
 - 200% 文本缩放后页面可滚动，控件不裁切。
-- Dirty、Saving、Error 和依赖禁用都有文本语义。
+- Error 和依赖禁用都有文本语义。
 - SettingsGroup 不形成卡片套卡片和过度阴影。

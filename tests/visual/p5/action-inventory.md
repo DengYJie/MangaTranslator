@@ -146,7 +146,6 @@
 | `settings.reduce_motion`| 开启/关闭减少动效 | — | `ToggleSwitch` | `SettingsViewModel::setReduceMotion(on)` |
 | `settings.canvas_bg` | 自定义画布背景色 | — | `LineEdit` (Hex) | `SettingsViewModel::setCanvasBackground(hex)` |
 | `settings.restore_defaults`| 恢复所有默认设置 | — | `Button` (Subtle) | `SettingsViewModel::restoreDefaults()` |
-| `settings.save` | 保存并应用设置 | `Ctrl+S` | `Button` (Accent) | `SettingsViewModel::saveSettings()` |
 
 ---
 

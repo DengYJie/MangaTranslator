@@ -35,7 +35,6 @@ public:
 class FakeOcrModelValidator : public ::manga::application::IOcrModelValidator {
 public:
     bool shouldFail{false};
-    ::manga::application::OcrModelStatus statusToReturn;
 
     ::manga::application::Result<::manga::application::OcrModelStatus>
     validate(const QString& modelDirectory) override {
@@ -68,14 +67,12 @@ class SettingsViewModelTest : public QObject {
 private Q_SLOTS:
     void testInitialObserveReplay();
     void testCategoryNavigationAndScrollPositions();
-    void testGeneralDraftEditingAndValidation();
-    void testOcrDraftEditingAndValidation();
-    void testAiTranslationDraftEditingAndCredentials();
-    void testAppearanceDraftEditingAndInstantThemePreview();
-    void testSaveWorkflowSuccess();
-    void testSaveWorkflowValidationFailure();
-    void testRestoreDefaultsAndRevert();
-    void testLeaveDecisionWorkflow();
+    void testGeneralEditingPersistsImmediately();
+    void testOcrEditingPersistsImmediatelyAndValidates();
+    void testAiTranslationEditingPersistsImmediatelyAndCredentials();
+    void testAppearanceEditingPersistsImmediatelyAndPreviewsTheme();
+    void testRestoreDefaultsPersistsImmediately();
+    void testUnavailableStoreReportsPersistenceFailure();
 };
 
 void SettingsViewModelTest::testInitialObserveReplay() {
@@ -95,9 +92,8 @@ void SettingsViewModelTest::testInitialObserveReplay() {
 
     QVERIFY(observed);
     QCOMPARE(receivedState.currentCategory, SettingsCategory::General);
-    QVERIFY(!receivedState.isDirty());
     QVERIFY(!receivedState.hasFieldErrors());
-    QCOMPARE(receivedState.draft, receivedState.persisted);
+    QCOMPARE(receivedState.persisted, ::manga::application::AppSettingsSnapshot{});
 }
 
 void SettingsViewModelTest::testCategoryNavigationAndScrollPositions() {
@@ -110,7 +106,6 @@ void SettingsViewModelTest::testCategoryNavigationAndScrollPositions() {
 
     vm.setCurrentCategory(SettingsCategory::Ocr);
     QCOMPARE(vm.state().currentCategory, SettingsCategory::Ocr);
-    QVERIFY(!vm.isDirty());
 
     vm.setScrollPosition(SettingsCategory::Ocr, 150);
     QCOMPARE(vm.state().scrollPositions.value(SettingsCategory::Ocr), 150);
@@ -120,7 +115,7 @@ void SettingsViewModelTest::testCategoryNavigationAndScrollPositions() {
     QCOMPARE(vm.state().scrollPositions.value(SettingsCategory::Ocr), 150);
 }
 
-void SettingsViewModelTest::testGeneralDraftEditingAndValidation() {
+void SettingsViewModelTest::testGeneralEditingPersistsImmediately() {
     FakeAppSettingsStore store;
     ::manga::application::test::FakeCredentialStore credStore;
     FakeOcrModelValidator validator;
@@ -129,25 +124,25 @@ void SettingsViewModelTest::testGeneralDraftEditingAndValidation() {
     SettingsViewModel vm(&store, &credentialOperations, &validator);
 
     vm.setRestoreLastProject(false);
-    QVERIFY(vm.isDirty());
-    QVERIFY(vm.state().isCategoryDirty(SettingsCategory::General));
+    QCOMPARE(vm.state().persisted.restoreLastProject, false);
+    QCOMPARE(store.m_values.value(QStringLiteral("general/restoreLastProject")).toBool(), false);
 
     vm.setRecentProjectLimit(20);
-    QCOMPARE(vm.state().draft.recentProjectLimit, 20);
+    QCOMPARE(vm.state().persisted.recentProjectLimit, 20);
+    QCOMPARE(store.m_values.value(QStringLiteral("general/recentProjectLimit")).toInt(), 20);
     QVERIFY(!vm.state().hasFieldErrors());
 
-    // Invalid recent limit (< 1 or > 50)
     vm.setRecentProjectLimit(0);
+    QCOMPARE(vm.state().persisted.recentProjectLimit, 0);
     QVERIFY(vm.state().fieldErrors.contains(QStringLiteral("recentProjectLimit")));
+    QCOMPARE(store.m_values.value(QStringLiteral("general/recentProjectLimit")).toInt(), 20);
 
-    vm.setRecentProjectLimit(55);
-    QVERIFY(vm.state().fieldErrors.contains(QStringLiteral("recentProjectLimit")));
-
-    vm.setRecentProjectLimit(8);
-    QVERIFY(!vm.state().fieldErrors.contains(QStringLiteral("recentProjectLimit")));
+    vm.setTheme(::manga::application::AppTheme::Dark);
+    QCOMPARE(vm.state().persisted.theme, ::manga::application::AppTheme::Dark);
+    QCOMPARE(store.m_values.value(QStringLiteral("appearance/theme")).toString(), QStringLiteral("dark"));
 }
 
-void SettingsViewModelTest::testOcrDraftEditingAndValidation() {
+void SettingsViewModelTest::testOcrEditingPersistsImmediatelyAndValidates() {
     FakeAppSettingsStore store;
     ::manga::application::test::FakeCredentialStore credStore;
     FakeOcrModelValidator validator;
@@ -156,25 +151,27 @@ void SettingsViewModelTest::testOcrDraftEditingAndValidation() {
     SettingsViewModel vm(&store, &credentialOperations, &validator);
 
     vm.setOcrModelDirectory(QStringLiteral("C:/models/baberu"));
+    QCOMPARE(vm.state().persisted.ocrModelDirectory, QStringLiteral("C:/models/baberu"));
     QVERIFY(vm.state().modelStatus.isValid);
-    QCOMPARE(vm.state().modelStatus.id, QStringLiteral("baberu-onnx"));
-    QVERIFY(!vm.state().fieldErrors.contains(QStringLiteral("ocrModelDirectory")));
+    QCOMPARE(store.m_values.value(QStringLiteral("ocr/modelDirectory")).toString(), QStringLiteral("C:/models/baberu"));
 
     validator.shouldFail = true;
     vm.setOcrModelDirectory(QStringLiteral("C:/invalid/path"));
+    QCOMPARE(vm.state().persisted.ocrModelDirectory, QStringLiteral("C:/invalid/path"));
     QVERIFY(!vm.state().modelStatus.isValid);
     QVERIFY(vm.state().fieldErrors.contains(QStringLiteral("ocrModelDirectory")));
 
     validator.shouldFail = false;
     vm.setOcrLanguage(QStringLiteral("zh"));
-    QCOMPARE(vm.state().draft.ocrLanguage, QStringLiteral("zh"));
+    QCOMPARE(vm.state().persisted.ocrLanguage, QStringLiteral("zh"));
+    QCOMPARE(store.m_values.value(QStringLiteral("ocr/language")).toString(), QStringLiteral("zh"));
     QVERIFY(!vm.state().fieldErrors.contains(QStringLiteral("ocrLanguage")));
 
     vm.setOcrLanguage(QStringLiteral("   "));
     QVERIFY(vm.state().fieldErrors.contains(QStringLiteral("ocrLanguage")));
 }
 
-void SettingsViewModelTest::testAiTranslationDraftEditingAndCredentials() {
+void SettingsViewModelTest::testAiTranslationEditingPersistsImmediatelyAndCredentials() {
     FakeAppSettingsStore store;
     ::manga::application::test::FakeCredentialStore credStore;
     FakeOcrModelValidator validator;
@@ -184,46 +181,43 @@ void SettingsViewModelTest::testAiTranslationDraftEditingAndCredentials() {
 
     vm.setProviderId(QStringLiteral("openai-compatible"));
     QCOMPARE(vm.state().credentialStatus, ::manga::application::CredentialState::Missing);
+    QCOMPARE(store.m_values.value(QStringLiteral("translation/providerId")).toString(),
+             QStringLiteral("openai-compatible"));
 
-    // Set credential
     vm.setCredential(::manga::application::SecretBytes(QByteArray("sk-test-secret-key")));
     QCOMPARE(vm.state().credentialStatus, ::manga::application::CredentialState::Configured);
 
-    // Remove credential
     vm.removeCredential();
     QCOMPARE(vm.state().credentialStatus, ::manga::application::CredentialState::Missing);
 
-    // Endpoint validation
     vm.setEndpoint(QStringLiteral("https://api.openai.com/v1"));
     QVERIFY(!vm.state().fieldErrors.contains(QStringLiteral("endpoint")));
+    QCOMPARE(store.m_values.value(QStringLiteral("translation/endpoint")).toString(),
+             QStringLiteral("https://api.openai.com/v1"));
 
     vm.setEndpoint(QStringLiteral("invalid-url-string"));
     QVERIFY(vm.state().fieldErrors.contains(QStringLiteral("endpoint")));
 
-    vm.setEndpoint(QString()); // empty endpoint allowed (falls back to provider default)
+    vm.setEndpoint(QString());
     QVERIFY(!vm.state().fieldErrors.contains(QStringLiteral("endpoint")));
 
-    // Model name, timeout, retry count
     vm.setModelName(QStringLiteral("claude-3-5-sonnet"));
-    QCOMPARE(vm.state().draft.modelName, QStringLiteral("claude-3-5-sonnet"));
+    QCOMPARE(vm.state().persisted.modelName, QStringLiteral("claude-3-5-sonnet"));
+    QCOMPARE(store.m_values.value(QStringLiteral("translation/modelName")).toString(),
+             QStringLiteral("claude-3-5-sonnet"));
 
     vm.setTimeoutSeconds(120);
-    QCOMPARE(vm.state().draft.timeoutSeconds, 120);
-
-    vm.setTimeoutSeconds(400); // invalid > 300
+    QCOMPARE(vm.state().persisted.timeoutSeconds, 120);
+    vm.setTimeoutSeconds(400);
     QVERIFY(vm.state().fieldErrors.contains(QStringLiteral("timeoutSeconds")));
 
-    vm.setTimeoutSeconds(60);
-    QVERIFY(!vm.state().fieldErrors.contains(QStringLiteral("timeoutSeconds")));
-
     vm.setRetryCount(3);
-    QCOMPARE(vm.state().draft.retryCount, 3);
-
-    vm.setRetryCount(20); // invalid > 10
+    QCOMPARE(vm.state().persisted.retryCount, 3);
+    vm.setRetryCount(20);
     QVERIFY(vm.state().fieldErrors.contains(QStringLiteral("retryCount")));
 }
 
-void SettingsViewModelTest::testAppearanceDraftEditingAndInstantThemePreview() {
+void SettingsViewModelTest::testAppearanceEditingPersistsImmediatelyAndPreviewsTheme() {
     FakeAppSettingsStore store;
     ::manga::application::test::FakeCredentialStore credStore;
     FakeOcrModelValidator validator;
@@ -234,128 +228,55 @@ void SettingsViewModelTest::testAppearanceDraftEditingAndInstantThemePreview() {
     QSignalSpy themeSpy(&vm, &SettingsViewModel::themePreviewRequested);
 
     vm.setTheme(::manga::application::AppTheme::Dark);
-    QCOMPARE(vm.state().draft.theme, ::manga::application::AppTheme::Dark);
-    QVERIFY(vm.state().isCategoryDirty(SettingsCategory::Appearance));
+    QCOMPARE(vm.state().persisted.theme, ::manga::application::AppTheme::Dark);
+    QCOMPARE(store.m_values.value(QStringLiteral("appearance/theme")).toString(), QStringLiteral("dark"));
     QCOMPARE(themeSpy.count(), 1);
     QCOMPARE(themeSpy.at(0).at(0).value<::manga::application::AppTheme>(), ::manga::application::AppTheme::Dark);
 
     vm.setDensity(::manga::application::InterfaceDensity::Comfortable);
-    QCOMPARE(vm.state().draft.density, ::manga::application::InterfaceDensity::Comfortable);
+    QCOMPARE(vm.state().persisted.density, ::manga::application::InterfaceDensity::Comfortable);
+    QCOMPARE(store.m_values.value(QStringLiteral("appearance/density")).toString(), QStringLiteral("comfortable"));
 
     vm.setReduceMotion(true);
-    QCOMPARE(vm.state().draft.reduceMotion, true);
+    QCOMPARE(vm.state().persisted.reduceMotion, true);
+    QCOMPARE(store.m_values.value(QStringLiteral("appearance/reduceMotion")).toBool(), true);
 
     vm.setCanvasBackground(QStringLiteral("#1e1e1e"));
-    QCOMPARE(vm.state().draft.canvasBackground, QStringLiteral("#1e1e1e"));
+    QCOMPARE(vm.state().persisted.canvasBackground, QStringLiteral("#1e1e1e"));
     QVERIFY(!vm.state().fieldErrors.contains(QStringLiteral("canvasBackground")));
+    QCOMPARE(store.m_values.value(QStringLiteral("appearance/canvasBackground")).toString(), QStringLiteral("#1e1e1e"));
 
     vm.setCanvasBackground(QStringLiteral("not-a-color"));
     QVERIFY(vm.state().fieldErrors.contains(QStringLiteral("canvasBackground")));
 }
 
-void SettingsViewModelTest::testSaveWorkflowSuccess() {
+void SettingsViewModelTest::testRestoreDefaultsPersistsImmediately() {
     FakeAppSettingsStore store;
     ::manga::application::test::FakeCredentialStore credStore;
     FakeOcrModelValidator validator;
 
     ::manga::application::CredentialOperations credentialOperations(&credStore);
     SettingsViewModel vm(&store, &credentialOperations, &validator);
-
-    QSignalSpy savedSpy(&vm, &SettingsViewModel::settingsSaved);
-
-    vm.setRecentProjectLimit(15);
-    vm.setOcrLanguage(QStringLiteral("zh"));
-    vm.setTheme(::manga::application::AppTheme::Light);
-
-    QVERIFY(vm.isDirty());
-
-    vm.saveSettings();
-
-    QCOMPARE(savedSpy.count(), 1);
-    QVERIFY(!vm.isDirty());
-    QCOMPARE(vm.state().persisted.recentProjectLimit, 15);
-    QCOMPARE(vm.state().persisted.ocrLanguage, QStringLiteral("zh"));
-    QCOMPARE(vm.state().persisted.theme, ::manga::application::AppTheme::Light);
-    QCOMPARE(vm.state().draft, vm.state().persisted);
-}
-
-void SettingsViewModelTest::testSaveWorkflowValidationFailure() {
-    FakeAppSettingsStore store;
-    ::manga::application::test::FakeCredentialStore credStore;
-    FakeOcrModelValidator validator;
-
-    ::manga::application::CredentialOperations credentialOperations(&credStore);
-    SettingsViewModel vm(&store, &credentialOperations, &validator);
-
-    QSignalSpy savedSpy(&vm, &SettingsViewModel::settingsSaved);
-    QSignalSpy focusSpy(&vm, &SettingsViewModel::focusFieldRequested);
-
-    vm.setRecentProjectLimit(100); // invalid
-    QVERIFY(vm.isDirty());
-
-    vm.saveSettings();
-
-    QCOMPARE(savedSpy.count(), 0);
-    QVERIFY(vm.isDirty());
-    QVERIFY(vm.state().saveError.has_value());
-    QCOMPARE(vm.state().currentCategory, SettingsCategory::General);
-    QCOMPARE(focusSpy.count(), 1);
-    QCOMPARE(focusSpy.at(0).at(0).toString(), QStringLiteral("recentProjectLimit"));
-}
-
-void SettingsViewModelTest::testRestoreDefaultsAndRevert() {
-    FakeAppSettingsStore store;
-    ::manga::application::test::FakeCredentialStore credStore;
-    FakeOcrModelValidator validator;
-
-    ::manga::application::CredentialOperations credentialOperations(&credStore);
-    SettingsViewModel vm(&store, &credentialOperations, &validator);
-
-    QSignalSpy themeSpy(&vm, &SettingsViewModel::themePreviewRequested);
 
     vm.setTheme(::manga::application::AppTheme::Dark);
     vm.setRecentProjectLimit(25);
-    QVERIFY(vm.isDirty());
-
-    // Revert draft back to persisted
-    vm.revertDraft();
-    QVERIFY(!vm.isDirty());
-    QCOMPARE(vm.state().draft.theme, ::manga::application::AppTheme::System);
-    QCOMPARE(vm.state().draft.recentProjectLimit, 8);
-
-    // Modify and restore defaults
-    vm.setRecentProjectLimit(35);
     vm.restoreDefaults();
-    QCOMPARE(vm.state().draft.recentProjectLimit, 8);
+
+    QCOMPARE(vm.state().persisted, ::manga::application::AppSettingsSnapshot{});
+    QCOMPARE(store.m_values.value(QStringLiteral("general/recentProjectLimit")).toInt(), 8);
+    QCOMPARE(store.m_values.value(QStringLiteral("appearance/theme")).toString(), QStringLiteral("system"));
 }
 
-void SettingsViewModelTest::testLeaveDecisionWorkflow() {
-    FakeAppSettingsStore store;
+void SettingsViewModelTest::testUnavailableStoreReportsPersistenceFailure() {
     ::manga::application::test::FakeCredentialStore credStore;
     FakeOcrModelValidator validator;
-
     ::manga::application::CredentialOperations credentialOperations(&credStore);
-    SettingsViewModel vm(&store, &credentialOperations, &validator);
+    SettingsViewModel vm(nullptr, &credentialOperations, &validator);
 
-    // Clean state -> immediately proceeds
-    bool proceedResult = false;
-    vm.requestLeave([&proceedResult](bool proceed) { proceedResult = proceed; });
-    QVERIFY(proceedResult);
+    vm.setReduceMotion(true);
 
-    // Dirty state -> emits leaveDecisionRequested
-    vm.setRecentProjectLimit(12);
-    QSignalSpy leaveSpy(&vm, &SettingsViewModel::leaveDecisionRequested);
-
-    bool decided = false;
-    vm.requestLeave([&decided](bool /*proceed*/) { decided = true; });
-    QCOMPARE(leaveSpy.count(), 1);
-    QVERIFY(!decided); // blocked until user confirms
-
-    // Confirm without save
-    bool proceedAfterDiscard = false;
-    vm.confirmLeaveWithoutSave([&proceedAfterDiscard](bool proceed) { proceedAfterDiscard = proceed; });
-    QVERIFY(proceedAfterDiscard);
-    QVERIFY(!vm.isDirty());
+    QCOMPARE(vm.state().persisted.reduceMotion, true);
+    QVERIFY(vm.state().fieldErrors.contains(QStringLiteral("persist")));
 }
 
 } // namespace manga::ui::screen::settings

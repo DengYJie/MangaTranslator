@@ -101,7 +101,7 @@ void SettingsPage::buildUi() {
 
     // Global page notification InfoBar
     m_pageInfoBar = new fluent::status_info::InfoBar(m_columnContainer);
-    m_pageInfoBar->setIsClosable(true);
+    m_pageInfoBar->setIsClosable(false);
     m_pageInfoBar->setIsOpen(false);
     m_columnLayout->addWidget(m_pageInfoBar);
 

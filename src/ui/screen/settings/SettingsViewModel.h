@@ -72,6 +72,7 @@ private:
     IAppSettingsStore* m_settingsStore;                        // non-owning
     application::CredentialOperations* m_credentialOperations; // non-owning
     IOcrModelValidator* m_ocrModelValidator;                   // non-owning
+    application::AppSettingsSnapshot m_lastPersistedSnapshot;
 };
 
 } // namespace manga::ui::screen::settings

@@ -76,7 +76,7 @@
 | **llm.timeout** | `InfoBar` (Editor) | “AI 翻译请求超时，请检查网络连接或增加超时时间设置。” | Retry / OpenSettings | “重试” / “检查设置” |
 | **llm.rate_limited** | `InfoBar` (Editor) | “AI 请求频率超出服务商限制，已自动暂停，请稍后重试。” | Retry | “稍后重试” |
 | **editor.page_load_failed** | `MangaCanvas` (Editor) | “页面图像加载失败，原图像文件可能已丢失或损坏。” | Retry | “重试加载” |
-| **settings.save_failed** | `InfoBar` (Settings) | “保存设置失败，请检查配置目录读写权限。” | Retry | “重试” |
+| **settings.persistence_failed** | `InfoBar` (Settings) | “设置写入失败，请检查配置目录读写权限。” | — | — |
 
 ---
 
@@ -121,9 +121,8 @@
 | `m_openButton` (Home) | 打开项目 | 打开已有的 MangaTranslator 项目 | 打开项目 |
 | `m_importButton` (Home)| 新建项目/导入 | 从漫画图片或文件夹新建项目 | 新建项目/导入 |
 | `m_browseButton` (Import)| 浏览 | 选择项目保存文件夹 | 选择保存位置 |
-| `m_submitButton` (Import)| 创建并导入 | 创建项目并导入所选页面 | 创建并导入 |
+| `m_submitButton` (Import)| 创建并导入 | 从漫画图片或文件夹新建项目 | 创建并导入 |
 | `settingsRestoreDefaultsButton` | 恢复默认 | 恢复所有设置项为默认值 | 恢复默认设置 |
-| `settingsSaveButton` | 保存设置 | 保存当前配置 (Ctrl+S) | 保存设置 |
 | `ocrBrowseButton` | 浏览... | 选择 Baberu OCR 模型所在文件夹 | 选择 OCR 模型目录 |
 | `credentialUpdateButton` | 更新密钥 | 输入并配置新的 API 密钥 | 更新 API 密钥 |
 | `credentialRemoveButton` | 移除密钥 | 从本地安全存储中移除该密钥 | 移除 API 密钥 |

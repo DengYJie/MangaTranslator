@@ -11,7 +11,7 @@
 namespace manga::ui::widget {
 
 namespace {
-constexpr int kResponsiveBreakpoint = 560;
+constexpr int kResponsiveBreakpoint = 680;
 constexpr int kHorizontalPaddingH = 16;
 constexpr int kHorizontalPaddingV = 12;
 constexpr int kHorizontalSpacing = 16;

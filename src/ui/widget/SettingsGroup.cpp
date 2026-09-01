@@ -22,36 +22,27 @@ SettingsGroup::SettingsGroup(const QString& title, const QString& description, Q
 
 void SettingsGroup::setupUi() {
     setAttribute(Qt::WA_StyledBackground, false);
+    setAutoFillBackground(false);
     setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
 
     m_mainLayout = new QVBoxLayout(this);
     m_mainLayout->setContentsMargins(0, 0, 0, 0);
-    m_mainLayout->setSpacing(6);
+    m_mainLayout->setSpacing(4);
 
-    // Group title outside card
+    // Group title outside card, aligned with card's outer left edge
     m_titleLabel = new fluent::textfields::Label(this);
-    m_titleLabel->setFluentTypography(Typography::FontRole::Subtitle);
+    m_titleLabel->setFluentTypography(Typography::FontRole::BodyStrong);
+    m_titleLabel->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Fixed);
     m_titleLabel->setVisible(false);
-    m_mainLayout->addWidget(m_titleLabel);
+    m_mainLayout->addWidget(m_titleLabel, 0, Qt::AlignLeft);
 
-    // Group description outside card
+    // Group description outside card, aligned with card's outer left edge
     m_descLabel = new fluent::textfields::Label(this);
     m_descLabel->setFluentTypography(Typography::FontRole::Caption);
     m_descLabel->setTextColorRole(fluent::textfields::Label::TextColorRole::Secondary);
-    m_descLabel->setWordWrap(true);
+    m_descLabel->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
     m_descLabel->setVisible(false);
-    m_mainLayout->addWidget(m_descLabel);
-
-    // Card surface
-    m_card = new fluent::layout::Card(this);
-    m_card->setAppearance(fluent::layout::Card::Layer);
-    m_card->setBorderVisible(true);
-
-    m_cardLayout = new QVBoxLayout(m_card);
-    m_cardLayout->setContentsMargins(0, 0, 0, 0);
-    m_cardLayout->setSpacing(0);
-
-    m_mainLayout->addWidget(m_card);
+    m_mainLayout->addWidget(m_descLabel, 0, Qt::AlignLeft);
 }
 
 void SettingsGroup::setTitle(const QString& title) {
@@ -79,13 +70,36 @@ void SettingsGroup::addRow(SettingsRow* row) {
         return;
     }
 
-    if (!m_rows.isEmpty()) {
-        auto* divider = new fluent::layout::Divider(Qt::Horizontal, m_card);
-        m_cardLayout->addWidget(divider);
-    }
-
     m_rows.append(row);
-    m_cardLayout->addWidget(row);
+    rebuildCards();
+}
+
+void SettingsGroup::rebuildCards() {
+    // Remove existing cards
+    for (auto* card : m_cards) {
+        m_mainLayout->removeWidget(card);
+        card->deleteLater();
+    }
+    m_cards.clear();
+
+    // Create a card for each row (WinUI 3 style: one card per setting item)
+    for (auto* row : m_rows) {
+        auto* card = new fluent::layout::Card(this);
+        card->setAppearance(fluent::layout::Card::Layer);
+        card->setBorderVisible(true);
+        card->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+
+        auto* cardLayout = new QVBoxLayout(card);
+        cardLayout->setContentsMargins(0, 0, 0, 0);
+        cardLayout->setSpacing(0);
+
+        row->setParent(card);
+        cardLayout->addWidget(row);
+
+        // Card spans full width, aligning with group title/description
+        m_mainLayout->addWidget(card);
+        m_cards.append(card);
+    }
 }
 
 int SettingsGroup::rowCount() const {

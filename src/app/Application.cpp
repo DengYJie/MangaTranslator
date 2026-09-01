@@ -201,28 +201,40 @@ int Application::run() {
         }
     };
 
-    QObject::connect(
-        mainWindow, &ui::window::MainWindow::closeRequested, mainWindow, [editorViewModel, pendingAction]() {
-            *pendingAction = QString();
-            editorViewModel->requestCloseProject();
-        });
-
     QObject::connect(mainWindow,
-                     &ui::window::MainWindow::navigationInterceptRequested,
+                     &ui::window::MainWindow::closeRequested,
                      mainWindow,
-                     [editorViewModel, pendingAction, controller](const QString& routeKey) {
-                         *pendingAction = routeKey;
-                         if (routeKey.startsWith(QLatin1String("settings"))) {
-                             if (editorViewModel->hasSession() && editorViewModel->state().saveState.isDirty) {
-                                 editorViewModel->requestCloseProject();
-                             } else {
-                                 controller->navigate(routeKey);
-                             }
+                     [editorViewModel, settingsViewModel, pendingAction, mainWindow]() {
+                         *pendingAction = QString();
+                         if (mainWindow->activeNavigationSurfaceId() == QLatin1String("settings") &&
+                             settingsViewModel->state().fieldErrors.contains(QStringLiteral("persist"))) {
                              return;
                          }
-
                          editorViewModel->requestCloseProject();
                      });
+
+    QObject::connect(
+        mainWindow,
+        &ui::window::MainWindow::navigationInterceptRequested,
+        mainWindow,
+        [editorViewModel, settingsViewModel, pendingAction, controller, mainWindow](const QString& routeKey) {
+            *pendingAction = routeKey;
+            if (routeKey.startsWith(QLatin1String("settings"))) {
+                if (editorViewModel->hasSession() && editorViewModel->state().saveState.isDirty) {
+                    editorViewModel->requestCloseProject();
+                } else {
+                    controller->navigate(routeKey);
+                }
+                return;
+            }
+
+            if (mainWindow->activeNavigationSurfaceId() == QLatin1String("settings") &&
+                settingsViewModel->state().fieldErrors.contains(QStringLiteral("persist"))) {
+                return;
+            }
+
+            editorViewModel->requestCloseProject();
+        });
 
     QObject::connect(
         editorViewModel, &ui::screen::editor::EditorViewModel::projectClosed, mainWindow, handleProjectClose);

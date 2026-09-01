@@ -5,7 +5,6 @@
 #include "ui/screen/settings/SettingsViewModel.h"
 #include "unit/application/FakeCredentialStore.h"
 
-#include <FluentQt/DialogsFlyouts.h>
 #include <QSignalSpy>
 #include <QTest>
 
@@ -49,7 +48,7 @@ class SettingsLifetimeTest : public QObject {
     Q_OBJECT
 private Q_SLOTS:
     void testViewModelPageDestructionCleanliness();
-    void testLeaveInterceptionAndThemeRevertOnDiscard();
+    void testThemePersistenceAndPreview();
     void testCredentialOperationsDestructionSafety();
 };
 
@@ -65,13 +64,14 @@ void SettingsLifetimeTest::testViewModelPageDestructionCleanliness() {
         page->show();
         QTest::qWait(20);
         vm->setRecentProjectLimit(15);
-        QVERIFY(vm->isDirty());
+        QCOMPARE(vm->state().persisted.recentProjectLimit, 15);
+        QCOMPARE(store.m_values.value(QStringLiteral("general/recentProjectLimit")).toInt(), 15);
         delete page;
         delete vm;
     }
 }
 
-void SettingsLifetimeTest::testLeaveInterceptionAndThemeRevertOnDiscard() {
+void SettingsLifetimeTest::testThemePersistenceAndPreview() {
     FakeAppSettingsStore store;
     ::manga::application::test::FakeCredentialStore credStore;
     ::manga::application::CredentialOperations credentialOperations(&credStore);
@@ -81,14 +81,8 @@ void SettingsLifetimeTest::testLeaveInterceptionAndThemeRevertOnDiscard() {
     vm.setTheme(::manga::application::AppTheme::Dark);
     QCOMPARE(themeSpy.count(), 1);
     QCOMPARE(themeSpy.at(0).at(0).value<::manga::application::AppTheme>(), ::manga::application::AppTheme::Dark);
-    QSignalSpy leaveSpy(&vm, &SettingsViewModel::leaveDecisionRequested);
-    bool leaveProceed = false;
-    vm.requestLeave([&leaveProceed](bool proceed) { leaveProceed = proceed; });
-    QCOMPARE(leaveSpy.count(), 1);
-    vm.confirmLeaveWithoutSave([&leaveProceed](bool proceed) { leaveProceed = proceed; });
-    QVERIFY(leaveProceed);
-    QCOMPARE(themeSpy.count(), 2);
-    QCOMPARE(themeSpy.at(1).at(0).value<::manga::application::AppTheme>(), ::manga::application::AppTheme::System);
+    QCOMPARE(vm.state().persisted.theme, ::manga::application::AppTheme::Dark);
+    QCOMPARE(store.m_values.value(QStringLiteral("appearance/theme")).toString(), QStringLiteral("dark"));
 }
 
 void SettingsLifetimeTest::testCredentialOperationsDestructionSafety() {

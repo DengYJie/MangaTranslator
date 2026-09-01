@@ -269,9 +269,8 @@ bool NavigationWindow::setActiveNavigationSurface(const QString& surfaceId) {
     m_navigationView->setMainChromeWidget(targetPanel.data(), fluent::WidgetOwnership::Reparented);
     m_activeSurfaceId = surfaceId;
 
-    // Shell spec §6.1: the main surface defaults to the compact rail, secondary
-    // surfaces (e.g. settings) to an expanded pane so category names stay readable.
-    m_navigationView->setPaneOpen(surfaceId != QStringLiteral("main"));
+    // Shell spec §6.1: all surfaces use the compact rail for consistent navigation.
+    m_navigationView->setPaneOpen(false);
 
     syncActivePanelState();
     targetPanel->show();

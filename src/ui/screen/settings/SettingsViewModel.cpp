@@ -55,6 +55,7 @@ void SettingsViewModel::loadSettings() {
         refreshCredentialStatus(state);
         validateOcrModelDirectory(state);
     });
+    m_lastPersistedSnapshot = m_state.persisted;
 }
 
 void SettingsViewModel::setCurrentCategory(SettingsCategory category) {
@@ -228,19 +229,57 @@ void SettingsViewModel::restoreDefaults() {
 
 void SettingsViewModel::persistSettings() {
     if (m_settingsStore == nullptr) {
+        updateState([this](SettingsState& state) {
+            state.fieldErrors.insert(QStringLiteral("persist"), tr("设置存储不可用，无法保存更改"));
+        });
         return;
     }
 
+    const auto hasValidationError = [this](const QString& field) { return m_state.fieldErrors.contains(field); };
+    auto snapshot = m_state.persisted;
+    if (hasValidationError(QStringLiteral("recentProjectLimit"))) {
+        snapshot.recentProjectLimit = m_lastPersistedSnapshot.recentProjectLimit;
+    }
+    if (hasValidationError(QStringLiteral("ocrLanguage"))) {
+        snapshot.ocrLanguage = m_lastPersistedSnapshot.ocrLanguage;
+    }
+    if (hasValidationError(QStringLiteral("providerId"))) {
+        snapshot.providerId = m_lastPersistedSnapshot.providerId;
+    }
+    if (hasValidationError(QStringLiteral("endpoint"))) {
+        snapshot.endpoint = m_lastPersistedSnapshot.endpoint;
+    }
+    if (hasValidationError(QStringLiteral("timeoutSeconds"))) {
+        snapshot.timeoutSeconds = m_lastPersistedSnapshot.timeoutSeconds;
+    }
+    if (hasValidationError(QStringLiteral("retryCount"))) {
+        snapshot.retryCount = m_lastPersistedSnapshot.retryCount;
+    }
+    if (hasValidationError(QStringLiteral("canvasBackground"))) {
+        snapshot.canvasBackground = m_lastPersistedSnapshot.canvasBackground;
+    }
+
     application::SaveAppSettingsUseCase saveUseCase(m_settingsStore);
-    const auto result = saveUseCase.execute(m_state.persisted);
+    const auto result = saveUseCase.execute(snapshot);
 
     if (!result) {
-        updateState([&result](SettingsState& state) {
-            state.fieldErrors.insert(QStringLiteral("persist"),
-                                     ui::error::RecoveryPresenter::localizedSafeMessage(result.error()));
-        });
+        if (!m_state.fieldErrors.contains(QStringLiteral("recentProjectLimit")) &&
+            !m_state.fieldErrors.contains(QStringLiteral("ocrLanguage")) &&
+            !m_state.fieldErrors.contains(QStringLiteral("providerId")) &&
+            !m_state.fieldErrors.contains(QStringLiteral("endpoint")) &&
+            !m_state.fieldErrors.contains(QStringLiteral("timeoutSeconds")) &&
+            !m_state.fieldErrors.contains(QStringLiteral("retryCount")) &&
+            !m_state.fieldErrors.contains(QStringLiteral("canvasBackground"))) {
+            updateState([&result](SettingsState& state) {
+                state.fieldErrors.insert(QStringLiteral("persist"),
+                                         ui::error::RecoveryPresenter::localizedSafeMessage(result.error()));
+            });
+        }
     } else if (m_state.fieldErrors.contains(QStringLiteral("persist"))) {
+        m_lastPersistedSnapshot = snapshot;
         updateState([](SettingsState& state) { state.fieldErrors.remove(QStringLiteral("persist")); });
+    } else {
+        m_lastPersistedSnapshot = snapshot;
     }
 }
 

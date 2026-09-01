@@ -564,12 +564,12 @@ git commit -m "feat(application): add typed executable app settings"
 **Interfaces:**
 - Categories: `General`、`Ocr`、`AiTranslation`、`Appearance`；只注册这四项。
 - 前置契约第 5 条：OCR 分类固定显示 Baberu 身份与模型校验状态，不渲染引擎选择器或自动横竖排开关；AI 翻译分类的默认模型是可编辑模型 ID，不做远端模型枚举前置；OCR 语言行标注其作用于新建项目（既有 Region 的请求语言来自项目源语言快照）。
-- State 保存 persisted snapshot、draft、field errors、Dirty categories、credential status、model status、当前 category 和滚动位置；不保存 Secret。
+- State 保存 persisted snapshot、field errors、credential status、model status、当前 category 和滚动位置；不保存 Secret。
 - Secret 仅存在短生命周期 `SecretBytes` 提交参数，提交后立即清零。
 
 - [x] **Step 1: 写 ViewModel 失败测试**
 
-覆盖 load、跨分类 draft、valid save、invalid field focus request、credential status 不读取 key、replace cancel 保留旧 key、clear confirmation、theme preview rollback、external settings conflict。
+- 覆盖 load、setter 即时持久化、非法字段校验、credential status 不读取 key、replace cancel 保留旧 key、clear confirmation 和 theme preview。
 
 - [x] **Step 2: 运行确认失败**
 
@@ -579,7 +579,7 @@ pwsh -NoProfile -ExecutionPolicy Bypass -File tools/build/build.ps1 -Preset loca
 
 - [x] **Step 3: 实现 SettingsViewModel**
 
-`Ctrl+S` 保存所有 Dirty categories。切分类不提示；离开 Surface 发一次 `leaveDecisionRequested`。保存成功更新 persisted snapshot、清 Dirty 并发短暂 `settingsSaved`；失败保留 draft 并导航/聚焦第一个错误字段。
+所有设置 setter 直接更新 persisted snapshot 并立即写入设置存储。切分类和离开 Surface 不提示；写入失败保留错误状态并由 SettingsPage 显示 InfoBar。
 
 - [x] **Step 4: 实现 SettingsGroup/SettingsRow**
 
@@ -591,7 +591,7 @@ TitleBar 只保留应用名和 Back；设置分类 pane 不含重复“设置”
 
 - [x] **Step 6: 实现凭据与主题行为**
 
-凭据已配置只显示状态和“更新密钥/移除密钥”。移除使用按需创建、close 后销毁的 `ContentDialog`。主题即时预览通过 `themePreviewRequested` 交给 Application；取消离开恢复 persisted theme，保留焦点。
+凭据已配置只显示状态和“更新密钥/移除密钥”。移除使用按需创建、close 后销毁的 `ContentDialog`。主题即时预览通过 `themePreviewRequested` 交给 Application，并与设置写入保持一致。
 
 - [x] **Step 7: 注册 Settings 路由并运行测试**
 

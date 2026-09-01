@@ -45,6 +45,7 @@ public:
     void onThemeUpdated() override;
 
 private:
+    void rebuildCards();
     void setupUi();
 
     QString m_title;
@@ -53,10 +54,9 @@ private:
     QVBoxLayout* m_mainLayout{nullptr};
     fluent::textfields::Label* m_titleLabel{nullptr};
     fluent::textfields::Label* m_descLabel{nullptr};
-    fluent::layout::Card* m_card{nullptr};
-    QVBoxLayout* m_cardLayout{nullptr};
 
     QList<SettingsRow*> m_rows;
+    QList<fluent::layout::Card*> m_cards;
 };
 
 } // namespace manga::ui::widget

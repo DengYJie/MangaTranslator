@@ -59,7 +59,7 @@ private Q_SLOTS:
     void testCategorySwitching();
     void testResponsiveModePreservesWidgetAndFocus();
     void testRowErrorDisplayExpandsContent();
-    void testSaveAndRestoreDefaultsButtons();
+    void testImmediatePersistenceAndRestoreDefaults();
 };
 
 void SettingsPageTest::testInitialRendering() {
@@ -78,7 +78,7 @@ void SettingsPageTest::testInitialRendering() {
     auto* limitRow = page.rowForField(QStringLiteral("recentProjectLimit"));
     QVERIFY(limitRow != nullptr);
     QVERIFY(!limitRow->hasError());
-    QVERIFY(!limitRow->isDirty());
+    QVERIFY(page.findChild<fluent::basicinput::Button*>(QStringLiteral("settingsSaveButton")) == nullptr);
 }
 
 void SettingsPageTest::testCategorySwitching() {
@@ -165,7 +165,7 @@ void SettingsPageTest::testRowErrorDisplayExpandsContent() {
     QVERIFY(!limitRow->hasError());
 }
 
-void SettingsPageTest::testSaveAndRestoreDefaultsButtons() {
+void SettingsPageTest::testImmediatePersistenceAndRestoreDefaults() {
     FakeAppSettingsStore store;
     ::manga::application::test::FakeCredentialStore credStore;
     FakeOcrModelValidator validator;
@@ -175,24 +175,23 @@ void SettingsPageTest::testSaveAndRestoreDefaultsButtons() {
     SettingsPage page(&vm);
     page.resize(800, 600);
 
-    QSignalSpy saveSpy(&vm, &SettingsViewModel::settingsSaved);
+    QVERIFY(page.findChild<fluent::basicinput::Button*>(QStringLiteral("settingsSaveButton")) == nullptr);
 
-    vm.setRecentProjectLimit(12);
-    QVERIFY(vm.isDirty());
-
-    auto* saveBtn = page.saveButtonForTest();
-    QVERIFY(saveBtn != nullptr);
-    saveBtn->click();
-
-    QCOMPARE(saveSpy.count(), 1);
-    QVERIFY(!vm.isDirty());
+    auto* limitRow = page.rowForField(QStringLiteral("recentProjectLimit"));
+    QVERIFY(limitRow != nullptr);
+    auto* limitBox = qobject_cast<fluent::textfields::NumberBox*>(limitRow->editorWidget());
+    QVERIFY(limitBox != nullptr);
+    limitBox->setValue(12);
+    QCOMPARE(vm.state().persisted.recentProjectLimit, 12);
+    QCOMPARE(store.m_values.value(QStringLiteral("general/recentProjectLimit")).toInt(), 12);
 
     // Test restore defaults
     auto* restoreBtn = page.restoreDefaultsButtonForTest();
     QVERIFY(restoreBtn != nullptr);
     vm.setRecentProjectLimit(25);
     restoreBtn->click();
-    QCOMPARE(vm.state().draft.recentProjectLimit, 8);
+    QCOMPARE(vm.state().persisted.recentProjectLimit, 8);
+    QCOMPARE(store.m_values.value(QStringLiteral("general/recentProjectLimit")).toInt(), 8);
 }
 
 } // namespace manga::ui::screen::settings
