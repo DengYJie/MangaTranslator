@@ -413,6 +413,25 @@ private Q_SLOTS:
         QCOMPARE(m_viewModel->state().processing.status, ProcessingStatus::Failed);
         QVERIFY(m_viewModel->state().processing.failedRegionIds.contains(regionId));
     }
+
+    void testOcrModelFailureDisablesOcrCapability() {
+        m_ocr->shouldFail = true;
+        m_ocr->nextError = makeApplicationError(ErrorCategory::Model, "model.missing", "manifest.json not found");
+
+        auto session = createSessionWithRegions(1, 1);
+        openSession(session);
+        const auto pageId = m_viewModel->state().currentPageId;
+        const auto regionId = m_viewModel->state().regions.at(0).id;
+        m_viewModel->selectRegion(regionId, RegionSelectionMode::Replace);
+
+        m_controller->recognizeSelectedRegions();
+        while (m_controller->hasActiveOperation(pageId)) {
+            QCoreApplication::processEvents(QEventLoop::AllEvents, 50);
+        }
+
+        QVERIFY(!m_viewModel->state().isOcrAvailable);
+        QCOMPARE(m_viewModel->state().ocrUnavailableReason, QStringLiteral("manifest.json not found"));
+    }
 };
 
 QTEST_MAIN(EditorProcessingControllerTest)

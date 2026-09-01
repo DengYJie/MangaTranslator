@@ -447,6 +447,10 @@ void EditorProcessingController::recognizeRegion(const domain::PageId& pageId, c
                                              << "region=" << QString::fromStdString(regionId.toString())
                                              << "category=" << static_cast<int>(err.category) << "code=" << err.code
                                              << "message=" << err.safeMessage;
+                        if (err.category == application::ErrorCategory::Model ||
+                            err.code.startsWith(QLatin1String("model."))) {
+                            m_viewModel->setOcrAvailability(false, err.safeMessage);
+                        }
                         if (err.category != application::ErrorCategory::Cancelled) {
                             m_pageFailedRegions[key.pageId] = {regionId};
                             m_pageSafeMessages[key.pageId] = err.safeMessage;

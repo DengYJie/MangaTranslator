@@ -185,7 +185,7 @@ private slots:
         QTRY_VERIFY_WITH_TIMEOUT(f.imageLoader.pendingCount() == 1, 2000);
     }
 
-    void staleThumbnailCompletionIsDiscardedAfterPageSwitch() {
+    void thumbnailCompletionSurvivesPageSwitch() {
         Fixture f;
         f.imageLoader.deferred = true;
         EditorViewModel viewModel(&f.thumbnailStore, &f.imageLoader, &f.registry);
@@ -200,10 +200,10 @@ private slots:
         viewModel.requestThumbnail(pageAt(session, 1), false);
         QTRY_VERIFY_WITH_TIMEOUT(f.imageLoader.pendingCount() == 2, 2000);
         viewModel.selectPage(pageAt(session, 1));
-        QCOMPARE(invalidatedSpy.size(), 1);
+        QCOMPARE(invalidatedSpy.size(), 0);
         f.imageLoader.completeAll();
         QTRY_VERIFY_WITH_TIMEOUT(!viewModel.state().isPageLoading, 2000);
-        QCOMPARE(readySpy.size(), 0);
+        QTRY_COMPARE_WITH_TIMEOUT(readySpy.size(), 2, 2000);
     }
 
     void perPageViewTransformIsRestoredOnRevisit() {

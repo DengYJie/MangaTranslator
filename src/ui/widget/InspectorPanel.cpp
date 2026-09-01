@@ -132,6 +132,26 @@ InspectorPanel::InspectorPanel(QWidget* parent) : QWidget(parent) {
     setInspectorState(screen::editor::PageInspectorState{});
 }
 
+void InspectorPanel::setOcrAvailability(bool available, const QString& unavailableReason) {
+    m_ocrAvailable = available;
+    const QString guidance =
+        available ? tr("识别选中区域的文字")
+                  : tr("OCR 模型不可用：%1。请在设置 > OCR 中选择包含 manifest.json 的模型目录，然后重启应用。")
+                        .arg(unavailableReason.isEmpty() ? tr("尚未配置模型目录") : unavailableReason);
+    for (auto* button : {m_singleOcrButton, m_multiOcrButton}) {
+        if (button != nullptr) {
+            button->setEnabled(available);
+            button->setToolTip(guidance);
+        }
+    }
+    for (auto* label : {m_singleOcrUnavailableLabel, m_multiOcrUnavailableLabel}) {
+        if (label != nullptr) {
+            label->setText(guidance);
+            label->setVisible(!available);
+        }
+    }
+}
+
 void InspectorPanel::resizeEvent(QResizeEvent* event) {
     QWidget::resizeEvent(event);
     syncContentWidth();
@@ -417,6 +437,13 @@ QWidget* InspectorPanel::buildSingleHost() {
     singleActionsLayout->addWidget(m_singleClearButton);
     singleActionsLayout->addWidget(m_singleLayoutButton);
     translationLayout->addWidget(singleActionsRow);
+
+    m_singleOcrUnavailableLabel = new Label();
+    m_singleOcrUnavailableLabel->setObjectName(QStringLiteral("inspectorSingleOcrUnavailable"));
+    m_singleOcrUnavailableLabel->setTextColorRole(Label::TextColorRole::Secondary);
+    m_singleOcrUnavailableLabel->setWordWrap(true);
+    m_singleOcrUnavailableLabel->hide();
+    translationLayout->addWidget(m_singleOcrUnavailableLabel);
 
     connect(m_singleOcrButton, &Button::clicked, this, [this]() {
         if (m_currentPageId.isValid() && !m_currentRegionIds.isEmpty()) {
@@ -770,6 +797,13 @@ QWidget* InspectorPanel::buildMultiHost() {
     multiActionsLayout->addWidget(m_multiClearButton);
     multiActionsLayout->addWidget(m_multiLayoutButton);
     layout->addWidget(multiActionsRow);
+
+    m_multiOcrUnavailableLabel = new Label(host);
+    m_multiOcrUnavailableLabel->setObjectName(QStringLiteral("inspectorMultiOcrUnavailable"));
+    m_multiOcrUnavailableLabel->setTextColorRole(Label::TextColorRole::Secondary);
+    m_multiOcrUnavailableLabel->setWordWrap(true);
+    m_multiOcrUnavailableLabel->hide();
+    layout->addWidget(m_multiOcrUnavailableLabel);
 
     connect(m_multiOcrButton, &Button::clicked, this, [this]() {
         if (m_currentPageId.isValid() && !m_currentRegionIds.isEmpty()) {
@@ -1174,6 +1208,7 @@ void InspectorPanel::populateMulti(const screen::editor::MultiRegionInspectorSta
     }
 
     const bool editable = !state.allLocked;
+    m_multiOcrButton->setEnabled(editable && m_ocrAvailable);
     m_multiFontFamilyCombo->setEnabled(editable);
     m_multiFontWeightCombo->setEnabled(editable);
     m_multiFontSizeBox->setEnabled(editable);
@@ -1190,6 +1225,7 @@ void InspectorPanel::populateMulti(const screen::editor::MultiRegionInspectorSta
 
 void InspectorPanel::setLockedEditing(bool locked) {
     m_sourceEdit->setReadOnly(locked);
+    m_singleOcrButton->setEnabled(!locked && m_ocrAvailable);
     m_translationEdit->setReadOnly(locked);
     m_candidatesList->setEnabled(!locked);
     m_adoptCandidateButton->setEnabled(!locked && m_candidatesList->currentRow() >= 0);

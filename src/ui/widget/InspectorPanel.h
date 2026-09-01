@@ -44,6 +44,7 @@ public:
 
     /// Renders the inspector projection; switches hosts, never stacks them.
     void setInspectorState(const screen::editor::InspectorState& state);
+    void setOcrAvailability(bool available, const QString& unavailableReason);
 
     /// Mode of the currently visible host.
     [[nodiscard]] screen::editor::InspectorMode modeForTest() const noexcept {
@@ -180,6 +181,7 @@ private:
     fluent::textfields::Label* m_regionOrderLabel{nullptr};
 
     fluent::basicinput::Button* m_singleOcrButton{nullptr};
+    fluent::textfields::Label* m_singleOcrUnavailableLabel{nullptr};
     fluent::basicinput::Button* m_singleTranslateButton{nullptr};
     fluent::basicinput::Button* m_singleClearButton{nullptr};
     fluent::basicinput::Button* m_singleLayoutButton{nullptr};
@@ -187,6 +189,7 @@ private:
     // Multi host: safe intersection only.
     fluent::textfields::Label* m_multiHintLabel{nullptr};
     fluent::basicinput::Button* m_multiOcrButton{nullptr};
+    fluent::textfields::Label* m_multiOcrUnavailableLabel{nullptr};
     fluent::basicinput::Button* m_multiTranslateButton{nullptr};
     fluent::basicinput::Button* m_multiClearButton{nullptr};
     fluent::basicinput::Button* m_multiLayoutButton{nullptr};
@@ -206,6 +209,7 @@ private:
     fluent::layout::Field* m_multiClearedField{nullptr};
     fluent::basicinput::ToggleSwitch* m_multiClearedSwitch{nullptr};
     fluent::basicinput::Button* m_multiDeleteButton{nullptr};
+    bool m_ocrAvailable{true};
 };
 
 } // namespace manga::ui::widget

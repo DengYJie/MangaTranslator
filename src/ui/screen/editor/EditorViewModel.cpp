@@ -314,10 +314,14 @@ void EditorViewModel::completeProjectClose() {
 
     const auto projGen = m_state.projectSessionGeneration + 1;
     const auto viewGen = m_state.viewGeneration + 1;
+    const bool isOcrAvailable = m_state.isOcrAvailable;
+    const QString ocrUnavailableReason = m_state.ocrUnavailableReason;
     updateState([&](EditorState& s) {
         s = EditorState{};
         s.projectSessionGeneration = projGen;
         s.viewGeneration = viewGen;
+        s.isOcrAvailable = isOcrAvailable;
+        s.ocrUnavailableReason = ocrUnavailableReason;
     });
 
     Q_EMIT thumbnailsInvalidated();
@@ -361,8 +365,6 @@ void EditorViewModel::selectPage(const domain::PageId& pageId) {
     if (m_processingController != nullptr) {
         m_processingController->handlePageSwitched(pageId);
     }
-
-    Q_EMIT thumbnailsInvalidated();
 
     m_thumbnailQueue.clear();
     startPageLoad(pageId);
@@ -1009,7 +1011,7 @@ void EditorViewModel::startThumbnail(const domain::PageId& pageId) {
 
     ThumbnailTicket ticket;
     ticket.operationId = context.operationId;
-    ticket.viewGeneration = m_state.viewGeneration;
+    ticket.projectSessionGeneration = m_state.projectSessionGeneration;
     const QString key = QString::fromStdString(pageId.toString());
     m_thumbnailInFlight.insert(key, ticket);
     qInfo().noquote() << "[ThumbnailVM] start page=" << key
@@ -1047,7 +1049,7 @@ void EditorViewModel::handleThumbnailFinished(const domain::PageId& pageId) {
         watcher->deleteLater();
     }
 
-    if (ticket.viewGeneration == m_state.viewGeneration) {
+    if (ticket.projectSessionGeneration == m_state.projectSessionGeneration) {
         auto result = watcher ? watcher->result()
                               : std::unexpected(application::makeApplicationError(application::ErrorCategory::Internal,
                                                                                   QStringLiteral("Missing watcher"),
@@ -1067,8 +1069,8 @@ void EditorViewModel::handleThumbnailFinished(const domain::PageId& pageId) {
         }
     } else {
         qInfo().noquote() << "[ThumbnailVM] stale result discarded page=" << key
-                          << "ticketGeneration=" << ticket.viewGeneration
-                          << "currentGeneration=" << m_state.viewGeneration;
+                          << "ticketSessionGeneration=" << ticket.projectSessionGeneration
+                          << "currentSessionGeneration=" << m_state.projectSessionGeneration;
     }
 
     pumpThumbnailQueue();

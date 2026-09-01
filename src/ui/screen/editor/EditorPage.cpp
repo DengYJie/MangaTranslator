@@ -519,6 +519,7 @@ void EditorPage::render(const EditorState& state) {
         m_pageList->setPageProcessingStatus(state.currentPageId, static_cast<int>(state.processing.status));
     }
 
+    m_inspector->setOcrAvailability(state.isOcrAvailable, state.ocrUnavailableReason);
     m_inspector->setInspectorState(state.inspector);
 
     // Sync canvas tool and region projections from the authoritative State.

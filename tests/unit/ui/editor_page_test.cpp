@@ -206,6 +206,24 @@ private Q_SLOTS:
         QVERIFY(clearBtn != nullptr);
         QVERIFY(layoutBtn != nullptr);
     }
+
+    void unavailableOcrDisablesInspectorActionsWithGuidance() {
+        test::FakeThumbnailStore thumbnails;
+        test::FakePageImageLoader images;
+        application::OperationRegistry registry;
+        ui::screen::editor::EditorViewModel viewModel(&thumbnails, &images, &registry);
+        viewModel.setOcrAvailability(false, QStringLiteral("manifest.json not found"));
+        ui::screen::editor::EditorPage page(&viewModel);
+
+        auto* singleButton = page.findChild<fluent::basicinput::Button*>(QStringLiteral("inspectorSingleOcr"));
+        auto* multiButton = page.findChild<fluent::basicinput::Button*>(QStringLiteral("inspectorMultiOcr"));
+        QVERIFY(singleButton != nullptr);
+        QVERIFY(multiButton != nullptr);
+        QVERIFY(!singleButton->isEnabled());
+        QVERIFY(!multiButton->isEnabled());
+        QVERIFY(singleButton->toolTip().contains(QStringLiteral("manifest.json")));
+        QVERIFY(singleButton->toolTip().contains(QStringLiteral("设置 > OCR")));
+    }
 };
 
 QTEST_MAIN(EditorPageTest)

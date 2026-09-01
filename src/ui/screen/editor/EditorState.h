@@ -151,6 +151,8 @@ struct EditorState {
     std::optional<EditorNotice> notice;
     std::optional<EditorNotice> exportNotice;
     QVector<QString> exportFailureSummaries;
+    bool isOcrAvailable{true};
+    QString ocrUnavailableReason;
 
     /// Current page region projections sorted by orderIndex.
     QVector<RegionProjection> regions;

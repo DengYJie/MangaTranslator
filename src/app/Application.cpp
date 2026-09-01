@@ -25,6 +25,7 @@
 #include <FluentQt/DialogsFlyouts.h>
 #include <FluentQt/FluentQt.h>
 #include <QApplication>
+#include <QDateTime>
 #include <QDir>
 #include <QFileDialog>
 #include <QFileInfo>
@@ -129,6 +130,7 @@ int Application::run() {
                                                                     m_context->operationRegistry(),
                                                                     m_context->projectRepository(),
                                                                     mainWindow);
+    editorViewModel->setOcrAvailability(m_context->isOcrModelAvailable(), m_context->ocrModelUnavailableReason());
     editorViewModel->setExportDependencies(m_context->comicExporter(), m_context->derivedAssetStore());
     auto* editorPage = new ui::screen::editor::EditorPage(editorViewModel, mainWindow);
     QObject::connect(editorPage,
@@ -405,11 +407,21 @@ int Application::run() {
     });
 
     auto* importViewModel = new ui::screen::import_::ImportViewModel(
-        m_context->projectRepository(), m_context->comicImporter(), m_context->operationRegistry());
+        m_context->projectRepository(), m_context->comicImporter(), m_context->operationRegistry(), mainWindow);
     auto* importPage = new ui::screen::import_::ImportPage(importViewModel, mainWindow);
 
     mainWindow->registerRoute(QStringLiteral("import"), importPage, QStringLiteral("main"));
 
+    QObject::connect(importViewModel,
+                     &ui::screen::import_::ImportViewModel::projectImported,
+                     homeViewModel,
+                     [this, homeViewModel](const application::OpenedProjectSession& session) {
+                         m_context->recentProjectsStore()->addRecentProject(
+                             {QString::fromStdString(session.project.name()),
+                              session.projectRootPath,
+                              QDateTime::currentMSecsSinceEpoch()});
+                         homeViewModel->refresh();
+                     });
     QObject::connect(importViewModel,
                      &ui::screen::import_::ImportViewModel::projectImported,
                      editorViewModel,

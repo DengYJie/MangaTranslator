@@ -744,7 +744,12 @@ void MangaCanvas::drawForeground(QPainter* painter, const QRectF& rect) {
     painter->setPen(m_placeholderTextColor);
 
     QFont font = painter->font();
-    font.setPointSizeF(font.pointSizeF() * 1.5);
+    if (font.pointSizeF() > 0.0) {
+        font.setPointSizeF(font.pointSizeF() * 1.5);
+    } else {
+        const int basePixelSize = font.pixelSize() > 0 ? font.pixelSize() : painter->fontMetrics().height();
+        font.setPixelSize(std::max(1, qRound(basePixelSize * 1.5)));
+    }
     painter->setFont(font);
 
     QString text = m_placeholderMessage;

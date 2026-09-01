@@ -17,8 +17,11 @@
 #include "application/usecase/credential/CredentialUseCases.h"
 #include "application/workflow/OperationRegistry.h"
 
+#include <QString>
+
 #include <atomic>
 #include <memory>
+#include <optional>
 
 namespace manga::data {
 class ProjectIoCoordinator;
@@ -108,6 +111,12 @@ public:
     [[nodiscard]] application::IOcrModelValidator* ocrModelValidator() const {
         return m_ocrModelValidator.get();
     }
+    [[nodiscard]] bool isOcrModelAvailable() const noexcept {
+        return !m_ocrModelError.has_value();
+    }
+    [[nodiscard]] QString ocrModelUnavailableReason() const {
+        return m_ocrModelError ? m_ocrModelError->safeMessage : QString();
+    }
 
     void updateProviderConfig(std::shared_ptr<const network::ProviderConfig> config);
     [[nodiscard]] std::shared_ptr<const network::ProviderConfig> providerConfig() const;
@@ -136,6 +145,7 @@ private:
     std::unique_ptr<application::CredentialOperations> m_credentialOperations;
     std::unique_ptr<application::ICredentialStore> m_credentialStore;
     std::unique_ptr<application::IOcrModelValidator> m_ocrModelValidator;
+    std::optional<application::ApplicationError> m_ocrModelError;
     std::atomic<std::shared_ptr<const network::ProviderConfig>> m_providerConfig;
     bool m_shutdown{false};
 };

@@ -23,6 +23,7 @@
 #include "network/translation/ProviderConfig.h"
 #include "ui/screen/editor/EditorPage.h"
 #include "ui/screen/editor/EditorViewModel.h"
+#include "ui/screen/import/ImportViewModel.h"
 #include "ui/window/MainWindow.h"
 
 #include <QCoreApplication>
@@ -96,11 +97,15 @@ public:
 class StubRecentProjectsStore final : public manga::application::IRecentProjectsStore {
 public:
     [[nodiscard]] QVector<manga::application::RecentProject> loadRecentProjects() const override {
-        return {};
+        return projects;
     }
-    void addRecentProject(const manga::application::RecentProject&) override {}
+    void addRecentProject(const manga::application::RecentProject& project) override {
+        projects.append(project);
+    }
     void removeRecentProject(const QString&) override {}
     void clearRecentProjects() override {}
+
+    QVector<manga::application::RecentProject> projects;
 };
 
 class StubAppSettingsStore final : public manga::application::IAppSettingsStore {
@@ -526,6 +531,50 @@ private Q_SLOTS:
         const int exitCode = app.run();
         QVERIFY(timerExecuted);
         QCOMPARE(exitCode, 0);
+    }
+
+    void importedProjectIsAddedToRecentProjects() {
+        auto recents = std::make_unique<StubRecentProjectsStore>();
+        auto* recentsPtr = recents.get();
+        auto context = std::make_unique<manga::app::ApplicationContext>(std::make_unique<StubProjectRepository>(),
+                                                                        std::move(recents),
+                                                                        std::make_unique<StubAppSettingsStore>(),
+                                                                        std::make_unique<StubThumbnailStore>(),
+                                                                        std::make_unique<StubPageImageLoader>(),
+                                                                        std::make_unique<StubComicImporter>(),
+                                                                        nullptr,
+                                                                        nullptr,
+                                                                        nullptr,
+                                                                        nullptr,
+                                                                        nullptr,
+                                                                        std::make_unique<StubCredentialStore>(),
+                                                                        std::make_unique<StubOcrModelValidator>());
+
+        int argc = 1;
+        char arg0[] = "manga_tests_app";
+        char* argv[] = {arg0, nullptr};
+        manga::app::Application app(argc, argv, std::move(context));
+
+        bool timerExecuted = false;
+        QTimer::singleShot(20, [&]() {
+            timerExecuted = true;
+            auto* importViewModel = app.mainWindow()->findChild<manga::ui::screen::import_::ImportViewModel*>();
+            QVERIFY(importViewModel != nullptr);
+
+            manga::application::OpenedProjectSession session;
+            session.project = manga::domain::ComicProject("Imported Project");
+            session.projectRootPath = QStringLiteral("D:/projects/imported");
+            Q_EMIT importViewModel->projectImported(session);
+
+            QCOMPARE(recentsPtr->projects.size(), 1);
+            QCOMPARE(recentsPtr->projects.first().name, QStringLiteral("Imported Project"));
+            QCOMPARE(recentsPtr->projects.first().path, QStringLiteral("D:/projects/imported"));
+            QVERIFY(recentsPtr->projects.first().lastOpenedTimeMs > 0);
+            QCoreApplication::quit();
+        });
+
+        QCOMPARE(app.run(), 0);
+        QVERIFY(timerExecuted);
     }
 };
 

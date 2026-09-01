@@ -45,7 +45,7 @@ struct ProjectCloseSummary {
 };
 
 /// Drives the editor skeleton: project session, current page image loading and the
-/// thumbnail pipeline (max 4 concurrent, generation-checked late results).
+/// thumbnail pipeline (max 4 concurrent, session-generation-checked late results).
 class EditorViewModel : public base::BaseViewModel<EditorViewModel, EditorState> {
     Q_OBJECT
 public:
@@ -64,6 +64,12 @@ public:
     void selectAdjacentPage(int offset);
     void retryPageLoad();
     void requestThumbnail(const domain::PageId& pageId, bool force);
+    void setOcrAvailability(bool available, const QString& unavailableReason) {
+        updateState([&](EditorState& s) {
+            s.isOcrAvailable = available;
+            s.ocrUnavailableReason = available ? QString() : unavailableReason;
+        });
+    }
     /// Records the live canvas transform for the current page. Memory-only, no State churn.
     void noteViewTransform(double zoom, const QPointF& centerOnPage);
     void dismissNotice();
@@ -194,7 +200,7 @@ Q_SIGNALS:
     void previewImageReady(const PageImageDelivery& delivery);
     void thumbnailReady(const domain::PageId& pageId, const QImage& image);
     void thumbnailFailed(const domain::PageId& pageId, const QString& safeMessage);
-    /// viewGeneration bumped: in-flight thumbnail binds are discarded, rows must re-request.
+    /// The project session changed or thumbnail work was explicitly cancelled; loading rows must re-request.
     void thumbnailsInvalidated();
 
     void closeDecisionRequested(const ProjectCloseSummary& summary);
@@ -217,7 +223,7 @@ private:
     };
     struct ThumbnailTicket {
         application::OperationId operationId;
-        quint64 viewGeneration{0};
+        quint64 projectSessionGeneration{0};
     };
 
     void startPageLoad(const domain::PageId& pageId);

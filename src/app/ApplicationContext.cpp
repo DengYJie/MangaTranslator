@@ -65,6 +65,10 @@ ApplicationContext::ApplicationContext()
     m_production->executor = std::make_unique<services::BoundedTaskExecutor>();
 
     const auto settings = application::LoadAppSettingsUseCase(m_appSettingsStore.get()).execute();
+    const auto ocrModelStatus = m_ocrModelValidator->validate(settings.ocrModelDirectory);
+    if (!ocrModelStatus.has_value()) {
+        m_ocrModelError = ocrModelStatus.error();
+    }
     m_inpainter = std::make_unique<services::SolidColorInpainter>(m_production->executor.get());
     m_textLayouter = std::make_unique<services::QtTextLayouter>(m_production->executor.get());
     m_ocrEngine =
