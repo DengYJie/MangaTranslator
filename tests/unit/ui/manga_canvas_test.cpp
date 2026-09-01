@@ -1,11 +1,14 @@
 #include "ui/manga/CanvasZOrder.h"
 #include "ui/manga/MangaCanvas.h"
 #include "ui/manga/RegionInteraction.h"
+#include "ui/manga/RegionOverlayItem.h"
 
 #include <QApplication>
+#include <QGraphicsScene>
 #include <QKeyEvent>
 #include <QList>
 #include <QMouseEvent>
+#include <QPainter>
 #include <QSignalSpy>
 #include <QtTest>
 
@@ -212,6 +215,39 @@ private Q_SLOTS:
         canvas.setRegions({{id1, {10, 10, 50, 50}, false}});
         canvas.setRegions({{id1, {20, 20, 60, 60}, true}});
         QCOMPARE(canvas.regionOverlayCountForTest(), 1);
+    }
+
+    void regionOutlineContrastsDarkAndLightArtwork() {
+        QGraphicsScene scene;
+        scene.setSceneRect(0, 0, 64, 64);
+        auto* overlay = new manga::ui::manga::RegionOverlayItem(RegionId::generate());
+        overlay->setTransientGeometry({12, 12, 40, 40});
+        overlay->setColors(
+            QColor(QStringLiteral("#60CDFF")), QColor(QStringLiteral("#393939")), QColor(QStringLiteral("#60CDFF")));
+        scene.addItem(overlay);
+
+        const auto edgeContrast = [&scene](const QColor& background) {
+            QImage image(64, 64, QImage::Format_ARGB32_Premultiplied);
+            image.fill(background);
+            QPainter painter(&image);
+            scene.render(&painter, QRectF(0, 0, 64, 64), scene.sceneRect());
+            painter.end();
+
+            int maximumDifference = 0;
+            for (int x = 10; x <= 14; ++x) {
+                for (int y = 28; y <= 36; ++y) {
+                    const QColor pixel = image.pixelColor(x, y);
+                    maximumDifference = qMax(
+                        maximumDifference,
+                        qMax(qAbs(pixel.red() - background.red()),
+                             qMax(qAbs(pixel.green() - background.green()), qAbs(pixel.blue() - background.blue()))));
+                }
+            }
+            return maximumDifference;
+        };
+
+        QVERIFY(edgeContrast(QColor(QStringLiteral("#202124"))) >= 96);
+        QVERIFY(edgeContrast(Qt::white) >= 96);
     }
 
     // Create region gesture.

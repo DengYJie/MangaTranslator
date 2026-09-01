@@ -316,12 +316,16 @@ void EditorViewModel::completeProjectClose() {
     const auto viewGen = m_state.viewGeneration + 1;
     const bool isOcrAvailable = m_state.isOcrAvailable;
     const QString ocrUnavailableReason = m_state.ocrUnavailableReason;
+    const bool isTranslationAvailable = m_state.isTranslationAvailable;
+    const QString translationUnavailableReason = m_state.translationUnavailableReason;
     updateState([&](EditorState& s) {
         s = EditorState{};
         s.projectSessionGeneration = projGen;
         s.viewGeneration = viewGen;
         s.isOcrAvailable = isOcrAvailable;
         s.ocrUnavailableReason = ocrUnavailableReason;
+        s.isTranslationAvailable = isTranslationAvailable;
+        s.translationUnavailableReason = translationUnavailableReason;
     });
 
     Q_EMIT thumbnailsInvalidated();

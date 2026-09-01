@@ -80,6 +80,7 @@ Q_SIGNALS:
     void openProjectRequested();
     void importPagesRequested();
     void chooseExportPathRequested();
+    void settingsRequested(const QString& routeKey);
 
 protected:
     void paintEvent(QPaintEvent* event) override;

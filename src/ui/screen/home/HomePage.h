@@ -34,6 +34,9 @@ public:
     /// Test-only observation hook.
     [[nodiscard]] bool isEmptyStateVisibleForTest() const;
     [[nodiscard]] fluent::basicinput::Button* importButtonForTest() const;
+    [[nodiscard]] fluent::collections::GridView* recentProjectsGridForTest() const {
+        return m_gridView;
+    }
 
     void onThemeUpdated() override;
 

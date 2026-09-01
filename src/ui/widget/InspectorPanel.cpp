@@ -6,6 +6,7 @@
 #include <FluentQt/DialogsFlyouts.h>
 #include <FluentQt/Layout.h>
 #include <FluentQt/Scrolling.h>
+#include <FluentQt/StatusInfo.h>
 #include <FluentQt/TextFields.h>
 #include <QAbstractButton>
 #include <QHBoxLayout>
@@ -138,18 +139,67 @@ void InspectorPanel::setOcrAvailability(bool available, const QString& unavailab
         available ? tr("识别选中区域的文字")
                   : tr("OCR 模型不可用：%1。请在设置 > OCR 中选择包含 manifest.json 的模型目录，然后重启应用。")
                         .arg(unavailableReason.isEmpty() ? tr("尚未配置模型目录") : unavailableReason);
-    for (auto* button : {m_singleOcrButton, m_multiOcrButton}) {
+    if (m_multiOcrButton != nullptr) {
+        m_multiOcrButton->setEnabled(available);
+        m_multiOcrButton->setToolTip(guidance);
+    }
+    if (m_multiOcrUnavailableLabel != nullptr) {
+        m_multiOcrUnavailableLabel->setText(guidance);
+        m_multiOcrUnavailableLabel->setVisible(!available);
+    }
+}
+
+void InspectorPanel::setTranslationAvailability(bool available, const QString& unavailableReason) {
+    m_translationAvailable = available;
+    m_translationUnavailableReason = available ? QString() : unavailableReason;
+    for (auto* button : {m_singleTranslateButton, m_multiTranslateButton}) {
         if (button != nullptr) {
             button->setEnabled(available);
-            button->setToolTip(guidance);
+            button->setToolTip(available ? tr("使用当前 AI 服务重新翻译") : tr("请先配置 AI 翻译服务"));
         }
     }
-    for (auto* label : {m_singleOcrUnavailableLabel, m_multiOcrUnavailableLabel}) {
-        if (label != nullptr) {
-            label->setText(guidance);
-            label->setVisible(!available);
-        }
+    updateTranslationInfoBar();
+}
+
+void InspectorPanel::setProcessingState(const screen::editor::EditorProcessingState& processingState) {
+    m_processingState = processingState;
+    updateTranslationInfoBar();
+}
+
+void InspectorPanel::updateTranslationInfoBar() {
+    if (m_translationInfoBar == nullptr) {
+        return;
     }
+
+    if (!m_translationAvailable) {
+        m_translationInfoBar->setSeverity(fluent::status_info::InfoBar::Warning);
+        m_translationInfoBar->setTitle(tr("AI 翻译未配置"));
+        m_translationInfoBar->setMessage(m_translationUnavailableReason.isEmpty()
+                                             ? tr("请在设置中配置 API 端点、模型和密钥。")
+                                             : m_translationUnavailableReason);
+        m_translationInfoBar->setActionWidget(m_translationSettingsButton);
+        m_translationSettingsButton->show();
+        m_translationInfoBar->setIsOpen(true);
+        return;
+    }
+
+    if (!m_processingState.safeMessage.isEmpty() &&
+        (m_processingState.status == screen::editor::ProcessingStatus::Failed ||
+         m_processingState.status == screen::editor::ProcessingStatus::NeedsReview)) {
+        const bool failed = m_processingState.status == screen::editor::ProcessingStatus::Failed;
+        m_translationInfoBar->setSeverity(failed ? fluent::status_info::InfoBar::Error
+                                                 : fluent::status_info::InfoBar::Warning);
+        m_translationInfoBar->setTitle(failed ? tr("翻译失败") : tr("翻译需要处理"));
+        m_translationInfoBar->setMessage(m_processingState.safeMessage);
+        m_translationInfoBar->setActionWidget(nullptr);
+        m_translationSettingsButton->hide();
+        m_translationInfoBar->setIsOpen(true);
+        return;
+    }
+
+    m_translationInfoBar->setActionWidget(nullptr);
+    m_translationSettingsButton->hide();
+    m_translationInfoBar->setIsOpen(false);
 }
 
 void InspectorPanel::resizeEvent(QResizeEvent* event) {
@@ -327,6 +377,16 @@ QWidget* InspectorPanel::buildSingleHost() {
     translationLayout->setContentsMargins(12, 8, 12, 12);
     translationLayout->setSpacing(8);
 
+    m_translationInfoBar = new fluent::status_info::InfoBar(translationContent);
+    m_translationInfoBar->setObjectName(QStringLiteral("inspectorTranslationInfoBar"));
+    m_translationInfoBar->setIsClosable(false);
+    m_translationInfoBar->setIsOpen(false);
+    m_translationSettingsButton = new Button(tr("打开设置"));
+    m_translationSettingsButton->setObjectName(QStringLiteral("inspectorTranslationSettings"));
+    m_translationSettingsButton->setAccessibleName(tr("打开 AI 翻译设置"));
+    connect(m_translationSettingsButton, &Button::clicked, this, &InspectorPanel::translationSettingsRequested);
+    translationLayout->addWidget(m_translationInfoBar);
+
     auto* sourceField = new Field();
     sourceField->setLabelText(tr("原文"));
     m_sourceEdit = new TextEdit();
@@ -378,6 +438,7 @@ QWidget* InspectorPanel::buildSingleHost() {
     translationLayout->addWidget(m_translationMetaLabel);
 
     m_candidatesExpander = new Expander();
+    m_candidatesExpander->setObjectName(QStringLiteral("inspectorCandidatesExpander"));
     m_candidatesExpander->setHeaderText(tr("候选译文"));
     auto* candidatesContent = new QWidget();
     auto* candidatesLayout = new QVBoxLayout(candidatesContent);
@@ -399,70 +460,22 @@ QWidget* InspectorPanel::buildSingleHost() {
     m_candidatesExpander->setContentWidget(candidatesContent, fluent::WidgetOwnership::Owned);
     translationLayout->addWidget(m_candidatesExpander);
 
-    // Read-only clear status display; clearing actions stay outside the Inspector.
-    auto* clearStatusRow = new QWidget();
-    auto* clearStatusLayout = new QHBoxLayout(clearStatusRow);
-    clearStatusLayout->setContentsMargins(0, 0, 0, 0);
-    clearStatusLayout->setSpacing(8);
-    auto* clearStatusCaption = new Label(tr("清除状态"));
-    clearStatusCaption->setTextColorRole(Label::TextColorRole::Secondary);
-    m_clearStatusValue = new Label();
-    m_clearStatusValue->setObjectName(QStringLiteral("inspectorClearStatus"));
-    clearStatusLayout->addWidget(clearStatusCaption);
-    clearStatusLayout->addWidget(m_clearStatusValue, 1);
-    translationLayout->addWidget(clearStatusRow);
-
     auto* singleActionsRow = new QWidget();
     auto* singleActionsLayout = new QHBoxLayout(singleActionsRow);
     singleActionsLayout->setContentsMargins(0, 4, 0, 4);
     singleActionsLayout->setSpacing(8);
-    m_singleOcrButton = new Button(tr("OCR"));
-    m_singleOcrButton->setObjectName(QStringLiteral("inspectorSingleOcr"));
-    m_singleOcrButton->setToolTip(tr("识别选中区域的文字"));
-    m_singleOcrButton->setAccessibleName(tr("OCR 识别"));
-    m_singleTranslateButton = new Button(tr("翻译"));
+    singleActionsLayout->addStretch(1);
+    m_singleTranslateButton = new Button(tr("AI 重译"));
     m_singleTranslateButton->setObjectName(QStringLiteral("inspectorSingleTranslate"));
-    m_singleTranslateButton->setToolTip(tr("翻译选中区域的文本"));
-    m_singleTranslateButton->setAccessibleName(tr("AI 翻译"));
-    m_singleClearButton = new Button(tr("涂抹"));
-    m_singleClearButton->setObjectName(QStringLiteral("inspectorSingleClear"));
-    m_singleClearButton->setToolTip(tr("清除选中区域的背景文字"));
-    m_singleClearButton->setAccessibleName(tr("清除背景"));
-    m_singleLayoutButton = new Button(tr("排版"));
-    m_singleLayoutButton->setObjectName(QStringLiteral("inspectorSingleLayout"));
-    m_singleLayoutButton->setToolTip(tr("对选中区域重新排版"));
-    m_singleLayoutButton->setAccessibleName(tr("应用排版"));
-    singleActionsLayout->addWidget(m_singleOcrButton);
+    m_singleTranslateButton->setFluentStyle(Button::Accent);
+    m_singleTranslateButton->setToolTip(tr("使用当前 AI 服务重新翻译"));
+    m_singleTranslateButton->setAccessibleName(tr("AI 重译"));
+    m_singleTranslateButton->setMinimumWidth(104);
     singleActionsLayout->addWidget(m_singleTranslateButton);
-    singleActionsLayout->addWidget(m_singleClearButton);
-    singleActionsLayout->addWidget(m_singleLayoutButton);
     translationLayout->addWidget(singleActionsRow);
-
-    m_singleOcrUnavailableLabel = new Label();
-    m_singleOcrUnavailableLabel->setObjectName(QStringLiteral("inspectorSingleOcrUnavailable"));
-    m_singleOcrUnavailableLabel->setTextColorRole(Label::TextColorRole::Secondary);
-    m_singleOcrUnavailableLabel->setWordWrap(true);
-    m_singleOcrUnavailableLabel->hide();
-    translationLayout->addWidget(m_singleOcrUnavailableLabel);
-
-    connect(m_singleOcrButton, &Button::clicked, this, [this]() {
-        if (m_currentPageId.isValid() && !m_currentRegionIds.isEmpty()) {
-            Q_EMIT ocrRequested(m_currentPageId, m_currentRegionIds);
-        }
-    });
     connect(m_singleTranslateButton, &Button::clicked, this, [this]() {
         if (m_currentPageId.isValid() && !m_currentRegionIds.isEmpty()) {
             Q_EMIT translateRequested(m_currentPageId, m_currentRegionIds);
-        }
-    });
-    connect(m_singleClearButton, &Button::clicked, this, [this]() {
-        if (m_currentPageId.isValid() && !m_currentRegionIds.isEmpty()) {
-            Q_EMIT clearRequested(m_currentPageId, m_currentRegionIds);
-        }
-    });
-    connect(m_singleLayoutButton, &Button::clicked, this, [this]() {
-        if (m_currentPageId.isValid() && !m_currentRegionIds.isEmpty()) {
-            Q_EMIT layoutRequested(m_currentPageId, m_currentRegionIds);
         }
     });
 
@@ -1085,8 +1098,8 @@ void InspectorPanel::populateSingle(const screen::editor::SingleRegionInspectorS
         }
     }
     m_candidatesExpander->setHeaderText(tr("候选译文 (%1)").arg(state.candidates.size()));
+    m_candidatesExpander->setVisible(!state.candidates.isEmpty());
     m_adoptCandidateButton->setEnabled(m_candidatesList->currentRow() >= 0);
-    m_clearStatusValue->setText(state.isCleared ? tr("已清除") : tr("未清除"));
 
     if (m_fontFamilyCombo->findText(state.fontFamily) < 0 && !state.fontFamily.isEmpty()) {
         m_fontFamilyCombo->addItem(state.fontFamily);
@@ -1225,8 +1238,8 @@ void InspectorPanel::populateMulti(const screen::editor::MultiRegionInspectorSta
 
 void InspectorPanel::setLockedEditing(bool locked) {
     m_sourceEdit->setReadOnly(locked);
-    m_singleOcrButton->setEnabled(!locked && m_ocrAvailable);
     m_translationEdit->setReadOnly(locked);
+    m_singleTranslateButton->setEnabled(!locked && m_translationAvailable);
     m_candidatesList->setEnabled(!locked);
     m_adoptCandidateButton->setEnabled(!locked && m_candidatesList->currentRow() >= 0);
     m_fontFamilyCombo->setEnabled(!locked);

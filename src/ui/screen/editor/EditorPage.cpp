@@ -155,6 +155,9 @@ EditorPage::EditorPage(EditorViewModel* viewModel, QWidget* parent) : base::Base
                     ctrl->smartTranslatePage(pageId);
                 }
             });
+    connect(m_inspector, &widget::InspectorPanel::translationSettingsRequested, this, [this]() {
+        Q_EMIT settingsRequested(QStringLiteral("settings/ai-translation"));
+    });
     connect(m_inspector,
             &widget::InspectorPanel::clearRequested,
             this,
@@ -520,6 +523,8 @@ void EditorPage::render(const EditorState& state) {
     }
 
     m_inspector->setOcrAvailability(state.isOcrAvailable, state.ocrUnavailableReason);
+    m_inspector->setTranslationAvailability(state.isTranslationAvailable, state.translationUnavailableReason);
+    m_inspector->setProcessingState(state.processing);
     m_inspector->setInspectorState(state.inspector);
 
     // Sync canvas tool and region projections from the authoritative State.

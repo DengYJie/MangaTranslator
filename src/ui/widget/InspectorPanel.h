@@ -27,6 +27,9 @@ class LineEdit;
 class NumberBox;
 class TextEdit;
 } // namespace fluent::textfields
+namespace fluent::status_info {
+class InfoBar;
+}
 namespace manga::ui::widget {
 
 class ColorSwatchButton;
@@ -45,6 +48,8 @@ public:
     /// Renders the inspector projection; switches hosts, never stacks them.
     void setInspectorState(const screen::editor::InspectorState& state);
     void setOcrAvailability(bool available, const QString& unavailableReason);
+    void setTranslationAvailability(bool available, const QString& unavailableReason);
+    void setProcessingState(const screen::editor::EditorProcessingState& processingState);
 
     /// Mode of the currently visible host.
     [[nodiscard]] screen::editor::InspectorMode modeForTest() const noexcept {
@@ -76,6 +81,7 @@ Q_SIGNALS:
     void translateRequested(const domain::PageId& pageId, const QVector<domain::RegionId>& regionIds);
     void clearRequested(const domain::PageId& pageId, const QVector<domain::RegionId>& regionIds);
     void layoutRequested(const domain::PageId& pageId, const QVector<domain::RegionId>& regionIds);
+    void translationSettingsRequested();
     /// A text control lost focus; the ViewModel seals the active text merge batch.
     void textEditingSessionFinished();
 
@@ -110,6 +116,7 @@ private:
                          screen::editor::InspectorField field);
 
     void setLockedEditing(bool locked);
+    void updateTranslationInfoBar();
     bool m_updating{false};
     bool m_inImePreedit{false};
     screen::editor::InspectorMode m_mode{screen::editor::InspectorMode::Page};
@@ -133,11 +140,12 @@ private:
 
     // Single host: translation.
     fluent::layout::Expander* m_translationExpander{nullptr};
+    fluent::status_info::InfoBar* m_translationInfoBar{nullptr};
+    fluent::basicinput::Button* m_translationSettingsButton{nullptr};
     fluent::textfields::TextEdit* m_sourceEdit{nullptr};
     fluent::textfields::Label* m_sourceMetaLabel{nullptr};
     fluent::textfields::TextEdit* m_translationEdit{nullptr};
     fluent::textfields::Label* m_translationMetaLabel{nullptr};
-    fluent::textfields::Label* m_clearStatusValue{nullptr};
     fluent::layout::Expander* m_candidatesExpander{nullptr};
     QListWidget* m_candidatesList{nullptr};
     fluent::basicinput::Button* m_adoptCandidateButton{nullptr};
@@ -180,11 +188,7 @@ private:
     fluent::textfields::NumberBox* m_regionHeightBox{nullptr};
     fluent::textfields::Label* m_regionOrderLabel{nullptr};
 
-    fluent::basicinput::Button* m_singleOcrButton{nullptr};
-    fluent::textfields::Label* m_singleOcrUnavailableLabel{nullptr};
     fluent::basicinput::Button* m_singleTranslateButton{nullptr};
-    fluent::basicinput::Button* m_singleClearButton{nullptr};
-    fluent::basicinput::Button* m_singleLayoutButton{nullptr};
 
     // Multi host: safe intersection only.
     fluent::textfields::Label* m_multiHintLabel{nullptr};
@@ -210,6 +214,9 @@ private:
     fluent::basicinput::ToggleSwitch* m_multiClearedSwitch{nullptr};
     fluent::basicinput::Button* m_multiDeleteButton{nullptr};
     bool m_ocrAvailable{true};
+    bool m_translationAvailable{true};
+    QString m_translationUnavailableReason;
+    screen::editor::EditorProcessingState m_processingState;
 };
 
 } // namespace manga::ui::widget

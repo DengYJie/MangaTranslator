@@ -153,6 +153,8 @@ struct EditorState {
     QVector<QString> exportFailureSummaries;
     bool isOcrAvailable{true};
     QString ocrUnavailableReason;
+    bool isTranslationAvailable{true};
+    QString translationUnavailableReason;
 
     /// Current page region projections sorted by orderIndex.
     QVector<RegionProjection> regions;

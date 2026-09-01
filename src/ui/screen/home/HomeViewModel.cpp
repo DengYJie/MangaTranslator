@@ -16,9 +16,13 @@ HomeViewModel::HomeViewModel(application::IRecentProjectsStore* recentStore,
     : base::BaseViewModel<HomeViewModel, HomeState>(parent), m_recentStore(recentStore),
       m_projectRepository(projectRepository), m_operationRegistry(operationRegistry) {
     connect(&m_openWatcher, &QFutureWatcherBase::finished, this, [this]() { handleOpenFinished(); });
+    refresh();
 }
 
 void HomeViewModel::refresh() {
+    if (m_recentStore == nullptr) {
+        return;
+    }
     updateState([this](HomeState& state) { state.recentProjects = m_recentStore->loadRecentProjects(); });
 }
 

@@ -11,16 +11,13 @@ using namespace manga;
 class HomeViewModelTest : public QObject {
     Q_OBJECT
 private Q_SLOTS:
-    void refreshLoadsRecentsIntoState() {
+    void constructionLoadsPersistedRecentsIntoState() {
         test::FakeRecentProjectsStore recents;
         recents.m_projects = {{QStringLiteral("A"), QStringLiteral("D:/a"), 100},
                               {QStringLiteral("B"), QStringLiteral("D:/b"), 200}};
         test::FakeProjectRepository repository;
         application::OperationRegistry registry;
         ui::screen::home::HomeViewModel viewModel(&recents, &repository, &registry);
-        QSignalSpy spy(&viewModel, &ui::screen::home::HomeViewModel::stateChanged);
-        viewModel.refresh();
-        QVERIFY(spy.size() >= 1);
         QCOMPARE(viewModel.state().recentProjects.size(), 2);
     }
 

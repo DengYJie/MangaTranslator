@@ -127,6 +127,9 @@ void HomePage::buildUi() {
     m_gridView->setModel(m_model);
     m_gridView->setItemDelegate(m_delegate);
     m_gridView->setCellSize(QSize(240, 216));
+    m_gridView->setSelectionMode(fluent::collections::SelectionMode::Single);
+    m_gridView->setSelectionBehavior(QAbstractItemView::SelectItems);
+    m_gridView->setEditTriggers(QAbstractItemView::NoEditTriggers);
     m_gridView->setHorizontalSpacing(16);
     m_gridView->setVerticalSpacing(16);
     m_gridView->setContextMenuPolicy(Qt::CustomContextMenu);
@@ -139,8 +142,7 @@ void HomePage::buildUi() {
             }
         }
     };
-    connect(m_gridView, &QAbstractItemView::activated, this, openAt);
-    connect(m_gridView, &QAbstractItemView::doubleClicked, this, openAt);
+    connect(m_gridView, &QAbstractItemView::clicked, this, openAt);
     m_stack->addWidget(m_gridView);
     mainLayout->addWidget(stackContainer, 1);
 

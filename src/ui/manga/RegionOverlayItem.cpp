@@ -3,6 +3,7 @@
 #include "ui/manga/CanvasZOrder.h"
 
 #include <QBrush>
+#include <QPainter>
 #include <QPen>
 
 namespace manga::ui::manga {
@@ -45,6 +46,29 @@ void RegionOverlayItem::setTransientGeometry(const ::manga::domain::RectGeometry
 ::manga::domain::RectGeometry RegionOverlayItem::currentGeometry() const noexcept {
     const QRectF r = rect();
     return {.x = r.x(), .y = r.y(), .width = r.width(), .height = r.height()};
+}
+
+QRectF RegionOverlayItem::boundingRect() const {
+    return QGraphicsRectItem::boundingRect().adjusted(-2.0, -2.0, 2.0, 2.0);
+}
+
+void RegionOverlayItem::paint(QPainter* painter, const QStyleOptionGraphicsItem*, QWidget*) {
+    painter->save();
+    painter->setBrush(Qt::NoBrush);
+
+    QPen halo(QColor(0, 0, 0, 220), 3.0);
+    halo.setCosmetic(true);
+    halo.setJoinStyle(Qt::MiterJoin);
+    painter->setPen(halo);
+    painter->drawRect(rect());
+
+    const QColor foreground = m_selected ? m_selectedStroke : QColor(Qt::white);
+    QPen outline(foreground, 1.0);
+    outline.setCosmetic(true);
+    outline.setJoinStyle(Qt::MiterJoin);
+    painter->setPen(outline);
+    painter->drawRect(rect());
+    painter->restore();
 }
 
 void RegionOverlayItem::layoutHandles() {

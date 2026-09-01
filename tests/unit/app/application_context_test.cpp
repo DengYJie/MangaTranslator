@@ -26,7 +26,11 @@
 #include "ui/screen/import/ImportViewModel.h"
 #include "ui/window/MainWindow.h"
 
+#include <FluentQt/BasicInput.h>
+#include <FluentQt/DialogsFlyouts.h>
+#include <FluentQt/TextFields.h>
 #include <QCoreApplication>
+#include <QPointer>
 #include <QSettings>
 #include <QTemporaryDir>
 #include <QTimer>
@@ -83,7 +87,10 @@ public:
     QFuture<Result<OpenProjectResult>> recoverProject(OpenProjectRequest, OperationContext) override {
         return makeFailedFuture<OpenProjectResult>({});
     }
-    QFuture<Result<SaveProjectResult>> saveProject(SaveProjectRequest, OperationContext) override {
+    QFuture<Result<SaveProjectResult>> saveProject(SaveProjectRequest request, OperationContext) override {
+        if (saveSucceeds) {
+            return makeReadyFuture<SaveProjectResult>(SaveProjectResult{request.project.revision()});
+        }
         return makeFailedFuture<SaveProjectResult>({});
     }
     QFuture<Result<SaveAsProjectResult>> saveProjectAs(SaveAsProjectRequest, OperationContext) override {
@@ -92,6 +99,8 @@ public:
     QFuture<Result<void>> closeProject(CloseProjectRequest, OperationContext) override {
         return makeReadyFuture<void>({});
     }
+
+    bool saveSucceeds{false};
 };
 
 class StubRecentProjectsStore final : public manga::application::IRecentProjectsStore {
@@ -461,6 +470,7 @@ private Q_SLOTS:
 
     void windowCloseCancelKeepsContextAndSessionAlive() {
         auto repository = std::make_unique<StubProjectRepository>();
+        auto* repositoryPtr = repository.get();
         auto recents = std::make_unique<StubRecentProjectsStore>();
         auto settings = std::make_unique<StubAppSettingsStore>();
         auto thumbnails = std::make_unique<StubThumbnailStore>();
@@ -515,8 +525,25 @@ private Q_SLOTS:
             QVERIFY(editorViewModel->state().saveState.isDirty);
 
             Q_EMIT mainWindow->closeRequested();
+            QCoreApplication::processEvents(QEventLoop::AllEvents, 50);
+            auto* closeDialog = mainWindow->findChild<fluent::dialogs_flyouts::ContentDialog*>();
+            QVERIFY(closeDialog != nullptr);
+            auto* message = closeDialog->findChild<fluent::textfields::Label*>(QStringLiteral("projectCloseMessage"));
+            QVERIFY(message != nullptr);
+            QVERIFY(message->wordWrap());
+            QVERIFY(message->text().contains(QStringLiteral("未保存")));
+            const auto buttons = closeDialog->findChildren<fluent::basicinput::Button*>();
+            QCOMPARE(buttons.size(), 3);
+            for (const auto* button : buttons) {
+                QCOMPARE(button->sizePolicy().horizontalPolicy(), QSizePolicy::Fixed);
+            }
+            QVERIFY(closeDialog->width() >= 480);
 
-            editorViewModel->cancelClose();
+            QPointer<fluent::dialogs_flyouts::ContentDialog> dialogGuard(closeDialog);
+            closeDialog->setAnimationEnabled(false);
+            Q_EMIT closeDialog->closeButtonClicked();
+            closeDialog->done(fluent::dialogs_flyouts::ContentDialog::ResultNone);
+            QTRY_VERIFY_WITH_TIMEOUT(dialogGuard.isNull(), 2000);
 
             QVERIFY(editorViewModel->hasSession());
             QVERIFY(editorViewModel->state().saveState.isDirty);
@@ -525,7 +552,15 @@ private Q_SLOTS:
             editorViewModel->createRegion(manga::domain::RectGeometry(200, 200, 50, 50));
             QCOMPARE(editorViewModel->state().regions.size(), 2);
 
-            editorViewModel->confirmDiscardAndClose();
+            repositoryPtr->saveSucceeds = true;
+            Q_EMIT mainWindow->closeRequested();
+            QCoreApplication::processEvents(QEventLoop::AllEvents, 50);
+            auto* saveDialog = mainWindow->findChild<fluent::dialogs_flyouts::ContentDialog*>();
+            QVERIFY(saveDialog != nullptr);
+            saveDialog->setAnimationEnabled(false);
+            Q_EMIT saveDialog->primaryButtonClicked();
+            saveDialog->done(fluent::dialogs_flyouts::ContentDialog::ResultPrimary);
+            QTRY_VERIFY_WITH_TIMEOUT(!editorViewModel->hasSession(), 2000);
         });
 
         const int exitCode = app.run();

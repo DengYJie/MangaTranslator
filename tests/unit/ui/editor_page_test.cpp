@@ -3,13 +3,18 @@
 #include "ui/manga/MangaCanvas.h"
 #include "ui/screen/editor/EditorPage.h"
 #include "ui/screen/editor/EditorViewModel.h"
+#include "ui/widget/EditorCommandBar.h"
 #include "ui/widget/PageListModel.h"
 #include "ui/widget/PageThumbnailList.h"
 
 #include <FluentQt/FluentQt.h>
+#include <QFrame>
 #include <QPushButton>
+#include <QRegularExpression>
 #include <QSignalSpy>
 #include <QtTest>
+
+#include <algorithm>
 
 using namespace manga;
 
@@ -189,7 +194,35 @@ private Q_SLOTS:
         QVERIFY(translateBtn->text().isEmpty());
     }
 
-    void inspectorActionButtonsExist() {
+    void commandbarShowsOcrOnlyWhenRegionSelected() {
+        test::FakeThumbnailStore thumbnails;
+        test::FakePageImageLoader images;
+        application::OperationRegistry registry;
+        ui::screen::editor::EditorViewModel viewModel(&thumbnails, &images, &registry);
+        ui::screen::editor::EditorPage page(&viewModel);
+        page.show();
+
+        auto* commandBar = page.findChild<QWidget*>(QStringLiteral("editorCommandBar"));
+        auto* ocrButton = commandBar->findChild<fluent::basicinput::Button*>(QStringLiteral("ocrButton"));
+        QVERIFY(ocrButton != nullptr);
+        QVERIFY(!ocrButton->isVisibleTo(commandBar));
+
+        auto session = makeSession(1);
+        domain::TextRegion region(domain::RegionId::generate(), domain::RectGeometry{10.0, 10.0, 80.0, 40.0}, 0);
+        const auto regionId = region.id();
+        session.project.findPage(pageAt(session, 0))->addRegion(std::move(region));
+        viewModel.openProjectSession(session);
+        viewModel.selectRegion(regionId, ui::screen::editor::RegionSelectionMode::Replace);
+
+        QVERIFY(ocrButton->isVisibleTo(commandBar));
+        QVERIFY(ocrButton->isEnabled());
+
+        viewModel.selectRegion(regionId, ui::screen::editor::RegionSelectionMode::Replace);
+        viewModel.deleteRegions({regionId});
+        QVERIFY(!ocrButton->isVisibleTo(commandBar));
+    }
+
+    void translationSectionUsesSingleAiRetranslateAction() {
         test::FakeThumbnailStore thumbnails;
         test::FakePageImageLoader images;
         application::OperationRegistry registry;
@@ -201,13 +234,14 @@ private Q_SLOTS:
         auto* clearBtn = page.findChild<fluent::basicinput::Button*>(QStringLiteral("inspectorSingleClear"));
         auto* layoutBtn = page.findChild<fluent::basicinput::Button*>(QStringLiteral("inspectorSingleLayout"));
 
-        QVERIFY(ocrBtn != nullptr);
+        QVERIFY(ocrBtn == nullptr);
         QVERIFY(trBtn != nullptr);
-        QVERIFY(clearBtn != nullptr);
-        QVERIFY(layoutBtn != nullptr);
+        QCOMPARE(trBtn->text(), QStringLiteral("AI 重译"));
+        QVERIFY(clearBtn == nullptr);
+        QVERIFY(layoutBtn == nullptr);
     }
 
-    void unavailableOcrDisablesInspectorActionsWithGuidance() {
+    void unavailableOcrDisablesRemainingBatchActionWithGuidance() {
         test::FakeThumbnailStore thumbnails;
         test::FakePageImageLoader images;
         application::OperationRegistry registry;
@@ -215,14 +249,30 @@ private Q_SLOTS:
         viewModel.setOcrAvailability(false, QStringLiteral("manifest.json not found"));
         ui::screen::editor::EditorPage page(&viewModel);
 
-        auto* singleButton = page.findChild<fluent::basicinput::Button*>(QStringLiteral("inspectorSingleOcr"));
         auto* multiButton = page.findChild<fluent::basicinput::Button*>(QStringLiteral("inspectorMultiOcr"));
-        QVERIFY(singleButton != nullptr);
         QVERIFY(multiButton != nullptr);
-        QVERIFY(!singleButton->isEnabled());
         QVERIFY(!multiButton->isEnabled());
-        QVERIFY(singleButton->toolTip().contains(QStringLiteral("manifest.json")));
-        QVERIFY(singleButton->toolTip().contains(QStringLiteral("设置 > OCR")));
+        QVERIFY(multiButton->toolTip().contains(QStringLiteral("manifest.json")));
+        QVERIFY(multiButton->toolTip().contains(QStringLiteral("设置 > OCR")));
+    }
+
+    void commandbarHidesSeparatorsForEmptyGroups() {
+        test::FakeThumbnailStore thumbnails;
+        test::FakePageImageLoader images;
+        application::OperationRegistry registry;
+        ui::screen::editor::EditorViewModel viewModel(&thumbnails, &images, &registry);
+        ui::widget::EditorCommandBar commandBar(&viewModel);
+        commandBar.resize(1568, 40);
+        commandBar.show();
+        QCoreApplication::processEvents();
+
+        const auto separators =
+            commandBar.findChildren<QFrame*>(QRegularExpression(QStringLiteral("^editorCommandBarSeparator")));
+        QCOMPARE(separators.size(), 7);
+        QCOMPARE(std::count_if(separators.cbegin(),
+                               separators.cend(),
+                               [](const auto* separator) { return separator->isVisible(); }),
+                 5);
     }
 };
 

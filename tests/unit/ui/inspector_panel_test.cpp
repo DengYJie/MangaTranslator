@@ -2,6 +2,7 @@
 
 #include <FluentQt/BasicInput.h>
 #include <FluentQt/Layout.h>
+#include <FluentQt/StatusInfo.h>
 #include <FluentQt/TextFields.h>
 #include <QInputMethodEvent>
 #include <QListWidget>
@@ -148,15 +149,60 @@ private Q_SLOTS:
         auto* orderLabel = panel.findChild<fluent::textfields::Label*>(QStringLiteral("inspectorRegionOrder"));
         QVERIFY(orderLabel != nullptr);
         QVERIFY(orderLabel->text().contains(QString::number(2)));
+    }
 
-        auto* clearStatus = panel.findChild<fluent::textfields::Label*>(QStringLiteral("inspectorClearStatus"));
-        QVERIFY(clearStatus != nullptr);
-        QCOMPARE(clearStatus->text(), QStringLiteral("未清除"));
+    void unavailableTranslationShowsActionableInfoBar() {
+        InspectorPanel panel;
+        panel.show();
+        panel.setInspectorState(InspectorState{makeSingleState()});
 
-        auto clearedState = makeSingleState();
-        clearedState.isCleared = true;
-        panel.setInspectorState(InspectorState{clearedState});
-        QCOMPARE(clearStatus->text(), QStringLiteral("已清除"));
+        panel.setTranslationAvailability(false, QStringLiteral("尚未配置 API 端点和模型"));
+
+        auto* infoBar = panel.findChild<fluent::status_info::InfoBar*>(QStringLiteral("inspectorTranslationInfoBar"));
+        QVERIFY(infoBar != nullptr);
+        QVERIFY(infoBar->isOpen());
+        QCOMPARE(infoBar->severity(), fluent::status_info::InfoBar::Warning);
+        QVERIFY(infoBar->message().contains(QStringLiteral("尚未配置")));
+        auto* translate = panel.findChild<fluent::basicinput::Button*>(QStringLiteral("inspectorSingleTranslate"));
+        QVERIFY(translate != nullptr);
+        QVERIFY(!translate->isEnabled());
+
+        QSignalSpy settingsSpy(&panel, &InspectorPanel::translationSettingsRequested);
+        auto* settings = panel.findChild<fluent::basicinput::Button*>(QStringLiteral("inspectorTranslationSettings"));
+        QVERIFY(settings != nullptr);
+        QTest::mouseClick(settings, Qt::LeftButton);
+        QCOMPARE(settingsSpy.size(), 1);
+    }
+
+    void translationFailureShowsProcessingMessage() {
+        InspectorPanel panel;
+        panel.show();
+        panel.setInspectorState(InspectorState{makeSingleState()});
+        panel.setTranslationAvailability(true, {});
+
+        ui::screen::editor::EditorProcessingState processing;
+        processing.status = ui::screen::editor::ProcessingStatus::Failed;
+        processing.safeMessage = QStringLiteral("翻译服务暂时不可用");
+        panel.setProcessingState(processing);
+
+        auto* infoBar = panel.findChild<fluent::status_info::InfoBar*>(QStringLiteral("inspectorTranslationInfoBar"));
+        QVERIFY(infoBar != nullptr);
+        QVERIFY(infoBar->isOpen());
+        QCOMPARE(infoBar->severity(), fluent::status_info::InfoBar::Error);
+        QCOMPARE(infoBar->title(), QStringLiteral("翻译失败"));
+        QCOMPARE(infoBar->message(), QStringLiteral("翻译服务暂时不可用"));
+    }
+
+    void emptyCandidateListStaysCollapsed() {
+        InspectorPanel panel;
+        panel.show();
+        auto state = makeSingleState();
+        state.candidates.clear();
+        panel.setInspectorState(InspectorState{state});
+
+        auto* candidates = panel.findChild<fluent::layout::Expander*>(QStringLiteral("inspectorCandidatesExpander"));
+        QVERIFY(candidates != nullptr);
+        QVERIFY(!candidates->isVisible());
     }
 
     void marginValidationErrorClearsOnRegionSwitch() {

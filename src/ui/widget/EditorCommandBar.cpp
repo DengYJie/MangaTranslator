@@ -83,6 +83,9 @@ void EditorCommandBar::buildUi() {
     toolGroup->addButton(m_createRegionButton);
     m_previewSelectorButton = createIconButton(
         Typography::Icons::View, tr("切换原图/译文预览 (Space)"), QStringLiteral("previewSelectorButton"));
+    m_ocrButton = createIconButton(Typography::Icons::glyph(QStringLiteral("ic_fluent_scan_text_20_regular")),
+                                   tr("重新 OCR"),
+                                   QStringLiteral("ocrButton"));
     m_smartTranslateButton =
         createIconButton(Typography::Icons::glyph(QStringLiteral("ic_fluent_translate_20_regular")),
                          tr("智能翻译 (Ctrl+T)"),
@@ -129,10 +132,12 @@ void EditorCommandBar::buildUi() {
     });
 
     bool hasGroup = false;
-    const auto addGroup = [layout, &hasGroup](std::initializer_list<QWidget*> widgets) {
+    const auto addGroup = [this, layout, &hasGroup](std::initializer_list<QWidget*> widgets) {
+        QFrame* separator = nullptr;
         if (hasGroup) {
             layout->addSpacing(8);
-            auto* separator = new QFrame(layout->parentWidget());
+            separator = new QFrame(layout->parentWidget());
+            separator->setObjectName(QStringLiteral("editorCommandBarSeparator%1").arg(m_commandSeparators.size()));
             separator->setFrameShape(QFrame::VLine);
             separator->setFrameShadow(QFrame::Sunken);
             separator->setFixedSize(1, 20);
@@ -147,6 +152,8 @@ void EditorCommandBar::buildUi() {
             groupLayout->addWidget(widget);
         }
         layout->addWidget(group);
+        m_commandGroups.append(group);
+        m_commandSeparators.append(separator);
         hasGroup = true;
     };
 
@@ -154,7 +161,7 @@ void EditorCommandBar::buildUi() {
     addGroup({m_zoomOutButton, m_zoomValueLabel, m_zoomInButton, m_fitToPageButton, m_actualSizeButton});
     addGroup({m_selectButton, m_panButton, m_createRegionButton});
     addGroup({m_previewSelectorButton});
-    addGroup({m_smartTranslateButton, m_adoptButton, m_rejectButton});
+    addGroup({m_ocrButton, m_smartTranslateButton, m_adoptButton, m_rejectButton});
     layout->addStretch();
     addGroup({m_pagePaneToggleButton, m_inspectorPaneToggleButton});
     addGroup({m_overflowButton});
@@ -181,6 +188,14 @@ void EditorCommandBar::buildUi() {
                               ? PreviewMode::Translated
                               : (current == PreviewMode::Translated ? PreviewMode::Compare : PreviewMode::Original);
         m_viewModel->setPreviewMode(mode);
+    });
+    connect(m_ocrButton, &fluent::basicinput::Button::clicked, this, [this]() {
+        if (auto* ctrl = m_viewModel->processingController()) {
+            const auto& state = m_viewModel->state();
+            if (state.currentPageId.isValid() && !state.selectedRegionIds.isEmpty()) {
+                ctrl->recognizeSelectedRegions();
+            }
+        }
     });
     connect(m_smartTranslateButton, &fluent::basicinput::Button::clicked, this, [this]() {
         if (auto* ctrl = m_viewModel->processingController()) {
@@ -266,6 +281,23 @@ void EditorCommandBar::updateResponsiveLayout() {
     m_previewOverflowAction->setVisible(overflowActive);
     m_adoptOverflowAction->setVisible(overflowActive && !m_hasProposal);
     m_rejectOverflowAction->setVisible(overflowActive && !m_hasProposal);
+
+    bool previousGroupVisible = false;
+    for (int i = 0; i < m_commandGroups.size(); ++i) {
+        const auto children = m_commandGroups.at(i)->findChildren<QWidget*>(QString(), Qt::FindDirectChildrenOnly);
+        bool groupVisible = false;
+        for (const auto* child : children) {
+            if (!child->isHidden()) {
+                groupVisible = true;
+                break;
+            }
+        }
+        m_commandGroups.at(i)->setVisible(groupVisible);
+        if (m_commandSeparators.at(i) != nullptr) {
+            m_commandSeparators.at(i)->setVisible(groupVisible && previousGroupVisible);
+        }
+        previousGroupVisible = previousGroupVisible || groupVisible;
+    }
 }
 
 void EditorCommandBar::render(const EditorState& state) {
@@ -290,12 +322,24 @@ void EditorCommandBar::render(const EditorState& state) {
     m_panButton->setEnabled(hasPage);
     m_createRegionButton->setEnabled(hasPage);
     m_previewSelectorButton->setEnabled(hasPage);
+    const bool hasSelectedRegions = hasPage && !state.selectedRegionIds.isEmpty();
+    m_ocrButton->setVisible(hasSelectedRegions);
+    m_ocrButton->setEnabled(hasSelectedRegions && state.isOcrAvailable);
+    m_ocrButton->setToolTip(state.isOcrAvailable ? tr("重新识别选中区域的文字")
+                                                 : tr("OCR 模型不可用，请先在设置 > OCR 中配置模型"));
+    m_ocrButton->setAccessibleName(state.isOcrAvailable ? tr("重新 OCR") : tr("重新 OCR（不可用）"));
 
     if (state.processing.isRunning) {
         m_smartTranslateButton->setEnabled(true);
         m_smartTranslateButton->setIconGlyph(Typography::Icons::Cancel, Typography::IconSize::Standard);
         m_smartTranslateButton->setToolTip(tr("取消处理"));
         m_smartTranslateButton->setAccessibleName(tr("取消处理"));
+    } else if (!state.isTranslationAvailable) {
+        m_smartTranslateButton->setEnabled(false);
+        m_smartTranslateButton->setIconGlyph(Typography::Icons::glyph(QStringLiteral("ic_fluent_translate_20_regular")),
+                                             Typography::IconSize::Standard);
+        m_smartTranslateButton->setToolTip(state.translationUnavailableReason);
+        m_smartTranslateButton->setAccessibleName(tr("智能翻译（未配置）"));
     } else if (hasPage && !hasRegions) {
         m_smartTranslateButton->setEnabled(false);
         m_smartTranslateButton->setIconGlyph(Typography::Icons::glyph(QStringLiteral("ic_fluent_translate_20_regular")),
@@ -346,7 +390,8 @@ void EditorCommandBar::setupShortcuts() {
     makeGlobal(QStringLiteral("Ctrl+T"), [this]() {
         if (auto* ctrl = m_viewModel->processingController()) {
             const auto& state = m_viewModel->state();
-            if (!state.processing.isRunning && state.currentPageId.isValid() && !state.regions.isEmpty()) {
+            if (state.isTranslationAvailable && !state.processing.isRunning && state.currentPageId.isValid() &&
+                !state.regions.isEmpty()) {
                 ctrl->smartTranslatePage(state.currentPageId);
             }
         }

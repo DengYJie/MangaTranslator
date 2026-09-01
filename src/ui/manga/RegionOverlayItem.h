@@ -5,6 +5,9 @@
 
 #include <QGraphicsRectItem>
 
+class QPainter;
+class QStyleOptionGraphicsItem;
+
 namespace manga::ui::manga {
 
 /// Visual overlay for a single text region on the manga canvas. Draws a cosmetic
@@ -41,6 +44,9 @@ public:
 
     /// Updates overlay and handle colors from resolved FluentQt semantic tokens.
     void setColors(const QColor& selectedStroke, const QColor& unselectedStroke, const QColor& handleFill);
+
+    [[nodiscard]] QRectF boundingRect() const override;
+    void paint(QPainter* painter, const QStyleOptionGraphicsItem* option, QWidget* widget) override;
 
 private:
     void setSelected(bool selected);

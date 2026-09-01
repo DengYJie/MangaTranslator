@@ -70,6 +70,12 @@ public:
             s.ocrUnavailableReason = available ? QString() : unavailableReason;
         });
     }
+    void setTranslationAvailability(bool available, const QString& unavailableReason) {
+        updateState([&](EditorState& s) {
+            s.isTranslationAvailable = available;
+            s.translationUnavailableReason = available ? QString() : unavailableReason;
+        });
+    }
     /// Records the live canvas transform for the current page. Memory-only, no State churn.
     void noteViewTransform(double zoom, const QPointF& centerOnPage);
     void dismissNotice();
