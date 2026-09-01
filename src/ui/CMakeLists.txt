@@ -99,6 +99,10 @@ add_library(manga_ui STATIC
     widget/PageThumbnailDelegate.h
     widget/PageThumbnailList.cpp
     widget/PageThumbnailList.h
+    widget/PaneCard.cpp
+    widget/PaneCard.h
+    widget/PaneSplitter.cpp
+    widget/PaneSplitter.h
     widget/SettingsGroup.cpp
     widget/SettingsGroup.h
     widget/SettingsRow.cpp

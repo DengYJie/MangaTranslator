@@ -8,14 +8,17 @@
 #include "ui/widget/InspectorPanel.h"
 #include "ui/widget/PageListModel.h"
 #include "ui/widget/PageThumbnailList.h"
+#include "ui/widget/PaneCard.h"
+#include "ui/widget/PaneSplitter.h"
 
 #include <FluentQt/FluentQt.h>
 #include <QApplication>
 #include <QKeyEvent>
+#include <QPaintEvent>
+#include <QPainter>
 #include <QResizeEvent>
 #include <QScrollArea>
 #include <QShortcut>
-#include <QSplitter>
 #include <QVBoxLayout>
 
 namespace manga::ui::screen::editor {
@@ -25,16 +28,31 @@ constexpr int kBreakpointWide = 1440;
 constexpr int kBreakpointStandard = 1200;
 constexpr int kBreakpointCompact = 1008;
 constexpr int kBreakpointNarrow = 720;
-constexpr int kFlatHeightBreakpoint = 560;
 
 constexpr int kPagePaneWideWidth = 232;
 constexpr int kPagePaneStandardWidth = 220;
 constexpr int kPagePaneCompactWidth = 96;
+constexpr int kPagePaneMaxWidth = 248;
 
 constexpr int kInspectorWideWidth = 352;
 constexpr int kInspectorStandardWidth = 328;
 constexpr int kInspectorCompactWidth = 320;
+constexpr int kInspectorMaxWidth = 380;
 } // namespace
+
+QSplitter* EditorPage::splitterForTest() const {
+    return m_splitter;
+}
+
+void EditorPage::paintEvent(QPaintEvent* event) {
+    Q_UNUSED(event);
+
+    // Fill the page with the same layer surface the command bar sits on, so
+    // the splitter handles' transparent strips read as one continuous pane
+    // background instead of a contrasting gap.
+    QPainter painter(this);
+    painter.fillRect(rect(), themeColorsRef().bgLayer);
+}
 
 EditorPage::EditorPage(EditorViewModel* viewModel, QWidget* parent) : base::BasePage(parent), m_viewModel(viewModel) {
     buildUi();
@@ -192,16 +210,16 @@ EditorPage::EditorPage(EditorViewModel* viewModel, QWidget* parent) : base::Base
 
 void EditorPage::buildUi() {
     auto* layout = new QVBoxLayout(this);
-    layout->setContentsMargins(8, 8, 8, 8);
-    layout->setSpacing(4);
+    layout->setContentsMargins(0, 0, 0, 0);
+    layout->setSpacing(0);
 
-    m_splitter = new QSplitter(Qt::Horizontal, this);
-    m_splitter->setHandleWidth(8);
+    m_splitter = new widget::PaneSplitter(Qt::Horizontal, this);
     layout->addWidget(m_splitter);
 
-    auto* pagePaneCard = new fluent::layout::Card(m_splitter);
+    auto* pagePaneCard = new widget::PaneCard(m_splitter);
     pagePaneCard->setObjectName(QStringLiteral("editorPagePaneCard"));
     pagePaneCard->setAppearance(fluent::layout::Card::Layer);
+    pagePaneCard->setMaximumWidth(kPagePaneMaxWidth);
     auto* pagePaneLayout = new QVBoxLayout(pagePaneCard);
     pagePaneLayout->setContentsMargins(0, 0, 0, 0);
     pagePaneLayout->setSpacing(0);
@@ -210,9 +228,9 @@ void EditorPage::buildUi() {
     m_splitter->addWidget(pagePaneCard);
     m_pagePaneCard = pagePaneCard;
 
-    auto* canvasPaneCard = new fluent::layout::Card(m_splitter);
+    auto* canvasPaneCard = new widget::PaneCard(m_splitter);
     canvasPaneCard->setObjectName(QStringLiteral("editorCanvasPaneCard"));
-    canvasPaneCard->setAppearance(fluent::layout::Card::Layer);
+    canvasPaneCard->setAppearance(fluent::layout::Card::Canvas);
     auto* canvasPaneLayout = new QVBoxLayout(canvasPaneCard);
     canvasPaneLayout->setContentsMargins(0, 0, 0, 0);
     canvasPaneLayout->setSpacing(0);
@@ -222,6 +240,9 @@ void EditorPage::buildUi() {
     m_commandBarScrollArea = new QScrollArea(canvasPaneCard);
     m_commandBarScrollArea->setObjectName(QStringLiteral("editorCommandBarScrollArea"));
     m_commandBarScrollArea->setFrameShape(QFrame::NoFrame);
+    // Keep the command bar transparent so it reads as part of the pane
+    // surface instead of a contrasting viewport rectangle.
+    m_commandBarScrollArea->viewport()->setAutoFillBackground(false);
     m_commandBarScrollArea->setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
     m_commandBarScrollArea->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     m_commandBarScrollArea->setWidgetResizable(false);
@@ -233,9 +254,10 @@ void EditorPage::buildUi() {
     canvasPaneLayout->addWidget(m_canvas, 1);
     m_splitter->addWidget(canvasPaneCard);
 
-    auto* inspectorCard = new fluent::layout::Card(m_splitter);
+    auto* inspectorCard = new widget::PaneCard(m_splitter);
     inspectorCard->setObjectName(QStringLiteral("editorInspectorCard"));
     inspectorCard->setAppearance(fluent::layout::Card::Layer);
+    inspectorCard->setMaximumWidth(kInspectorMaxWidth);
     auto* inspectorLayout = new QVBoxLayout(inspectorCard);
     inspectorLayout->setContentsMargins(0, 0, 0, 0);
     inspectorLayout->setSpacing(0);
@@ -322,6 +344,8 @@ void EditorPage::applySplitterLayout() {
             }
             break;
     }
+
+    m_splitter->refreshHandlePainting();
 }
 
 void EditorPage::setPageDrawerVisible(bool visible) {
@@ -472,13 +496,6 @@ void EditorPage::keyPressEvent(QKeyEvent* event) {
 
 void EditorPage::resizeEvent(QResizeEvent* event) {
     base::BasePage::resizeEvent(event);
-    const bool flatHeight = height() < kFlatHeightBreakpoint;
-    if (layout()) {
-        const int m = flatHeight ? 2 : 8;
-        const int s = flatHeight ? 2 : 4;
-        layout()->setContentsMargins(m, m, m, m);
-        layout()->setSpacing(s);
-    }
 }
 
 void EditorPage::render(const EditorState& state) {

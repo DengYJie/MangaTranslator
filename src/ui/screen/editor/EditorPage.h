@@ -3,6 +3,7 @@
 #include "ui/base/BasePage.h"
 #include "ui/manga/MangaCanvas.h"
 
+class QPaintEvent;
 class QSplitter;
 class QScrollArea;
 
@@ -13,6 +14,7 @@ namespace manga::ui::widget {
 class InspectorPanel;
 class PageThumbnailList;
 class EditorCommandBar;
+class PaneSplitter;
 } // namespace manga::ui::widget
 
 namespace manga::ui::screen::editor {
@@ -57,9 +59,7 @@ public:
     [[nodiscard]] ui::widget::InspectorPanel* inspectorForTest() const {
         return m_inspector;
     }
-    [[nodiscard]] QSplitter* splitterForTest() const {
-        return m_splitter;
-    }
+    [[nodiscard]] QSplitter* splitterForTest() const;
     [[nodiscard]] QWidget* pagePaneCardForTest() const {
         return m_pagePaneCard;
     }
@@ -78,6 +78,7 @@ Q_SIGNALS:
     void importPagesRequested();
 
 protected:
+    void paintEvent(QPaintEvent* event) override;
     void updateResponsiveLayout(int availableWidth) override;
     void keyPressEvent(QKeyEvent* event) override;
     void resizeEvent(QResizeEvent* event) override;
@@ -92,7 +93,7 @@ private:
     EditorViewModel* m_viewModel; // non-owning
     ui::widget::EditorCommandBar* m_commandBar{nullptr};
     QScrollArea* m_commandBarScrollArea{nullptr};
-    QSplitter* m_splitter{nullptr};
+    widget::PaneSplitter* m_splitter{nullptr};
     QWidget* m_pagePaneCard{nullptr};
     ui::widget::PageThumbnailList* m_pageList{nullptr};
     ui::manga::MangaCanvas* m_canvas{nullptr};
