@@ -19,9 +19,6 @@ namespace fluent::layout {
 class Expander;
 class Field;
 } // namespace fluent::layout
-namespace fluent::scrolling {
-class ScrollView;
-}
 namespace fluent::textfields {
 class Label;
 class LineEdit;
@@ -32,6 +29,7 @@ class TextEdit;
 namespace manga::ui::widget {
 
 class ColorSwatchButton;
+class TransparentScrollView;
 
 /// Selection-driven region inspector. Renders the InspectorState projection through
 /// three mutually exclusive hosts (page summary, single region, multi region) and
@@ -117,7 +115,7 @@ private:
 
     fluent::textfields::Label* m_headerTitle{nullptr};
     fluent::textfields::Label* m_headerSubtitle{nullptr};
-    fluent::scrolling::ScrollView* m_scrollView{nullptr};
+    TransparentScrollView* m_scrollView{nullptr};
     QStackedWidget* m_stack{nullptr};
     QWidget* m_pageHost{nullptr};
     QWidget* m_singleHost{nullptr};

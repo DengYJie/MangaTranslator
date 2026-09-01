@@ -1,5 +1,7 @@
 #include "ui/widget/InspectorPanel.h"
 
+#include "ui/widget/TransparentScrollView.h"
+
 #include <FluentQt/BasicInput.h>
 #include <FluentQt/DialogsFlyouts.h>
 #include <FluentQt/Layout.h>
@@ -150,7 +152,7 @@ void InspectorPanel::buildUi() {
     m_headerSubtitle->setTextElideMode(Qt::ElideMiddle);
     root->addWidget(m_headerSubtitle);
 
-    m_scrollView = new fluent::scrolling::ScrollView(this);
+    m_scrollView = new TransparentScrollView(this);
     m_scrollView->setWidgetResizable(true);
     m_scrollView->setHorizontalScrollBarVisibility(fluent::scrolling::ScrollView::ScrollBarVisibility::Hidden);
     root->addWidget(m_scrollView, 1);
