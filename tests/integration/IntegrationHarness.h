@@ -24,6 +24,7 @@
 #include <QRandomGenerator>
 #include <QString>
 #include <QTemporaryDir>
+#include <QThreadPool>
 #include <QTimer>
 
 #include <memory>
@@ -77,6 +78,10 @@ struct RealDataStack {
           executor(std::make_unique<services::BoundedTaskExecutor>()),
           inpainter(std::make_unique<services::SolidColorInpainter>(executor.get())),
           layouter(std::make_unique<services::QtTextLayouter>(executor.get())) {}
+
+    ~RealDataStack() {
+        QThreadPool::globalInstance()->waitForDone();
+    }
 
     [[nodiscard]] QString projectRoot(const QString& name) const {
         return QDir(tempRoot.path()).filePath(name);

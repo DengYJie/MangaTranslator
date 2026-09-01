@@ -1,22 +1,40 @@
-qt_add_executable(manga_tests_integration integration_init_test.cpp)
-manga_apply_project_options(manga_tests_integration)
-set_target_properties(manga_tests_integration PROPERTIES AUTOMOC ON)
+qt_add_executable(manga_tests_integration_e01_manual_offline
+    e01_manual_offline_test.cpp
+)
+manga_apply_project_options(manga_tests_integration_e01_manual_offline)
+set_target_properties(manga_tests_integration_e01_manual_offline PROPERTIES AUTOMOC ON)
 
-target_link_libraries(manga_tests_integration
+target_compile_definitions(manga_tests_integration_e01_manual_offline
+    PRIVATE
+        QT_NO_KEYWORDS
+        MANGA_TEST_FIXTURES_DIR="${PROJECT_SOURCE_DIR}/tests/fixtures"
+)
+
+target_include_directories(manga_tests_integration_e01_manual_offline
+    PRIVATE
+        "${PROJECT_SOURCE_DIR}/tests/unit/application"
+        "${PROJECT_SOURCE_DIR}/tests"
+        "${PROJECT_SOURCE_DIR}/tests/unit"
+)
+
+target_link_libraries(manga_tests_integration_e01_manual_offline
     PRIVATE
         manga_domain
         manga_application
         manga_services
         manga_data
-        manga_network
+        manga_rendering
+        manga_ui
         Qt6::Test
+        Qt6::Widgets
 )
 
-manga_deploy_qt_runtime(manga_tests_integration)
-add_test(NAME manga_tests_integration COMMAND manga_tests_integration)
-set_tests_properties(manga_tests_integration PROPERTIES
+manga_deploy_qt_runtime(manga_tests_integration_e01_manual_offline)
+add_test(NAME manga_tests_integration_e01_manual_offline COMMAND manga_tests_integration_e01_manual_offline)
+set_tests_properties(manga_tests_integration_e01_manual_offline PROPERTIES
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
     LABELS "integration"
-    TIMEOUT 30
+    TIMEOUT 60
 )
 
 add_subdirectory(ui)

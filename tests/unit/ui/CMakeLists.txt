@@ -739,3 +739,39 @@ set_tests_properties(manga_tests_ui_accessibility PROPERTIES
     LABELS "unit;ui"
     TIMEOUT 15
 )
+
+qt_add_executable(manga_tests_ui_export_snapshot_builder
+    export_snapshot_builder_test.cpp
+)
+manga_apply_project_options(manga_tests_ui_export_snapshot_builder)
+set_target_properties(manga_tests_ui_export_snapshot_builder PROPERTIES AUTOMOC ON)
+
+target_compile_definitions(manga_tests_ui_export_snapshot_builder
+    PRIVATE
+        QT_NO_KEYWORDS
+)
+
+target_include_directories(manga_tests_ui_export_snapshot_builder
+    PRIVATE
+        "${PROJECT_SOURCE_DIR}/tests/unit/application"
+        "${PROJECT_SOURCE_DIR}/tests"
+        "${PROJECT_SOURCE_DIR}/tests/unit"
+)
+
+target_link_libraries(manga_tests_ui_export_snapshot_builder
+    PRIVATE
+        manga_ui
+        manga_application
+        manga_domain
+        manga_rendering
+        Qt6::Test
+        Qt6::Widgets
+)
+
+manga_deploy_qt_runtime(manga_tests_ui_export_snapshot_builder)
+add_test(NAME manga_tests_ui_export_snapshot_builder COMMAND manga_tests_ui_export_snapshot_builder)
+set_tests_properties(manga_tests_ui_export_snapshot_builder PROPERTIES
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
+    LABELS "unit;ui"
+    TIMEOUT 15
+)
