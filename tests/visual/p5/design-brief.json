@@ -1,0 +1,793 @@
+{
+  "contract_version": 4,
+  "application": "MangaTranslator",
+  "profile": "full",
+  "author_id": "p5-implementation",
+  "recipe_id": "document-workbench",
+  "identity": {
+    "primary_object": "Current manga page and its editable text Regions",
+    "dominant_time_model": "Project revision with undoable Region commands; OCR and translation are transient page operations",
+    "core_outcome": "A reviewed, editable translated manga page ready for typesetting and export",
+    "hero_interaction": "Directly select a Region on the current page and compare or correct its source, translation, and layout",
+    "signature_surface": "A centered paper page on a neutral pasteboard, with selection geometry and proof context serving direct editing"
+  },
+  "references": {
+    "aligned": {
+      "name": "Godot editor tour",
+      "fit": "A spatial authoring reference because canvas selection controls the meaning of property tools.",
+      "transferred_traits": [
+        "Keep the authored visual artifact dominant.",
+        "Bind selection, properties, and commands to the same object.",
+        "Preserve the viewport by moving auxiliary panels to drawers at narrow widths."
+      ],
+      "rejected_traits": [
+        "Scene-tree semantics and game-engine branding do not fit manga page review.",
+        "Persistent diagnostic docks must not compete with the page."
+      ]
+    },
+    "contrast": {
+      "name": "Zed project-panel guidance",
+      "fit": "A contrast reference for restrained contextual tools and focused narrow layouts.",
+      "transferred_traits": [
+        "Keep rare tools contextual while the central artifact stays quiet.",
+        "Use mutually exclusive supporting surfaces at narrow widths."
+      ],
+      "rejected_traits": [
+        "Code-editor tabs and collaborator affordances are not manga editing objects.",
+        "Minimalism must not hide OCR failure or manual-override status."
+      ]
+    }
+  },
+  "taste_context": {
+    "user_signals": [
+      "The P5 supplement requires a continuous current-page workbench, not a task-panel collection.",
+      "The task requires three neutral high-fidelity concepts and an unselected human-review gate."
+    ],
+    "project_signals": [
+      "docs/ui/foundations.md establishes Win11 Fluent semantics, Mica, 4 px rhythm, and a neutral dark canvas even in Light theme.",
+      "docs/ui/pages/editor.md defines PageThumbnailList, MangaCanvas, Inspector, CommandBar, and AppStatusTaskStrip as the editor anatomy."
+    ],
+    "non_ui_reference": {
+      "name": "Printed manga page and editorial proof sheet",
+      "source": "docs/plan/v0.1/phase-5-ui-editor-supplement.md §1 and docs/ui/pages/editor.md",
+      "transferred_traits": [
+        "Paper edge, margin, selection marks, and reading order create a careful proofing rhythm.",
+        "A page can remain calm while only active regions carry precise marks."
+      ],
+      "rejected_traits": [
+        "No reproduction of copyrighted manga art or publisher typography.",
+        "No faux paper texture that reduces field legibility."
+      ]
+    },
+    "recent_patterns_to_avoid": [
+      "A generic persistent navigation, session, chat, and Inspector skeleton unrelated to the page.",
+      "A dashboard grid of identical rounded cards, decorative gradients, or status-only metrics."
+    ]
+  },
+  "subject_vernacular": {
+    "materials": [
+      "manga paper",
+      "neutral pasteboard",
+      "selection rule"
+    ],
+    "artifacts": [
+      "1200×1800 source page",
+      "editable text Region",
+      "typeset translation"
+    ],
+    "instruments": [
+      "Region selection handles",
+      "OCR progress",
+      "translation and typesetting fields"
+    ],
+    "verbs": [
+      "select",
+      "compare",
+      "correct",
+      "adopt",
+      "typeset"
+    ],
+    "tempo": "Careful page-by-page proofreading with short, nonblocking machine-assist intervals"
+  },
+  "art_direction": {
+    "desired_impression": [
+      "attentive",
+      "precise",
+      "quiet"
+    ],
+    "visual_world": "A restrained editorial pasteboard: a white manga page is held in a neutral working field, while proof rules, selected geometry, and compact margin tools make edits legible without turning the page into a dashboard.",
+    "signature_element": "A paper-centered canvas whose selected Region, thumbnail, and proof context share a single thin registration rule and explicit labels.",
+    "typography_voice": "System UI typography with 14 px CJK body copy, compact 12 px metadata, and semibold section anchors; translated text is readable before chrome is decorative.",
+    "palette_strategy": "Fluent semantic Light and Dark surfaces frame one stable neutral canvas. Accent identifies selection and one primary action; warning and error remain semantic and paired with text or icons.",
+    "motion_voice": "Short 160–220 ms selection and pane transitions clarify continuity; direct Region manipulation is immediate and Reduce Motion removes nonessential shimmer and movement.",
+    "aesthetic_risk": {
+      "move": "Keep the canvas a deep neutral pasteboard in both themes so the paper edge and Region geometry retain authority.",
+      "evidence": "The foundations and editor specification explicitly preserve a neutral deep canvas even in Light theme.",
+      "quiet_zone": "Navigation, Inspector fields, page rows, and the task strip stay low-chroma and structurally quiet.",
+      "usability_guard": "All status uses text plus icon or shape, selection has handles and a high-contrast double outline, and no field text depends on the pasteboard for contrast.",
+      "fallback": "If contrast or accessibility review rejects the deep pasteboard, use the Fluent canvas semantic surface with the same paper-edge and double-outline hierarchy."
+    },
+    "anti_goals": [
+      "A generic AI dashboard that makes task progress more prominent than the page.",
+      "Opaque-card proliferation around every Inspector group or proofreading row.",
+      "Decorative manga motifs, gradients, glow, or copied artwork used as identity."
+    ],
+    "content_fixture": {
+      "id": "p5-editor-page-1200x1800-r12",
+      "source": "Task 1 brief plus docs/ui/pages/editor.md and the P5 supplement selection contract.",
+      "scenario": "A translator is correcting page 07 while OCR is running at 72%; one model is missing and the AI translation settings route is available for recovery.",
+      "required_strings": [
+        "第 7 / 12 页 · 1200 × 1800",
+        "12 个区域 · 已选择区域 08 · 多选区域 03、11",
+        "OCR 72% · 模型缺失：未找到翻译模型",
+        "设置 › AI 翻译 · 配置模型"
+      ],
+      "required_states": [
+        "one selected Region and two multi-selected Regions",
+        "OCR running at 72% with one model-missing recoverable error",
+        "Light and Dark normal and narrow layouts"
+      ]
+    }
+  },
+  "genericity_review": {
+    "default_solution": "A conventional three-pane settings shell with a white canvas, equal-weight cards, and a decorative accent gradient.",
+    "detected_cliches": [
+      "Treating every Inspector group as an elevated rounded card.",
+      "Using color alone for selected, running, and failed state.",
+      "Making three concepts differ only by accent color."
+    ],
+    "revisions": [
+      {
+        "from": "A pale blank canvas and card-stack Inspector",
+        "to": "A paper-centered neutral pasteboard with flat proof rules, explicit Region marks, and bounded Fluent field groups",
+        "reason": "The revision exposes the physical page, direct manipulation, and editorial tempo that distinguish manga review."
+      }
+    ],
+    "recognizable_without_brand": "The centered page, measured registration rules, visible Region geometry, and proofing cadence still identify the tool when color and marks are removed."
+  },
+  "tuning_axes": {
+    "density": {
+      "value": 4,
+      "note": "Compact command and list cadence while keeping multiline translation fields readable."
+    },
+    "contrast": {
+      "value": 3,
+      "note": "Quiet neutral chrome with emphatic paper edge, selection marks, and recoverable error."
+    },
+    "material_depth": {
+      "value": 2,
+      "note": "Mica shows through quiet gaps; only persistent panes and the drawer have bounded surface elevation."
+    },
+    "corner_softness": {
+      "value": 2,
+      "note": "Crisp 4–8 px Fluent radii keep the proofing surface technical rather than bubbly."
+    },
+    "motion_energy": {
+      "value": 2,
+      "note": "Motion explains pane and selection continuity; direct manipulation and reduced-motion states are immediate."
+    },
+    "visual_expressiveness": {
+      "value": 3,
+      "note": "The editorial pasteboard and registration rule provide one signature move while chrome remains restrained."
+    }
+  },
+  "concepts": [
+    {
+      "id": "editor-stable-inspector",
+      "title": "画布优先 · 稳定属性栏",
+      "topology": "persistent-page-rail-canvas-inspector",
+      "primary_surface": "Centered manga canvas with a stable right Inspector",
+      "hero_interaction": "Select Region 08 on the page and refine its translation without leaving the canvas",
+      "narrow_behavior": "Page rail and Inspector become mutually exclusive overlays below 720 px; canvas and command bar remain fixed.",
+      "failure_risk": "A persistent Inspector can reduce canvas width if its minimum width is not enforced.",
+      "layout_regions": [
+        {
+          "id": "command-bar",
+          "placement": "top",
+          "lifetime": "persistent",
+          "priority": "primary"
+        },
+        {
+          "id": "page-thumbnail-list",
+          "placement": "left",
+          "lifetime": "persistent",
+          "priority": "supporting"
+        },
+        {
+          "id": "manga-canvas",
+          "placement": "center",
+          "lifetime": "persistent",
+          "priority": "hero"
+        },
+        {
+          "id": "region-inspector",
+          "placement": "right",
+          "lifetime": "persistent",
+          "priority": "primary"
+        },
+        {
+          "id": "task-strip",
+          "placement": "bottom",
+          "lifetime": "persistent",
+          "priority": "supporting"
+        }
+      ],
+      "scores": {
+        "workflow_fit": 5,
+        "state_visibility": 5,
+        "responsiveness": 4,
+        "component_semantics": 5,
+        "implementation_risk": 4,
+        "distinctiveness": 4
+      },
+      "visual_direction": {
+        "name": "纸页基准线",
+        "composition_character": "A calm three-column proof desk: compact rails frame a large dark pasteboard and the Inspector reads as a measured editorial margin.",
+        "palette_strategy": "Neutral Fluent surfaces surround a charcoal canvas; muted teal is reserved for selected geometry and one primary recovery action.",
+        "type_strategy": "System UI text keeps controls compact while CJK body copy receives stable 14 px lines and semibold section anchors.",
+        "icon_strategy": "Fluent System Icons use quiet outline commands, a filled selected tool, and semantic status color only on state-bearing symbols.",
+        "subject_translation": "The reading rhythm follows paper, margin, and annotation: the page is centered, regions are editorial marks, and metadata aligns as margin notes.",
+        "signature_move": "A thin vertical proof rule links the selected page thumbnail, Region 08 outline, and the Inspector header without drawing decorative connectors.",
+        "aesthetic_risk": "The Light theme retains a deep neutral pasteboard around the white manga page instead of whitening the whole editor.",
+        "risk_guard": "Selection uses label, handles, and high-contrast double outline; no essential text sits on the pasteboard.",
+        "restraint_rule": "The Inspector uses grouped fields and dividers, never a stack of raised cards."
+      },
+      "visual_scores": {
+        "workflow_fit": {
+          "score": 5,
+          "note": "Keeps page, Region selection, and correction in one continuous workbench moment."
+        },
+        "product_signature": {
+          "score": 5,
+          "note": "The paper page, selection geometry, and proof marks identify manga editing without a logo."
+        },
+        "visual_hierarchy": {
+          "score": 5,
+          "note": "The current page remains visually dominant over supporting controls."
+        },
+        "density_and_typography": {
+          "score": 5,
+          "note": "Compact chrome and readable CJK field rhythm retain a usable editing measure."
+        },
+        "theme_and_material": {
+          "score": 5,
+          "note": "Mica-adjacent chrome and neutral canvas preserve paper contrast in Light and Dark."
+        },
+        "iconography": {
+          "score": 4,
+          "note": "One Fluent System Icons family keeps command, status, and disabled states coherent."
+        },
+        "surface_composition": {
+          "score": 5,
+          "note": "Persistent panes or a bounded contextual surface clarify ownership without card stacking."
+        },
+        "responsive_quality": {
+          "score": 4,
+          "note": "Narrow panels preserve canvas location and make auxiliary regions mutually exclusive."
+        },
+        "state_and_interaction_polish": {
+          "score": 5,
+          "note": "Selection, OCR progress, missing-model recovery, and focus are visible as text plus shape."
+        }
+      },
+      "preferred_components": [
+        "fluent::menus_toolbars::CommandBar",
+        "Qt Model/View PageThumbnailList",
+        "MangaCanvas",
+        "fluent::layout::Card",
+        "fluent::layout::Expander",
+        "fluent::status_info::InfoBar"
+      ],
+      "comp": {
+        "fidelity": "high",
+        "source_kind": "svg",
+        "theme": "light-dark",
+        "viewport": {
+          "width": 1200,
+          "height": 1800
+        },
+        "content_fixture_id": "p5-editor-page-1200x1800-r12",
+        "path": "concepts/editor-stable-inspector.svg"
+      }
+    },
+    {
+      "id": "editor-drawer-inspector",
+      "title": "画布优先 · 上下文属性抽屉",
+      "topology": "canvas-with-contextual-inspector-drawer",
+      "primary_surface": "Full-width manga canvas with an anchored contextual Inspector drawer",
+      "hero_interaction": "Select Region 08 and open its property drawer beside the exact text bubble",
+      "narrow_behavior": "The contextual Inspector remains a single right-side drawer; page navigation and Inspector are never visible together below 720 px.",
+      "failure_risk": "The drawer can obscure too much of the selected art or duplicate narrow-mode pane behavior.",
+      "layout_regions": [
+        {
+          "id": "command-bar",
+          "placement": "top",
+          "lifetime": "persistent",
+          "priority": "primary"
+        },
+        {
+          "id": "page-thumbnail-list",
+          "placement": "left",
+          "lifetime": "conditional",
+          "priority": "supporting"
+        },
+        {
+          "id": "manga-canvas",
+          "placement": "center",
+          "lifetime": "persistent",
+          "priority": "hero"
+        },
+        {
+          "id": "contextual-inspector-drawer",
+          "placement": "overlay",
+          "lifetime": "conditional",
+          "priority": "primary"
+        },
+        {
+          "id": "task-strip",
+          "placement": "bottom",
+          "lifetime": "persistent",
+          "priority": "supporting"
+        }
+      ],
+      "scores": {
+        "workflow_fit": 4,
+        "state_visibility": 4,
+        "responsiveness": 4,
+        "component_semantics": 4,
+        "implementation_risk": 3,
+        "distinctiveness": 5
+      },
+      "visual_direction": {
+        "name": "浮注工作台",
+        "composition_character": "A broad visual stage with a precise right-anchored annotation drawer, letting the page breathe until a Region asks for attention.",
+        "palette_strategy": "The canvas stays neutral and deep; the drawer uses a warm paper-tinted Fluent layer while error recovery uses contained critical color.",
+        "type_strategy": "A condensed command cadence makes room for a larger annotation title and generous multiline translation field measure.",
+        "icon_strategy": "The shared Fluent icon family differentiates transient drawer controls through outline weight and an active close affordance, not a second pack.",
+        "subject_translation": "A selected speech region produces an editorial side note: the drawer is attached by proximity and state, not by a decorative callout line.",
+        "signature_move": "The drawer header repeats the selected Region's small cropped paper fragment as a location chip, making context recoverable after zoom.",
+        "aesthetic_risk": "The warm annotation layer creates a second material temperature inside a Fluent window.",
+        "risk_guard": "The temperature shift is limited to the drawer header and field group; semantic contrast and focus tokens remain platform-derived.",
+        "restraint_rule": "The canvas receives no floating tool palettes beyond the one Inspector drawer."
+      },
+      "visual_scores": {
+        "workflow_fit": {
+          "score": 4,
+          "note": "Keeps page, Region selection, and correction in one continuous workbench moment."
+        },
+        "product_signature": {
+          "score": 5,
+          "note": "The paper page, selection geometry, and proof marks identify manga editing without a logo."
+        },
+        "visual_hierarchy": {
+          "score": 5,
+          "note": "The current page remains visually dominant over supporting controls."
+        },
+        "density_and_typography": {
+          "score": 4,
+          "note": "Compact chrome and readable CJK field rhythm retain a usable editing measure."
+        },
+        "theme_and_material": {
+          "score": 5,
+          "note": "Mica-adjacent chrome and neutral canvas preserve paper contrast in Light and Dark."
+        },
+        "iconography": {
+          "score": 4,
+          "note": "One Fluent System Icons family keeps command, status, and disabled states coherent."
+        },
+        "surface_composition": {
+          "score": 4,
+          "note": "Persistent panes or a bounded contextual surface clarify ownership without card stacking."
+        },
+        "responsive_quality": {
+          "score": 4,
+          "note": "Narrow panels preserve canvas location and make auxiliary regions mutually exclusive."
+        },
+        "state_and_interaction_polish": {
+          "score": 4,
+          "note": "Selection, OCR progress, missing-model recovery, and focus are visible as text plus shape."
+        }
+      },
+      "preferred_components": [
+        "fluent::menus_toolbars::CommandBar",
+        "Qt Model/View PageThumbnailList",
+        "MangaCanvas",
+        "DrawerView-compatible project-local overlay",
+        "fluent::layout::Expander",
+        "fluent::status_info::InfoBar"
+      ],
+      "comp": {
+        "fidelity": "high",
+        "source_kind": "svg",
+        "theme": "light-dark",
+        "viewport": {
+          "width": 1200,
+          "height": 1800
+        },
+        "content_fixture_id": "p5-editor-page-1200x1800-r12",
+        "path": "concepts/editor-drawer-inspector.svg"
+      }
+    },
+    {
+      "id": "proofreading-split",
+      "title": "校对优先 · 文本与画布分栏",
+      "topology": "proofreading-list-and-canvas-dual-pane",
+      "primary_surface": "Canvas paired with a reading-order proofreading sheet",
+      "hero_interaction": "Review Region 08's source and translation against the page while adjacent Region rows retain context",
+      "narrow_behavior": "The proofreading sheet and canvas become switchable full-height surfaces; only one auxiliary panel is exposed at a time.",
+      "failure_risk": "Text rows can visually overtake the manga page and turn the editor into a task list.",
+      "layout_regions": [
+        {
+          "id": "command-bar",
+          "placement": "top",
+          "lifetime": "persistent",
+          "priority": "primary"
+        },
+        {
+          "id": "proofreading-sheet",
+          "placement": "left",
+          "lifetime": "persistent",
+          "priority": "primary"
+        },
+        {
+          "id": "manga-canvas",
+          "placement": "right",
+          "lifetime": "persistent",
+          "priority": "hero"
+        },
+        {
+          "id": "region-detail",
+          "placement": "overlay",
+          "lifetime": "conditional",
+          "priority": "supporting"
+        },
+        {
+          "id": "task-strip",
+          "placement": "bottom",
+          "lifetime": "persistent",
+          "priority": "supporting"
+        }
+      ],
+      "scores": {
+        "workflow_fit": 3,
+        "state_visibility": 5,
+        "responsiveness": 3,
+        "component_semantics": 4,
+        "implementation_risk": 3,
+        "distinctiveness": 5
+      },
+      "visual_direction": {
+        "name": "校样对照页",
+        "composition_character": "A deliberate reading spread: a proof sheet establishes text order on the left while the page remains the visual authority on the right.",
+        "palette_strategy": "Fluent neutral panes use slightly stronger rule contrast; selected text and Region geometry share one restrained teal trace across the spread.",
+        "type_strategy": "The proof sheet uses an editorial hierarchy with compact source labels, 14 px translated text, and a 16 px active excerpt.",
+        "icon_strategy": "Fluent System Icons stay compact in the command rail while row state is carried by text, confidence dots, and a single selected marker.",
+        "subject_translation": "The composition borrows the act of comparing a printed proof against a page: reading order, source text, and result line up as evidence rather than dashboard rows.",
+        "signature_move": "A selected proof row has a narrow vertical registration mark that aligns with the matching Region's edge on the page.",
+        "aesthetic_risk": "The proof sheet is intentionally prominent enough to support careful reading rather than a conventional hidden Inspector.",
+        "risk_guard": "The page keeps the larger visual field, and narrow mode never shows a squeezed proof sheet beside an unusable canvas.",
+        "restraint_rule": "Rows remain flat and separated by cadence and rules, not individual card containers."
+      },
+      "visual_scores": {
+        "workflow_fit": {
+          "score": 3,
+          "note": "Keeps page, Region selection, and correction in one continuous workbench moment."
+        },
+        "product_signature": {
+          "score": 4,
+          "note": "The paper page, selection geometry, and proof marks identify manga editing without a logo."
+        },
+        "visual_hierarchy": {
+          "score": 4,
+          "note": "The current page remains visually dominant over supporting controls."
+        },
+        "density_and_typography": {
+          "score": 5,
+          "note": "Compact chrome and readable CJK field rhythm retain a usable editing measure."
+        },
+        "theme_and_material": {
+          "score": 4,
+          "note": "Mica-adjacent chrome and neutral canvas preserve paper contrast in Light and Dark."
+        },
+        "iconography": {
+          "score": 4,
+          "note": "One Fluent System Icons family keeps command, status, and disabled states coherent."
+        },
+        "surface_composition": {
+          "score": 4,
+          "note": "Persistent panes or a bounded contextual surface clarify ownership without card stacking."
+        },
+        "responsive_quality": {
+          "score": 3,
+          "note": "Narrow panels preserve canvas location and make auxiliary regions mutually exclusive."
+        },
+        "state_and_interaction_polish": {
+          "score": 4,
+          "note": "Selection, OCR progress, missing-model recovery, and focus are visible as text plus shape."
+        }
+      },
+      "preferred_components": [
+        "fluent::menus_toolbars::CommandBar",
+        "Qt Model/View proofreading list",
+        "MangaCanvas",
+        "fluent::layout::Expander",
+        "fluent::status_info::InfoBar"
+      ],
+      "comp": {
+        "fidelity": "high",
+        "source_kind": "svg",
+        "theme": "light-dark",
+        "viewport": {
+          "width": 1200,
+          "height": 1800
+        },
+        "content_fixture_id": "p5-editor-page-1200x1800-r12",
+        "path": "concepts/proofreading-split.svg"
+      }
+    }
+  ],
+  "approval": {
+    "status": "approved",
+    "decision_maker_kind": "human",
+    "decision_maker_id": "product-owner",
+    "decided_at": "2026-08-30T10:00:00Z",
+    "selected_concept_id": "editor-stable-inspector",
+    "selection_reason": "Directly reuses the established three-column layout, responsive drawer, and single EditorViewModel; Inspector sync with canvas selection remains persistent and predictable with minimal state branching.",
+    "rejected_concept_reasons": {
+      "editor-drawer-inspector": "Contextual floating drawer introduces extra visibility toggles at normal widths that overlap with narrow-width drawer responsibilities, making selection sync visibility unstable.",
+      "proofreading-split": "Proofreading split-column elevates the text list to a primary object, departing from the canvas-dominant Hero Surface and turning the editor into a task panel collection."
+    }
+  },
+  "density": {
+    "chrome_height": 32,
+    "edge_inset": 24,
+    "related_gap": 8,
+    "section_gap": 16,
+    "control_height": 32,
+    "row_height": 48,
+    "icon_size": 20,
+    "inspector_inset": 16,
+    "footer_height": 32,
+    "minimum_target": 32,
+    "wrap_policy": "Translation and errors wrap; page labels elide with a tooltip; CommandBar owns low-priority overflow."
+  },
+  "theme": {
+    "material": "mica",
+    "light_strategy": "Use Fluent semantic window and layered surfaces; retain a neutral dark canvas so page edges and focus geometry are visible.",
+    "dark_strategy": "Use Fluent semantic dark layers with a slightly lifted neutral pasteboard; preserve paper, selection, and error contrast without forcing the Inspector dark independently.",
+    "palette_source": "docs/ui/foundations.md §§2–3 and the P5 design intent; no approved identity asset exists yet.",
+    "palette_derivation": "Map the document's semantic surface, foreground, accent, caution, critical, and focus roles to FluentQt public theme tokens; the paper edge and registration rhythm provide non-color identity.",
+    "brand_cues": [
+      "Paper-centered canvas with a measured surrounding pasteboard.",
+      "Thin registration rule aligning the selected thumbnail, page Region, and proof context."
+    ]
+  },
+  "iconography": {
+    "family": "Fluent System Icons",
+    "provenance": "Microsoft Fluent System Icons repository, MIT License; use only the single licensed family in the FluentQt-compatible application mapping.",
+    "source_strategy": "Reuse one licensed outline family; do not generate a bespoke icon pack before a human-approved direction requires one.",
+    "style": "20 px rounded-outline glyphs with optical centering; selected tools may use the family’s filled variant.",
+    "base_grid": 24,
+    "compact_glyph_size": 16,
+    "standard_glyph_size": 20,
+    "action_slot_size": 32,
+    "stroke_policy": "Use the family’s supplied stroke language; do not mix arbitrary Unicode, emoji, or a second pack.",
+    "filled_policy": "Filled variants mark the currently active tool or persistent selected state only.",
+    "color_policy": "Routine icons inherit semantic foreground; accent marks selection; caution and critical are reserved for state-bearing icons and always paired with text.",
+    "icon_only_policy": "Every icon-only control exposes a localized accessible name, tooltip, keyboard focus cue, and at least a 32 px target.",
+    "application_icon_strategy": "No application tile is claimed in this concepts-stage artifact; selection must later define a separate multi-resolution platform tile from approved identity evidence.",
+    "in_app_mark_strategy": "Use no logo treatment in the editor comp; the paper edge and registration rule are the in-product signature.",
+    "small_size_validation": "Before implementation, inspect the chosen Fluent icons at 16 px and 20 px in Light, Dark, selected, disabled, and critical states.",
+    "palette_seed": "Neutral paper and pasteboard derive from the repository baseline; teal remains a restrained selection cue, not an unapproved brand color.",
+    "prohibited": [
+      "emoji used as an action icon",
+      "mixed icon packs in one hierarchy",
+      "arbitrary Unicode glyphs or scaled raster icons"
+    ]
+  },
+  "copy_policy": {
+    "audience": "Desktop manga translators and proofreaders who need editable, stateful tools.",
+    "voice": "Direct, calm, and object-first Chinese product copy.",
+    "locale_strategy": "Use stable Chinese state terms, support CJK/RTL/Emoji and 200% text scaling, wrap recovery text, and give elided labels a tooltip.",
+    "allowed_technical_terms": [
+      "OCR",
+      "Region",
+      "模型",
+      "AI 翻译"
+    ],
+    "compression_rules": [
+      "Name the object and action first, such as 配置模型 or 应用清除.",
+      "Keep persistent status to object plus stage, never an assistant narrative.",
+      "Use a three-part error: what happened, the impact, and one direct next step."
+    ],
+    "state_vocabulary": [
+      "未处理",
+      "处理中",
+      "已完成",
+      "需要检查",
+      "失败",
+      "正在停止"
+    ],
+    "forbidden_patterns": [
+      "raw protocol method names",
+      "unexplained identifiers and filesystem paths",
+      "assistant self-narration such as I will or I can",
+      "unsupported marketing adjectives and duplicated help"
+    ]
+  },
+  "action_inventory": [
+    {
+      "action_id": "select-region",
+      "owner_region": "MangaCanvas",
+      "primary_entry": "Canvas click or keyboard Region navigation",
+      "primary_visible_when": "All editor layouts with a current page",
+      "responsive_fallback": "none",
+      "fallback_visible_when": "none",
+      "simultaneously_visible": false,
+      "coexistence_reason": "none"
+    },
+    {
+      "action_id": "edit-translation",
+      "owner_region": "Region Inspector or proofreading sheet",
+      "primary_entry": "Translation field after explicit user focus",
+      "primary_visible_when": "One Region is selected in normal layouts",
+      "responsive_fallback": "Inspector drawer field",
+      "fallback_visible_when": "Narrow layout with the Inspector drawer open",
+      "simultaneously_visible": false,
+      "coexistence_reason": "none"
+    },
+    {
+      "action_id": "start-ocr",
+      "owner_region": "CommandBar",
+      "primary_entry": "OCR AppBarButton",
+      "primary_visible_when": "Current page has eligible Regions",
+      "responsive_fallback": "OCR command in CommandBar overflow",
+      "fallback_visible_when": "The normal command slot overflows",
+      "simultaneously_visible": false,
+      "coexistence_reason": "none"
+    },
+    {
+      "action_id": "start-smart-translation",
+      "owner_region": "CommandBar",
+      "primary_entry": "智能翻译 SplitButton",
+      "primary_visible_when": "Current page has eligible Regions",
+      "responsive_fallback": "Named smart-translation command in compact CommandBar",
+      "fallback_visible_when": "Narrow or minimum layout",
+      "simultaneously_visible": false,
+      "coexistence_reason": "none"
+    },
+    {
+      "action_id": "configure-missing-model",
+      "owner_region": "Model-missing InfoBar",
+      "primary_entry": "配置模型 action",
+      "primary_visible_when": "A recoverable model-missing error is active",
+      "responsive_fallback": "Settings › AI 翻译 route",
+      "fallback_visible_when": "InfoBar is dismissed after the error remains discoverable",
+      "simultaneously_visible": false,
+      "coexistence_reason": "none"
+    },
+    {
+      "action_id": "toggle-page-pane",
+      "owner_region": "CommandBar",
+      "primary_entry": "页面 AppBarToggleButton",
+      "primary_visible_when": "Normal and compact editor layouts",
+      "responsive_fallback": "页面 toggle in narrow CommandBar",
+      "fallback_visible_when": "Below 720 px",
+      "simultaneously_visible": false,
+      "coexistence_reason": "none"
+    },
+    {
+      "action_id": "toggle-inspector",
+      "owner_region": "CommandBar",
+      "primary_entry": "属性 AppBarToggleButton",
+      "primary_visible_when": "Normal and compact editor layouts",
+      "responsive_fallback": "属性 toggle in narrow CommandBar",
+      "fallback_visible_when": "Below 720 px",
+      "simultaneously_visible": false,
+      "coexistence_reason": "none"
+    },
+    {
+      "action_id": "cancel-ocr",
+      "owner_region": "AppStatusTaskStrip",
+      "primary_entry": "取消 OCR task-strip action",
+      "primary_visible_when": "OCR is running",
+      "responsive_fallback": "none",
+      "fallback_visible_when": "none",
+      "simultaneously_visible": false,
+      "coexistence_reason": "none"
+    }
+  ],
+  "component_decisions": [
+    {
+      "need": "One-line command grouping with predictable overflow",
+      "component_id": "fluent::menus_toolbars::CommandBar",
+      "decision": "must-use",
+      "reason": "The editor specification assigns primary and secondary commands with a single-line overflow contract."
+    },
+    {
+      "need": "Page collection with lazy thumbnails and stable scrolling",
+      "component_id": "Qt Model/View PageThumbnailList",
+      "decision": "must-use",
+      "reason": "The supplement explicitly requires Model/View and forbids per-row widget behavior for page thumbnails."
+    },
+    {
+      "need": "Direct manipulation of a 1200×1800 page and Region geometry",
+      "component_id": "MangaCanvas",
+      "decision": "project-local custom control",
+      "reason": "The product requires zoom, pan, selection handles, and non-destructive layers beyond a generic Fluent component."
+    },
+    {
+      "need": "Contextual grouped Region properties",
+      "component_id": "fluent::layout::Card + Expander + Field",
+      "decision": "must-use",
+      "reason": "The P5 supplement maps the Inspector to these FluentQt public component families."
+    },
+    {
+      "need": "Persistent recoverable model-missing feedback",
+      "component_id": "fluent::status_info::InfoBar",
+      "decision": "must-use",
+      "reason": "The foundations reserve page-space feedback for persistent nonmodal problems with one direct recovery action."
+    },
+    {
+      "need": "Narrow auxiliary-pane transform",
+      "component_id": "project-local resizable pane and overlay host",
+      "decision": "required custom layout",
+      "reason": "The UI guide explicitly prohibits assuming a FluentQt SplitView public API and requires mutually exclusive page and Inspector overlays."
+    }
+  ],
+  "implementation_spec": {
+    "source_concept_id": "editor-stable-inspector",
+    "container_model": "A centered manga canvas on a dark pasteboard flanked by a compact left page rail and a stable right Inspector, transforming into mutually exclusive overlays below 720 px.",
+    "semantic_tokens": [
+      "Map Fluent semantic surfaces, foreground, accent, caution, critical, and focus roles without hard-coded palette values.",
+      "Keep the 4 px rhythm, Mica-revealing pane gaps, and neutral canvas relationship."
+    ],
+    "typography_roles": [
+      "System UI 14 px CJK body for translation and form content.",
+      "System UI 12 px metadata and 16 px semibold section anchors."
+    ],
+    "component_families": [
+      "CommandBar, Model/View page collection, MangaCanvas, Fluent Inspector fields, InfoBar."
+    ],
+    "state_grammar": [
+      "Selection is double outline plus handles, Region label, and synchronized Inspector context.",
+      "Running and model-missing states pair semantic iconography with direct Chinese status and recovery."
+    ],
+    "motion_cues": [
+      "Selection and pane continuity use short Fluent transitions; Reduce Motion uses immediate state changes."
+    ],
+    "responsive_rules": [
+      "Below 720 px page navigation and Inspector must be mutually exclusive overlays.",
+      "Canvas keeps location and core command access while low-priority commands move to overflow."
+    ],
+    "locked_decisions": [
+      "Use the approved editor-stable-inspector topology; do not blend with floating drawer or split views.",
+      "The current manga page and Region remain the primary object rather than a chat, task, or dashboard surface."
+    ],
+    "allowed_adaptations": [
+      "Adapt native FluentQt control anatomy, localization, accessibility, and public API constraints while preserving the approved hierarchy."
+    ],
+    "known_risks": [
+      "Narrow viewport (<720 px) requires mutually exclusive page list and inspector overlays to prevent canvas compression."
+    ],
+    "comparison_regions": [
+      "Full-window comparison: selected Region 08 on page 07 with OCR at 72%.",
+      "Detail comparison: model-missing InfoBar and the selected Region editing surface in Light, Dark, normal, and narrow states."
+    ]
+  },
+  "planned_states": [
+    "normal-light",
+    "normal-dark",
+    "narrow-light",
+    "narrow-dark",
+    "empty",
+    "loading",
+    "single-selection",
+    "multi-selection",
+    "model-missing-error",
+    "settings-ai-translation",
+    "reduced-motion",
+    "200-percent-text"
+  ],
+  "design_board": "design-board.svg"
+}
