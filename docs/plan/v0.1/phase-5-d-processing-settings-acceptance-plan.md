@@ -78,7 +78,7 @@
 **Interfaces:**
 - Produces: 当前 bundled FluentQt design brief contract，`profile=full`、`author_id`、三套同内容高保真概念、human decision 与实现比较区域。
 
-- [ ] **Step 1: 初始化 full design brief 和架构 manifest**
+- [x] **Step 1: 初始化 full design brief 和架构 manifest**
 
 ```powershell
 python .agents/skills/build-fluentqt-gui/scripts/init_project_structure.py --project-root . --application MangaTranslator --language cpp --profile full --source-root src --tests-root tests
@@ -87,11 +87,11 @@ python .agents/skills/build-fluentqt-gui/scripts/init_design_brief.py --applicat
 
 若脚本实际路径随 skill 安装位置不同，执行者先解析 `.agents/skills/build-fluentqt-gui/`；不复制脚本进仓库。
 
-- [ ] **Step 2: 用同一 representative fixture 完成三套概念**
+- [x] **Step 2: 用同一 representative fixture 完成三套概念**
 
 固定内容：1200×1800 漫画页、12 个 Region、1 个选中、2 个多选、OCR 运行 72%、1 条模型缺失错误、Settings AI 翻译页。每套包含 Light/Dark、normal/narrow，且结构差异对应 supplement §1.2 的三方案。
 
-- [ ] **Step 3: 渲染 board 并验证 concepts-ready**
+- [x] **Step 3: 渲染 board 并验证 concepts-ready**
 
 ```powershell
 python .agents/skills/build-fluentqt-gui/scripts/render_design_board.py tests/visual/p5/design-brief.json --output tests/visual/p5/design-board.svg
@@ -100,11 +100,11 @@ python .agents/skills/build-fluentqt-gui/scripts/validate_design_brief.py --stag
 
 Expected: `CONCEPTS READY`。此结果只允许产品负责人评审，不允许实现者自行选择。
 
-- [ ] **Step 4: 暂停并取得 human selection**
+- [x] **Step 4: 暂停并取得 human selection**
 
 向产品负责人展示 board 与三个原始 comp。把选择、理由、拒绝理由和允许适配写回 brief；如果选择仍为“画布优先 + 稳定 Inspector”，记录它与 2026-08-30 决策一致，而不是伪造此前已查看这些 comp。
 
-- [ ] **Step 5: 验证 approved brief 和架构**
+- [x] **Step 5: 验证 approved brief 和架构**
 
 ```powershell
 python .agents/skills/build-fluentqt-gui/scripts/validate_design_brief.py tests/visual/p5/design-brief.json
@@ -113,7 +113,7 @@ python .agents/skills/build-fluentqt-gui/scripts/validate_project_structure.py -
 
 Expected: `PASS`。任何失败是进入可见 P5-D Surface 实现的阻塞项。
 
-- [ ] **Step 6: Commit（仅在获授权时）**
+- [x] **Step 6: Commit（仅在获授权时）**
 
 ```bash
 git add .fluentqt tests/visual/p5 docs/plan/v0.1/phase-5-ui-editor-supplement.md
@@ -165,31 +165,31 @@ struct OperationSnapshot {
 - 最多保留 32 条 settled 摘要或 10 分钟，以先到者为准；active operation 不受 settled 上限删除。
 - 前置契约第 1 条：`OperationState` 必须与 V0.2 冻结状态集合一一可映射；`skipped` 带稳定原因码、`stale` 与 `failed` 分离的表达方式在本任务定型（测试覆盖命名映射与 skipped 原因码）。
 
-- [ ] **Step 1: 写线程安全与状态序列失败测试**
+- [x] **Step 1: 写线程安全与状态序列失败测试**
 
 覆盖 Queued→Running→Completed、取消 queued/running、失败安全错误、单调进度、同 operation 跨线程发布、32 条保留、项目取消不影响其他项目。
 
-- [ ] **Step 2: 运行确认失败**
+- [x] **Step 2: 运行确认失败**
 
 ```powershell
 pwsh -NoProfile -ExecutionPolicy Bypass -File tools/build/build.ps1 -Preset local-test -Target manga_tests_application
 ```
 
-- [ ] **Step 3: 实现 reporter 与 GUI-thread publication**
+- [x] **Step 3: 实现 reporter 与 GUI-thread publication**
 
 `OperationProgressReporter` 只持有 Registry shared state 的 weak 引用；worker 更新受 mutex 保护，再用 context-bound `QMetaObject::invokeMethod` 合并到 Registry owning thread。每 50 ms 最多发一次中间进度，final/error/cancel 立即发。
 
-- [ ] **Step 4: 接入 BoundedTaskExecutor**
+- [x] **Step 4: 接入 BoundedTaskExecutor**
 
 executor 创建的 `TaskProgress` 同时更新 `QPromise` 和 `context.progressReporter`。入队后标记 Queued，实际 run 前标记 Running，所有完成路径只调用一次 `markFinished`。
 
-- [ ] **Step 5: 运行 Application/Services 测试**
+- [x] **Step 5: 运行 Application/Services 测试**
 
 ```powershell
 pwsh -NoProfile -ExecutionPolicy Bypass -File tools/build/test.ps1 -Preset local-test -Regex "manga_tests_(application|services)"
 ```
 
-- [ ] **Step 6: Commit（仅在获授权时）**
+- [x] **Step 6: Commit（仅在获授权时）**
 
 ```bash
 git add src/application/operation src/application/workflow src/application/CMakeLists.txt src/services/execution tests/unit/application tests/unit/services
@@ -237,35 +237,35 @@ struct PageProcessingProposal {
 };
 ```
 
-- [ ] **Step 1: 写 Workflow 失败测试**
+- [x] **Step 1: 写 Workflow 失败测试**
 
 覆盖无 Region 不启动、OCR→Translate→Clear→Layout 顺序、阶段失败停止依赖阶段、取消、manual override 默认跳过、部分成功保留、切页不取消、session generation 变化丢弃。
 
-- [ ] **Step 2: 运行确认失败**
+- [x] **Step 2: 运行确认失败**
 
 ```powershell
 pwsh -NoProfile -ExecutionPolicy Bypass -File tools/build/build.ps1 -Preset local-test -Target manga_tests_application
 ```
 
-- [ ] **Step 3: 扩展 Processing UseCase 的 descriptor 参数**
+- [x] **Step 3: 扩展 Processing UseCase 的 descriptor 参数**
 
 每个 UseCase 调用 `createOperation(OperationDescriptor, ...)`；descriptor 使用安全页码/Region 序号，不含漫画正文、完整路径或 Secret。
 
-- [ ] **Step 4: 实现 Workflow**
+- [x] **Step 4: 实现 Workflow**
 
 Workflow 串联 focused UseCase/Future，保留已完成 proposal；失败时返回带 `issues` 的成功 proposal，只有根级输入/依赖错误才返回 failed `Result`。用户可从失败 stage 以新的 operationId 重试。
 
-- [ ] **Step 5: 完成 ApplicationContext production/test wiring**
+- [x] **Step 5: 完成 ApplicationContext production/test wiring**
 
 生产构造按 adapters→UseCases→ViewModels 顺序；测试构造接受 fake ports。shutdown 顺序：停止接收 → `cancelProject/all` → executor bounded shutdown → adapter teardown。
 
-- [ ] **Step 6: 运行测试**
+- [x] **Step 6: 运行测试**
 
 ```powershell
 pwsh -NoProfile -ExecutionPolicy Bypass -File tools/build/test.ps1 -Preset local-test -Regex "manga_tests_(application|app)"
 ```
 
-- [ ] **Step 7: Commit（仅在获授权时）**
+- [x] **Step 7: Commit（仅在获授权时）**
 
 ```bash
 git add src/application/workflow src/application/usecase/processing src/application/CMakeLists.txt src/app tests/unit/application tests/unit/app
@@ -309,25 +309,25 @@ struct PreparedProcessingAdoption {
 - Prepare UseCases 校验 project/session/target/contentRevision 并计算 before/after，但 OCR/translation/layout 不修改 Domain；Clear 继续先原子写 immutable asset，再返回 prepared change。
 - `ProcessingAdoptionCommand` 使用 P5-C `EditorCommandContext`；first redo、undo、redo 都只同步应用已准备值。
 
-- [ ] **Step 1: 写 preparation 失败测试**
+- [x] **Step 1: 写 preparation 失败测试**
 
 覆盖 ID mismatch、stale generation、deleted Region、content revision conflict、manual source/translation override、translation unknown/missing/duplicate IDs、layout warning/overflow、clear prepare I/O failure。
 
-- [ ] **Step 2: 运行确认失败**
+- [x] **Step 2: 运行确认失败**
 
 ```powershell
 pwsh -NoProfile -ExecutionPolicy Bypass -File tools/build/build.ps1 -Preset local-test -Target manga_tests_application
 ```
 
-- [ ] **Step 3: 实现 prepare UseCases**
+- [x] **Step 3: 实现 prepare UseCases**
 
 批量翻译按 Region 分组成功/skip；成功 changes 作为一条宏采用命令。manual override 默认进入 skipped，只有用户确认的 `ReplaceManualPolicy::Replace` 才生成 after。
 
-- [ ] **Step 4: 写命令失败测试**
+- [x] **Step 4: 写命令失败测试**
 
 覆盖采用一次进栈、Undo 恢复完整 before、Redo 不重新调用网络/I/O、Clear redo 不再写资产、保存后历史保留、跨页采用命令导航目标页。
 
-- [ ] **Step 5: 实现命令与 EditorViewModel 接口**
+- [x] **Step 5: 实现命令与 EditorViewModel 接口**
 
 ```cpp
 Result<void> adoptProcessingProposal(const PreparedProcessingAdoption& prepared);
@@ -336,13 +336,13 @@ void rejectProcessingProposal(OperationId operationId);
 
 push 前在同一 GUI event 再做最终 snapshot 校验；push 后任何命令失败设置 `undoHistoryFaulted` 并停止重放，不能静默移动栈游标。
 
-- [ ] **Step 6: 运行测试**
+- [x] **Step 6: 运行测试**
 
 ```powershell
 pwsh -NoProfile -ExecutionPolicy Bypass -File tools/build/test.ps1 -Preset local-test -Regex "manga_tests_(application|ui_processing_adoption)"
 ```
 
-- [ ] **Step 7: Commit（仅在获授权时）**
+- [x] **Step 7: Commit（仅在获授权时）**
 
 ```bash
 git add src/application/usecase/apply src/application/CMakeLists.txt src/ui/command src/ui/screen/editor tests/unit/application tests/unit/ui
@@ -369,35 +369,35 @@ git commit -m "feat(ui): adopt processing results through project undo"
 - Commands: OCR selected、Translate page、Clear selected、Layout selected、Smart Translate page、Cancel operation、Retry failed stage、Adopt、Reject。
 - `EditorProcessingState` 只含 operation IDs、target IDs、stage/status、safe issue summaries 和 proposal availability，不保存 raw result images。
 
-- [ ] **Step 1: 写状态机失败测试**
+- [x] **Step 1: 写状态机失败测试**
 
 覆盖当前页无 Region 的画布提示、同目标新任务取消旧 operation、切页后任务继续、关闭项目取消、结果 conflict 显示“有新的 AI 译文可比较”、adopt/reject 清 proposal。
 
-- [ ] **Step 2: 运行确认失败**
+- [x] **Step 2: 运行确认失败**
 
 ```powershell
 pwsh -NoProfile -ExecutionPolicy Bypass -File tools/build/build.ps1 -Preset local-test -Target manga_tests_ui_editor_processing
 ```
 
-- [ ] **Step 3: 实现 Controller watcher 所有权**
+- [x] **Step 3: 实现 Controller watcher 所有权**
 
 Controller 在 GUI 线程持有 `QFutureWatcher`，key 为 project/page/region/stage；callback 先检查 receiver、session generation、operationId 与目标 snapshot。`QImage` 结果只在 GUI 线程转 `QPixmap`，proposal data 由 controller 有界持有，项目关闭全部释放。
 
-- [ ] **Step 4: 接入 CommandBar 与 Inspector**
+- [x] **Step 4: 接入 CommandBar 与 Inspector**
 
 Smart Translate 为唯一 Accent action；没有 Region 时禁用并提供明确原因。单阶段命令是次要动作。运行时同位置显示 cancel，不同时保留同权重 start/cancel。
 
-- [ ] **Step 5: 接入页面行/Region 状态**
+- [x] **Step 5: 接入页面行/Region 状态**
 
 页面列表和 Region overlay 只显示受影响项的 Queued/Running/NeedsReview/Failed；不在多个区域重复同一错误全文。状态同时有图标/形状/文本可访问描述。
 
-- [ ] **Step 6: 运行测试**
+- [x] **Step 6: 运行测试**
 
 ```powershell
 pwsh -NoProfile -ExecutionPolicy Bypass -File tools/build/test.ps1 -Preset local-test -Regex "manga_tests_ui_(editor_processing|editor_page)"
 ```
 
-- [ ] **Step 7: Commit（仅在获授权时）**
+- [x] **Step 7: Commit（仅在获授权时）**
 
 ```bash
 git add src/ui/screen/editor src/ui/widget tests/unit/ui
@@ -425,35 +425,35 @@ git commit -m "feat(ui): add editor processing and review workflow"
 - Strip consumes `QVector<OperationSnapshot>` 和 `DocumentStatusSnapshot`。
 - Signals: `operationActivated(OperationId, ProjectId, PageId)`、`cancelRequested(OperationId)`、`saveFailureDetailsRequested()`。
 
-- [ ] **Step 1: 写优先级与增量模型失败测试**
+- [x] **Step 1: 写优先级与增量模型失败测试**
 
 覆盖 SaveFailed>Dirty>cancellable task>offline/model missing>saved/environment；多个任务摘要；目标行 `dataChanged` 而非 modelReset；完成摘要 1–2 秒后收起；高频进度不重复播报。
 
-- [ ] **Step 2: 运行确认失败**
+- [x] **Step 2: 运行确认失败**
 
 ```powershell
 pwsh -NoProfile -ExecutionPolicy Bypass -File tools/build/build.ps1 -Preset local-test -Target manga_tests_ui_app_status_task_strip
 ```
 
-- [ ] **Step 3: 实现三段式 Strip**
+- [x] **Step 3: 实现三段式 Strip**
 
 基准高度 32 px；Document/Active Task/Environment 共享一个 host，不做三张卡。`>=1008` 完整，`720–1007` 环境缩图标，`<720` 只保留最高优先级和菜单按钮；200% 文本允许增长至 40–48 px。
 
-- [ ] **Step 4: 实现有界任务 Flyout**
+- [x] **Step 4: 实现有界任务 Flyout**
 
 使用 ListView+model+delegate，不使用 per-row widget。Flyout 按需创建，关闭后 `deleteLater()` 并清 `QPointer`；重复开关 50 次后 live instance 回到 baseline。
 
-- [ ] **Step 5: 接入全局导航**
+- [x] **Step 5: 接入全局导航**
 
 激活任务时按 ProjectId 校验当前会话，再导航 Editor/PageId；任务不会因导航改变 target。取消调用 Registry；关键错误在所属页面打开 InfoBar。
 
-- [ ] **Step 6: 运行测试**
+- [x] **Step 6: 运行测试**
 
 ```powershell
 pwsh -NoProfile -ExecutionPolicy Bypass -File tools/build/test.ps1 -Preset local-test -Regex "manga_tests_ui_(operation_list_model|app_status_task_strip|main_window)"
 ```
 
-- [ ] **Step 7: Commit（仅在获授权时）**
+- [x] **Step 7: Commit（仅在获授权时）**
 
 ```bash
 git add src/ui/model src/ui/delegate src/ui/widget/AppStatusTaskStrip.* src/ui/window src/app/Application.cpp tests/unit/ui
@@ -506,35 +506,35 @@ struct AppSettingsSnapshot {
 - `IOcrModelValidator::validate(directory) -> Result<OcrModelStatus>`，services adapter wraps existing manifest validation。
 - 前置契约第 4 条：Manifest 校验扩展为保留 `source.repository`、`source.revision`、`source.license`、`runtime.opset`、`runtime.minimumOnnxRuntime`、`runtime.executionProvider`（V0.2-P0 §1.1 基线校正项）；`OcrModelStatus`/校验结果类型携带这些身份字段，供诊断与模型状态显示。未知字段、缺失字段和不兼容 runtime 继续失败关闭。
 
-- [ ] **Step 1: 写 typed settings 失败测试**
+- [x] **Step 1: 写 typed settings 失败测试**
 
 覆盖 defaults、valid roundtrip、unknown enum、invalid endpoint/timeout/retry/recent limit/color、empty model directory、写入 key 清单不含 API Key。
 
-- [ ] **Step 2: 运行确认失败**
+- [x] **Step 2: 运行确认失败**
 
 ```powershell
 pwsh -NoProfile -ExecutionPolicy Bypass -File tools/build/build.ps1 -Preset local-test -Target manga_tests_application
 ```
 
-- [ ] **Step 3: 实现 typed UseCases**
+- [x] **Step 3: 实现 typed UseCases**
 
 UI 永远只看到 `AppSettingsSnapshot`，不拼 key。Provider setting 明确标注“新请求使用；若 adapter 不能热重载则需要重启”，由 ApplicationContext 的实际消费方式决定最终文案。
 
-- [ ] **Step 4: 写并实现 OCR 模型 validator contract test**
+- [x] **Step 4: 写并实现 OCR 模型 validator contract test**
 
 覆盖 missing directory、invalid manifest、incompatible runtime、valid model；safeMessage 不含完整敏感路径，diagnostic 可供日志。
 
-- [ ] **Step 5: 扩展 ApplicationContext**
+- [x] **Step 5: 扩展 ApplicationContext**
 
 生产注入 `WindowsCredentialStore` 和 `OcrModelValidator`；测试构造接受 fake。UI 只接收 interfaces/usecases，不能向下 cast concrete adapter。
 
-- [ ] **Step 6: 运行测试**
+- [x] **Step 6: 运行测试**
 
 ```powershell
 pwsh -NoProfile -ExecutionPolicy Bypass -File tools/build/test.ps1 -Preset local-test -Regex "manga_tests_(application|services|app)"
 ```
 
-- [ ] **Step 7: Commit（仅在获授权时）**
+- [x] **Step 7: Commit（仅在获授权时）**
 
 ```bash
 git add src/application/dto src/application/ports/IOcrModelValidator.h src/application/usecase/settings src/services/ocr/OcrModelValidator.* src/app tests/unit
@@ -567,39 +567,39 @@ git commit -m "feat(application): add typed executable app settings"
 - State 保存 persisted snapshot、draft、field errors、Dirty categories、credential status、model status、当前 category 和滚动位置；不保存 Secret。
 - Secret 仅存在短生命周期 `SecretBytes` 提交参数，提交后立即清零。
 
-- [ ] **Step 1: 写 ViewModel 失败测试**
+- [x] **Step 1: 写 ViewModel 失败测试**
 
 覆盖 load、跨分类 draft、valid save、invalid field focus request、credential status 不读取 key、replace cancel 保留旧 key、clear confirmation、theme preview rollback、external settings conflict。
 
-- [ ] **Step 2: 运行确认失败**
+- [x] **Step 2: 运行确认失败**
 
 ```powershell
 pwsh -NoProfile -ExecutionPolicy Bypass -File tools/build/build.ps1 -Preset local-test -Target manga_tests_ui_settings_view_model
 ```
 
-- [ ] **Step 3: 实现 SettingsViewModel**
+- [x] **Step 3: 实现 SettingsViewModel**
 
 `Ctrl+S` 保存所有 Dirty categories。切分类不提示；离开 Surface 发一次 `leaveDecisionRequested`。保存成功更新 persisted snapshot、清 Dirty 并发短暂 `settingsSaved`；失败保留 draft 并导航/聚焦第一个错误字段。
 
-- [ ] **Step 4: 实现 SettingsGroup/SettingsRow**
+- [x] **Step 4: 实现 SettingsGroup/SettingsRow**
 
 Group 是单一 surface，行之间 divider，不做卡片套卡片。内容 `>=680` 横向、`<680` 垂直；模式切换不重建输入或丢焦点。Error 行按内容增长，200% 文本不重叠。
 
-- [ ] **Step 5: 实现 SettingsPage 和独立 Navigation Surface**
+- [x] **Step 5: 实现 SettingsPage 和独立 Navigation Surface**
 
 TitleBar 只保留应用名和 Back；设置分类 pane 不含重复“设置”项/返回项。内容列 max width 1100 px，宽屏 32 px 对称 margin，窄屏 20 px；分类滚动位置按会话恢复。
 
-- [ ] **Step 6: 实现凭据与主题行为**
+- [x] **Step 6: 实现凭据与主题行为**
 
 凭据已配置只显示状态和“更新密钥/移除密钥”。移除使用按需创建、close 后销毁的 `ContentDialog`。主题即时预览通过 `themePreviewRequested` 交给 Application；取消离开恢复 persisted theme，保留焦点。
 
-- [ ] **Step 7: 注册 Settings 路由并运行测试**
+- [x] **Step 7: 注册 Settings 路由并运行测试**
 
 ```powershell
 pwsh -NoProfile -ExecutionPolicy Bypass -File tools/build/test.ps1 -Preset local-test -Regex "manga_tests_ui_settings"
 ```
 
-- [ ] **Step 8: Commit（仅在获授权时）**
+- [x] **Step 8: Commit（仅在获授权时）**
 
 ```bash
 git add src/ui/screen/settings src/ui/widget/SettingsGroup.* src/ui/widget/SettingsRow.* src/ui/CMakeLists.txt src/app/Application.cpp tests/unit/ui
@@ -632,11 +632,11 @@ git commit -m "feat(ui): add executable settings surface"
 | `QLockFile::UnknownError` 或未归类的读取 I/O | `persistence.io` | `Retry` | “暂时无法访问项目文件夹” + “重试”；diagnostic 只记录稳定 Qt/OS 数字错误码 |
 | current `project.json` 损坏但备份可恢复 | `persistence.recovery_failed` 后执行既有 recovery UseCase | 专用恢复决策 | 阻塞对话框提供“从备份恢复/取消”；恢复成功显示 warning，不把它归为权限错误 |
 
-- [ ] **Step 1: 写项目打开分类失败测试**
+- [x] **Step 1: 写项目打开分类失败测试**
 
 在 `FileSystemProjectRepositoryTest` 覆盖：不存在根目录、普通目录无 `project.json`、`project.json` 读取被拒、有效项目根不可写、第二 repository 持有锁、stale lock 可清除、unknown lock mapping。Windows deny ACE 或目录只读无法可靠建立时只允许带明确平台原因 `QSKIP`，不能把该行记作通过。
 
-- [ ] **Step 2: 运行确认失败**
+- [x] **Step 2: 运行确认失败**
 
 ```powershell
 pwsh -NoProfile -ExecutionPolicy Bypass -File tools/build/build.ps1 -Preset local-test -Target manga_tests_data
@@ -645,11 +645,11 @@ pwsh -NoProfile -ExecutionPolicy Bypass -File tools/build/test.ps1 -Preset local
 
 Expected: 新增断言至少分别暴露当前把缺少 `project.json` 归为 `persistence.io`、把 `QLockFile::PermissionError` 归为 `persistence.locked` 的行为。
 
-- [ ] **Step 3: 实现项目路径与锁错误映射**
+- [x] **Step 3: 实现项目路径与锁错误映射**
 
 `openProject` 在取得 session lock 后验证 `project.json` 存在且为普通文件，再执行原有 read/deserialize/asset validation；任何失败都释放新锁。`toProjectLockError` 显式 switch `LockFailedError`、`PermissionError`、`UnknownError`，并由 create/open/recover/save-as 的全部项目锁获取点复用。不要用预先的 `QFileInfo::isWritable()` 代替实际锁操作，Windows ACL 和网络文件系统以操作结果为准。
 
-- [ ] **Step 4: 运行 data tests**
+- [x] **Step 4: 运行 data tests**
 
 ```powershell
 pwsh -NoProfile -ExecutionPolicy Bypass -File tools/build/test.ps1 -Preset local-test -Regex "manga_tests_data"
@@ -657,7 +657,7 @@ pwsh -NoProfile -ExecutionPolicy Bypass -File tools/build/test.ps1 -Preset local
 
 Expected: 项目目录矩阵可自动化的各行通过，原有 second-session 与 stale-lock 测试继续通过。
 
-- [ ] **Step 5: Commit（仅在获授权时）**
+- [x] **Step 5: Commit（仅在获授权时）**
 
 ```bash
 git add src/data/DataErrorMapping.* src/data/project/FileSystemProjectRepository.cpp tests/unit/data/FileSystemProjectRepositoryTest.cpp
@@ -697,35 +697,35 @@ struct RecoveryPresentation {
 
 - `RecoveryPresenter::present(error, targetKey, now)` 合并 3 秒内相同 `code+targetKey`；Cancelled/stale 返回 `std::nullopt`。
 
-- [ ] **Step 1: 写每个 enum 分支和项目打开路由失败测试**
+- [x] **Step 1: 写每个 enum 分支和项目打开路由失败测试**
 
 覆盖 Retry、OpenSettings、Reauthenticate、LocateModel、ChoosePath、FreeDiskSpace、None、Cancelled；再逐行覆盖 Task 9 的项目目录矩阵，断言 code、中文可翻译文案、actionText、blocking、目标去重键和路由效果。`diagnostic`、绝对路径和锁文件内容从不进入 presentation。
 
-- [ ] **Step 2: 运行确认失败**
+- [x] **Step 2: 运行确认失败**
 
 ```powershell
 pwsh -NoProfile -ExecutionPolicy Bypass -File tools/build/build.ps1 -Preset local-test -Target manga_tests_ui_recovery_presenter
 ```
 
-- [ ] **Step 3: 实现映射与去重**
+- [x] **Step 3: 实现映射与去重**
 
 映射严格遵循 supplement §10 和 Task 9 的项目目录矩阵。Presenter 只决定安全文案/动作，不直接打开 dialog、folder 或 route；文案在 UI translation context 中按稳定 code 生成，data 层 `safeMessage` 只作未知 code fallback。
 
-- [ ] **Step 4: 接入 Application shell effects**
+- [x] **Step 4: 接入 Application shell effects**
 
 `Retry` 回到原 owning ViewModel 创建新 operationId；Home 的 `persistence.locked` 重试同一路径，其他任务保持原业务目标。`OpenSettings/Reauthenticate/LocateModel` 导航具体 Settings category/field；`ChoosePath` 重开 picker 并保留表单，Home 的项目路径类错误回到“打开 MangaTranslator 项目”选择器。`FreeDiskSpace` 显示安全目录名与所需空间并提供“查看位置”；`None` 无动作。原生选择器自身拒绝访问并返回空路径时不调用 `openProjectPath()`，也不生成第二条应用错误。
 
-- [ ] **Step 5: 关闭 P5-A/P5-B 明确遗留**
+- [x] **Step 5: 关闭 P5-A/P5-B 明确遗留**
 
 实现 Home 卡片“在文件夹中显示”、查看全部、打开中 Progress 状态；Import warnings/recoverySource 呈现；导航 Accent/过渡、页面列表 responsive overlay 与 pane width persistence。导入异步来源扫描和项目目录删除仍因缺 Port 不显示/不虚构。
 
-- [ ] **Step 6: 运行测试**
+- [x] **Step 6: 运行测试**
 
 ```powershell
 pwsh -NoProfile -ExecutionPolicy Bypass -File tools/build/test.ps1 -Preset local-test -Regex "manga_tests_ui_(recovery|home|import|navigation)"
 ```
 
-- [ ] **Step 7: Commit（仅在获授权时）**
+- [x] **Step 7: Commit（仅在获授权时）**
 
 ```bash
 git add src/ui/error src/ui/screen src/app/Application.cpp tests/unit/ui tests/integration/ui
@@ -753,29 +753,29 @@ git commit -m "feat(ui): add executable error recovery routes"
 - Breakpoints: Wide `>=1440`、Standard `1200–1439`、Compact `1008–1199`、Narrow `720–1007`、Minimum `<720`；Flat height `<560`。
 - Escape consumption: IME → text session → canvas gesture → Flyout → Overlay → navigation。
 
-- [ ] **Step 1: 写响应式与动作所有权失败测试**
+- [x] **Step 1: 写响应式与动作所有权失败测试**
 
 覆盖每个 breakpoint、互斥 Page/Inspector drawer、Overlay 不回写 desktop width、主 Smart Translate/Save/Undo 可达、同一 action 无同时可见重复入口。
 
-- [ ] **Step 2: 实现 responsive composition**
+- [x] **Step 2: 实现 responsive composition**
 
 Wide/Standard 三栏；Compact 页面栏 80–96 px；Narrow/Minimum 页面与 Inspector 互斥 drawer，Canvas 保持 viewport center，不自动 fit；Flat height 压缩 CommandBar/Strip 但不裁动作。
 
-- [ ] **Step 3: 完成 keyboard/accessibility**
+- [x] **Step 3: 完成 keyboard/accessibility**
 
 F6 pane cycle、完整 Tab order、Region virtual children、Tooltip/accessible name、状态 live announcement、200% text、高对比度和 reduce motion。无法自动验证 native IME 的环境必须标记 unverified，不能记 pass。
 
-- [ ] **Step 4: 审计产品文案**
+- [x] **Step 4: 审计产品文案**
 
 `copy-inventory.md` 记录 audience=`manga translators/editors`、voice=`direct, calm, technical`、zh-CN/CJK strategy、稳定状态词和禁用 AI narration/protocol labels。逐项检查 empty/loading/error/completion/dialog/tooltip。
 
-- [ ] **Step 5: 运行测试**
+- [x] **Step 5: 运行测试**
 
 ```powershell
 pwsh -NoProfile -ExecutionPolicy Bypass -File tools/build/test.ps1 -Preset local-test -Regex "manga_tests_ui_(responsive|accessibility)"
 ```
 
-- [ ] **Step 6: Commit（仅在获授权时）**
+- [x] **Step 6: Commit（仅在获授权时）**
 
 ```bash
 git add src/ui tests/unit/ui tests/visual/p5/action-inventory.md tests/visual/p5/copy-inventory.md
@@ -795,7 +795,7 @@ git commit -m "fix(ui): finish responsive and accessible p5 surfaces"
 **Interfaces:**
 - Produces contract v4 evidence, final executable identity, Gallery/VisualCheck references, Inspector quality report or compatibility boundary, independent reviewer verdict。
 
-- [ ] **Step 1: 格式化、配置、构建和全测**
+- [x] **Step 1: 格式化、配置、构建和全测**
 
 ```powershell
 prek run --all-files
@@ -806,11 +806,11 @@ pwsh -NoProfile -ExecutionPolicy Bypass -File tools/build/test.ps1 -Preset local
 
 记录实际通过数量和任何未运行边界；不得写“应当通过”。
 
-- [ ] **Step 2: 运行确定性性能/生命周期门**
+- [x] **Step 2: 运行确定性性能/生命周期门**
 
 覆盖 500 页惰性缩略图、300 Region paint hot path、任务 queue/cancel/retention、50 次 Flyout/Dialog close baseline、settings theme/width cache invalidation。固定发布机另记录 >30 fps 与热切页 <300 ms。
 
-- [ ] **Step 3: 初始化 visual evidence v4**
+- [x] **Step 3: 初始化 visual evidence v4**
 
 ```powershell
 python .agents/skills/build-fluentqt-gui/scripts/init_visual_evidence.py --brief tests/visual/p5/design-brief.json --reviewed-build build/local-test/src/app/MangaTranslator.exe --platform "Windows, native scale, Qt 6.11.1, Debug" --output tests/visual/p5/visual-evidence.json
@@ -818,15 +818,15 @@ python .agents/skills/build-fluentqt-gui/scripts/init_visual_evidence.py --brief
 
 Reviewed build 路径以 preset 实际产物为准并写入绝对运行时路径；提交 artifact 不保留开发者绝对路径，仓库版本改用相对 evidence reference 或生成时替换。
 
-- [ ] **Step 4: 驱动真实 final build 并采集 mandatory states/regions**
+- [x] **Step 4: 驱动真实 final build 并采集 mandatory states/regions**
 
 状态至少：normal-light/dark、narrow、minimum、empty、0/1/2/8+/300 Region density、long-localized、input single/max、scroll-end、async-settled、selected/focus/disabled、drawer/flyout/dialog/toast、IME preedit。区域至少：title bar、navigation/page list、canvas、CommandBar/Inspector headers、StatusStrip、scroll terminals、overlays。
 
-- [ ] **Step 5: 执行 inspect-fix-rebuild-recapture loop**
+- [x] **Step 5: 执行 inspect-fix-rebuild-recapture loop**
 
 与相同 platform/theme/scale 的 FluentQt Gallery/VisualCheck 并排；测量 panel inset、row height、indicator/icon/text slots、baseline/optical centers、footer height、last readable pixel。任何 clipping、overlap、stale palette/overlay、wrong density 或 open major finding 必须修复并重新 capture 同一状态。
 
-- [ ] **Step 6: 生成 review board 并交独立 reviewer**
+- [x] **Step 6: 生成 review board 并交独立 reviewer**
 
 ```powershell
 python .agents/skills/build-fluentqt-gui/scripts/render_visual_review.py tests/visual/p5/visual-evidence.json --output tests/visual/p5/visual-review.html
@@ -834,7 +834,7 @@ python .agents/skills/build-fluentqt-gui/scripts/render_visual_review.py tests/v
 
 reviewer 必须不同于 `author_id`，只接收 raw brief、board 和 final build，不接收实现者期望 verdict。九项评分均 >=4/5 且无 open blocker/major 才可 pass。
 
-- [ ] **Step 7: 验证 current contract 和最终结构**
+- [x] **Step 7: 验证 current contract 和最终结构**
 
 ```powershell
 python .agents/skills/build-fluentqt-gui/scripts/validate_visual_evidence.py --require-current tests/visual/p5/visual-evidence.json
@@ -843,7 +843,7 @@ python .agents/skills/build-fluentqt-gui/scripts/validate_project_structure.py -
 
 若 FluentQt 提供 diagnostics Inspector，运行 final settled surface report；否则在 `acceptance.md` 记录锁定 revision 不提供该 API，不复制私有规则。
 
-- [ ] **Step 8: 更新 Phase 5 状态并 Commit（仅在获授权时）**
+- [x] **Step 8: 更新 Phase 5 状态并 Commit（仅在获授权时）**
 
 只有 engineering 与 visual 两门都通过才勾选 Phase 5 项目和退出条件。
 
