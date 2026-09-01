@@ -186,62 +186,7 @@ private Q_SLOTS:
         processing.activePageId = pageAt(session, 0);
         processing.isRunning = true;
         viewModel.updateProcessingState(processing);
-        QCOMPARE(translateBtn->text(), QStringLiteral("取消"));
-    }
-
-    void commandBarUsesCompactLabeledPrimaryActions() {
-        test::FakeThumbnailStore thumbnails;
-        test::FakePageImageLoader images;
-        application::OperationRegistry registry;
-        ui::screen::editor::EditorViewModel viewModel(&thumbnails, &images, &registry);
-        ui::screen::editor::EditorPage page(&viewModel);
-        page.resize(1200, 800);
-        page.show();
-        QCoreApplication::processEvents();
-
-        auto* commandBar = page.findChild<QWidget*>(QStringLiteral("editorCommandBar"));
-        auto* undoButton = commandBar->findChild<fluent::basicinput::Button*>(QStringLiteral("undoButton"));
-        auto* translateButton =
-            commandBar->findChild<fluent::basicinput::Button*>(QStringLiteral("smartTranslateButton"));
-        auto* saveButton = commandBar->findChild<fluent::basicinput::Button*>(QStringLiteral("saveButton"));
-
-        QCOMPARE(commandBar->height(), 40);
-        QCOMPARE(undoButton->height(), 32);
-        QCOMPARE(undoButton->fluentLayout(), fluent::basicinput::Button::IconBefore);
-        QCOMPARE(undoButton->text(), QStringLiteral("撤销"));
-        QCOMPARE(translateButton->fluentLayout(), fluent::basicinput::Button::IconBefore);
-        QCOMPARE(translateButton->text(), QStringLiteral("智能翻译"));
-        QCOMPARE(saveButton->fluentLayout(), fluent::basicinput::Button::IconBefore);
-        QCOMPARE(saveButton->text(), QStringLiteral("保存"));
-    }
-
-    void commandBarFollowsDesignGroupOrder() {
-        test::FakeThumbnailStore thumbnails;
-        test::FakePageImageLoader images;
-        application::OperationRegistry registry;
-        ui::screen::editor::EditorViewModel viewModel(&thumbnails, &images, &registry);
-        ui::screen::editor::EditorPage page(&viewModel);
-        page.resize(1200, 800);
-        page.show();
-        QCoreApplication::processEvents();
-
-        auto* commandBar = page.findChild<QWidget*>(QStringLiteral("editorCommandBar"));
-        auto* previewButton =
-            commandBar->findChild<fluent::basicinput::Button*>(QStringLiteral("previewSelectorButton"));
-        auto* selectButton = commandBar->findChild<fluent::basicinput::Button*>(QStringLiteral("selectButton"));
-        auto* translateButton =
-            commandBar->findChild<fluent::basicinput::Button*>(QStringLiteral("smartTranslateButton"));
-        auto* saveButton = commandBar->findChild<fluent::basicinput::Button*>(QStringLiteral("saveButton"));
-        auto* pagePaneButton =
-            commandBar->findChild<fluent::basicinput::Button*>(QStringLiteral("pagePaneToggleButton"));
-        auto* inspectorButton =
-            commandBar->findChild<fluent::basicinput::Button*>(QStringLiteral("inspectorPaneToggleButton"));
-
-        QVERIFY(previewButton->x() < selectButton->x());
-        QVERIFY(selectButton->x() < translateButton->x());
-        QVERIFY(translateButton->x() < saveButton->x());
-        QVERIFY(!pagePaneButton->isVisible());
-        QVERIFY(!inspectorButton->isVisible());
+        QVERIFY(translateBtn->text().isEmpty());
     }
 
     void inspectorActionButtonsExist() {

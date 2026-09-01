@@ -38,6 +38,8 @@ Canvas Workspace 从上到下：
 1. `CommandBar`。
 2. Canvas viewport。
 
+`CommandBar` 使用 `bgLayer`，Canvas viewport 使用 `bgCanvas`。命令栏按钮均为 IconOnly，通过 Tooltip、无障碍名称和快捷键提示表达完整语义；按钮按历史、视图、工具、预览、处理和面板分组，组间使用 1 px 分隔线。
+
 Preview `SelectorBar` 固定嵌入 `CommandBar` 的视图命令区，不在画布上另建浮动层。窄宽时整组进入 CommandBar 的可展开区域，仍保持当前模式可见。
 
 窗口最底部为全局 `AppStatusTaskStrip`，不属于编辑器页面内部。
@@ -144,6 +146,7 @@ Secondary Commands / Overflow：
 详细合同见 [manga-canvas.md](../components/manga-canvas.md)。页面级要求：
 
 - 画布工作区使用 FluentQt `bgCanvas` 主题色作为中性背景，并支持细网格/无网格偏好。画布背景不得使用硬编码颜色。
+- 未打开项目时，画布中心显示轻量状态卡，仅包含文件夹图标、`尚未打开项目`、简短说明和 `打开项目` 主按钮，不使用全屏遮罩。
 - 页面居中显示，周围保持至少 24 px 安全空间。
 - V0.1 固定为每页独立记住缩放和中心位置；切回页面时恢复该状态。未访问页面首次打开使用适应页面。V0.1 不提供“统一适应页面”全局偏好。
 - Region 选择与 Inspector 选择使用稳定 Region ID 同步。

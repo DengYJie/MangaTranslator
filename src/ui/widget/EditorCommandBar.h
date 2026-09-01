@@ -2,7 +2,12 @@
 
 #include "ui/screen/editor/EditorState.h"
 
+#include <FluentQt/Foundation.h>
 #include <QWidget>
+
+class QPaintEvent;
+class QResizeEvent;
+class QAction;
 
 namespace fluent::basicinput {
 class Button;
@@ -10,9 +15,8 @@ class Button;
 namespace fluent::textfields {
 class Label;
 }
-
-namespace fluent::textfields {
-class Label;
+namespace fluent::menus_toolbars {
+class FluentMenu;
 }
 
 namespace manga::ui::screen::editor {
@@ -21,7 +25,7 @@ class EditorViewModel;
 
 namespace manga::ui::widget {
 
-class EditorCommandBar : public QWidget {
+class EditorCommandBar : public QWidget, public fluent::FluentElement {
     Q_OBJECT
 public:
     explicit EditorCommandBar(screen::editor::EditorViewModel* viewModel, QWidget* parent = nullptr);
@@ -55,13 +59,17 @@ Q_SIGNALS:
     void pagePaneToggleRequested();
     void inspectorPaneToggleRequested();
 
+protected:
+    void paintEvent(QPaintEvent* event) override;
+    void resizeEvent(QResizeEvent* event) override;
+    void onThemeUpdated() override;
+
 private:
     void buildUi();
     void render(const screen::editor::EditorState& state);
     void setupShortcuts();
+    void updateResponsiveLayout();
     fluent::basicinput::Button* createIconButton(const QString& glyph, const QString& tooltip, const QString& name);
-    fluent::basicinput::Button*
-    createLabeledButton(const QString& glyph, const QString& text, const QString& tooltip, const QString& name);
     bool shouldIgnoreShortcut() const;
 
     screen::editor::EditorViewModel* m_viewModel;
@@ -83,6 +91,17 @@ private:
     fluent::basicinput::Button* m_pagePaneToggleButton{nullptr};
     fluent::basicinput::Button* m_inspectorPaneToggleButton{nullptr};
     fluent::basicinput::Button* m_saveButton{nullptr};
+    fluent::basicinput::Button* m_overflowButton{nullptr};
+    fluent::menus_toolbars::FluentMenu* m_overflowMenu{nullptr};
+    QAction* m_zoomOutOverflowAction{nullptr};
+    QAction* m_zoomInOverflowAction{nullptr};
+    QAction* m_fitToPageOverflowAction{nullptr};
+    QAction* m_actualSizeOverflowAction{nullptr};
+    QAction* m_previewOverflowAction{nullptr};
+    QAction* m_adoptOverflowAction{nullptr};
+    QAction* m_rejectOverflowAction{nullptr};
+    bool m_overflowActive{false};
+    bool m_hasProposal{false};
 };
 
 } // namespace manga::ui::widget
