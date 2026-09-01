@@ -5,7 +5,6 @@
 #include "application/usecase/credential/CredentialUseCases.h"
 
 #include <QHash>
-#include <QSet>
 #include <QString>
 
 #include <optional>
@@ -78,23 +77,11 @@ inline std::optional<SettingsCategory> settingsCategoryFromRouteKey(const QStrin
 
 struct SettingsState {
     AppSettingsSnapshot persisted;
-    AppSettingsSnapshot draft;
     QHash<QString, QString> fieldErrors;
-    QSet<SettingsCategory> dirtyCategories;
     CredentialState credentialStatus{CredentialState::Missing};
     OcrModelStatus modelStatus;
     SettingsCategory currentCategory{SettingsCategory::General};
     QHash<SettingsCategory, int> scrollPositions;
-    bool isSaving{false};
-    std::optional<QString> saveError;
-
-    [[nodiscard]] bool isDirty() const {
-        return !dirtyCategories.isEmpty();
-    }
-
-    [[nodiscard]] bool isCategoryDirty(SettingsCategory category) const {
-        return dirtyCategories.contains(category);
-    }
 
     [[nodiscard]] bool hasFieldErrors() const {
         return !fieldErrors.isEmpty();

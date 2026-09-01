@@ -54,7 +54,6 @@ public:
         return m_currentCategory;
     }
     [[nodiscard]] widget::SettingsRow* rowForField(const QString& fieldName) const;
-    [[nodiscard]] fluent::basicinput::Button* saveButtonForTest() const;
     [[nodiscard]] fluent::basicinput::Button* restoreDefaultsButtonForTest() const;
 
 protected:
@@ -98,7 +97,6 @@ private:
     // Bottom action bar
     QWidget* m_actionBar{nullptr};
     fluent::basicinput::Button* m_restoreDefaultsButton{nullptr};
-    fluent::basicinput::Button* m_saveButton{nullptr};
 
     // General category controls
     widget::SettingsRow* m_restoreLastProjectRow{nullptr};

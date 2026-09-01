@@ -16,7 +16,6 @@
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QScrollBar>
-#include <QShortcut>
 #include <QStackedWidget>
 #include <QVBoxLayout>
 
@@ -24,15 +23,21 @@ namespace manga::ui::screen::settings {
 
 namespace {
 
-constexpr int kMaxContentWidth = 1100;
-constexpr int kMarginWide = 32;
+// ForgeAI SettingsNavigationModule responsive constants
+constexpr int kMaxContentWidth = 1064;
+constexpr int kMarginWide = 36;
 constexpr int kMarginNarrow = 20;
-constexpr int kBreakpointWide = 1008;
+constexpr int kBreakpointWide = 800;
+constexpr int kMarginTopWide = 24;
+constexpr int kMarginBottomWide = 24;
+constexpr int kMarginTopNarrow = 16;
+constexpr int kMarginBottomNarrow = 16;
 
 } // namespace
 
 SettingsPage::SettingsPage(SettingsViewModel* viewModel, QWidget* parent) : BasePage(parent), m_viewModel(viewModel) {
     buildUi();
+
     if (m_viewModel != nullptr) {
         m_viewModel->observe(this, &SettingsPage::render);
         connect(m_viewModel, &SettingsViewModel::focusFieldRequested, this, &SettingsPage::focusField);
@@ -41,6 +46,7 @@ SettingsPage::SettingsPage(SettingsViewModel* viewModel, QWidget* parent) : Base
 
 void SettingsPage::buildUi() {
     setAttribute(Qt::WA_StyledBackground, false);
+    setAutoFillBackground(false);
 
     auto* rootLayout = new QVBoxLayout(this);
     rootLayout->setContentsMargins(0, 0, 0, 0);
@@ -48,36 +54,50 @@ void SettingsPage::buildUi() {
 
     m_scrollView = new fluent::scrolling::ScrollView(this);
     m_scrollView->setWidgetResizable(true);
+    m_scrollView->setFrameShape(QFrame::NoFrame);
     m_scrollView->setHorizontalScrollBarVisibility(fluent::scrolling::ScrollView::ScrollBarVisibility::Hidden);
+    m_scrollView->setAutoFillBackground(false);
+    if (auto* vp = m_scrollView->viewport()) {
+        vp->setAutoFillBackground(false);
+        QPalette pal = vp->palette();
+        pal.setColor(QPalette::Window, Qt::transparent);
+        pal.setColor(QPalette::Base, Qt::transparent);
+        vp->setPalette(pal);
+    }
     rootLayout->addWidget(m_scrollView);
 
     m_scrollContent = new QWidget(m_scrollView);
+    m_scrollContent->setAutoFillBackground(false);
     m_scrollContentLayout = new QVBoxLayout(m_scrollContent);
-    m_scrollContentLayout->setContentsMargins(kMarginWide, 24, kMarginWide, 32);
+    m_scrollContentLayout->setContentsMargins(kMarginWide, kMarginTopWide, kMarginWide, kMarginBottomWide);
     m_scrollContentLayout->setSpacing(0);
     m_scrollContentLayout->setAlignment(Qt::AlignHCenter | Qt::AlignTop);
 
     m_columnContainer = new QWidget(m_scrollContent);
+    m_columnContainer->setAutoFillBackground(false);
     m_columnContainer->setMaximumWidth(kMaxContentWidth);
     m_columnContainer->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
 
     m_columnLayout = new QVBoxLayout(m_columnContainer);
     m_columnLayout->setContentsMargins(0, 0, 0, 0);
-    m_columnLayout->setSpacing(16);
+    m_columnLayout->setSpacing(4);
     m_columnLayout->setAlignment(Qt::AlignTop);
 
     // Category title & subtitle
     m_categoryTitleLabel = new fluent::textfields::Label(m_columnContainer);
     m_categoryTitleLabel->setFluentTypography(Typography::FontRole::Title);
+    m_categoryTitleLabel->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Fixed);
     m_categoryTitleLabel->setObjectName(QStringLiteral("settingsCategoryTitle"));
     m_columnLayout->addWidget(m_categoryTitleLabel);
+    m_columnLayout->addSpacing(12);
 
     m_categorySubtitleLabel = new fluent::textfields::Label(m_columnContainer);
     m_categorySubtitleLabel->setFluentTypography(Typography::FontRole::Body);
     m_categorySubtitleLabel->setTextColorRole(fluent::textfields::Label::TextColorRole::Secondary);
-    m_categorySubtitleLabel->setWordWrap(true);
+    m_categorySubtitleLabel->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
     m_categorySubtitleLabel->setObjectName(QStringLiteral("settingsCategorySubtitle"));
     m_columnLayout->addWidget(m_categorySubtitleLabel);
+    m_columnLayout->addSpacing(20);
 
     // Global page notification InfoBar
     m_pageInfoBar = new fluent::status_info::InfoBar(m_columnContainer);
@@ -87,15 +107,18 @@ void SettingsPage::buildUi() {
 
     // Category views stack
     m_categoryStack = new QStackedWidget(m_columnContainer);
+    m_categoryStack->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
     buildCategoryViews();
     m_columnLayout->addWidget(m_categoryStack);
 
+    m_columnLayout->addStretch(1);
+
     // Action bar at bottom
     m_actionBar = new QWidget(m_columnContainer);
+    m_actionBar->setAutoFillBackground(false);
     auto* actionLayout = new QHBoxLayout(m_actionBar);
     actionLayout->setContentsMargins(0, 8, 0, 0);
     actionLayout->setSpacing(12);
-    actionLayout->addStretch(1);
 
     m_restoreDefaultsButton = new fluent::basicinput::Button(tr("恢复默认"), m_actionBar);
     m_restoreDefaultsButton->setObjectName(QStringLiteral("settingsRestoreDefaultsButton"));
@@ -108,30 +131,10 @@ void SettingsPage::buildUi() {
     });
     actionLayout->addWidget(m_restoreDefaultsButton);
 
-    m_saveButton = new fluent::basicinput::Button(tr("保存设置"), m_actionBar);
-    m_saveButton->setObjectName(QStringLiteral("settingsSaveButton"));
-    m_saveButton->setFluentStyle(fluent::basicinput::Button::Accent);
-    m_saveButton->setToolTip(tr("保存当前配置 (Ctrl+S)"));
-    m_saveButton->setAccessibleName(tr("保存设置"));
-    connect(m_saveButton, &fluent::basicinput::Button::clicked, this, [this]() {
-        if (m_viewModel) {
-            m_viewModel->saveSettings();
-        }
-    });
-    actionLayout->addWidget(m_saveButton);
-
     m_columnLayout->addWidget(m_actionBar);
 
     m_scrollContentLayout->addWidget(m_columnContainer);
     m_scrollView->setContentWidget(m_scrollContent, fluent::WidgetOwnership::Owned);
-
-    // Ctrl+S shortcut to save settings
-    auto* saveShortcut = new QShortcut(QKeySequence::Save, this);
-    connect(saveShortcut, &QShortcut::activated, this, [this]() {
-        if (m_viewModel) {
-            m_viewModel->saveSettings();
-        }
-    });
 }
 
 void SettingsPage::buildCategoryViews() {
@@ -148,9 +151,11 @@ void SettingsPage::buildCategoryViews() {
 
 QWidget* SettingsPage::buildGeneralView() {
     auto* container = new QWidget();
+    container->setAutoFillBackground(false);
+    container->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
     auto* layout = new QVBoxLayout(container);
     layout->setContentsMargins(0, 0, 0, 0);
-    layout->setSpacing(16);
+    layout->setSpacing(4);
 
     auto* group = new widget::SettingsGroup(tr("常规偏好"), tr("管理项目恢复与最近项目记录"), container);
     m_allGroups.append(group);
@@ -188,14 +193,17 @@ QWidget* SettingsPage::buildGeneralView() {
     m_fieldRowMap.insert(QStringLiteral("recentProjectLimit"), m_recentProjectLimitRow);
 
     layout->addWidget(group);
+    layout->addStretch(1);
     return container;
 }
 
 QWidget* SettingsPage::buildOcrView() {
     auto* container = new QWidget();
+    container->setAutoFillBackground(false);
+    container->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
     auto* layout = new QVBoxLayout(container);
     layout->setContentsMargins(0, 0, 0, 0);
-    layout->setSpacing(16);
+    layout->setSpacing(4);
 
     auto* group = new widget::SettingsGroup(
         tr("Baberu OCR 引擎"), tr("配置用于漫画文字识别的 Baberu ONNX 模型与识别语言"), container);
@@ -213,7 +221,7 @@ QWidget* SettingsPage::buildOcrView() {
     m_ocrModelDirEdit->setPlaceholderText(tr("选择或输入模型目录路径"));
     connect(m_ocrModelDirEdit, &fluent::textfields::LineEdit::textChanged, this, [this](const QString& text) {
         if (!m_isUpdatingFromState && m_viewModel) {
-            m_viewModel->setOcrModelDirectory(text);
+            m_viewModel->setOcrModelDirectory(text.trimmed());
         }
     });
     dirLayout->addWidget(m_ocrModelDirEdit, 1);
@@ -259,14 +267,17 @@ QWidget* SettingsPage::buildOcrView() {
     m_fieldRowMap.insert(QStringLiteral("ocrLanguage"), m_ocrLanguageRow);
 
     layout->addWidget(group);
+    layout->addStretch(1);
     return container;
 }
 
 QWidget* SettingsPage::buildAiTranslationView() {
     auto* container = new QWidget();
+    container->setAutoFillBackground(false);
+    container->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
     auto* layout = new QVBoxLayout(container);
     layout->setContentsMargins(0, 0, 0, 0);
-    layout->setSpacing(16);
+    layout->setSpacing(4);
 
     auto* group =
         new widget::SettingsGroup(tr("服务商配置"), tr("配置用于漫画台词翻译的 AI 模型、端点与访问密钥"), container);
@@ -293,7 +304,7 @@ QWidget* SettingsPage::buildAiTranslationView() {
     m_endpointEdit->setPlaceholderText(QStringLiteral("https://api.openai.com/v1"));
     connect(m_endpointEdit, &fluent::textfields::LineEdit::textChanged, this, [this](const QString& text) {
         if (!m_isUpdatingFromState && m_viewModel) {
-            m_viewModel->setEndpoint(text);
+            m_viewModel->setEndpoint(text.trimmed());
         }
     });
     m_endpointRow->setEditorWidget(m_endpointEdit, true);
@@ -397,7 +408,7 @@ QWidget* SettingsPage::buildAiTranslationView() {
     m_modelNameEdit->setPlaceholderText(QStringLiteral("gpt-4o"));
     connect(m_modelNameEdit, &fluent::textfields::LineEdit::textChanged, this, [this](const QString& text) {
         if (!m_isUpdatingFromState && m_viewModel) {
-            m_viewModel->setModelName(text);
+            m_viewModel->setModelName(text.trimmed());
         }
     });
     m_modelNameRow->setEditorWidget(m_modelNameEdit, true);
@@ -439,14 +450,17 @@ QWidget* SettingsPage::buildAiTranslationView() {
     m_fieldRowMap.insert(QStringLiteral("retryCount"), m_retryCountRow);
 
     layout->addWidget(group);
+    layout->addStretch(1);
     return container;
 }
 
 QWidget* SettingsPage::buildAppearanceView() {
     auto* container = new QWidget();
+    container->setAutoFillBackground(false);
+    container->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
     auto* layout = new QVBoxLayout(container);
     layout->setContentsMargins(0, 0, 0, 0);
-    layout->setSpacing(16);
+    layout->setSpacing(4);
 
     auto* group = new widget::SettingsGroup(
         tr("主题与外观"), tr("自定义应用界面主题、显示密度与视觉偏好（修改将即时预览）"), container);
@@ -506,7 +520,7 @@ QWidget* SettingsPage::buildAppearanceView() {
     m_canvasBackgroundEdit->setPlaceholderText(QStringLiteral("#202124"));
     connect(m_canvasBackgroundEdit, &fluent::textfields::LineEdit::textChanged, this, [this](const QString& text) {
         if (!m_isUpdatingFromState && m_viewModel) {
-            m_viewModel->setCanvasBackground(text);
+            m_viewModel->setCanvasBackground(text.trimmed());
         }
     });
     m_canvasBackgroundRow->setEditorWidget(m_canvasBackgroundEdit, true);
@@ -514,6 +528,7 @@ QWidget* SettingsPage::buildAppearanceView() {
     m_fieldRowMap.insert(QStringLiteral("canvasBackground"), m_canvasBackgroundRow);
 
     layout->addWidget(group);
+    layout->addStretch(1);
     return container;
 }
 
@@ -526,6 +541,7 @@ void SettingsPage::render(const SettingsState& state) {
             m_viewModel->setScrollPosition(m_currentCategory, m_scrollView->verticalScrollBar()->value());
         }
         m_currentCategory = state.currentCategory;
+
         const int targetIndex = static_cast<int>(m_currentCategory);
         m_categoryStack->setCurrentIndex(targetIndex);
         updateCategoryHeaders(m_currentCategory);
@@ -538,78 +554,100 @@ void SettingsPage::render(const SettingsState& state) {
         updateCategoryHeaders(m_currentCategory);
     }
 
-    // Update General category inputs
-    m_restoreLastProjectSwitch->setIsOn(state.draft.restoreLastProject);
-    m_recentProjectLimitBox->setValue(state.draft.recentProjectLimit);
-
-    // Update OCR category inputs
-    if (m_ocrModelDirEdit->text() != state.draft.ocrModelDirectory) {
-        m_ocrModelDirEdit->setText(state.draft.ocrModelDirectory);
+    // Update General category inputs (always created)
+    if (m_restoreLastProjectSwitch) {
+        m_restoreLastProjectSwitch->setIsOn(state.persisted.restoreLastProject);
     }
-    const int langIdx = m_ocrLanguageCombo->findData(state.draft.ocrLanguage);
-    if (langIdx >= 0 && m_ocrLanguageCombo->currentIndex() != langIdx) {
-        m_ocrLanguageCombo->setCurrentIndex(langIdx);
+    if (m_recentProjectLimitBox) {
+        m_recentProjectLimitBox->setValue(state.persisted.recentProjectLimit);
     }
 
-    // Update OCR Status InfoBar
-    if (state.draft.ocrModelDirectory.trimmed().isEmpty()) {
-        m_ocrStatusInfoBar->setIsOpen(false);
-    } else if (state.modelStatus.isValid) {
-        m_ocrStatusInfoBar->setSeverity(fluent::status_info::InfoBar::Success);
-        m_ocrStatusInfoBar->setTitle(tr("OCR 模型有效"));
-        m_ocrStatusInfoBar->setMessage(tr("模型: %1 (版本: %2, 算子集: %3)")
-                                           .arg(state.modelStatus.id)
-                                           .arg(state.modelStatus.version)
-                                           .arg(state.modelStatus.opset));
-        m_ocrStatusInfoBar->setIsOpen(true);
-    } else {
-        m_ocrStatusInfoBar->setSeverity(fluent::status_info::InfoBar::Error);
-        m_ocrStatusInfoBar->setTitle(tr("OCR 模型校验失败"));
-        m_ocrStatusInfoBar->setMessage(
-            state.fieldErrors.value(QStringLiteral("ocrModelDirectory"), tr("未找到有效的 Baberu OCR 模型文件")));
-        m_ocrStatusInfoBar->setIsOpen(true);
+    // Update OCR category inputs (lazy loaded)
+    if (m_ocrModelDirEdit && m_ocrModelDirEdit->text() != state.persisted.ocrModelDirectory) {
+        m_ocrModelDirEdit->setText(state.persisted.ocrModelDirectory);
+    }
+    if (m_ocrLanguageCombo) {
+        const int langIdx = m_ocrLanguageCombo->findData(state.persisted.ocrLanguage);
+        if (langIdx >= 0 && m_ocrLanguageCombo->currentIndex() != langIdx) {
+            m_ocrLanguageCombo->setCurrentIndex(langIdx);
+        }
     }
 
-    // Update AI Translation category inputs
-    const int provIdx = m_providerIdCombo->findData(state.draft.providerId);
-    if (provIdx >= 0 && m_providerIdCombo->currentIndex() != provIdx) {
-        m_providerIdCombo->setCurrentIndex(provIdx);
-    }
-    if (m_endpointEdit->text() != state.draft.endpoint) {
-        m_endpointEdit->setText(state.draft.endpoint);
-    }
-    if (m_modelNameEdit->text() != state.draft.modelName) {
-        m_modelNameEdit->setText(state.draft.modelName);
-    }
-    m_timeoutBox->setValue(state.draft.timeoutSeconds);
-    m_retryCountBox->setValue(state.draft.retryCount);
-
-    // Update Credential Status & Widget visibility
-    if (state.credentialStatus == application::CredentialState::Configured && !m_isCredentialEditMode) {
-        m_credentialConfiguredWidget->setVisible(true);
-        m_credentialInputWidget->setVisible(false);
-        m_credentialCancelButton->setVisible(true);
-    } else {
-        m_credentialConfiguredWidget->setVisible(false);
-        m_credentialInputWidget->setVisible(true);
-        m_credentialCancelButton->setVisible(state.credentialStatus == application::CredentialState::Configured);
+    // Update OCR Status InfoBar (lazy loaded)
+    if (m_ocrStatusInfoBar) {
+        if (state.persisted.ocrModelDirectory.trimmed().isEmpty()) {
+            m_ocrStatusInfoBar->setIsOpen(false);
+        } else if (state.modelStatus.isValid) {
+            m_ocrStatusInfoBar->setSeverity(fluent::status_info::InfoBar::Success);
+            m_ocrStatusInfoBar->setTitle(tr("OCR 模型有效"));
+            m_ocrStatusInfoBar->setMessage(tr("模型: %1 (版本: %2, 算子集: %3)")
+                                               .arg(state.modelStatus.id)
+                                               .arg(state.modelStatus.version)
+                                               .arg(state.modelStatus.opset));
+            m_ocrStatusInfoBar->setIsOpen(true);
+        } else {
+            m_ocrStatusInfoBar->setSeverity(fluent::status_info::InfoBar::Error);
+            m_ocrStatusInfoBar->setTitle(tr("OCR 模型校验失败"));
+            m_ocrStatusInfoBar->setMessage(
+                state.fieldErrors.value(QStringLiteral("ocrModelDirectory"), tr("未找到有效的 Baberu OCR 模型文件")));
+            m_ocrStatusInfoBar->setIsOpen(true);
+        }
     }
 
-    // Update Appearance category inputs
-    const int themeIdx = m_themeCombo->findData(static_cast<int>(state.draft.theme));
-    if (themeIdx >= 0 && m_themeCombo->currentIndex() != themeIdx) {
-        m_themeCombo->setCurrentIndex(themeIdx);
+    // Update AI Translation category inputs (lazy loaded)
+    if (m_providerIdCombo) {
+        const int provIdx = m_providerIdCombo->findData(state.persisted.providerId);
+        if (provIdx >= 0 && m_providerIdCombo->currentIndex() != provIdx) {
+            m_providerIdCombo->setCurrentIndex(provIdx);
+        }
     }
-    const int densityIdx = m_densityCombo->findData(static_cast<int>(state.draft.density));
-    if (densityIdx >= 0 && m_densityCombo->currentIndex() != densityIdx) {
-        m_densityCombo->setCurrentIndex(densityIdx);
+    if (m_endpointEdit && m_endpointEdit->text() != state.persisted.endpoint) {
+        m_endpointEdit->setText(state.persisted.endpoint);
     }
-    m_reduceMotionSwitch->setIsOn(state.draft.reduceMotion);
-    if (m_canvasBackgroundEdit->text() != state.draft.canvasBackground) {
-        m_canvasBackgroundEdit->setText(state.draft.canvasBackground);
+    if (m_modelNameEdit && m_modelNameEdit->text() != state.persisted.modelName) {
+        m_modelNameEdit->setText(state.persisted.modelName);
+    }
+    if (m_timeoutBox) {
+        m_timeoutBox->setValue(state.persisted.timeoutSeconds);
+    }
+    if (m_retryCountBox) {
+        m_retryCountBox->setValue(state.persisted.retryCount);
     }
 
-    // Update Field Errors & Dirty indicators
+    // Update Credential Status & Widget visibility (lazy loaded)
+    if (m_credentialConfiguredWidget && m_credentialInputWidget && m_credentialCancelButton) {
+        if (state.credentialStatus == application::CredentialState::Configured && !m_isCredentialEditMode) {
+            m_credentialConfiguredWidget->setVisible(true);
+            m_credentialInputWidget->setVisible(false);
+            m_credentialCancelButton->setVisible(true);
+        } else {
+            m_credentialConfiguredWidget->setVisible(false);
+            m_credentialInputWidget->setVisible(true);
+            m_credentialCancelButton->setVisible(state.credentialStatus == application::CredentialState::Configured);
+        }
+    }
+
+    // Update Appearance category inputs (lazy loaded)
+    if (m_themeCombo) {
+        const int themeIdx = m_themeCombo->findData(static_cast<int>(state.persisted.theme));
+        if (themeIdx >= 0 && m_themeCombo->currentIndex() != themeIdx) {
+            m_themeCombo->setCurrentIndex(themeIdx);
+        }
+    }
+    if (m_densityCombo) {
+        const int densityIdx = m_densityCombo->findData(static_cast<int>(state.persisted.density));
+        if (densityIdx >= 0 && m_densityCombo->currentIndex() != densityIdx) {
+            m_densityCombo->setCurrentIndex(densityIdx);
+        }
+    }
+    if (m_reduceMotionSwitch) {
+        m_reduceMotionSwitch->setIsOn(state.persisted.reduceMotion);
+    }
+    if (m_canvasBackgroundEdit && m_canvasBackgroundEdit->text() != state.persisted.canvasBackground) {
+        m_canvasBackgroundEdit->setText(state.persisted.canvasBackground);
+    }
+
+    // Update field errors
     for (auto it = m_fieldRowMap.begin(); it != m_fieldRowMap.end(); ++it) {
         const QString& field = it.key();
         auto* row = it.value();
@@ -624,33 +662,15 @@ void SettingsPage::render(const SettingsState& state) {
         }
     }
 
-    // Category-specific row dirty state
-    m_restoreLastProjectRow->setDirty(state.draft.restoreLastProject != state.persisted.restoreLastProject);
-    m_recentProjectLimitRow->setDirty(state.draft.recentProjectLimit != state.persisted.recentProjectLimit);
-    m_ocrModelDirRow->setDirty(state.draft.ocrModelDirectory != state.persisted.ocrModelDirectory);
-    m_ocrLanguageRow->setDirty(state.draft.ocrLanguage != state.persisted.ocrLanguage);
-    m_providerIdRow->setDirty(state.draft.providerId != state.persisted.providerId);
-    m_endpointRow->setDirty(state.draft.endpoint != state.persisted.endpoint);
-    m_modelNameRow->setDirty(state.draft.modelName != state.persisted.modelName);
-    m_timeoutRow->setDirty(state.draft.timeoutSeconds != state.persisted.timeoutSeconds);
-    m_retryCountRow->setDirty(state.draft.retryCount != state.persisted.retryCount);
-    m_themeRow->setDirty(state.draft.theme != state.persisted.theme);
-    m_densityRow->setDirty(state.draft.density != state.persisted.density);
-    m_reduceMotionRow->setDirty(state.draft.reduceMotion != state.persisted.reduceMotion);
-    m_canvasBackgroundRow->setDirty(state.draft.canvasBackground != state.persisted.canvasBackground);
-
-    // Global save error InfoBar
-    if (state.saveError.has_value()) {
+    // Show persistence failures without introducing a second save state.
+    if (state.fieldErrors.contains(QStringLiteral("persist"))) {
         m_pageInfoBar->setSeverity(fluent::status_info::InfoBar::Error);
         m_pageInfoBar->setTitle(tr("保存失败"));
-        m_pageInfoBar->setMessage(*state.saveError);
+        m_pageInfoBar->setMessage(state.fieldErrors.value(QStringLiteral("persist")));
         m_pageInfoBar->setIsOpen(true);
     } else {
         m_pageInfoBar->setIsOpen(false);
     }
-
-    // Save button state
-    m_saveButton->setEnabled(!state.isSaving);
 
     m_isUpdatingFromState = false;
 }
@@ -708,10 +728,6 @@ widget::SettingsRow* SettingsPage::rowForField(const QString& fieldName) const {
     return m_fieldRowMap.value(fieldName, nullptr);
 }
 
-fluent::basicinput::Button* SettingsPage::saveButtonForTest() const {
-    return m_saveButton;
-}
-
 fluent::basicinput::Button* SettingsPage::restoreDefaultsButtonForTest() const {
     return m_restoreDefaultsButton;
 }
@@ -719,10 +735,15 @@ fluent::basicinput::Button* SettingsPage::restoreDefaultsButtonForTest() const {
 void SettingsPage::updateResponsiveLayout(int availableWidth) {
     BasePage::updateResponsiveLayout(availableWidth);
 
-    const int margin = (availableWidth >= kBreakpointWide) ? kMarginWide : kMarginNarrow;
-    m_scrollContentLayout->setContentsMargins(margin, 24, margin, 32);
+    // ForgeAI SettingsNavigationModule responsive margins
+    const bool narrow = availableWidth < kBreakpointWide;
+    const int marginH = narrow ? kMarginNarrow : kMarginWide;
+    const int marginV = narrow ? kMarginTopNarrow : kMarginTopWide;
+    const int marginB = narrow ? kMarginBottomNarrow : kMarginBottomWide;
 
-    const int contentWidth = qMin(availableWidth - margin * 2, kMaxContentWidth);
+    m_scrollContentLayout->setContentsMargins(marginH, marginV, marginH, marginB);
+
+    const int contentWidth = qMin(availableWidth - marginH * 2, kMaxContentWidth);
     for (auto* group : m_allGroups) {
         if (group) {
             group->updateResponsiveLayout(contentWidth);

@@ -11,12 +11,14 @@
 namespace manga::ui::widget {
 
 namespace {
-constexpr int kResponsiveBreakpoint = 680;
+constexpr int kResponsiveBreakpoint = 560;
 constexpr int kHorizontalPaddingH = 16;
 constexpr int kHorizontalPaddingV = 12;
 constexpr int kHorizontalSpacing = 16;
 constexpr int kVerticalSpacing = 8;
 constexpr int kEditorMaxWidth = 320;
+constexpr int kMinimumHeight = 64;
+constexpr int kStackedMinimumHeight = 96;
 } // namespace
 
 SettingsRow::SettingsRow(QWidget* parent) : QWidget(parent) {
@@ -31,7 +33,9 @@ SettingsRow::SettingsRow(const QString& title, const QString& description, QWidg
 
 void SettingsRow::setupUi() {
     setAttribute(Qt::WA_StyledBackground, false);
-    setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
+    setAutoFillBackground(false);
+    setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+    setMinimumHeight(kMinimumHeight);
 
     m_mainLayout = new QBoxLayout(QBoxLayout::LeftToRight, this);
     m_mainLayout->setContentsMargins(
@@ -40,12 +44,13 @@ void SettingsRow::setupUi() {
 
     // Left text container
     m_textContainer = new QWidget(this);
+    m_textContainer->setAutoFillBackground(false);
     m_textContainer->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
     m_textLayout = new QVBoxLayout(m_textContainer);
     m_textLayout->setContentsMargins(0, 0, 0, 0);
-    m_textLayout->setSpacing(4);
+    m_textLayout->setSpacing(2);
 
-    // Title row with dirty indicator
+    // Title row
     m_titleRow = new QWidget(m_textContainer);
     m_titleRowLayout = new QHBoxLayout(m_titleRow);
     m_titleRowLayout->setContentsMargins(0, 0, 0, 0);
@@ -56,12 +61,6 @@ void SettingsRow::setupUi() {
     m_titleLabel->setWordWrap(true);
     m_titleRowLayout->addWidget(m_titleLabel);
 
-    m_dirtyIndicator = new fluent::textfields::Label(QStringLiteral("●"), m_titleRow);
-    m_dirtyIndicator->setObjectName(QStringLiteral("settingsRowDirtyIndicator"));
-    m_dirtyIndicator->setFluentTypography(Typography::FontRole::Caption);
-    m_dirtyIndicator->setVisible(false);
-    m_dirtyIndicator->setToolTip(tr("已修改"));
-    m_titleRowLayout->addWidget(m_dirtyIndicator);
     m_titleRowLayout->addStretch(1);
 
     m_textLayout->addWidget(m_titleRow);
@@ -84,6 +83,7 @@ void SettingsRow::setupUi() {
 
     // Right editor container
     m_editorContainer = new QWidget(this);
+    m_editorContainer->setAutoFillBackground(false);
     m_editorContainer->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Preferred);
     m_editorLayout = new QVBoxLayout(m_editorContainer);
     m_editorLayout->setContentsMargins(0, 0, 0, 0);
@@ -139,15 +139,6 @@ bool SettingsRow::hasError() const {
     return !m_error.isEmpty();
 }
 
-void SettingsRow::setDirty(bool dirty) {
-    m_dirty = dirty;
-    m_dirtyIndicator->setVisible(dirty);
-}
-
-bool SettingsRow::isDirty() const {
-    return m_dirty;
-}
-
 void SettingsRow::setEditorWidget(QWidget* widget, bool fillWidthInVertical) {
     if (m_editorWidget) {
         m_editorLayout->removeWidget(m_editorWidget);
@@ -185,6 +176,7 @@ void SettingsRow::applyMode(bool horizontal) {
         m_editorLayout->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
         m_editorContainer->setMaximumWidth(kEditorMaxWidth);
         m_editorContainer->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Preferred);
+        setMinimumHeight(kMinimumHeight);
     } else {
         m_mainLayout->setDirection(QBoxLayout::TopToBottom);
         m_mainLayout->setSpacing(kVerticalSpacing);
@@ -194,6 +186,7 @@ void SettingsRow::applyMode(bool horizontal) {
         m_editorContainer->setMaximumWidth(QWIDGETSIZE_MAX);
         m_editorContainer->setSizePolicy(m_fillWidthInVertical ? QSizePolicy::Expanding : QSizePolicy::Preferred,
                                          QSizePolicy::Preferred);
+        setMinimumHeight(kStackedMinimumHeight);
     }
     updateGeometry();
 }
@@ -205,11 +198,6 @@ void SettingsRow::resizeEvent(QResizeEvent* event) {
 
 void SettingsRow::onThemeUpdated() {
     const auto& colors = themeColorsRef();
-    if (m_dirtyIndicator) {
-        QPalette pal = m_dirtyIndicator->palette();
-        pal.setColor(QPalette::WindowText, colors.accentDefault);
-        m_dirtyIndicator->setPalette(pal);
-    }
     if (m_errorLabel) {
         QPalette pal = m_errorLabel->palette();
         pal.setColor(QPalette::WindowText, colors.systemCritical);

@@ -13,7 +13,7 @@ class Label;
 namespace manga::ui::widget {
 
 /// Layout container for a single setting item with title, description, error text,
-/// dirty state indicator, and an editor control.
+/// and an editor control.
 /// Supports responsive horizontal (>=680px) and vertical (<680px) modes without
 /// rebuilding widgets or dropping focus.
 class SettingsRow : public QWidget, public fluent::FluentElement, public fluent::QMLPlus {
@@ -33,9 +33,6 @@ public:
     void clearError();
     [[nodiscard]] QString error() const;
     [[nodiscard]] bool hasError() const;
-
-    void setDirty(bool dirty);
-    [[nodiscard]] bool isDirty() const;
 
     void setEditorWidget(QWidget* widget, bool fillWidthInVertical = true);
     [[nodiscard]] QWidget* editorWidget() const;
@@ -58,7 +55,6 @@ private:
     QString m_title;
     QString m_description;
     QString m_error;
-    bool m_dirty{false};
     bool m_isHorizontal{true};
     bool m_fillWidthInVertical{true};
 
@@ -68,7 +64,6 @@ private:
     QWidget* m_titleRow{nullptr};
     QBoxLayout* m_titleRowLayout{nullptr};
     fluent::textfields::Label* m_titleLabel{nullptr};
-    fluent::textfields::Label* m_dirtyIndicator{nullptr};
     fluent::textfields::Label* m_descLabel{nullptr};
     fluent::textfields::Label* m_errorLabel{nullptr};
 

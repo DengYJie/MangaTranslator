@@ -201,88 +201,31 @@ int Application::run() {
         }
     };
 
+    QObject::connect(
+        mainWindow, &ui::window::MainWindow::closeRequested, mainWindow, [editorViewModel, pendingAction]() {
+            *pendingAction = QString();
+            editorViewModel->requestCloseProject();
+        });
+
     QObject::connect(mainWindow,
-                     &ui::window::MainWindow::closeRequested,
+                     &ui::window::MainWindow::navigationInterceptRequested,
                      mainWindow,
-                     [editorViewModel, settingsViewModel, pendingAction, mainWindow]() {
-                         *pendingAction = QString();
-                         if (mainWindow->activeNavigationSurfaceId() == QLatin1String("settings") &&
-                             settingsViewModel->isDirty()) {
-                             settingsViewModel->requestLeave([editorViewModel](bool proceed) {
-                                 if (proceed) {
-                                     editorViewModel->requestCloseProject();
-                                 }
-                             });
+                     [editorViewModel, pendingAction, controller](const QString& routeKey) {
+                         *pendingAction = routeKey;
+                         if (routeKey.startsWith(QLatin1String("settings"))) {
+                             if (editorViewModel->hasSession() && editorViewModel->state().saveState.isDirty) {
+                                 editorViewModel->requestCloseProject();
+                             } else {
+                                 controller->navigate(routeKey);
+                             }
                              return;
                          }
+
                          editorViewModel->requestCloseProject();
                      });
 
     QObject::connect(
-        mainWindow,
-        &ui::window::MainWindow::navigationInterceptRequested,
-        mainWindow,
-        [editorViewModel, settingsViewModel, pendingAction, controller, mainWindow](const QString& routeKey) {
-            *pendingAction = routeKey;
-            if (routeKey.startsWith(QLatin1String("settings"))) {
-                if (editorViewModel->hasSession() && editorViewModel->state().saveState.isDirty) {
-                    editorViewModel->requestCloseProject();
-                } else {
-                    controller->navigate(routeKey);
-                }
-                return;
-            }
-
-            if (mainWindow->activeNavigationSurfaceId() == QLatin1String("settings") && settingsViewModel->isDirty()) {
-                settingsViewModel->requestLeave([editorViewModel, pendingAction, controller](bool proceed) {
-                    if (proceed) {
-                        if (editorViewModel->hasSession() && editorViewModel->state().saveState.isDirty) {
-                            editorViewModel->requestCloseProject();
-                        } else {
-                            controller->navigate(*pendingAction);
-                        }
-                    }
-                });
-                return;
-            }
-
-            editorViewModel->requestCloseProject();
-        });
-
-    QObject::connect(
         editorViewModel, &ui::screen::editor::EditorViewModel::projectClosed, mainWindow, handleProjectClose);
-
-    QObject::connect(
-        settingsViewModel,
-        &ui::screen::settings::SettingsViewModel::leaveDecisionRequested,
-        mainWindow,
-        [settingsViewModel, mainWindow](const std::function<void(bool proceed)>& callback) {
-            auto* dialog = new fluent::dialogs_flyouts::ContentDialog(mainWindow);
-            dialog->setAttribute(Qt::WA_DeleteOnClose);
-            dialog->setTitle(QCoreApplication::translate("Application", "保留未保存的设置？"));
-            dialog->setContent(
-                new QLabel(QCoreApplication::translate("Application", "设置中有未保存的更改，是否在离开前保存？")));
-            dialog->setPrimaryButtonText(QCoreApplication::translate("Application", "保存并离开"));
-            dialog->setSecondaryButtonText(QCoreApplication::translate("Application", "不保存"));
-            dialog->setCloseButtonText(QCoreApplication::translate("Application", "取消"));
-
-            QObject::connect(dialog,
-                             &fluent::dialogs_flyouts::ContentDialog::primaryButtonClicked,
-                             settingsViewModel,
-                             [settingsViewModel, callback]() { settingsViewModel->confirmLeaveWithSave(callback); });
-            QObject::connect(dialog,
-                             &fluent::dialogs_flyouts::ContentDialog::secondaryButtonClicked,
-                             settingsViewModel,
-                             [settingsViewModel, callback]() { settingsViewModel->confirmLeaveWithoutSave(callback); });
-            QObject::connect(
-                dialog, &fluent::dialogs_flyouts::ContentDialog::closeButtonClicked, settingsViewModel, [callback]() {
-                    if (callback) {
-                        callback(false);
-                    }
-                });
-
-            dialog->show();
-        });
 
     QObject::connect(editorViewModel,
                      &ui::screen::editor::EditorViewModel::closeDecisionRequested,
