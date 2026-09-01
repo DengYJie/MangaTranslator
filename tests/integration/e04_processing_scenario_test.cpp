@@ -357,11 +357,9 @@ struct ProcessingFixture {
     }
     QSignalSpy closeSpy(fixture.viewModel.get(), &EditorViewModel::projectClosed);
     fixture.viewModel->requestCloseProject();
-    if (closeSpy.count() != 1) {
+    if (!closeSpy.wait(kAwaitTimeoutMs)) {
         return {};
     }
-    // The close is a queued data operation; drain it so the reopen cannot race it.
-    QThreadPool::globalInstance()->waitForDone();
 
     OpenProjectRequest openReq{.path = fixture.projectRoot};
     auto openFuture = OpenProjectUseCase(fixture.stack.repository.get()).execute(openReq, OperationContext{});
