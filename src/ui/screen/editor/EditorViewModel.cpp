@@ -1575,7 +1575,11 @@ void EditorViewModel::exportPages(application::ExportScope scope, const QString&
     m_exportOperation = context.operationId;
     m_exportScope = scope;
     m_exportOutputDir = outputDir;
-    m_exportToken = beginRequest();
+    // Capture the export targets at intent time: navigation and selection stay
+    // enabled while the export runs and must not alter it.
+    m_exportCurrentPageId = m_state.currentPageId;
+    m_exportSelectedPageIds = m_state.selectedPageIds;
+    m_exportToken = ++m_exportSequence;
 
     updateState([](EditorState& s) { s.isExporting = true; });
 
@@ -1596,10 +1600,14 @@ void EditorViewModel::cancelExport() {
     }
     m_exportOperation = application::OperationId{};
     m_exportContext = {};
+    m_exportProjectSnapshot.reset();
+    // Invalidate pending export completions so queued handlers never touch the
+    // released aggregate snapshot.
+    ++m_exportSequence;
 }
 
 void EditorViewModel::handleExportSnapshotFinished() {
-    if (!isRequestCurrent(m_exportToken)) {
+    if (m_exportToken != m_exportSequence) {
         return;
     }
 
@@ -1615,9 +1623,9 @@ void EditorViewModel::handleExportSnapshotFinished() {
     request.outputDir = m_exportOutputDir;
     request.pageSnapshots = result.value();
     if (m_exportScope == application::ExportScope::CurrentPage) {
-        request.currentPageId = m_state.currentPageId;
+        request.currentPageId = m_exportCurrentPageId;
     } else if (m_exportScope == application::ExportScope::SelectedPages) {
-        request.selectedPageIds = m_state.selectedPageIds;
+        request.selectedPageIds = m_exportSelectedPageIds;
     }
 
     application::ExportPagesUseCase useCase(m_exporter, m_exportProjectSnapshot.get());
@@ -1625,7 +1633,7 @@ void EditorViewModel::handleExportSnapshotFinished() {
 }
 
 void EditorViewModel::handleExportFinished() {
-    if (!isRequestCurrent(m_exportToken)) {
+    if (m_exportToken != m_exportSequence) {
         return;
     }
 

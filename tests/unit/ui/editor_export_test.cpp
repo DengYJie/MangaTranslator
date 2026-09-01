@@ -198,6 +198,36 @@ private Q_SLOTS:
         QVERIFY(!viewModel.state().isExporting);
     }
 
+    void exportCurrentPageCapturesPageAtIntentTime() {
+        Fixture f;
+        // Stall the snapshot stage so the page switch happens while the export runs.
+        f.imageLoader.deferred = true;
+        EditorViewModel viewModel(&f.thumbnailStore, &f.imageLoader, &f.registry);
+        f.attach(viewModel);
+        const auto session = makeSession(3);
+        viewModel.openProjectSession(session);
+        viewModel.selectPage(pageAt(session, 1));
+        QSignalSpy completedSpy(&viewModel, &EditorViewModel::exportCompleted);
+        QSignalSpy failedSpy(&viewModel, &EditorViewModel::exportFailed);
+
+        viewModel.exportPages(ExportScope::CurrentPage, QStringLiteral("D:/out/race"));
+        QVERIFY(viewModel.state().isExporting);
+
+        // Page navigation stays enabled during export; the running export must keep
+        // exporting the page selected at intent time.
+        viewModel.selectPage(pageAt(session, 2));
+        QCOMPARE(viewModel.state().currentPageId, pageAt(session, 2));
+        QVERIFY(viewModel.state().isExporting);
+
+        f.imageLoader.completeAll();
+        QTRY_COMPARE_WITH_TIMEOUT(completedSpy.count(), 1, 5000);
+        QCOMPARE(failedSpy.count(), 0);
+        QCOMPARE(f.exporter.lastRequest.pages.size(), 1);
+        QCOMPARE(f.exporter.lastRequest.pages.first().pageId, pageAt(session, 1));
+        QCOMPARE(f.exporter.lastRequest.pages.first().outputStem, QStringLiteral("page_0002_translated"));
+        QVERIFY(!viewModel.state().isExporting);
+    }
+
     void exportFailureEmitsFailedAndKeepsProject() {
         Fixture f;
         f.exporter.shouldFail = true;

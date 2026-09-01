@@ -301,10 +301,17 @@ private:
     QFutureWatcher<application::Result<QVector<application::ExportPageSnapshot>>> m_snapshotWatcher;
     QFutureWatcher<application::Result<application::ExportResponse>> m_exportWatcher;
     application::OperationContext m_exportContext;
+    /// Export completions are validated against a dedicated sequence: page switches
+    /// bump the shared request counter and must not strand a running export.
     quint64 m_exportToken{0};
+    quint64 m_exportSequence{0};
     application::OperationId m_exportOperation{};
     application::ExportScope m_exportScope{application::ExportScope::AllPages};
     QString m_exportOutputDir;
+    /// Page identifiers captured when the export intent was accepted; later page
+    /// switches or selection changes must not alter the running export.
+    domain::PageId m_exportCurrentPageId;
+    QVector<domain::PageId> m_exportSelectedPageIds;
     /// Aggregate copy owned for the duration of one export so the background
     /// snapshot chain never reads a released session aggregate.
     std::unique_ptr<domain::ComicProject> m_exportProjectSnapshot;
