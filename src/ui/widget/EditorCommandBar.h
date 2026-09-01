@@ -1,5 +1,6 @@
 #pragma once
 
+#include "application/usecase/export/ExportUseCases.h"
 #include "ui/screen/editor/EditorState.h"
 
 #include <FluentQt/Foundation.h>
@@ -47,6 +48,13 @@ public:
     }
     [[nodiscard]] fluent::basicinput::Button* inspectorPaneToggleButtonForTest() const noexcept {
         return m_inspectorPaneToggleButton;
+    }
+    [[nodiscard]] fluent::basicinput::Button* exportButtonForTest() const noexcept {
+        return m_exportButton;
+    }
+    /// Test hook: replaces the directory chooser so export tests never open a real dialog.
+    void setOutputDirProviderForTest(std::function<QString()> provider) {
+        m_outputDirProvider = std::move(provider);
     }
 
 Q_SIGNALS:

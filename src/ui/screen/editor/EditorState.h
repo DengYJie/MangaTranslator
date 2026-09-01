@@ -173,6 +173,11 @@ struct EditorState {
     /// Asynchronous processing and review workflow state projection.
     EditorProcessingState processing;
 
+    /// True while a page-range export runs; duplicate export intents are ignored.
+    bool isExporting{false};
+    /// Batch page selection for export commands; may be in any user order.
+    QVector<domain::PageId> selectedPageIds;
+
     bool operator==(const EditorState&) const = default;
 };
 

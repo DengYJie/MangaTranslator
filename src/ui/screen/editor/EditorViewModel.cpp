@@ -12,8 +12,10 @@
 #include "ui/command/RegionCommands.h"
 #include "ui/command/RegionPropertyCommand.h"
 #include "ui/screen/editor/EditorProcessingController.h"
+#include "ui/screen/editor/ExportSnapshotBuilder.h"
 
 #include <QFileInfo>
+#include <QSet>
 
 #include <algorithm>
 
@@ -122,6 +124,14 @@ EditorViewModel::EditorViewModel(application::IThumbnailStore* thumbnailStore,
             &QFutureWatcher<application::Result<application::SaveProjectResult>>::finished,
             this,
             &EditorViewModel::handleSaveFinished);
+    connect(&m_snapshotWatcher,
+            &QFutureWatcher<application::Result<QVector<application::ExportPageSnapshot>>>::finished,
+            this,
+            &EditorViewModel::handleExportSnapshotFinished);
+    connect(&m_exportWatcher,
+            &QFutureWatcher<application::Result<application::ExportResponse>>::finished,
+            this,
+            &EditorViewModel::handleExportFinished);
 }
 
 EditorViewModel::~EditorViewModel() {
@@ -132,6 +142,7 @@ EditorViewModel::~EditorViewModel() {
     if (m_operationRegistry && m_pageLoadOperation.isValid()) {
         m_operationRegistry->cancelOperation(m_pageLoadOperation);
     }
+    cancelExport();
 }
 
 void EditorViewModel::openProjectSession(application::OpenedProjectSession session) {
@@ -150,6 +161,7 @@ void EditorViewModel::openProjectSession(application::OpenedProjectSession sessi
         m_operationRegistry->cancelOperation(m_pageLoadOperation);
         m_pageLoadOperation = application::OperationId{};
     }
+    cancelExport();
     invalidateRequests();
 
     m_session = application::mapping::ProjectMapper::toSessionDescriptor(session);
@@ -183,6 +195,8 @@ void EditorViewModel::openProjectSession(application::OpenedProjectSession sessi
         s.notice.reset();
         s.isPageLoading = false;
         s.currentPageId = domain::PageId{};
+        s.isExporting = false;
+        s.selectedPageIds.clear();
 
         // Reset region selection and tool state for new session.
         s.regions.clear();
@@ -213,6 +227,7 @@ void EditorViewModel::closeProjectSession() {
         m_operationRegistry->cancelOperation(m_pageLoadOperation);
         m_pageLoadOperation = application::OperationId{};
     }
+    cancelExport();
     invalidateRequests();
 
     // P5-D 项目任务取消钩子
@@ -1481,6 +1496,174 @@ void EditorViewModel::handleSaveFinished() {
         updateState([this](EditorState& s) { s.saveState.isSaving = false; });
         Q_EMIT saveFailed(result.error());
     }
+}
+
+void EditorViewModel::setExportDependencies(application::IComicExporter* exporter,
+                                            application::IDerivedAssetStore* derivedStore) {
+    m_exporter = exporter;
+    m_derivedAssetStore = derivedStore;
+}
+
+void EditorViewModel::setSelectedPages(const QVector<domain::PageId>& pageIds) {
+    if (!m_hasSession) {
+        return;
+    }
+    QVector<domain::PageId> valid;
+    QSet<QString> seen;
+    valid.reserve(pageIds.size());
+    for (const auto& id : pageIds) {
+        const auto key = QString::fromStdString(id.toString());
+        if (!id.isValid() || seen.contains(key) || findPage(id) == nullptr) {
+            continue;
+        }
+        seen.insert(key);
+        valid.append(id);
+    }
+    updateState([&](EditorState& s) { s.selectedPageIds = valid; });
+}
+
+void EditorViewModel::exportPages(application::ExportScope scope, const QString& outputDir) {
+    if (!m_hasSession || !m_openedSession || !m_operationRegistry) {
+        return;
+    }
+    if (m_exportOperation.isValid()) {
+        return; // Already exporting
+    }
+    if (m_exporter == nullptr || m_derivedAssetStore == nullptr || m_pageImageLoader == nullptr) {
+        failExport(application::makeApplicationError(application::ErrorCategory::Internal,
+                                                     QStringLiteral("internal.null_dependency"),
+                                                     QStringLiteral("Export dependency is unavailable")));
+        return;
+    }
+
+    QVector<domain::PageId> targetPageIds;
+    switch (scope) {
+        case application::ExportScope::CurrentPage:
+            if (!m_state.currentPageId.isValid()) {
+                return;
+            }
+            targetPageIds.append(m_state.currentPageId);
+            break;
+        case application::ExportScope::SelectedPages:
+            if (m_state.selectedPageIds.isEmpty()) {
+                return;
+            }
+            targetPageIds = m_state.selectedPageIds;
+            break;
+        case application::ExportScope::AllPages:
+            if (m_state.pages.isEmpty()) {
+                return;
+            }
+            break;
+    }
+
+    // The descriptor target lists project page ordinals only: no content, no paths.
+    QStringList ordinals;
+    for (const auto& page : m_openedSession->project.pages()) {
+        if (targetPageIds.isEmpty() || targetPageIds.contains(page.id())) {
+            ordinals.append(QString::number(page.orderIndex() + 1));
+        }
+    }
+    application::OperationDescriptor descriptor;
+    descriptor.stage = application::OperationStage::Export;
+    descriptor.projectId = m_session.projectId;
+    descriptor.displayTarget = ordinals.join(QStringLiteral(", "));
+
+    auto context =
+        m_operationRegistry->createOperation(descriptor, m_state.projectSessionGeneration, m_state.viewGeneration);
+    m_exportContext = context;
+    m_exportOperation = context.operationId;
+    m_exportScope = scope;
+    m_exportOutputDir = outputDir;
+    m_exportToken = beginRequest();
+
+    updateState([](EditorState& s) { s.isExporting = true; });
+
+    // The snapshot chain reads pages on worker threads, so it must not touch the
+    // live aggregate: a concurrent session close would free it under the chain.
+    m_exportProjectSnapshot = std::make_unique<domain::ComicProject>(m_openedSession->project);
+
+    ExportSnapshotBuilder builder(m_exportProjectSnapshot.get(), m_pageImageLoader, m_derivedAssetStore);
+    ExportSnapshotBuilder::Request snapshotRequest;
+    snapshotRequest.projectRoot = m_session.projectRootPath;
+    snapshotRequest.pageIds = targetPageIds;
+    m_snapshotWatcher.setFuture(builder.execute(snapshotRequest, context));
+}
+
+void EditorViewModel::cancelExport() {
+    if (m_operationRegistry && m_exportOperation.isValid()) {
+        m_operationRegistry->cancelOperation(m_exportOperation);
+    }
+    m_exportOperation = application::OperationId{};
+    m_exportContext = {};
+}
+
+void EditorViewModel::handleExportSnapshotFinished() {
+    if (!isRequestCurrent(m_exportToken)) {
+        return;
+    }
+
+    auto result = m_snapshotWatcher.result();
+    if (!result.has_value()) {
+        failExport(result.error());
+        return;
+    }
+
+    application::ExportPagesRequest request;
+    request.projectId = m_exportProjectSnapshot->id();
+    request.scope = m_exportScope;
+    request.outputDir = m_exportOutputDir;
+    request.pageSnapshots = result.value();
+    if (m_exportScope == application::ExportScope::CurrentPage) {
+        request.currentPageId = m_state.currentPageId;
+    } else if (m_exportScope == application::ExportScope::SelectedPages) {
+        request.selectedPageIds = m_state.selectedPageIds;
+    }
+
+    application::ExportPagesUseCase useCase(m_exporter, m_exportProjectSnapshot.get());
+    m_exportWatcher.setFuture(useCase.execute(request, m_exportContext));
+}
+
+void EditorViewModel::handleExportFinished() {
+    if (!isRequestCurrent(m_exportToken)) {
+        return;
+    }
+
+    auto result = m_exportWatcher.result();
+    if (result.has_value()) {
+        if (m_operationRegistry && m_exportOperation.isValid()) {
+            m_operationRegistry->markFinished(m_exportOperation);
+        }
+        m_exportOperation = application::OperationId{};
+        m_exportContext = {};
+        m_exportProjectSnapshot.reset();
+        updateState([](EditorState& s) { s.isExporting = false; });
+        Q_EMIT exportCompleted(result.value());
+    } else {
+        failExport(result.error());
+    }
+}
+
+void EditorViewModel::failExport(const application::ApplicationError& error) {
+    if (m_operationRegistry && m_exportOperation.isValid()) {
+        m_operationRegistry->markFinished(m_exportOperation, error);
+    }
+    m_exportOperation = application::OperationId{};
+    m_exportContext = {};
+    m_exportProjectSnapshot.reset();
+    updateState([&](EditorState& s) {
+        s.isExporting = false;
+        if (error.category != application::ErrorCategory::Cancelled) {
+            const auto presentation = m_recoveryPresenter.present(error);
+            if (presentation) {
+                EditorNotice notice;
+                notice.safeMessage = presentation->safeMessage;
+                notice.retryable = presentation->action == application::RecoveryAction::Retry;
+                s.notice = notice;
+            }
+        }
+    });
+    Q_EMIT exportFailed(error);
 }
 
 void EditorViewModel::requestCloseProject() {

@@ -25,6 +25,7 @@ EditorCommandBar::EditorCommandBar(EditorViewModel* viewModel, QWidget* parent)
     : QWidget(parent), m_viewModel(viewModel) {
     setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
     setFixedHeight(40);
+    m_outputDirProvider = [this]() { return QFileDialog::getExistingDirectory(this, tr("选择导出目录")); };
     buildUi();
     setupShortcuts();
 

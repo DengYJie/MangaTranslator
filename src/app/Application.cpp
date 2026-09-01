@@ -128,6 +128,7 @@ int Application::run() {
                                                                     m_context->operationRegistry(),
                                                                     m_context->projectRepository(),
                                                                     mainWindow);
+    editorViewModel->setExportDependencies(m_context->comicExporter(), m_context->derivedAssetStore());
     auto* editorPage = new ui::screen::editor::EditorPage(editorViewModel, mainWindow);
     m_processingController =
         std::make_unique<ui::screen::editor::EditorProcessingController>(editorViewModel,

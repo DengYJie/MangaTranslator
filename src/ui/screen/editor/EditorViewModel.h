@@ -1,9 +1,11 @@
 #pragma once
 
+#include "application/dto/ExportDto.h"
 #include "application/dto/ImportDto.h"
 #include "application/dto/ProjectDto.h"
 #include "application/operation/AsyncResult.h"
 #include "application/usecase/apply/PrepareProcessingAdoptionUseCases.h"
+#include "application/usecase/export/ExportUseCases.h"
 #include "ui/base/BaseViewModel.h"
 #include "ui/command/EditorCommandContext.h"
 #include "ui/command/RegionPropertyCommand.h"
@@ -22,6 +24,8 @@
 #include <optional>
 
 namespace manga::application {
+class IComicExporter;
+class IDerivedAssetStore;
 class IPageImageLoader;
 class IThumbnailStore;
 class IProjectRepository;
@@ -118,6 +122,17 @@ public:
     void confirmDiscardAndClose();
     void cancelClose();
 
+    /// Injects the export pipeline ports. Non-owning; export intents fail with
+    /// internal.null_dependency until both are set.
+    void setExportDependencies(application::IComicExporter* exporter, application::IDerivedAssetStore* derivedStore);
+    /// Replaces the batch page selection used by ExportScope::SelectedPages.
+    /// IDs are deduplicated and filtered to existing pages; selection order is kept.
+    void setSelectedPages(const QVector<domain::PageId>& pageIds);
+    /// Exports pages for the given scope into outputDir. The request is assembled on
+    /// the GUI thread from an aggregate snapshot; image I/O and writing run on workers.
+    /// Duplicate intents while an export is running are ignored.
+    void exportPages(application::ExportScope scope, const QString& outputDir);
+
     /// Test-only hook: removes a region via RemoveRegionUseCase and rebuilds projection.
     /// Production intents must not use this method.
     [[nodiscard]] bool removeRegionForTest(const domain::RegionId& regionId);
@@ -183,6 +198,9 @@ Q_SIGNALS:
     void saveFailed(const application::ApplicationError& error);
     void projectClosed();
 
+    void exportCompleted(const application::ExportResponse& response);
+    void exportFailed(const application::ApplicationError& error);
+
 protected:
     void emitStateChanged() override {
         Q_EMIT stateChanged(m_state);
@@ -205,6 +223,10 @@ private:
     void pumpThumbnailQueue();
     void cancelThumbnailRequests();
     void handleSaveFinished();
+    void cancelExport();
+    void handleExportSnapshotFinished();
+    void handleExportFinished();
+    void failExport(const application::ApplicationError& error);
     [[nodiscard]] const application::PageDescriptor* findPage(const domain::PageId& pageId) const;
 
     /// Rebuilds current page region projections from m_openedSession->project only.
@@ -272,6 +294,20 @@ private:
     QFutureWatcher<application::Result<application::SaveProjectResult>> m_saveWatcher;
     quint64 m_saveToken{0};
     application::OperationId m_saveOperation{};
+
+    /// Export pipeline ports, injected via setExportDependencies. Non-owning.
+    application::IComicExporter* m_exporter{nullptr};
+    application::IDerivedAssetStore* m_derivedAssetStore{nullptr};
+    QFutureWatcher<application::Result<QVector<application::ExportPageSnapshot>>> m_snapshotWatcher;
+    QFutureWatcher<application::Result<application::ExportResponse>> m_exportWatcher;
+    application::OperationContext m_exportContext;
+    quint64 m_exportToken{0};
+    application::OperationId m_exportOperation{};
+    application::ExportScope m_exportScope{application::ExportScope::AllPages};
+    QString m_exportOutputDir;
+    /// Aggregate copy owned for the duration of one export so the background
+    /// snapshot chain never reads a released session aggregate.
+    std::unique_ptr<domain::ComicProject> m_exportProjectSnapshot;
 
     ui::error::RecoveryPresenter m_recoveryPresenter;
     EditorProcessingController* m_processingController{nullptr};
