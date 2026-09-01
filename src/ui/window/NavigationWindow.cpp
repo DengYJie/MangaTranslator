@@ -3,10 +3,12 @@
 #include "ui/navigation/NavigationIndicator.h"
 #include "ui/navigation/NavigationPanel.h"
 #include "ui/navigation/NavigationToolButton.h"
+#include "ui/navigation/NavigationTreeWidget.h"
 #include "ui/navigation/NavigationWidget.h"
 #include "ui/window/TitleBar.h"
 
 #include <FluentQt/Navigation.h>
+#include <QApplication>
 #include <QDebug>
 #include <QMetaObject>
 
@@ -275,6 +277,14 @@ bool NavigationWindow::setActiveNavigationSurface(const QString& surfaceId) {
     syncActivePanelState();
     targetPanel->show();
     targetPanel->updateIndicatorVisuals(false);
+
+    // Hiding the previous panel moves focus to the next visible widget in the focus chain,
+    // which is the title bar back button. Return focus to the new surface navigation tree.
+    if (titleBar() && titleBar()->isAncestorOf(QApplication::focusWidget())) {
+        if (auto* item = targetPanel->tree()->findFirstSelectableItem()) {
+            item->setFocus(Qt::OtherFocusReason);
+        }
+    }
 
     return true;
 }
