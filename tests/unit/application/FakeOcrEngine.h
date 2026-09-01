@@ -53,6 +53,10 @@ public:
         m_context = {};
     }
 
+    [[nodiscard]] const OcrRequest& lastRequest() const noexcept {
+        return m_request;
+    }
+
 private:
     OcrRequest m_request;
     OperationContext m_context;

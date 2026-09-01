@@ -9,6 +9,7 @@
 #include "ui/screen/editor/EditorViewModel.h"
 
 #include <QCoreApplication>
+#include <QDebug>
 
 namespace manga::ui::screen::editor {
 
@@ -351,6 +352,7 @@ void EditorProcessingController::recognizeSelectedRegions() {
 void EditorProcessingController::recognizeRegion(const domain::PageId& pageId, const domain::RegionId& regionId) {
     if (m_viewModel == nullptr || !m_viewModel->hasSession() || !pageId.isValid() || !regionId.isValid() ||
         m_ocrUseCase == nullptr || m_registry == nullptr) {
+        qWarning() << "[OCR] rejected invalid controller/session/request state";
         return;
     }
 
@@ -376,10 +378,16 @@ void EditorProcessingController::recognizeRegion(const domain::PageId& pageId, c
     request.regionId = regionId;
     request.rect = region->geometry();
     request.language = domain::languages::Japanese;
-    request.image = QImage(region->geometry().width > 0 ? static_cast<int>(region->geometry().width) : 100,
-                           region->geometry().height > 0 ? static_cast<int>(region->geometry().height) : 100,
-                           QImage::Format_RGB32);
-    request.image.fill(Qt::white);
+    request.image = m_viewModel->currentPageImage();
+    if (request.image.isNull()) {
+        qWarning().noquote() << "[OCR] rejected: current page image unavailable page="
+                             << QString::fromStdString(pageId.toString());
+        return;
+    }
+
+    qInfo().noquote() << "[OCR] start page=" << QString::fromStdString(pageId.toString())
+                      << "region=" << QString::fromStdString(regionId.toString()) << "image=" << request.image.size()
+                      << "rect=" << request.rect.x << request.rect.y << request.rect.width << request.rect.height;
 
     application::OperationDescriptor desc;
     desc.projectId = projectId;
@@ -410,6 +418,9 @@ void EditorProcessingController::recognizeRegion(const domain::PageId& pageId, c
                     m_activeTasks.remove(key);
                     auto res = watcher->result();
                     if (res.has_value()) {
+                        qInfo().noquote() << "[OCR] success page=" << QString::fromStdString(key.pageId.toString())
+                                          << "region=" << QString::fromStdString(regionId.toString())
+                                          << "textLength=" << res.value().text.size();
                         auto ocrResp = res.value();
                         application::PageProcessingProposal prop;
                         prop.projectId = key.projectId;
@@ -432,6 +443,10 @@ void EditorProcessingController::recognizeRegion(const domain::PageId& pageId, c
                         prepareAdoptionAsync(key, prepReq, sessionGen);
                     } else {
                         const auto& err = res.error();
+                        qWarning().noquote() << "[OCR] failed page=" << QString::fromStdString(key.pageId.toString())
+                                             << "region=" << QString::fromStdString(regionId.toString())
+                                             << "category=" << static_cast<int>(err.category) << "code=" << err.code
+                                             << "message=" << err.safeMessage;
                         if (err.category != application::ErrorCategory::Cancelled) {
                             m_pageFailedRegions[key.pageId] = {regionId};
                             m_pageSafeMessages[key.pageId] = err.safeMessage;

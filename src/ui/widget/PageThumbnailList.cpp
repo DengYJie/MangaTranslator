@@ -5,6 +5,7 @@
 
 #include <FluentQt/TextFields.h>
 #include <QApplication>
+#include <QDebug>
 #include <QHBoxLayout>
 #include <QListView>
 #include <QScrollBar>
@@ -155,6 +156,8 @@ void PageThumbnailList::requestVisibleThumbnails() {
 
         if (status == ThumbnailStatus::NotLoaded || evicted) {
             m_model->setThumbnailStatus(pageId, ThumbnailStatus::Loading);
+            qInfo().noquote() << "[ThumbnailUI] request page=" << QString::fromStdString(pageId.toString())
+                              << "reason=" << (evicted ? "cache-evicted" : "not-loaded");
             Q_EMIT thumbnailRequested(pageId, false);
             hasLoading = true;
         } else if (status == ThumbnailStatus::Loading) {
@@ -174,21 +177,30 @@ void PageThumbnailList::insertThumbnail(const domain::PageId& pageId, const QIma
     cost = std::max(1, cost);
     m_thumbnailCache.insert(QString::fromStdString(pageId.toString()), new QPixmap(QPixmap::fromImage(image)), cost);
     m_model->setThumbnailStatus(pageId, ThumbnailStatus::Ready);
+    qInfo().noquote() << "[ThumbnailUI] ready page=" << QString::fromStdString(pageId.toString())
+                      << "size=" << image.size() << "cacheCostKiB=" << m_thumbnailCache.totalCost();
     // requestVisibleThumbnails() will be called on paintEvent triggered by dataChanged
 }
 
 void PageThumbnailList::markThumbnailFailed(const domain::PageId& pageId, const QString& safeMessage) {
     m_model->setThumbnailStatus(pageId, ThumbnailStatus::Failed, safeMessage);
+    qWarning().noquote() << "[ThumbnailUI] failed page=" << QString::fromStdString(pageId.toString())
+                         << "message=" << safeMessage;
 }
 
 void PageThumbnailList::resetLoadingThumbnails() {
+    int resetCount = 0;
     for (int i = 0; i < m_model->rowCount(); ++i) {
         auto status = static_cast<ThumbnailStatus>(m_model->index(i).data(PageListModel::ThumbnailStatusRole).toInt());
         if (status == ThumbnailStatus::Loading) {
             if (auto pageId = m_model->pageIdAt(i)) {
                 m_model->setThumbnailStatus(*pageId, ThumbnailStatus::NotLoaded);
+                ++resetCount;
             }
         }
+    }
+    if (resetCount > 0) {
+        qInfo() << "[ThumbnailUI] reset loading rows=" << resetCount;
     }
     requestVisibleThumbnails();
 }

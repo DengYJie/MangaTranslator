@@ -14,6 +14,7 @@
 #include "ui/screen/editor/EditorProcessingController.h"
 #include "ui/screen/editor/ExportSnapshotBuilder.h"
 
+#include <QDebug>
 #include <QFileInfo>
 #include <QSet>
 #include <QTimer>
@@ -401,6 +402,7 @@ void EditorViewModel::retryPageLoad() {
 
 void EditorViewModel::requestThumbnail(const domain::PageId& pageId, bool force) {
     if (!m_thumbnailStore || !m_pageImageLoader || !m_operationRegistry) {
+        qWarning() << "[ThumbnailVM] rejected: thumbnail ports unavailable";
         updateState([&](EditorState& s) {
             EditorNotice notice;
             notice.safeMessage = QStringLiteral("Internal error: ports not initialized");
@@ -411,6 +413,8 @@ void EditorViewModel::requestThumbnail(const domain::PageId& pageId, bool force)
     }
 
     if (!m_hasSession || !findPage(pageId)) {
+        qWarning().noquote() << "[ThumbnailVM] rejected page=" << QString::fromStdString(pageId.toString())
+                             << "session=" << m_hasSession;
         return;
     }
 
@@ -419,6 +423,7 @@ void EditorViewModel::requestThumbnail(const domain::PageId& pageId, bool force)
     const bool inQueue = m_thumbnailQueue.contains(pageId);
 
     if ((inFlight || inQueue) && !force) {
+        qInfo().noquote() << "[ThumbnailVM] duplicate suppressed page=" << key;
         return;
     }
     if (force && inFlight) {
@@ -1007,6 +1012,8 @@ void EditorViewModel::startThumbnail(const domain::PageId& pageId) {
     ticket.viewGeneration = m_state.viewGeneration;
     const QString key = QString::fromStdString(pageId.toString());
     m_thumbnailInFlight.insert(key, ticket);
+    qInfo().noquote() << "[ThumbnailVM] start page=" << key
+                      << "operation=" << QString::fromStdString(context.operationId.toString());
 
     application::LoadOrGenerateThumbnailRequest request;
     request.projectId = m_session.projectId;
@@ -1047,13 +1054,21 @@ void EditorViewModel::handleThumbnailFinished(const domain::PageId& pageId) {
                                                                                   QStringLiteral("Missing watcher")));
 
         if (result.has_value()) {
+            qInfo().noquote() << "[ThumbnailVM] success page=" << key << "size=" << result.value().size();
             Q_EMIT thumbnailReady(pageId, result.value());
         } else {
             const auto& error = result.error();
+            qWarning().noquote() << "[ThumbnailVM] failed page=" << key
+                                 << "category=" << static_cast<int>(error.category) << "code=" << error.code
+                                 << "message=" << error.safeMessage;
             if (error.category != application::ErrorCategory::Cancelled) {
                 Q_EMIT thumbnailFailed(pageId, error.safeMessage);
             }
         }
+    } else {
+        qInfo().noquote() << "[ThumbnailVM] stale result discarded page=" << key
+                          << "ticketGeneration=" << ticket.viewGeneration
+                          << "currentGeneration=" << m_state.viewGeneration;
     }
 
     pumpThumbnailQueue();

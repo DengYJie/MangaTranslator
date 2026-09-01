@@ -363,6 +363,7 @@ private Q_SLOTS:
 
         // OCR selected region
         m_controller->recognizeSelectedRegions();
+        QCOMPARE(m_ocr->lastRequest().image.size(), QSize(1000, 1500));
         while (m_controller->hasActiveOperation(pageId)) {
             QCoreApplication::processEvents(QEventLoop::AllEvents, 50);
         }
