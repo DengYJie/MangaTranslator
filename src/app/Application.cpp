@@ -168,8 +168,11 @@ int Application::run() {
     mainWindow->addNavigationItem(editorItem, QStringLiteral("main"));
     mainWindow->registerRoute(QStringLiteral("editor"), editorPage, QStringLiteral("main"));
 
-    auto* settingsViewModel = new ui::screen::settings::SettingsViewModel(
-        m_context->appSettingsStore(), m_context->credentialOperations(), m_context->ocrModelValidator(), mainWindow);
+    auto* settingsViewModel = new ui::screen::settings::SettingsViewModel(m_context->appSettingsStore(),
+                                                                          m_context->credentialOperations(),
+                                                                          m_context->ocrModelValidator(),
+                                                                          nullptr,
+                                                                          mainWindow);
     settingsViewModel->observe(mainWindow, [this, editorViewModel](const ui::screen::settings::SettingsState& state) {
         network::ProviderConfig provider;
         provider.providerId = state.persisted.providerId;

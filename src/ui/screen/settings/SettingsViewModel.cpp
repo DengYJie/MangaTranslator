@@ -32,9 +32,10 @@ bool isValidEndpointUrl(const QString& endpoint) {
 SettingsViewModel::SettingsViewModel(application::IAppSettingsStore* settingsStore,
                                      application::CredentialOperations* credentialOperations,
                                      application::IOcrModelValidator* ocrModelValidator,
+                                     application::IInpaintModelValidator* inpaintModelValidator,
                                      QObject* parent)
     : BaseViewModel(parent), m_settingsStore(settingsStore), m_credentialOperations(credentialOperations),
-      m_ocrModelValidator(ocrModelValidator) {
+      m_ocrModelValidator(ocrModelValidator), m_inpaintModelValidator(inpaintModelValidator) {
     loadSettings();
 }
 
@@ -54,6 +55,7 @@ void SettingsViewModel::loadSettings() {
 
         refreshCredentialStatus(state);
         validateOcrModelDirectory(state);
+        validateInpaintModelDirectory(state);
     });
     m_lastPersistedSnapshot = m_state.persisted;
 }
@@ -81,6 +83,14 @@ void SettingsViewModel::setOcrModelDirectory(const QString& directory) {
     updateState([this, directory](SettingsState& state) {
         state.persisted.ocrModelDirectory = directory;
         validateOcrModelDirectory(state);
+    });
+    persistSettings();
+}
+
+void SettingsViewModel::setInpaintModelDirectory(const QString& directory) {
+    updateState([this, directory](SettingsState& state) {
+        state.persisted.inpaintModelDirectory = directory;
+        validateInpaintModelDirectory(state);
     });
     persistSettings();
 }
@@ -214,6 +224,7 @@ void SettingsViewModel::restoreDefaults() {
         state.persisted = defaults;
         state.fieldErrors.clear();
         validateOcrModelDirectory(state);
+        validateInpaintModelDirectory(state);
     });
     persistSettings();
     Q_EMIT themePreviewRequested(defaults.theme);
@@ -234,6 +245,9 @@ void SettingsViewModel::persistSettings() {
     }
     if (hasValidationError(QStringLiteral("ocrLanguage"))) {
         snapshot.ocrLanguage = m_lastPersistedSnapshot.ocrLanguage;
+    }
+    if (hasValidationError(QStringLiteral("inpaintModelDirectory"))) {
+        snapshot.inpaintModelDirectory = m_lastPersistedSnapshot.inpaintModelDirectory;
     }
     if (hasValidationError(QStringLiteral("providerId"))) {
         snapshot.providerId = m_lastPersistedSnapshot.providerId;
@@ -257,6 +271,7 @@ void SettingsViewModel::persistSettings() {
     if (!result) {
         if (!m_state.fieldErrors.contains(QStringLiteral("recentProjectLimit")) &&
             !m_state.fieldErrors.contains(QStringLiteral("ocrLanguage")) &&
+            !m_state.fieldErrors.contains(QStringLiteral("inpaintModelDirectory")) &&
             !m_state.fieldErrors.contains(QStringLiteral("providerId")) &&
             !m_state.fieldErrors.contains(QStringLiteral("endpoint")) &&
             !m_state.fieldErrors.contains(QStringLiteral("timeoutSeconds")) &&
@@ -299,6 +314,24 @@ void SettingsViewModel::validateOcrModelDirectory(SettingsState& state) {
     } else {
         state.modelStatus = application::OcrModelStatus{.isValid = false, .modelDirectory = dir};
         state.fieldErrors.insert(QStringLiteral("ocrModelDirectory"),
+                                 ui::error::RecoveryPresenter::localizedSafeMessage(result.error()));
+    }
+}
+
+void SettingsViewModel::validateInpaintModelDirectory(SettingsState& state) {
+    const QString dir = state.persisted.inpaintModelDirectory.trimmed();
+    if (dir.isEmpty() || m_inpaintModelValidator == nullptr) {
+        state.inpaintModelStatus = application::InpaintModelStatus{};
+        state.fieldErrors.remove(QStringLiteral("inpaintModelDirectory"));
+        return;
+    }
+    const auto result = m_inpaintModelValidator->validate(dir);
+    if (result) {
+        state.inpaintModelStatus = *result;
+        state.fieldErrors.remove(QStringLiteral("inpaintModelDirectory"));
+    } else {
+        state.inpaintModelStatus = application::InpaintModelStatus{.isValid = false, .modelDirectory = dir};
+        state.fieldErrors.insert(QStringLiteral("inpaintModelDirectory"),
                                  ui::error::RecoveryPresenter::localizedSafeMessage(result.error()));
     }
 }

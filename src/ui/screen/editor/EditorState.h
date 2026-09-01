@@ -45,7 +45,8 @@ struct EditorNotice {
 enum class CanvasTool {
     Select,
     Pan,
-    CreateRegion
+    CreateRegion,
+    Remove
 };
 
 /// Page preview mode for comparing original and translated content.
@@ -65,7 +66,8 @@ enum class RegionSelectionMode {
 /// Inspector panel mode derived from selection count.
 enum class InspectorMode {
     None,
-    Single
+    Single,
+    Multi
 };
 
 /// Value-typed projection of one text region on the current page.

@@ -5,6 +5,10 @@ add_library(manga_services STATIC)
 target_sources(manga_services
     PRIVATE
         execution/BoundedTaskExecutor.cpp
+        inpaint/InpaintManifest.cpp
+        inpaint/InpaintModelValidator.cpp
+        inpaint/OnnxLamaPageInpainter.cpp
+        inpaint/OnnxLamaPageInpainter.h
         inpaint/SolidColorInpainter.cpp
         ocr/BaberuManifest.cpp
         ocr/OcrModelValidator.cpp

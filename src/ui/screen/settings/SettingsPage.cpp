@@ -276,6 +276,40 @@ QWidget* SettingsPage::buildOcrView() {
     m_ocrStatusInfoBar->setIsOpen(false);
     layout->addWidget(m_ocrStatusInfoBar);
 
+    auto* inpaintGroup = new widget::SettingsGroup(
+        tr("Remove 图像修复"), tr("配置用于 Remove 工具的 dynamic spatial ONNX 模型"), container);
+    m_allGroups.append(inpaintGroup);
+    m_inpaintModelDirRow =
+        new widget::SettingsRow(tr("模型目录"), tr("Inpaint ONNX 模型文件所在文件夹路径"), inpaintGroup);
+    auto* inpaintEditor = new QWidget(m_inpaintModelDirRow);
+    auto* inpaintLayout = new QHBoxLayout(inpaintEditor);
+    inpaintLayout->setContentsMargins(0, 0, 0, 0);
+    inpaintLayout->setSpacing(8);
+    m_inpaintModelDirEdit = new fluent::textfields::LineEdit(inpaintEditor);
+    m_inpaintModelDirEdit->setObjectName(QStringLiteral("inpaintModelDirEdit"));
+    m_inpaintModelDirEdit->setPlaceholderText(tr("选择或输入模型目录路径"));
+    connect(m_inpaintModelDirEdit, &fluent::textfields::LineEdit::textChanged, this, [this](const QString& text) {
+        if (!m_isUpdatingFromState && m_viewModel)
+            m_viewModel->setInpaintModelDirectory(text.trimmed());
+    });
+    inpaintLayout->addWidget(m_inpaintModelDirEdit, 1);
+    m_inpaintBrowseButton = new fluent::basicinput::Button(tr("浏览..."), inpaintEditor);
+    m_inpaintBrowseButton->setObjectName(QStringLiteral("inpaintBrowseButton"));
+    m_inpaintBrowseButton->setAccessibleName(tr("选择 Inpaint 模型目录"));
+    connect(m_inpaintBrowseButton, &fluent::basicinput::Button::clicked, this, [this]() {
+        const QString dir = QFileDialog::getExistingDirectory(this, tr("选择 Inpaint 模型目录"));
+        if (!dir.isEmpty() && m_viewModel)
+            m_viewModel->setInpaintModelDirectory(dir);
+    });
+    inpaintLayout->addWidget(m_inpaintBrowseButton, 0);
+    m_inpaintModelDirRow->setEditorWidget(inpaintEditor, true);
+    inpaintGroup->addRow(m_inpaintModelDirRow);
+    m_fieldRowMap.insert(QStringLiteral("inpaintModelDirectory"), m_inpaintModelDirRow);
+    m_inpaintStatusInfoBar = new fluent::status_info::InfoBar(container);
+    m_inpaintStatusInfoBar->setIsClosable(false);
+    m_inpaintStatusInfoBar->setIsOpen(false);
+    layout->addWidget(m_inpaintStatusInfoBar);
+
     // Language row
     m_ocrLanguageRow =
         new widget::SettingsRow(tr("默认识别语言"), tr("OCR 识别使用的默认语言（仅对新建项目生效）"), group);
@@ -579,6 +613,26 @@ void SettingsPage::render(const SettingsState& state) {
         const int langIdx = m_ocrLanguageCombo->findData(state.persisted.ocrLanguage);
         if (langIdx >= 0 && m_ocrLanguageCombo->currentIndex() != langIdx) {
             m_ocrLanguageCombo->setCurrentIndex(langIdx);
+        }
+    }
+
+    if (m_inpaintModelDirEdit && m_inpaintModelDirEdit->text() != state.persisted.inpaintModelDirectory)
+        m_inpaintModelDirEdit->setText(state.persisted.inpaintModelDirectory);
+    if (m_inpaintStatusInfoBar) {
+        if (state.persisted.inpaintModelDirectory.trimmed().isEmpty()) {
+            m_inpaintStatusInfoBar->setIsOpen(false);
+        } else if (state.inpaintModelStatus.isValid) {
+            m_inpaintStatusInfoBar->setSeverity(fluent::status_info::InfoBar::Success);
+            m_inpaintStatusInfoBar->setTitle(tr("Inpaint 模型有效"));
+            m_inpaintStatusInfoBar->setMessage(
+                tr("模型: %1 (版本: %2)").arg(state.inpaintModelStatus.id, state.inpaintModelStatus.version));
+            m_inpaintStatusInfoBar->setIsOpen(true);
+        } else {
+            m_inpaintStatusInfoBar->setSeverity(fluent::status_info::InfoBar::Error);
+            m_inpaintStatusInfoBar->setTitle(tr("Inpaint 模型校验失败"));
+            m_inpaintStatusInfoBar->setMessage(
+                state.fieldErrors.value(QStringLiteral("inpaintModelDirectory"), tr("未找到有效的 Inpaint 模型文件")));
+            m_inpaintStatusInfoBar->setIsOpen(true);
         }
     }
 

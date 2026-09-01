@@ -139,6 +139,9 @@ Q_SIGNALS:
     /// Emitted after a region context menu action is chosen.
     void regionContextActionRequested(SourceRegionId id, QString action);
 
+    /// Emitted once when a Remove stroke is released.
+    void removeStrokeCommitted(QVector<QPointF> points, double diameter);
+
 protected:
     void wheelEvent(QWheelEvent* event) override;
     void keyPressEvent(QKeyEvent* event) override;
@@ -170,6 +173,8 @@ private:
 
     /// Cancels any in-progress gesture and restores the start geometry.
     void cancelGesture();
+    void cancelRemoveStroke();
+    void updateRemoveCursor();
 
     /// Propagates resolved FluentQt semantic colors to overlay items and the creation box.
     void applyThemeColorsToItems();
@@ -212,6 +217,9 @@ private:
         std::optional<CanvasHandlePosition> activeHandle;
     };
     GestureState m_gesture;
+    QVector<QPointF> m_removeStroke;
+    bool m_removeStrokeActive{false};
+    double m_removeDiameter{48.0};
     bool m_spaceHeld{false};
     SourceRegionId m_hoveredRegionId{};
 };

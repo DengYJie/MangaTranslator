@@ -91,6 +91,8 @@ private:
     QWidget* buildContentHost();
 
     void populateSingle(const screen::editor::SingleRegionInspectorState& state);
+    void populateMulti(const screen::editor::MultiRegionInspectorState& state);
+    void populateNone();
 
     /// Emits fieldEditCommitted for the given ids unless a programmatic update is running.
     void emitFieldEdit(screen::editor::InspectorField field, const QVariant& value);

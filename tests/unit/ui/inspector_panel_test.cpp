@@ -67,7 +67,7 @@ private Q_SLOTS:
         InspectorPanel panel;
         panel.show();
 
-        panel.setInspectorState(std::nullopt);
+        panel.setInspectorState(std::monostate{});
 
         QCOMPARE(panel.modeForTest(), InspectorMode::None);
         QVERIFY(panel.contentHostForTest() != nullptr);
@@ -86,7 +86,7 @@ private Q_SLOTS:
         InspectorPanel panel;
         panel.show();
         const auto state = makeSingleState();
-        panel.setInspectorState(InspectorState{state});
+        panel.setInspectorState(state);
 
         QCOMPARE(panel.modeForTest(), InspectorMode::Single);
         QVERIFY(panel.contentHostForTest()->isEnabled());
@@ -132,20 +132,54 @@ private Q_SLOTS:
         auto* hexEdit = panel.findChild<fluent::textfields::LineEdit*>(QStringLiteral("inspectorTextColorHex"));
         QVERIFY(hexEdit != nullptr);
         QCOMPARE(hexEdit->text(), QStringLiteral("#112233"));
+    }
 
-        auto* orderLabel = panel.findChild<fluent::textfields::Label*>(QStringLiteral("inspectorRegionOrder"));
-        QVERIFY(orderLabel != nullptr);
-        QVERIFY(orderLabel->text().contains(QString::number(2)));
+    void multiStateShowsTypesettingAndHidesTranslation() {
+        InspectorPanel panel;
+        panel.show();
+        ui::screen::editor::MultiRegionInspectorState state;
+        state.pageId = domain::PageId::generate();
+        state.regionIds = {domain::RegionId::generate(), domain::RegionId::generate()};
+        state.regionCount = 2;
+        state.fontSizePt = 24.0;
+        state.fontFamily = QStringLiteral("Comic Sans");
+
+        panel.setInspectorState(state);
+
+        QCOMPARE(panel.modeForTest(), InspectorMode::Multi);
+        QVERIFY(panel.contentHostForTest()->isEnabled());
+
+        auto* title = panel.findChild<fluent::textfields::Label*>(QStringLiteral("inspectorHeaderTitle"));
+        QVERIFY(title != nullptr);
+        QCOMPARE(title->text(), QStringLiteral("文字框属性"));
+
+        auto* subtitle = panel.findChild<fluent::textfields::Label*>(QStringLiteral("inspectorHeaderSubtitle"));
+        QVERIFY(subtitle != nullptr);
+        QCOMPARE(subtitle->text(), QStringLiteral("已选中 2 个文字框"));
+
+        auto* translationExpander =
+            panel.findChild<fluent::layout::Expander*>(QStringLiteral("inspectorTranslationExpander"));
+        QVERIFY(translationExpander != nullptr);
+        QVERIFY(!translationExpander->isVisible());
+
+        auto* typesetExpander =
+            panel.findChild<fluent::layout::Expander*>(QStringLiteral("inspectorTypesettingExpander"));
+        QVERIFY(typesetExpander != nullptr);
+        QVERIFY(typesetExpander->isVisible());
+
+        auto* fontSize = panel.findChild<fluent::textfields::NumberBox*>(QStringLiteral("inspectorFontSize"));
+        QVERIFY(fontSize != nullptr);
+        QCOMPARE(fontSize->value(), 24.0);
     }
 
     void switchingFromSingleToUnselectedClearsAndDisables() {
         InspectorPanel panel;
         panel.show();
-        panel.setInspectorState(InspectorState{makeSingleState()});
+        panel.setInspectorState(makeSingleState());
         QCOMPARE(panel.modeForTest(), InspectorMode::Single);
         QVERIFY(panel.contentHostForTest()->isEnabled());
 
-        panel.setInspectorState(std::nullopt);
+        panel.setInspectorState(std::monostate{});
         QCOMPARE(panel.modeForTest(), InspectorMode::None);
         QVERIFY(!panel.contentHostForTest()->isEnabled());
 

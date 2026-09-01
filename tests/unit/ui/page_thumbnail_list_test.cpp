@@ -87,8 +87,10 @@ private slots:
         list.model()->setPages({entry, makeEntry(1)});
         list.show();
         QSignalSpy spy(&list, &PageThumbnailList::pageActivated);
+        QSignalSpy selectedSpy(&list, &PageThumbnailList::pagesSelected);
         list.setCurrentPageId(entry.id);
         QCOMPARE(spy.size(), 0);
+        QCOMPARE(selectedSpy.size(), 0);
     }
 };
 

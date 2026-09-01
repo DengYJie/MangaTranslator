@@ -2,6 +2,7 @@
 
 #include "application/dto/AppSettingsDto.h"
 #include "application/ports/IAppSettingsStore.h"
+#include "application/ports/IInpaintModelValidator.h"
 #include "application/ports/IOcrModelValidator.h"
 #include "application/usecase/credential/CredentialUseCases.h"
 #include "application/usecase/settings/AppSettingsUseCases.h"
@@ -12,6 +13,7 @@ namespace manga::ui::screen::settings {
 
 using IAppSettingsStore = ::manga::application::IAppSettingsStore;
 using IOcrModelValidator = ::manga::application::IOcrModelValidator;
+using IInpaintModelValidator = ::manga::application::IInpaintModelValidator;
 using SecretBytes = ::manga::application::SecretBytes;
 
 /// ViewModel managing persisted settings, validation, secure credential mutations, and instant theme preview.
@@ -21,6 +23,7 @@ public:
     explicit SettingsViewModel(IAppSettingsStore* settingsStore,
                                application::CredentialOperations* credentialOperations,
                                IOcrModelValidator* ocrModelValidator,
+                               IInpaintModelValidator* inpaintModelValidator = nullptr,
                                QObject* parent = nullptr);
     ~SettingsViewModel() override = default;
 
@@ -33,6 +36,7 @@ public:
 
     // --- OCR Category Intents ---
     void setOcrModelDirectory(const QString& directory);
+    void setInpaintModelDirectory(const QString& directory);
     void setOcrLanguage(const QString& language);
 
     // --- AI Translation Category Intents ---
@@ -65,10 +69,12 @@ private:
     void persistSettings();
     void refreshCredentialStatus(SettingsState& state);
     void validateOcrModelDirectory(SettingsState& state);
+    void validateInpaintModelDirectory(SettingsState& state);
 
     IAppSettingsStore* m_settingsStore;                        // non-owning
     application::CredentialOperations* m_credentialOperations; // non-owning
     IOcrModelValidator* m_ocrModelValidator;                   // non-owning
+    IInpaintModelValidator* m_inpaintModelValidator;           // non-owning
     application::AppSettingsSnapshot m_lastPersistedSnapshot;
 };
 

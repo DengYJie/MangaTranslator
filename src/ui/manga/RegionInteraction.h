@@ -15,7 +15,8 @@ namespace domain = ::manga::domain;
 enum class Tool {
     Select,
     Pan,
-    CreateRegion
+    CreateRegion,
+    Remove
 };
 
 /// Selection behavior when clicking a region.

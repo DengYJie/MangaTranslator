@@ -341,6 +341,10 @@ void EditorPage::buildUi() {
                   Typography::Icons::glyph(QStringLiteral("ic_fluent_scan_text_20_regular")),
                   tr("创建文本区域"),
                   CanvasTool::CreateRegion);
+    addCanvasTool(QStringLiteral("canvasRemoveButton"),
+                  Typography::Icons::glyph(QStringLiteral("ic_fluent_square_hint_sparkles_16_regular")),
+                  tr("移除内容"),
+                  CanvasTool::Remove);
     toolRail->move(12, 12);
 
     m_canvasStatusBar = new QWidget(canvasPaneCard);
@@ -658,6 +662,9 @@ void EditorPage::render(const EditorState& state) {
         case CanvasTool::CreateRegion:
             canvasTool = ui::manga::CanvasTool::CreateRegion;
             break;
+        case CanvasTool::Remove:
+            canvasTool = ui::manga::CanvasTool::Remove;
+            break;
     }
     m_canvas->setTool(canvasTool);
     if (m_canvasToolRail != nullptr) {
@@ -672,6 +679,10 @@ void EditorPage::render(const EditorState& state) {
         if (auto* button =
                 m_canvasToolRail->findChild<fluent::basicinput::Button*>(QStringLiteral("canvasCreateRegionButton"))) {
             button->setChecked(state.activeTool == CanvasTool::CreateRegion);
+        }
+        if (auto* button =
+                m_canvasToolRail->findChild<fluent::basicinput::Button*>(QStringLiteral("canvasRemoveButton"))) {
+            button->setChecked(state.activeTool == CanvasTool::Remove);
         }
     }
 

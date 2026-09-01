@@ -571,7 +571,9 @@ void EditorViewModel::selectRegion(const domain::RegionId& regionId, RegionSelec
                   });
 
         // Derive inspector mode from selection count.
-        s.inspectorMode = s.selectedRegionIds.size() == 1 ? InspectorMode::Single : InspectorMode::None;
+        s.inspectorMode = s.selectedRegionIds.size() > 1
+                              ? InspectorMode::Multi
+                              : (s.selectedRegionIds.size() == 1 ? InspectorMode::Single : InspectorMode::None);
         if (s.selectedRegionIds.isEmpty()) {
             s.primaryRegionId = domain::RegionId{};
         }
@@ -604,7 +606,7 @@ void EditorViewModel::selectAllRegionsOnCurrentPage() {
         }
         if (!s.selectedRegionIds.isEmpty()) {
             s.primaryRegionId = s.selectedRegionIds.first();
-            s.inspectorMode = s.selectedRegionIds.size() == 1 ? InspectorMode::Single : InspectorMode::None;
+            s.inspectorMode = s.selectedRegionIds.size() > 1 ? InspectorMode::Multi : InspectorMode::Single;
         } else {
             s.primaryRegionId = domain::RegionId{};
             s.inspectorMode = InspectorMode::None;
@@ -755,7 +757,9 @@ void EditorViewModel::rebuildCurrentPageProjection() {
         sanitizedPrimary = sanitizedSelection.isEmpty() ? domain::RegionId{} : sanitizedSelection.first();
     }
 
-    InspectorMode mode = sanitizedSelection.size() == 1 ? InspectorMode::Single : InspectorMode::None;
+    InspectorMode mode = sanitizedSelection.size() > 1
+                             ? InspectorMode::Multi
+                             : (sanitizedSelection.size() == 1 ? InspectorMode::Single : InspectorMode::None);
 
     updateState([&](EditorState& s) {
         s.regions = projections;
@@ -767,22 +771,119 @@ void EditorViewModel::rebuildCurrentPageProjection() {
 }
 
 void EditorViewModel::updateInspectorProjection(EditorState& s) const {
-    if (!m_hasSession || !m_openedSession || !s.currentPageId.isValid() || s.selectedRegionIds.size() != 1) {
-        s.inspector = std::nullopt;
+    if (!m_hasSession || !m_openedSession || !s.currentPageId.isValid() || s.selectedRegionIds.isEmpty()) {
+        s.inspector = std::monostate{};
         s.inspectorMode = InspectorMode::None;
         return;
     }
 
     const auto* page = m_openedSession->project.findPage(s.currentPageId);
     if (page == nullptr) {
-        s.inspector = std::nullopt;
+        s.inspector = std::monostate{};
         s.inspectorMode = InspectorMode::None;
+        return;
+    }
+
+    if (s.selectedRegionIds.size() > 1) {
+        MultiRegionInspectorState multi;
+        multi.pageId = page->id();
+        multi.regionIds = s.selectedRegionIds;
+        multi.regionCount = s.selectedRegionIds.size();
+        multi.allLocked = true;
+
+        bool first = true;
+        for (const auto& regionId : s.selectedRegionIds) {
+            const auto* region = page->findRegion(regionId);
+            if (region == nullptr) {
+                continue;
+            }
+            const auto& layout = region->layout();
+            const QString fontFamily = QString::fromStdString(layout.fontFamily);
+            const QString textColorHex = QString::fromStdString(layout.textColorHex);
+            const QString strokeColorHex = QString::fromStdString(layout.strokeColorHex);
+
+            if (first) {
+                multi.fontFamily = fontFamily;
+                multi.fontWeight = layout.fontWeight;
+                multi.fontSizePt = layout.fontSizePt;
+                multi.letterSpacingEm = layout.letterSpacingEm;
+                multi.orientation = layout.orientation;
+                multi.horizontalAlignment = layout.alignment.horizontal;
+                multi.verticalAlignment = layout.alignment.vertical;
+                multi.lineSpacing = layout.lineSpacing;
+                multi.marginTop = layout.margins.top;
+                multi.marginRight = layout.margins.right;
+                multi.marginBottom = layout.margins.bottom;
+                multi.marginLeft = layout.margins.left;
+                multi.textColorHex = textColorHex;
+                multi.strokeColorHex = strokeColorHex;
+                multi.strokeWidthPx = layout.strokeWidthPx;
+                first = false;
+            } else {
+                if (multi.fontFamily.has_value() && *multi.fontFamily != fontFamily) {
+                    multi.fontFamily.reset();
+                }
+                if (multi.fontWeight.has_value() && *multi.fontWeight != layout.fontWeight) {
+                    multi.fontWeight.reset();
+                }
+                if (multi.fontSizePt.has_value() && *multi.fontSizePt != layout.fontSizePt) {
+                    multi.fontSizePt.reset();
+                }
+                if (multi.letterSpacingEm.has_value() && *multi.letterSpacingEm != layout.letterSpacingEm) {
+                    multi.letterSpacingEm.reset();
+                }
+                if (multi.orientation.has_value() && *multi.orientation != layout.orientation) {
+                    multi.orientation.reset();
+                }
+                if (multi.horizontalAlignment.has_value() &&
+                    *multi.horizontalAlignment != layout.alignment.horizontal) {
+                    multi.horizontalAlignment.reset();
+                }
+                if (multi.verticalAlignment.has_value() && *multi.verticalAlignment != layout.alignment.vertical) {
+                    multi.verticalAlignment.reset();
+                }
+                if (multi.lineSpacing.has_value() && *multi.lineSpacing != layout.lineSpacing) {
+                    multi.lineSpacing.reset();
+                }
+                if (multi.marginTop.has_value() && *multi.marginTop != layout.margins.top) {
+                    multi.marginTop.reset();
+                }
+                if (multi.marginRight.has_value() && *multi.marginRight != layout.margins.right) {
+                    multi.marginRight.reset();
+                }
+                if (multi.marginBottom.has_value() && *multi.marginBottom != layout.margins.bottom) {
+                    multi.marginBottom.reset();
+                }
+                if (multi.marginLeft.has_value() && *multi.marginLeft != layout.margins.left) {
+                    multi.marginLeft.reset();
+                }
+                if (multi.textColorHex.has_value() && *multi.textColorHex != textColorHex) {
+                    multi.textColorHex.reset();
+                }
+                if (multi.strokeColorHex.has_value() && *multi.strokeColorHex != strokeColorHex) {
+                    multi.strokeColorHex.reset();
+                }
+                if (multi.strokeWidthPx.has_value() && *multi.strokeWidthPx != layout.strokeWidthPx) {
+                    multi.strokeWidthPx.reset();
+                }
+            }
+            multi.allLocked = multi.allLocked && region->isLocked();
+        }
+
+        if (first) {
+            s.inspector = std::monostate{};
+            s.inspectorMode = InspectorMode::None;
+            return;
+        }
+
+        s.inspector = multi;
+        s.inspectorMode = InspectorMode::Multi;
         return;
     }
 
     const auto* region = page->findRegion(s.selectedRegionIds.first());
     if (region == nullptr) {
-        s.inspector = std::nullopt;
+        s.inspector = std::monostate{};
         s.inspectorMode = InspectorMode::None;
         return;
     }
@@ -1415,7 +1516,7 @@ EditorViewModel::adoptProcessingProposal(const application::PreparedProcessingAd
         updateState([&](EditorState& s) {
             s.selectedRegionIds = targetRegionIds;
             s.primaryRegionId = targetRegionIds.first();
-            s.inspectorMode = targetRegionIds.size() == 1 ? InspectorMode::Single : InspectorMode::None;
+            s.inspectorMode = targetRegionIds.size() > 1 ? InspectorMode::Multi : InspectorMode::Single;
             updateInspectorProjection(s);
         });
     }
@@ -1600,6 +1701,9 @@ void EditorViewModel::setSelectedPages(const QVector<domain::PageId>& pageIds) {
         }
         seen.insert(key);
         valid.append(id);
+    }
+    if (m_state.selectedPageIds == valid) {
+        return;
     }
     updateState([&](EditorState& s) { s.selectedPageIds = valid; });
 }

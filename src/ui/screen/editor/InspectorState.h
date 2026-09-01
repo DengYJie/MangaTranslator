@@ -82,8 +82,35 @@ struct SingleRegionInspectorState {
     bool operator==(const SingleRegionInspectorState&) const = default;
 };
 
-/// Inspector surface projection: active single region projection or nullopt when unselected.
-using InspectorState = std::optional<SingleRegionInspectorState>;
+/// Multi-region selection: common styling properties without text or candidates.
+struct MultiRegionInspectorState {
+    domain::PageId pageId;
+    QVector<domain::RegionId> regionIds;
+    int regionCount{0};
+
+    std::optional<QString> fontFamily;
+    std::optional<int> fontWeight;
+    std::optional<double> fontSizePt;
+    std::optional<double> letterSpacingEm;
+    std::optional<domain::TextOrientation> orientation;
+    std::optional<domain::HorizontalAlignment> horizontalAlignment;
+    std::optional<domain::VerticalAlignment> verticalAlignment;
+    std::optional<double> lineSpacing;
+    std::optional<double> marginTop;
+    std::optional<double> marginRight;
+    std::optional<double> marginBottom;
+    std::optional<double> marginLeft;
+    std::optional<QString> textColorHex;
+    std::optional<QString> strokeColorHex;
+    std::optional<double> strokeWidthPx;
+
+    bool allLocked{false};
+
+    bool operator==(const MultiRegionInspectorState&) const = default;
+};
+
+/// Inspector surface projection: empty (monostate), single region, or multi-region.
+using InspectorState = std::variant<std::monostate, SingleRegionInspectorState, MultiRegionInspectorState>;
 
 } // namespace manga::ui::screen::editor
 

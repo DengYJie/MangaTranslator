@@ -109,16 +109,10 @@ void PageThumbnailList::setCurrentPageId(const domain::PageId& pageId) {
         QSignalBlocker blocker(m_view->selectionModel());
         const QModelIndex index = m_model->index(row);
         m_view->setCurrentIndex(index);
+        m_view->selectionModel()->select(index, QItemSelectionModel::ClearAndSelect | QItemSelectionModel::Rows);
         if (!m_view->verticalScrollBar()->isSliderDown()) {
             m_view->scrollTo(index);
         }
-        QVector<domain::PageId> selected;
-        for (const auto& selectedIndex : m_view->selectionModel()->selectedIndexes()) {
-            if (const auto selectedId = m_model->pageIdAt(selectedIndex.row())) {
-                selected.append(*selectedId);
-            }
-        }
-        Q_EMIT pagesSelected(selected);
     }
 }
 

@@ -83,7 +83,7 @@ struct Fixture {
 };
 
 SingleRegionInspectorState singleInspector(const EditorViewModel& viewModel) {
-    return *viewModel.state().inspector;
+    return std::get<SingleRegionInspectorState>(viewModel.state().inspector);
 }
 
 } // namespace

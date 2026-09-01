@@ -130,6 +130,7 @@ void MangaCanvas::onThemeUpdated() {
 }
 
 void MangaCanvas::setPageImage(const QImage& image) {
+    cancelRemoveStroke();
     m_pagePixmap = QPixmap::fromImage(image);
     if (!m_pageItem) {
         m_pageItem = new QGraphicsPixmapItem();
@@ -183,6 +184,7 @@ void MangaCanvas::setPreviewMode(int mode) {
 }
 
 void MangaCanvas::clearPageImage() {
+    cancelRemoveStroke();
     m_pagePixmap = QPixmap();
     m_translationPixmap = QPixmap();
     if (m_pageItem) {
@@ -249,6 +251,7 @@ void MangaCanvas::applyZoom(double factor) {
     setTransformationAnchor(QGraphicsView::AnchorViewCenter);
     setTransform(QTransform::fromScale(m_zoomFactor, m_zoomFactor));
     updateNavigationSceneRect();
+    updateRemoveCursor();
 
     Q_EMIT zoomChanged(m_zoomFactor);
     emitViewTransform();
@@ -343,8 +346,11 @@ void MangaCanvas::centerOnPage(const QPointF& scenePos) {
 }
 
 void MangaCanvas::setTool(canvas::Tool tool) {
-    if (m_tool != tool && m_gesture.active) {
-        cancelGesture();
+    if (m_tool != tool) {
+        if (m_gesture.active) {
+            cancelGesture();
+        }
+        cancelRemoveStroke();
     }
     m_tool = tool;
     if (m_spaceHeld) {
@@ -360,6 +366,10 @@ void MangaCanvas::setTool(canvas::Tool tool) {
             break;
         case canvas::Tool::CreateRegion:
             setDragMode(NoDrag);
+            break;
+        case canvas::Tool::Remove:
+            setDragMode(NoDrag);
+            updateRemoveCursor();
             break;
     }
 }
@@ -467,6 +477,33 @@ void MangaCanvas::cancelGesture() {
     Q_EMIT gestureCancelled();
 }
 
+void MangaCanvas::cancelRemoveStroke() {
+    if (!m_removeStrokeActive && m_removeStroke.isEmpty()) {
+        return;
+    }
+    m_removeStroke.clear();
+    m_removeStrokeActive = false;
+    viewport()->update();
+}
+
+void MangaCanvas::updateRemoveCursor() {
+    if (m_tool != canvas::Tool::Remove || m_spaceHeld || !viewport()) {
+        viewport()->unsetCursor();
+        return;
+    }
+    const int radius = std::max(4, qRound(m_removeDiameter * m_zoomFactor / 2.0));
+    const int size = radius * 2 + 4;
+    QPixmap cursorPixmap(size, size);
+    cursorPixmap.fill(Qt::transparent);
+    QPainter painter(&cursorPixmap);
+    painter.setRenderHint(QPainter::Antialiasing);
+    painter.setPen(QPen(Qt::white, 2));
+    painter.drawEllipse(QPointF(size / 2.0, size / 2.0), radius, radius);
+    painter.setPen(QPen(Qt::black, 1));
+    painter.drawEllipse(QPointF(size / 2.0, size / 2.0), radius, radius);
+    viewport()->setCursor(QCursor(cursorPixmap, size / 2, size / 2));
+}
+
 void MangaCanvas::applyThemeColorsToItems() {
     const auto& colors = themeColorsRef();
 
@@ -486,6 +523,16 @@ void MangaCanvas::applyThemeColorsToItems() {
 }
 
 void MangaCanvas::wheelEvent(QWheelEvent* event) {
+    if ((event->modifiers() & Qt::AltModifier) && m_tool == canvas::Tool::Remove && !m_spaceHeld) {
+        const int steps = event->angleDelta().y() / 120;
+        if (steps != 0) {
+            m_removeDiameter = std::clamp(m_removeDiameter + steps * 4.0, 1.0, 128.0);
+            updateRemoveCursor();
+            viewport()->update();
+        }
+        event->accept();
+        return;
+    }
     if (event->modifiers() & Qt::ControlModifier) {
         double delta = event->angleDelta().y();
         if (delta != 0) {
@@ -515,6 +562,7 @@ void MangaCanvas::keyPressEvent(QKeyEvent* event) {
     if (event->key() == Qt::Key_Space) {
         if (!event->isAutoRepeat() && !m_spaceHeld) {
             m_spaceHeld = true;
+            cancelRemoveStroke();
             setDragMode(ScrollHandDrag);
         }
         event->accept();
@@ -523,6 +571,12 @@ void MangaCanvas::keyPressEvent(QKeyEvent* event) {
 
     if (event->key() == Qt::Key_Escape && m_gesture.active) {
         cancelGesture();
+        event->accept();
+        return;
+    }
+    if (event->key() == Qt::Key_Escape && m_removeStrokeActive) {
+        cancelRemoveStroke();
+        Q_EMIT gestureCancelled();
         event->accept();
         return;
     }
@@ -638,6 +692,7 @@ void MangaCanvas::keyReleaseEvent(QKeyEvent* event) {
         if (!event->isAutoRepeat()) {
             m_spaceHeld = false;
             setTool(m_tool);
+            updateRemoveCursor();
         }
         event->accept();
         return;
@@ -653,11 +708,15 @@ void MangaCanvas::focusOutEvent(QFocusEvent* event) {
     if (m_gesture.active) {
         cancelGesture();
     }
+    if (m_removeStrokeActive) {
+        cancelRemoveStroke();
+    }
     QGraphicsView::focusOutEvent(event);
 }
 
 void MangaCanvas::mousePressEvent(QMouseEvent* event) {
     if (event->button() != Qt::LeftButton) {
+        cancelRemoveStroke();
         QGraphicsView::mousePressEvent(event);
         return;
     }
@@ -670,6 +729,15 @@ void MangaCanvas::mousePressEvent(QMouseEvent* event) {
     const QPointF devicePt = event->position();
     const QPointF scenePt = mapToScene(event->position().toPoint());
     const double dpr = viewport()->devicePixelRatio();
+
+    if (m_tool == canvas::Tool::Remove) {
+        m_removeStroke.clear();
+        m_removeStroke.append(scenePt);
+        m_removeStrokeActive = true;
+        viewport()->update();
+        event->accept();
+        return;
+    }
 
     if (m_tool == canvas::Tool::CreateRegion) {
         m_gesture.active = true;
@@ -756,6 +824,12 @@ void MangaCanvas::mousePressEvent(QMouseEvent* event) {
 }
 
 void MangaCanvas::mouseMoveEvent(QMouseEvent* event) {
+    if (m_tool == canvas::Tool::Remove && m_removeStrokeActive && !m_spaceHeld) {
+        m_removeStroke.append(mapToScene(event->position().toPoint()));
+        viewport()->update();
+        event->accept();
+        return;
+    }
     if (!m_gesture.active) {
         if (m_tool == canvas::Tool::Select) {
             const QPointF scenePt = mapToScene(event->position().toPoint());
@@ -871,6 +945,14 @@ void MangaCanvas::mouseMoveEvent(QMouseEvent* event) {
 }
 
 void MangaCanvas::mouseReleaseEvent(QMouseEvent* event) {
+    if (event->button() == Qt::LeftButton && m_tool == canvas::Tool::Remove && m_removeStrokeActive) {
+        if (!m_spaceHeld && !m_removeStroke.isEmpty()) {
+            Q_EMIT removeStrokeCommitted(m_removeStroke, m_removeDiameter);
+        }
+        cancelRemoveStroke();
+        event->accept();
+        return;
+    }
     if (event->button() != Qt::LeftButton || !m_gesture.active) {
         QGraphicsView::mouseReleaseEvent(event);
         return;
@@ -961,7 +1043,11 @@ void MangaCanvas::leaveEvent(QEvent* event) {
         previous.value()->setHovered(false);
     }
     m_hoveredRegionId = {};
-    viewport()->setCursor(Qt::ArrowCursor);
+    if (m_tool == canvas::Tool::Remove) {
+        updateRemoveCursor();
+    } else {
+        viewport()->setCursor(Qt::ArrowCursor);
+    }
     QGraphicsView::leaveEvent(event);
 }
 
@@ -978,6 +1064,21 @@ void MangaCanvas::resizeEvent(QResizeEvent* event) {
 
 void MangaCanvas::drawForeground(QPainter* painter, const QRectF& rect) {
     QGraphicsView::drawForeground(painter, rect);
+
+    if (m_removeStrokeActive && m_tool == canvas::Tool::Remove && !m_removeStroke.isEmpty()) {
+        painter->save();
+        painter->setRenderHint(QPainter::Antialiasing);
+        QColor strokeColor = themeColorsRef().accentDefault;
+        strokeColor.setAlpha(100);
+        painter->setPen(QPen(strokeColor, m_removeDiameter, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
+        if (m_removeStroke.size() == 1) {
+            painter->setBrush(strokeColor);
+            painter->drawEllipse(m_removeStroke.constFirst(), m_removeDiameter / 2.0, m_removeDiameter / 2.0);
+        } else {
+            painter->drawPolyline(m_removeStroke.constData(), m_removeStroke.size());
+        }
+        painter->restore();
+    }
 
     if (m_contentState == ContentState::Image) {
         return;

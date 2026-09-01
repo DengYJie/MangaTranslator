@@ -103,14 +103,14 @@ private Q_SLOTS:
         viewModel.openProjectSession(makeSession({withText, emptyRegion}, 1));
 
         QCOMPARE(viewModel.state().inspectorMode, InspectorMode::None);
-        QVERIFY(!viewModel.state().inspector.has_value());
+        QVERIFY(std::holds_alternative<std::monostate>(viewModel.state().inspector));
     }
 
     void noSessionYieldsNulloptInspector() {
         Fixture f;
         EditorViewModel viewModel(&f.thumbnailStore, &f.imageLoader, &f.registry);
         QCOMPARE(viewModel.state().inspectorMode, InspectorMode::None);
-        QVERIFY(!viewModel.state().inspector.has_value());
+        QVERIFY(std::holds_alternative<std::monostate>(viewModel.state().inspector));
     }
 
     void singleSelectionProjectsFullRegion() {
@@ -147,8 +147,8 @@ private Q_SLOTS:
         viewModel.selectRegion(regionAt(session, 0, 0), RegionSelectionMode::Replace);
 
         QCOMPARE(viewModel.state().inspectorMode, InspectorMode::Single);
-        QVERIFY(viewModel.state().inspector.has_value());
-        const auto& single = *viewModel.state().inspector;
+        QVERIFY(std::holds_alternative<SingleRegionInspectorState>(viewModel.state().inspector));
+        const auto& single = std::get<SingleRegionInspectorState>(viewModel.state().inspector);
         QCOMPARE(single.pageId, pageAt(session, 0));
         QCOMPARE(single.regionId, regionAt(session, 0, 0));
         QCOMPARE(single.sourceText, QStringLiteral("source text"));
@@ -195,13 +195,13 @@ private Q_SLOTS:
         viewModel.openProjectSession(session);
         viewModel.selectRegion(regionAt(session, 0, 0), RegionSelectionMode::Replace);
 
-        QVERIFY(viewModel.state().inspector.has_value());
-        const auto& single = *viewModel.state().inspector;
+        QVERIFY(std::holds_alternative<SingleRegionInspectorState>(viewModel.state().inspector));
+        const auto& single = std::get<SingleRegionInspectorState>(viewModel.state().inspector);
         QVERIFY(!single.hasManualTranslation);
         QCOMPARE(single.effectiveTranslation, QStringLiteral("candidate one"));
     }
 
-    void multiSelectionYieldsNulloptInspector() {
+    void multiSelectionYieldsMultiInspector() {
         domain::TextRegion first(domain::RegionId::generate(), makeGeometry(10.0, 10.0), 0);
         first.updateLayout([](domain::TextLayout& layout) { layout = makeLayout("Comic Sans", 18.0, 700, "#111111"); });
         first.updateSource([](domain::TextContent& source) { source.setPureManual("first source"); });
@@ -216,8 +216,12 @@ private Q_SLOTS:
         viewModel.selectRegion(regionAt(session, 0, 0), RegionSelectionMode::Replace);
         viewModel.selectRegion(regionAt(session, 0, 1), RegionSelectionMode::Toggle);
 
-        QCOMPARE(viewModel.state().inspectorMode, InspectorMode::None);
-        QVERIFY(!viewModel.state().inspector.has_value());
+        QCOMPARE(viewModel.state().inspectorMode, InspectorMode::Multi);
+        QVERIFY(std::holds_alternative<ui::screen::editor::MultiRegionInspectorState>(viewModel.state().inspector));
+        const auto& multi = std::get<ui::screen::editor::MultiRegionInspectorState>(viewModel.state().inspector);
+        QCOMPARE(multi.regionCount, 2);
+        QCOMPARE(multi.fontFamily, QStringLiteral("Comic Sans"));
+        QCOMPARE(multi.fontSizePt, 18.0);
     }
 
     void deletingSelectionFallsBackToNullopt() {
@@ -227,12 +231,12 @@ private Q_SLOTS:
         const auto session = makeSession({region}, 0);
         viewModel.openProjectSession(session);
         viewModel.selectRegion(regionAt(session, 0, 0), RegionSelectionMode::Replace);
-        QVERIFY(viewModel.state().inspector.has_value());
+        QVERIFY(std::holds_alternative<SingleRegionInspectorState>(viewModel.state().inspector));
 
         viewModel.deleteRegions({regionAt(session, 0, 0)});
 
         QCOMPARE(viewModel.state().inspectorMode, InspectorMode::None);
-        QVERIFY(!viewModel.state().inspector.has_value());
+        QVERIFY(std::holds_alternative<std::monostate>(viewModel.state().inspector));
     }
 
     void pageSwitchResetsInspectorToNullopt() {
@@ -242,12 +246,12 @@ private Q_SLOTS:
         const auto session = makeSession({region}, 1);
         viewModel.openProjectSession(session);
         viewModel.selectRegion(regionAt(session, 0, 0), RegionSelectionMode::Replace);
-        QVERIFY(viewModel.state().inspector.has_value());
+        QVERIFY(std::holds_alternative<SingleRegionInspectorState>(viewModel.state().inspector));
 
         viewModel.selectPage(pageAt(session, 1));
 
         QCOMPARE(viewModel.state().inspectorMode, InspectorMode::None);
-        QVERIFY(!viewModel.state().inspector.has_value());
+        QVERIFY(std::holds_alternative<std::monostate>(viewModel.state().inspector));
     }
 
     void closingSessionResetsInspector() {
@@ -257,12 +261,12 @@ private Q_SLOTS:
         const auto session = makeSession({region}, 0);
         viewModel.openProjectSession(session);
         viewModel.selectRegion(regionAt(session, 0, 0), RegionSelectionMode::Replace);
-        QVERIFY(viewModel.state().inspector.has_value());
+        QVERIFY(std::holds_alternative<SingleRegionInspectorState>(viewModel.state().inspector));
 
         viewModel.closeProjectSession();
 
         QCOMPARE(viewModel.state().inspectorMode, InspectorMode::None);
-        QVERIFY(!viewModel.state().inspector.has_value());
+        QVERIFY(std::holds_alternative<std::monostate>(viewModel.state().inspector));
     }
 };
 

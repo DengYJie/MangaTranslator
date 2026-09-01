@@ -130,7 +130,7 @@ private:
 
 InspectorPanel::InspectorPanel(QWidget* parent) : QWidget(parent) {
     buildUi();
-    setInspectorState(std::nullopt);
+    setInspectorState(std::monostate{});
 }
 
 void InspectorPanel::setOcrAvailability(bool available, const QString& unavailableReason) {
@@ -635,60 +635,212 @@ void InspectorPanel::focusTranslationEditor() {
 void InspectorPanel::setInspectorState(const screen::editor::InspectorState& state) {
     m_updating = true;
 
-    if (!state.has_value()) {
-        m_mode = screen::editor::InspectorMode::None;
-        m_currentPageId = domain::PageId{};
-        m_currentRegionIds.clear();
-
-        m_headerTitle->setText(tr("属性"));
-        m_headerSubtitle->setText(tr("未选中文字框"));
-        m_headerSubtitle->setToolTip(QString());
-
-        m_contentHost->setEnabled(false);
-
-        // Reset fields to placeholders
-        setTextPreservingCursor(m_sourceEdit, QString());
-        m_sourceMetaLabel->clear();
-        setTextPreservingCursor(m_translationEdit, QString());
-        m_translationMetaLabel->clear();
-        m_candidatesList->clear();
-        m_candidatesExpander->setVisible(false);
-        m_adoptCandidateButton->setEnabled(false);
-
-        m_fontSizeBox->setValue(14.0);
-        clearFieldError(m_fontSizeField);
-        m_letterSpacingBox->setValue(0.0);
-        clearFieldError(m_letterSpacingField);
-        m_lineSpacingBox->setValue(1.2);
-        clearFieldError(m_lineSpacingField);
-        m_marginTopBox->setValue(0.0);
-        m_marginRightBox->setValue(0.0);
-        m_marginBottomBox->setValue(0.0);
-        m_marginLeftBox->setValue(0.0);
-        clearFieldError(m_marginTopField);
-        clearFieldError(m_marginRightField);
-        clearFieldError(m_marginBottomField);
-        clearFieldError(m_marginLeftField);
-
-        m_textColorHexEdit->clear();
-        m_textColorSwatch->setSwatchColor(QColor());
-        m_textColorSwatch->setToolTip(QString());
-        clearFieldError(m_textColorField);
-
-        m_strokeColorHexEdit->clear();
-        m_strokeColorSwatch->setSwatchColor(QColor());
-        m_strokeColorSwatch->setToolTip(QString());
-        clearFieldError(m_strokeColorField);
-
-        m_strokeWidthBox->setValue(0.0);
-        clearFieldError(m_strokeWidthField);
-    } else {
+    if (std::holds_alternative<screen::editor::SingleRegionInspectorState>(state)) {
         m_mode = screen::editor::InspectorMode::Single;
         m_contentHost->setEnabled(true);
-        populateSingle(*state);
+        m_translationExpander->setVisible(true);
+        populateSingle(std::get<screen::editor::SingleRegionInspectorState>(state));
+    } else if (std::holds_alternative<screen::editor::MultiRegionInspectorState>(state)) {
+        m_mode = screen::editor::InspectorMode::Multi;
+        m_contentHost->setEnabled(true);
+        m_translationExpander->setVisible(false);
+        populateMulti(std::get<screen::editor::MultiRegionInspectorState>(state));
+    } else {
+        m_mode = screen::editor::InspectorMode::None;
+        m_translationExpander->setVisible(true);
+        populateNone();
     }
 
     m_updating = false;
+}
+
+void InspectorPanel::populateNone() {
+    m_currentPageId = domain::PageId{};
+    m_currentRegionIds.clear();
+
+    m_headerTitle->setText(tr("属性"));
+    m_headerSubtitle->setText(tr("未选中文字框"));
+    m_headerSubtitle->setToolTip(QString());
+
+    m_contentHost->setEnabled(false);
+
+    // Reset fields to placeholders
+    setTextPreservingCursor(m_sourceEdit, QString());
+    m_sourceMetaLabel->clear();
+    setTextPreservingCursor(m_translationEdit, QString());
+    m_translationMetaLabel->clear();
+    m_candidatesList->clear();
+    m_candidatesExpander->setVisible(false);
+    m_adoptCandidateButton->setEnabled(false);
+
+    m_fontSizeBox->setValue(14.0);
+    clearFieldError(m_fontSizeField);
+    m_letterSpacingBox->setValue(0.0);
+    clearFieldError(m_letterSpacingField);
+    m_lineSpacingBox->setValue(1.2);
+    clearFieldError(m_lineSpacingField);
+    m_marginTopBox->setValue(0.0);
+    m_marginRightBox->setValue(0.0);
+    m_marginBottomBox->setValue(0.0);
+    m_marginLeftBox->setValue(0.0);
+    clearFieldError(m_marginTopField);
+    clearFieldError(m_marginRightField);
+    clearFieldError(m_marginBottomField);
+    clearFieldError(m_marginLeftField);
+
+    m_textColorHexEdit->clear();
+    m_textColorSwatch->setSwatchColor(QColor());
+    m_textColorSwatch->setToolTip(QString());
+    clearFieldError(m_textColorField);
+
+    m_strokeColorHexEdit->clear();
+    m_strokeColorSwatch->setSwatchColor(QColor());
+    m_strokeColorSwatch->setToolTip(QString());
+    clearFieldError(m_strokeColorField);
+
+    m_strokeWidthBox->setValue(0.0);
+    clearFieldError(m_strokeWidthField);
+}
+
+void InspectorPanel::populateMulti(const screen::editor::MultiRegionInspectorState& state) {
+    m_headerTitle->setText(tr("文字框属性"));
+    m_headerSubtitle->setText(tr("已选中 %1 个文字框").arg(state.regionCount));
+    m_headerSubtitle->setToolTip(QString());
+
+    m_currentPageId = state.pageId;
+    m_currentRegionIds = state.regionIds;
+
+    // Reset translation fields while hidden
+    setTextPreservingCursor(m_sourceEdit, QString());
+    m_sourceMetaLabel->clear();
+    setTextPreservingCursor(m_translationEdit, QString());
+    m_translationMetaLabel->clear();
+    m_candidatesList->clear();
+    m_candidatesExpander->setVisible(false);
+    m_adoptCandidateButton->setEnabled(false);
+
+    // Font Family
+    if (state.fontFamily.has_value()) {
+        if (m_fontFamilyCombo->findText(*state.fontFamily) < 0 && !state.fontFamily->isEmpty()) {
+            m_fontFamilyCombo->addItem(*state.fontFamily);
+        }
+        m_fontFamilyCombo->setCurrentText(*state.fontFamily);
+    } else {
+        m_fontFamilyCombo->setCurrentIndex(-1);
+        m_fontFamilyCombo->setEditText(QString());
+    }
+
+    // Font Weight
+    if (state.fontWeight.has_value()) {
+        m_fontWeightCombo->setCurrentIndex(qBound(0, *state.fontWeight / 100 - 1, 8));
+    } else {
+        m_fontWeightCombo->setCurrentIndex(-1);
+    }
+
+    // Font Size
+    if (state.fontSizePt.has_value()) {
+        m_fontSizeBox->setValue(*state.fontSizePt);
+    } else {
+        m_fontSizeBox->clear();
+    }
+    clearFieldError(m_fontSizeField);
+
+    // Letter Spacing
+    if (state.letterSpacingEm.has_value()) {
+        m_letterSpacingBox->setValue(*state.letterSpacingEm);
+    } else {
+        m_letterSpacingBox->clear();
+    }
+    clearFieldError(m_letterSpacingField);
+
+    // Orientation
+    if (state.orientation.has_value()) {
+        m_orientationCombo->setCurrentIndex(static_cast<int>(*state.orientation));
+    } else {
+        m_orientationCombo->setCurrentIndex(-1);
+    }
+
+    // Horizontal Alignment
+    if (state.horizontalAlignment.has_value()) {
+        m_hAlignCombo->setCurrentIndex(static_cast<int>(*state.horizontalAlignment));
+    } else {
+        m_hAlignCombo->setCurrentIndex(-1);
+    }
+
+    // Vertical Alignment
+    if (state.verticalAlignment.has_value()) {
+        m_vAlignCombo->setCurrentIndex(static_cast<int>(*state.verticalAlignment));
+    } else {
+        m_vAlignCombo->setCurrentIndex(-1);
+    }
+
+    // Line Spacing
+    if (state.lineSpacing.has_value()) {
+        m_lineSpacingBox->setValue(*state.lineSpacing);
+    } else {
+        m_lineSpacingBox->clear();
+    }
+    clearFieldError(m_lineSpacingField);
+
+    // Margins
+    if (state.marginTop.has_value()) {
+        m_marginTopBox->setValue(*state.marginTop);
+    } else {
+        m_marginTopBox->clear();
+    }
+    if (state.marginRight.has_value()) {
+        m_marginRightBox->setValue(*state.marginRight);
+    } else {
+        m_marginRightBox->clear();
+    }
+    if (state.marginBottom.has_value()) {
+        m_marginBottomBox->setValue(*state.marginBottom);
+    } else {
+        m_marginBottomBox->clear();
+    }
+    if (state.marginLeft.has_value()) {
+        m_marginLeftBox->setValue(*state.marginLeft);
+    } else {
+        m_marginLeftBox->clear();
+    }
+    clearFieldError(m_marginTopField);
+    clearFieldError(m_marginRightField);
+    clearFieldError(m_marginBottomField);
+    clearFieldError(m_marginLeftField);
+
+    // Text Color
+    if (state.textColorHex.has_value()) {
+        m_textColorHexEdit->setText(*state.textColorHex);
+        m_textColorSwatch->setSwatchColor(QColor(*state.textColorHex));
+        m_textColorSwatch->setToolTip(*state.textColorHex);
+    } else {
+        m_textColorHexEdit->clear();
+        m_textColorSwatch->setSwatchColor(QColor());
+        m_textColorSwatch->setToolTip(tr("多种颜色"));
+    }
+    clearFieldError(m_textColorField);
+
+    // Stroke Color
+    if (state.strokeColorHex.has_value()) {
+        m_strokeColorHexEdit->setText(*state.strokeColorHex);
+        m_strokeColorSwatch->setSwatchColor(QColor(*state.strokeColorHex));
+        m_strokeColorSwatch->setToolTip(*state.strokeColorHex);
+    } else {
+        m_strokeColorHexEdit->clear();
+        m_strokeColorSwatch->setSwatchColor(QColor());
+        m_strokeColorSwatch->setToolTip(tr("多种颜色"));
+    }
+    clearFieldError(m_strokeColorField);
+
+    // Stroke Width
+    if (state.strokeWidthPx.has_value()) {
+        m_strokeWidthBox->setValue(*state.strokeWidthPx);
+    } else {
+        m_strokeWidthBox->clear();
+    }
+    clearFieldError(m_strokeWidthField);
+
+    setLockedEditing(state.allLocked);
 }
 
 void InspectorPanel::populateSingle(const screen::editor::SingleRegionInspectorState& state) {

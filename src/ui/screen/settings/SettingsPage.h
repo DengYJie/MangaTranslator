@@ -107,6 +107,10 @@ private:
     fluent::textfields::LineEdit* m_ocrModelDirEdit{nullptr};
     fluent::basicinput::Button* m_ocrBrowseButton{nullptr};
     fluent::status_info::InfoBar* m_ocrStatusInfoBar{nullptr};
+    widget::SettingsRow* m_inpaintModelDirRow{nullptr};
+    fluent::textfields::LineEdit* m_inpaintModelDirEdit{nullptr};
+    fluent::basicinput::Button* m_inpaintBrowseButton{nullptr};
+    fluent::status_info::InfoBar* m_inpaintStatusInfoBar{nullptr};
     widget::SettingsRow* m_ocrLanguageRow{nullptr};
     fluent::basicinput::ComboBox* m_ocrLanguageCombo{nullptr};
 

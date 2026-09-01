@@ -2,6 +2,8 @@ add_library(manga_rendering STATIC)
 
 target_sources(manga_rendering
     PRIVATE
+        inpaint/StrokeMaskRasterizer.cpp
+        inpaint/StrokeMaskRasterizer.h
         TextLayoutEngine.cpp
         TextRasterizer.cpp
 )
