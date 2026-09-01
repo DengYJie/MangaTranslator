@@ -25,7 +25,6 @@ using ::manga::domain::RegionId;
 
 namespace {
 constexpr double kZoomLevels[] = {0.05, 0.10, 0.25, 0.50, 0.75, 1.0, 1.5, 2.0, 4.0, 8.0, 16.0};
-const QColor kDefaultCanvasBackground(QStringLiteral("#202124"));
 const QColor kDefaultCanvasForeground(QStringLiteral("#F3F3F3"));
 
 canvas::HandlePosition arrowToPrimaryHandle(int key) noexcept {
@@ -58,7 +57,7 @@ MangaCanvas::MangaCanvas(QWidget* parent) : QGraphicsView(parent) {
     m_placeholderAction->hide();
     connect(m_placeholderAction, &fluent::basicinput::Button::clicked, this, &MangaCanvas::placeholderActionActivated);
 
-    m_backgroundColor = kDefaultCanvasBackground;
+    m_backgroundColor = themeColorsRef().bgCanvas;
     m_placeholderTextColor = kDefaultCanvasForeground;
     setBackgroundBrush(m_backgroundColor);
 
@@ -79,7 +78,7 @@ MangaCanvas::MangaCanvas(QWidget* parent) : QGraphicsView(parent) {
 MangaCanvas::~MangaCanvas() = default;
 
 void MangaCanvas::onThemeUpdated() {
-    m_backgroundColor = kDefaultCanvasBackground;
+    m_backgroundColor = themeColorsRef().bgCanvas;
     m_placeholderTextColor = kDefaultCanvasForeground;
     setBackgroundBrush(m_backgroundColor);
     applyThemeColorsToItems();

@@ -143,7 +143,7 @@ Secondary Commands / Overflow：
 
 详细合同见 [manga-canvas.md](../components/manga-canvas.md)。页面级要求：
 
-- 画布工作区使用中性深色背景与细网格/无网格偏好。
+- 画布工作区使用 FluentQt `bgCanvas` 主题色作为中性背景，并支持细网格/无网格偏好。画布背景不得使用硬编码颜色。
 - 页面居中显示，周围保持至少 24 px 安全空间。
 - V0.1 固定为每页独立记住缩放和中心位置；切回页面时恢复该状态。未访问页面首次打开使用适应页面。V0.1 不提供“统一适应页面”全局偏好。
 - Region 选择与 Inspector 选择使用稳定 Region ID 同步。

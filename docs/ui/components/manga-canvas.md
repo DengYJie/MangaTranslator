@@ -55,7 +55,7 @@
 
 ## 4. 视口背景与页面
 
-- Workspace 背景使用中性深灰，不使用纯黑。
+- Workspace 与 viewport 背景使用 FluentQt `bgCanvas` 主题色，不使用硬编码颜色或纯黑。外层 pane 使用 `Card::Canvas`，由画布控件统一绘制视口背景。
 - 可选 24 source px 细网格只用于空间感；缩放低于 25% 时固定隐藏，减少视觉干扰时也隐藏。
 - 页面周围最少 24 px 空间；适应页面时考虑 CommandBar 和 Overlay 安全区。
 - 页面阴影为低至中等 Elevation，不能污染页面实际像素。
