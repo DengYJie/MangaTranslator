@@ -178,6 +178,10 @@ public:
                                                                                std::optional<std::string> layerPath,
                                                                                bool isCleared);
 
+    /// Atomically replaces the page-level clear-layer reference and marks the project dirty.
+    [[nodiscard]] std::expected<void, ProjectEditError> setClearLayerAssetOnPage(const PageId& pageId,
+                                                                                 std::optional<std::string> layerPath);
+
     // Glossary
 
     bool addGlossaryEntry(GlossaryEntry entry);

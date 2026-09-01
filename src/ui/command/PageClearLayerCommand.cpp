@@ -26,14 +26,11 @@ bool PageClearLayerCommand::applyRef(const QString& expected, const QString& tar
     if (current != expected)
         return false;
 
-    // ComicProject intentionally exposes page mutators only through its aggregate methods;
-    // page-level layer adoption has no region to pass to applyClearChangeOnPage. The command
-    // therefore performs the same atomic single-field mutation used by project rehydration,
-    // followed by exactly one aggregate dirty mark.
-    auto* page = const_cast<domain::ComicPage*>(pageConst);
-    page->setClearLayerAsset(target.isEmpty() ? std::optional<std::string>{}
-                                              : std::optional<std::string>{target.toStdString()});
-    m_context->project()->markDirty();
+    const auto mutation = m_context->project()->setClearLayerAssetOnPage(
+        m_prepared.pageId,
+        target.isEmpty() ? std::optional<std::string>{} : std::optional<std::string>{target.toStdString()});
+    if (!mutation.has_value())
+        return false;
     if (m_invalidate)
         m_invalidate(m_prepared.pageId);
     return true;

@@ -5,7 +5,6 @@
 #include "application/operation/OperationContext.h"
 #include "application/ports/IDerivedAssetStore.h"
 #include "application/ports/IPageInpainter.h"
-#include "domain/model/ComicProject.h"
 
 #include <QFuture>
 #include <QImage>
@@ -18,6 +17,7 @@ struct ManualPageInpaintRequest {
     domain::PageId pageId;
     QImage pageImage;
     QImage mask;
+    QRect dirtyBounds;
     QString projectRoot;
     quint64 expectedSessionGeneration{0};
     quint64 currentSessionGeneration{0};
@@ -39,13 +39,12 @@ struct PreparedPageInpaintChange {
 /// immutable asset is adopted by PageClearLayerCommand only after the caller's stale guards pass.
 class ManualInpaintWorkflow {
 public:
-    ManualInpaintWorkflow(domain::ComicProject* project, IDerivedAssetStore* store, IPageInpainter* inpainter)
-        : m_project(project), m_store(store), m_inpainter(inpainter) {}
+    ManualInpaintWorkflow(IDerivedAssetStore* store, IPageInpainter* inpainter)
+        : m_store(store), m_inpainter(inpainter) {}
 
     [[nodiscard]] QFuture<Result<PreparedPageInpaintChange>> execute(ManualPageInpaintRequest request);
 
 private:
-    domain::ComicProject* m_project{nullptr};
     IDerivedAssetStore* m_store{nullptr};
     IPageInpainter* m_inpainter{nullptr};
 };

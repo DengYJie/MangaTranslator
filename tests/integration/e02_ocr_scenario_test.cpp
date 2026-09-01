@@ -147,6 +147,7 @@ struct OcrScenarioFixture {
                                                                   ocrEngine.get(),
                                                                   nullptr,
                                                                   stack.inpainter.get(),
+                                                                  nullptr,
                                                                   stack.layouter.get(),
                                                                   stack.derivedAssetStore.get(),
                                                                   &stack.operationRegistry);

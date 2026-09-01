@@ -91,6 +91,7 @@ private Q_SLOTS:
                                                                     m_ocr.get(),
                                                                     m_tr.get(),
                                                                     m_inpaint.get(),
+                                                                    nullptr,
                                                                     m_layout.get(),
                                                                     m_assetStore.get(),
                                                                     m_registry.get());

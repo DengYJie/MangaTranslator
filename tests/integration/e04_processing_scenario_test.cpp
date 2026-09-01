@@ -327,6 +327,7 @@ struct ProcessingFixture {
                                                                   ocrEngine.get(),
                                                                   translator.get(),
                                                                   stack.inpainter.get(),
+                                                                  nullptr,
                                                                   layouter,
                                                                   store,
                                                                   &stack.operationRegistry);

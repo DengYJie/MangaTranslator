@@ -283,6 +283,18 @@ std::expected<void, ProjectEditError> ComicProject::applyClearChangeOnPage(const
     return {};
 }
 
+std::expected<void, ProjectEditError> ComicProject::setClearLayerAssetOnPage(const PageId& pageId,
+                                                                             std::optional<std::string> layerPath) {
+    ComicPage* page = findPageMutable(pageId);
+    if (!page) {
+        return std::unexpected(ProjectEditError{
+            .code = ProjectErrorCode::EditNotFound, .message = "Page not found", .entityId = pageId.toString()});
+    }
+    page->setClearLayerAsset(std::move(layerPath));
+    markDirty();
+    return {};
+}
+
 bool ComicProject::addGlossaryEntry(GlossaryEntry entry) {
     if (!entry.isValid()) {
         return false;

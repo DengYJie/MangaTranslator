@@ -159,6 +159,7 @@ struct RecoveryFixture {
                                                                   fakeOcrEngine.get(),
                                                                   fakeTranslator.get(),
                                                                   stack.inpainter.get(),
+                                                                  nullptr,
                                                                   stack.layouter.get(),
                                                                   stack.derivedAssetStore.get(),
                                                                   &stack.operationRegistry);
@@ -874,6 +875,7 @@ void RecoveryMatrixTest::projectSwitchRejectsLateResults() {
                                                                    ocrEngine.get(),
                                                                    nullptr,
                                                                    stack.inpainter.get(),
+                                                                   nullptr,
                                                                    stack.layouter.get(),
                                                                    stack.derivedAssetStore.get(),
                                                                    &stack.operationRegistry);
