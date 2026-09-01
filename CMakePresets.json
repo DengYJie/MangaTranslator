@@ -12,6 +12,7 @@
         "CMAKE_CXX_STANDARD": "23",
         "CMAKE_CXX_STANDARD_REQUIRED": "ON",
         "CMAKE_CXX_EXTENSIONS": "OFF",
+        "MANGA_ONNXRUNTIME_VERSION": "1.23.2",
         "BUILD_TESTING": "ON"
       }
     },
