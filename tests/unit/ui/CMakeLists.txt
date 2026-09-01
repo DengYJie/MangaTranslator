@@ -679,3 +679,63 @@ set_tests_properties(manga_tests_ui_recovery_presenter PROPERTIES
     LABELS "unit;ui"
     TIMEOUT 15
 )
+
+qt_add_executable(manga_tests_ui_responsive
+    responsive_layout_test.cpp
+)
+manga_apply_project_options(manga_tests_ui_responsive)
+set_target_properties(manga_tests_ui_responsive PROPERTIES AUTOMOC ON)
+
+target_include_directories(manga_tests_ui_responsive
+    PRIVATE
+        "${PROJECT_SOURCE_DIR}/tests/unit/application"
+        "${PROJECT_SOURCE_DIR}/tests"
+        "${PROJECT_SOURCE_DIR}/tests/unit"
+)
+
+target_link_libraries(manga_tests_ui_responsive
+    PRIVATE
+        manga_ui
+        manga_application
+        manga_domain
+        Qt6::Test
+        Qt6::Widgets
+)
+
+manga_deploy_qt_runtime(manga_tests_ui_responsive)
+add_test(NAME manga_tests_ui_responsive COMMAND manga_tests_ui_responsive)
+set_tests_properties(manga_tests_ui_responsive PROPERTIES
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
+    LABELS "unit;ui"
+    TIMEOUT 15
+)
+
+qt_add_executable(manga_tests_ui_accessibility
+    accessibility_contract_test.cpp
+)
+manga_apply_project_options(manga_tests_ui_accessibility)
+set_target_properties(manga_tests_ui_accessibility PROPERTIES AUTOMOC ON)
+
+target_include_directories(manga_tests_ui_accessibility
+    PRIVATE
+        "${PROJECT_SOURCE_DIR}/tests/unit/application"
+        "${PROJECT_SOURCE_DIR}/tests"
+        "${PROJECT_SOURCE_DIR}/tests/unit"
+)
+
+target_link_libraries(manga_tests_ui_accessibility
+    PRIVATE
+        manga_ui
+        manga_application
+        manga_domain
+        Qt6::Test
+        Qt6::Widgets
+)
+
+manga_deploy_qt_runtime(manga_tests_ui_accessibility)
+add_test(NAME manga_tests_ui_accessibility COMMAND manga_tests_ui_accessibility)
+set_tests_properties(manga_tests_ui_accessibility PROPERTIES
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
+    LABELS "unit;ui"
+    TIMEOUT 15
+)

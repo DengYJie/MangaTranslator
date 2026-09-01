@@ -27,6 +27,8 @@ AppStatusTaskStrip::AppStatusTaskStrip(QWidget* parent)
     : QWidget(parent), m_operationModel(new model::OperationListModel(this)) {
     setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
     setMinimumHeight(kBaseHeight);
+    setAccessibleName(tr("应用状态与后台任务栏"));
+    setToolTip(tr("显示文档保存状态与后台处理任务"));
 
     m_completionTimer = new QTimer(this);
     m_completionTimer->setSingleShot(true);

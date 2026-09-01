@@ -138,6 +138,7 @@ private Q_SLOTS:
         application::OperationRegistry registry;
         ui::screen::editor::EditorViewModel viewModel(&thumbnails, &images, &registry);
         ui::screen::editor::EditorPage page(&viewModel);
+        page.show();
 
         auto session = makeSession(1);
         viewModel.openProjectSession(session);

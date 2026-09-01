@@ -60,6 +60,8 @@ void HomePage::buildUi() {
 
     m_openButton = new fluent::basicinput::Button(tr("打开项目"), this);
     m_openButton->setIconGlyph(Typography::Icons::Folder);
+    m_openButton->setToolTip(tr("打开已有的 MangaTranslator 项目"));
+    m_openButton->setAccessibleName(tr("打开项目"));
     connect(m_openButton, &fluent::basicinput::Button::clicked, this, [this]() {
         m_viewModel->requestOpenProjectDialog();
     });
@@ -68,6 +70,8 @@ void HomePage::buildUi() {
     m_importButton = new fluent::basicinput::Button(tr("新建项目/导入"), this);
     m_importButton->setFluentStyle(fluent::basicinput::Button::Accent);
     m_importButton->setIconGlyph(Typography::Icons::Add);
+    m_importButton->setToolTip(tr("从漫画图片或文件夹新建项目"));
+    m_importButton->setAccessibleName(tr("新建项目/导入"));
     connect(m_importButton, &fluent::basicinput::Button::clicked, this, &HomePage::importRequested);
     headerRow->addWidget(m_importButton, 0, Qt::AlignVCenter);
     rootLayout->addLayout(headerRow);
@@ -77,6 +81,8 @@ void HomePage::buildUi() {
     m_infoBar->setIsClosable(true);
     connect(m_infoBar, &fluent::status_info::InfoBar::closed, this, [this]() { m_viewModel->dismissNotice(); });
     m_retryButton = new fluent::basicinput::Button(tr("重试"), this);
+    m_retryButton->setToolTip(tr("重试上一次失败的操作"));
+    m_retryButton->setAccessibleName(tr("重试"));
     m_retryButton->hide(); // Hosted by the InfoBar only while an actionable notice is shown.
     connect(m_retryButton, &fluent::basicinput::Button::clicked, this, [this]() {
         if (m_currentNoticeAction == application::RecoveryAction::Retry) {
@@ -151,6 +157,7 @@ void HomePage::buildUi() {
         button->setIconGlyph(glyph);
         button->setEnabled(false);
         button->setToolTip(tr("导入向导将在后续版本提供"));
+        button->setAccessibleName(text);
         railLayout->addWidget(button);
         return button;
     };

@@ -15,6 +15,9 @@ namespace manga::ui::widget {
 PageThumbnailList::PageThumbnailList(QWidget* parent)
     : QWidget(parent), m_model(new PageListModel(this)), m_view(new QListView(this)), m_shimmerTimer(new QTimer(this)) {
     m_thumbnailCache.setMaxCost(64 * 1024);
+    setFocusPolicy(Qt::StrongFocus);
+    setFocusProxy(m_view);
+    m_view->setFocusPolicy(Qt::StrongFocus);
 
     auto layout = new QVBoxLayout(this);
     layout->setContentsMargins(0, 0, 0, 0);

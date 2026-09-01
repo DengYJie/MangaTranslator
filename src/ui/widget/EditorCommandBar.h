@@ -26,6 +26,25 @@ class EditorCommandBar : public QWidget {
 public:
     explicit EditorCommandBar(screen::editor::EditorViewModel* viewModel, QWidget* parent = nullptr);
 
+    [[nodiscard]] fluent::basicinput::Button* undoButtonForTest() const noexcept {
+        return m_undoButton;
+    }
+    [[nodiscard]] fluent::basicinput::Button* redoButtonForTest() const noexcept {
+        return m_redoButton;
+    }
+    [[nodiscard]] fluent::basicinput::Button* smartTranslateButtonForTest() const noexcept {
+        return m_smartTranslateButton;
+    }
+    [[nodiscard]] fluent::basicinput::Button* saveButtonForTest() const noexcept {
+        return m_saveButton;
+    }
+    [[nodiscard]] fluent::basicinput::Button* pagePaneToggleButtonForTest() const noexcept {
+        return m_pagePaneToggleButton;
+    }
+    [[nodiscard]] fluent::basicinput::Button* inspectorPaneToggleButtonForTest() const noexcept {
+        return m_inspectorPaneToggleButton;
+    }
+
 Q_SIGNALS:
     void zoomInRequested();
     void zoomOutRequested();
@@ -33,6 +52,8 @@ Q_SIGNALS:
     void actualSizeRequested();
     void deleteSelectedRegionsRequested();
     void commitRequested();
+    void pagePaneToggleRequested();
+    void inspectorPaneToggleRequested();
 
 private:
     void buildUi();
@@ -57,6 +78,8 @@ private:
     fluent::basicinput::Button* m_smartTranslateButton{nullptr};
     fluent::basicinput::Button* m_adoptButton{nullptr};
     fluent::basicinput::Button* m_rejectButton{nullptr};
+    fluent::basicinput::Button* m_pagePaneToggleButton{nullptr};
+    fluent::basicinput::Button* m_inspectorPaneToggleButton{nullptr};
     fluent::basicinput::Button* m_saveButton{nullptr};
 };
 

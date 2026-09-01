@@ -10,11 +10,30 @@
 #include "ui/widget/PageThumbnailList.h"
 
 #include <FluentQt/FluentQt.h>
+#include <QApplication>
+#include <QKeyEvent>
+#include <QResizeEvent>
 #include <QShortcut>
 #include <QSplitter>
 #include <QVBoxLayout>
 
 namespace manga::ui::screen::editor {
+
+namespace {
+constexpr int kBreakpointWide = 1440;
+constexpr int kBreakpointStandard = 1200;
+constexpr int kBreakpointCompact = 1008;
+constexpr int kBreakpointNarrow = 720;
+constexpr int kFlatHeightBreakpoint = 560;
+
+constexpr int kPagePaneWideWidth = 232;
+constexpr int kPagePaneStandardWidth = 220;
+constexpr int kPagePaneCompactWidth = 96;
+
+constexpr int kInspectorWideWidth = 352;
+constexpr int kInspectorStandardWidth = 328;
+constexpr int kInspectorCompactWidth = 320;
+} // namespace
 
 EditorPage::EditorPage(EditorViewModel* viewModel, QWidget* parent) : base::BasePage(parent), m_viewModel(viewModel) {
     buildUi();
@@ -145,6 +164,10 @@ EditorPage::EditorPage(EditorViewModel* viewModel, QWidget* parent) : base::Base
     connect(
         m_commandBar, &widget::EditorCommandBar::commitRequested, m_viewModel, &EditorViewModel::sealTextEditSession);
 
+    connect(m_commandBar, &widget::EditorCommandBar::pagePaneToggleRequested, this, &EditorPage::togglePagePane);
+    connect(
+        m_commandBar, &widget::EditorCommandBar::inspectorPaneToggleRequested, this, &EditorPage::toggleInspectorPane);
+
     m_viewModel->observe(this, [this](const EditorState& state) { render(state); });
 
     auto* pageUpShortcut = new QShortcut(QKeySequence(Qt::Key_PageUp), this);
@@ -154,6 +177,14 @@ EditorPage::EditorPage(EditorViewModel* viewModel, QWidget* parent) : base::Base
     auto* pageDownShortcut = new QShortcut(QKeySequence(Qt::Key_PageDown), this);
     pageDownShortcut->setContext(Qt::WidgetWithChildrenShortcut);
     connect(pageDownShortcut, &QShortcut::activated, m_viewModel, [this]() { m_viewModel->selectAdjacentPage(1); });
+
+    auto* f6Shortcut = new QShortcut(QKeySequence(Qt::Key_F6), this);
+    f6Shortcut->setContext(Qt::WidgetWithChildrenShortcut);
+    connect(f6Shortcut, &QShortcut::activated, this, [this]() { cyclePaneFocus(true); });
+
+    auto* shiftF6Shortcut = new QShortcut(QKeySequence(Qt::SHIFT | Qt::Key_F6), this);
+    shiftF6Shortcut->setContext(Qt::WidgetWithChildrenShortcut);
+    connect(shiftF6Shortcut, &QShortcut::activated, this, [this]() { cyclePaneFocus(false); });
 
     setDefaultFocusWidget(m_canvas);
 }
@@ -176,6 +207,7 @@ void EditorPage::buildUi() {
     m_pageList = new widget::PageThumbnailList(pagePaneCard);
     pagePaneLayout->addWidget(m_pageList);
     m_splitter->addWidget(pagePaneCard);
+    m_pagePaneCard = pagePaneCard;
 
     auto* canvasPaneCard = new fluent::layout::Card(m_splitter);
     canvasPaneCard->setObjectName(QStringLiteral("editorCanvasPaneCard"));
@@ -201,15 +233,243 @@ void EditorPage::buildUi() {
     m_inspector = new widget::InspectorPanel(inspectorCard);
     inspectorLayout->addWidget(m_inspector);
     m_splitter->addWidget(inspectorCard);
+    m_inspectorCard = inspectorCard;
 
-    m_splitter->setCollapsible(0, false);
+    m_splitter->setCollapsible(0, true);
     m_splitter->setCollapsible(1, false);
-    m_splitter->setCollapsible(2, false);
+    m_splitter->setCollapsible(2, true);
 
-    m_splitter->setSizes({232, 10000, 352});
+    m_splitter->setSizes({kPagePaneWideWidth, 10000, kInspectorWideWidth});
     m_splitter->setStretchFactor(0, 0);
     m_splitter->setStretchFactor(1, 1);
     m_splitter->setStretchFactor(2, 0);
+}
+
+void EditorPage::updateResponsiveLayout(int availableWidth) {
+    base::BasePage::updateResponsiveLayout(availableWidth);
+    m_lastAvailableWidth = availableWidth;
+
+    if (availableWidth >= kBreakpointWide) {
+        m_breakpointMode = BreakpointMode::Wide;
+    } else if (availableWidth >= kBreakpointStandard) {
+        m_breakpointMode = BreakpointMode::Standard;
+    } else if (availableWidth >= kBreakpointCompact) {
+        m_breakpointMode = BreakpointMode::Compact;
+    } else if (availableWidth >= kBreakpointNarrow) {
+        m_breakpointMode = BreakpointMode::Narrow;
+    } else {
+        m_breakpointMode = BreakpointMode::Minimum;
+    }
+
+    applySplitterLayout();
+}
+
+void EditorPage::applySplitterLayout() {
+    if (!m_splitter || !m_pagePaneCard || !m_inspectorCard) {
+        return;
+    }
+
+    switch (m_breakpointMode) {
+        case BreakpointMode::Wide:
+            m_pagePaneCard->setVisible(true);
+            m_inspectorCard->setVisible(true);
+            m_splitter->setSizes({kPagePaneWideWidth,
+                                  qMax(480, m_lastAvailableWidth - kPagePaneWideWidth - kInspectorWideWidth - 16),
+                                  kInspectorWideWidth});
+            break;
+        case BreakpointMode::Standard:
+            m_pagePaneCard->setVisible(true);
+            m_inspectorCard->setVisible(true);
+            m_splitter->setSizes(
+                {kPagePaneStandardWidth,
+                 qMax(480, m_lastAvailableWidth - kPagePaneStandardWidth - kInspectorStandardWidth - 16),
+                 kInspectorStandardWidth});
+            break;
+        case BreakpointMode::Compact:
+            m_pagePaneCard->setVisible(true);
+            m_inspectorCard->setVisible(true);
+            m_splitter->setSizes({kPagePaneCompactWidth,
+                                  qMax(480, m_lastAvailableWidth - kPagePaneCompactWidth - kInspectorCompactWidth - 16),
+                                  kInspectorCompactWidth});
+            break;
+        case BreakpointMode::Narrow:
+        case BreakpointMode::Minimum:
+            if (m_pageDrawerOpen) {
+                m_pagePaneCard->setVisible(true);
+                m_inspectorCard->setVisible(false);
+                const int drawerWidth =
+                    (m_breakpointMode == BreakpointMode::Minimum) ? qMin(m_lastAvailableWidth - 40, 232) : 232;
+                m_splitter->setSizes({drawerWidth, qMax(100, m_lastAvailableWidth - drawerWidth - 8), 0});
+            } else if (m_inspectorDrawerOpen) {
+                m_pagePaneCard->setVisible(false);
+                m_inspectorCard->setVisible(true);
+                const int drawerWidth =
+                    (m_breakpointMode == BreakpointMode::Minimum) ? qMin(m_lastAvailableWidth - 40, 320) : 320;
+                m_splitter->setSizes({0, qMax(100, m_lastAvailableWidth - drawerWidth - 8), drawerWidth});
+            } else {
+                m_pagePaneCard->setVisible(false);
+                m_inspectorCard->setVisible(false);
+                m_splitter->setSizes({0, m_lastAvailableWidth, 0});
+            }
+            break;
+    }
+}
+
+void EditorPage::setPageDrawerVisible(bool visible) {
+    if (m_breakpointMode == BreakpointMode::Narrow || m_breakpointMode == BreakpointMode::Minimum) {
+        m_pageDrawerOpen = visible;
+        if (visible) {
+            m_inspectorDrawerOpen = false;
+        }
+        applySplitterLayout();
+    } else {
+        m_pagePaneCard->setVisible(visible);
+    }
+}
+
+void EditorPage::setInspectorDrawerVisible(bool visible) {
+    if (m_breakpointMode == BreakpointMode::Narrow || m_breakpointMode == BreakpointMode::Minimum) {
+        m_inspectorDrawerOpen = visible;
+        if (visible) {
+            m_pageDrawerOpen = false;
+        }
+        applySplitterLayout();
+    } else {
+        m_inspectorCard->setVisible(visible);
+    }
+}
+
+void EditorPage::togglePagePane() {
+    if (m_breakpointMode == BreakpointMode::Narrow || m_breakpointMode == BreakpointMode::Minimum) {
+        setPageDrawerVisible(!m_pageDrawerOpen);
+    } else {
+        m_pagePaneCard->setVisible(!m_pagePaneCard->isVisible());
+    }
+}
+
+void EditorPage::toggleInspectorPane() {
+    if (m_breakpointMode == BreakpointMode::Narrow || m_breakpointMode == BreakpointMode::Minimum) {
+        setInspectorDrawerVisible(!m_inspectorDrawerOpen);
+    } else {
+        m_inspectorCard->setVisible(!m_inspectorCard->isVisible());
+    }
+}
+
+bool EditorPage::isPageDrawerVisible() const {
+    if (m_breakpointMode == BreakpointMode::Narrow || m_breakpointMode == BreakpointMode::Minimum) {
+        return m_pageDrawerOpen && m_pagePaneCard->isVisible();
+    }
+    return m_pagePaneCard->isVisible();
+}
+
+bool EditorPage::isInspectorDrawerVisible() const {
+    if (m_breakpointMode == BreakpointMode::Narrow || m_breakpointMode == BreakpointMode::Minimum) {
+        return m_inspectorDrawerOpen && m_inspectorCard->isVisible();
+    }
+    return m_inspectorCard->isVisible();
+}
+
+void EditorPage::cyclePaneFocus(bool forward) {
+    QWidget* focusW = QApplication::focusWidget();
+    enum class Pane {
+        PageList,
+        Canvas,
+        Inspector,
+        CommandBar
+    };
+    Pane current = Pane::Canvas;
+
+    if (m_pageList && (m_pageList->hasFocus() || m_pageList->isAncestorOf(focusW))) {
+        current = Pane::PageList;
+    } else if (m_canvas && (m_canvas->hasFocus() || m_canvas->isAncestorOf(focusW))) {
+        current = Pane::Canvas;
+    } else if (m_inspector && (m_inspector->hasFocus() || m_inspector->isAncestorOf(focusW))) {
+        current = Pane::Inspector;
+    } else if (m_commandBar && (m_commandBar->hasFocus() || m_commandBar->isAncestorOf(focusW))) {
+        current = Pane::CommandBar;
+    }
+
+    Pane next = Pane::Canvas;
+    if (forward) {
+        switch (current) {
+            case Pane::PageList:
+                next = Pane::Canvas;
+                break;
+            case Pane::Canvas:
+                next = (m_inspectorCard && m_inspectorCard->isVisible()) ? Pane::Inspector : Pane::CommandBar;
+                break;
+            case Pane::Inspector:
+                next = Pane::CommandBar;
+                break;
+            case Pane::CommandBar:
+                next = (m_pagePaneCard && m_pagePaneCard->isVisible()) ? Pane::PageList : Pane::Canvas;
+                break;
+        }
+    } else {
+        switch (current) {
+            case Pane::PageList:
+                next = Pane::CommandBar;
+                break;
+            case Pane::CommandBar:
+                next = (m_inspectorCard && m_inspectorCard->isVisible()) ? Pane::Inspector : Pane::Canvas;
+                break;
+            case Pane::Inspector:
+                next = Pane::Canvas;
+                break;
+            case Pane::Canvas:
+                next = (m_pagePaneCard && m_pagePaneCard->isVisible()) ? Pane::PageList : Pane::CommandBar;
+                break;
+        }
+    }
+
+    switch (next) {
+        case Pane::PageList:
+            if (m_pageList)
+                m_pageList->setFocus();
+            break;
+        case Pane::Canvas:
+            if (m_canvas)
+                m_canvas->setFocus();
+            break;
+        case Pane::Inspector:
+            if (m_inspector)
+                m_inspector->setFocus();
+            break;
+        case Pane::CommandBar:
+            if (m_commandBar)
+                m_commandBar->setFocus();
+            break;
+    }
+}
+
+void EditorPage::keyPressEvent(QKeyEvent* event) {
+    if (event->key() == Qt::Key_Escape) {
+        if (m_breakpointMode == BreakpointMode::Narrow || m_breakpointMode == BreakpointMode::Minimum) {
+            if (m_pageDrawerOpen || m_inspectorDrawerOpen) {
+                m_pageDrawerOpen = false;
+                m_inspectorDrawerOpen = false;
+                applySplitterLayout();
+                event->accept();
+                return;
+            }
+        }
+    } else if (event->key() == Qt::Key_F6) {
+        cyclePaneFocus(!(event->modifiers() & Qt::ShiftModifier));
+        event->accept();
+        return;
+    }
+    base::BasePage::keyPressEvent(event);
+}
+
+void EditorPage::resizeEvent(QResizeEvent* event) {
+    base::BasePage::resizeEvent(event);
+    const bool flatHeight = height() < kFlatHeightBreakpoint;
+    if (layout()) {
+        const int m = flatHeight ? 2 : 8;
+        const int s = flatHeight ? 2 : 4;
+        layout()->setContentsMargins(m, m, m, m);
+        layout()->setSpacing(s);
+    }
 }
 
 void EditorPage::render(const EditorState& state) {

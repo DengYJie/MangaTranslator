@@ -51,6 +51,8 @@ MangaCanvas::MangaCanvas(QWidget* parent) : QGraphicsView(parent) {
     setAlignment(Qt::AlignCenter);
     setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    setAccessibleName(tr("漫画画布"));
+    setFocusPolicy(Qt::StrongFocus);
 
     m_placeholderAction = new fluent::basicinput::Button(viewport());
     m_placeholderAction->hide();
@@ -71,6 +73,7 @@ MangaCanvas::MangaCanvas(QWidget* parent) : QGraphicsView(parent) {
     m_scene->addItem(m_creationBox);
 
     applyThemeColorsToItems();
+    updateAccessibleDescription();
 }
 
 MangaCanvas::~MangaCanvas() = default;
@@ -632,9 +635,11 @@ void MangaCanvas::mouseReleaseEvent(QMouseEvent* event) {
 }
 
 void MangaCanvas::resizeEvent(QResizeEvent* event) {
+    const QPointF oldCenter = (m_contentState == ContentState::Image) ? viewCenterOnPage() : QPointF();
     QGraphicsView::resizeEvent(event);
     layoutPlaceholderButton();
-    if (m_contentState == ContentState::Image) {
+    if (m_contentState == ContentState::Image && !oldCenter.isNull()) {
+        centerOn(oldCenter);
         emitViewTransform();
     }
 }
@@ -709,7 +714,7 @@ void MangaCanvas::updateAccessibleDescription() {
             ++selected;
         }
     }
-    setAccessibleDescription(tr("%1 regions, %2 selected").arg(total).arg(selected));
+    setAccessibleDescription(tr("漫画画布：包含 %1 个文本区域，已选中 %2 个").arg(total).arg(selected));
 }
 
 void MangaCanvas::showEvent(QShowEvent* event) {

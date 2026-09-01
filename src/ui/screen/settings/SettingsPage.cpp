@@ -99,6 +99,8 @@ void SettingsPage::buildUi() {
 
     m_restoreDefaultsButton = new fluent::basicinput::Button(tr("恢复默认"), m_actionBar);
     m_restoreDefaultsButton->setObjectName(QStringLiteral("settingsRestoreDefaultsButton"));
+    m_restoreDefaultsButton->setToolTip(tr("恢复所有设置项为默认值"));
+    m_restoreDefaultsButton->setAccessibleName(tr("恢复默认设置"));
     connect(m_restoreDefaultsButton, &fluent::basicinput::Button::clicked, this, [this]() {
         if (m_viewModel) {
             m_viewModel->restoreDefaults();
@@ -109,6 +111,8 @@ void SettingsPage::buildUi() {
     m_saveButton = new fluent::basicinput::Button(tr("保存设置"), m_actionBar);
     m_saveButton->setObjectName(QStringLiteral("settingsSaveButton"));
     m_saveButton->setFluentStyle(fluent::basicinput::Button::Accent);
+    m_saveButton->setToolTip(tr("保存当前配置 (Ctrl+S)"));
+    m_saveButton->setAccessibleName(tr("保存设置"));
     connect(m_saveButton, &fluent::basicinput::Button::clicked, this, [this]() {
         if (m_viewModel) {
             m_viewModel->saveSettings();
@@ -216,6 +220,8 @@ QWidget* SettingsPage::buildOcrView() {
 
     m_ocrBrowseButton = new fluent::basicinput::Button(tr("浏览..."), dirEditor);
     m_ocrBrowseButton->setObjectName(QStringLiteral("ocrBrowseButton"));
+    m_ocrBrowseButton->setToolTip(tr("选择 Baberu OCR 模型所在文件夹"));
+    m_ocrBrowseButton->setAccessibleName(tr("选择 OCR 模型目录"));
     connect(m_ocrBrowseButton, &fluent::basicinput::Button::clicked, this, [this]() {
         const QString dir = QFileDialog::getExistingDirectory(this, tr("选择 Baberu OCR 模型目录"));
         if (!dir.isEmpty() && m_viewModel) {
@@ -316,6 +322,8 @@ QWidget* SettingsPage::buildAiTranslationView() {
 
     m_credentialUpdateButton = new fluent::basicinput::Button(tr("更新密钥"), m_credentialConfiguredWidget);
     m_credentialUpdateButton->setObjectName(QStringLiteral("credentialUpdateButton"));
+    m_credentialUpdateButton->setToolTip(tr("输入并配置新的 API 密钥"));
+    m_credentialUpdateButton->setAccessibleName(tr("更新 API 密钥"));
     connect(m_credentialUpdateButton, &fluent::basicinput::Button::clicked, this, [this]() {
         m_isCredentialEditMode = true;
         m_credentialConfiguredWidget->setVisible(false);
@@ -327,6 +335,8 @@ QWidget* SettingsPage::buildAiTranslationView() {
 
     m_credentialRemoveButton = new fluent::basicinput::Button(tr("移除密钥"), m_credentialConfiguredWidget);
     m_credentialRemoveButton->setObjectName(QStringLiteral("credentialRemoveButton"));
+    m_credentialRemoveButton->setToolTip(tr("从本地安全存储中移除该密钥"));
+    m_credentialRemoveButton->setAccessibleName(tr("移除 API 密钥"));
     connect(m_credentialRemoveButton,
             &fluent::basicinput::Button::clicked,
             this,
@@ -344,11 +354,14 @@ QWidget* SettingsPage::buildAiTranslationView() {
     m_credentialPasswordBox = new fluent::textfields::PasswordBox(m_credentialInputWidget);
     m_credentialPasswordBox->setObjectName(QStringLiteral("credentialPasswordBox"));
     m_credentialPasswordBox->setPlaceholderText(tr("输入新的 API 密钥"));
+    m_credentialPasswordBox->setAccessibleName(tr("API 密钥"));
     inputLayout->addWidget(m_credentialPasswordBox, 1);
 
     m_credentialSaveButton = new fluent::basicinput::Button(tr("保存密钥"), m_credentialInputWidget);
     m_credentialSaveButton->setObjectName(QStringLiteral("credentialSaveButton"));
     m_credentialSaveButton->setFluentStyle(fluent::basicinput::Button::Accent);
+    m_credentialSaveButton->setToolTip(tr("安全保存 API 密钥"));
+    m_credentialSaveButton->setAccessibleName(tr("保存 API 密钥"));
     connect(m_credentialSaveButton, &fluent::basicinput::Button::clicked, this, [this]() {
         const QString key = m_credentialPasswordBox->password();
         if (!key.isEmpty() && m_viewModel) {
@@ -361,6 +374,8 @@ QWidget* SettingsPage::buildAiTranslationView() {
 
     m_credentialCancelButton = new fluent::basicinput::Button(tr("取消"), m_credentialInputWidget);
     m_credentialCancelButton->setObjectName(QStringLiteral("credentialCancelButton"));
+    m_credentialCancelButton->setToolTip(tr("取消密钥修改"));
+    m_credentialCancelButton->setAccessibleName(tr("取消密钥修改"));
     connect(m_credentialCancelButton, &fluent::basicinput::Button::clicked, this, [this]() {
         m_credentialPasswordBox->clear();
         m_isCredentialEditMode = false;

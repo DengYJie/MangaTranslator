@@ -41,10 +41,16 @@ FileDropZone::FileDropZone(QWidget* parent) : QWidget(parent) {
     m_formatLabel->setAttribute(Qt::WA_TransparentForMouseEvents);
 
     m_browseFilesButton = new fluent::basicinput::Button(tr("浏览文件"), this);
+    m_browseFilesButton->setObjectName(QStringLiteral("dropZoneBrowseFilesButton"));
     m_browseFilesButton->setFluentStyle(fluent::basicinput::Button::Accent);
+    m_browseFilesButton->setToolTip(tr("选择漫画图像文件"));
+    m_browseFilesButton->setAccessibleName(tr("浏览文件"));
     connect(m_browseFilesButton, &fluent::basicinput::Button::clicked, this, &FileDropZone::browseFilesRequested);
 
     m_browseFolderButton = new fluent::basicinput::Button(tr("选择文件夹"), this);
+    m_browseFolderButton->setObjectName(QStringLiteral("dropZoneBrowseFolderButton"));
+    m_browseFolderButton->setToolTip(tr("选择包含漫画图像的文件夹"));
+    m_browseFolderButton->setAccessibleName(tr("选择文件夹"));
     connect(m_browseFolderButton, &fluent::basicinput::Button::clicked, this, &FileDropZone::browseFolderRequested);
 
     auto* buttonsLayout = new QHBoxLayout;

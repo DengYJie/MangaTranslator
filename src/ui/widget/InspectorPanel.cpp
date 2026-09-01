@@ -133,6 +133,7 @@ void InspectorPanel::buildUi() {
     using fluent::textfields::Label;
 
     setMinimumWidth(kPanelMinimumWidth);
+    setFocusPolicy(Qt::StrongFocus);
 
     auto* root = new QVBoxLayout(this);
     root->setContentsMargins(12, 12, 12, 12);
@@ -305,6 +306,8 @@ QWidget* InspectorPanel::buildSingleHost() {
     candidatesLayout->addWidget(m_candidatesList);
     m_adoptCandidateButton = new Button(tr("采用候选"));
     m_adoptCandidateButton->setObjectName(QStringLiteral("inspectorAdoptCandidate"));
+    m_adoptCandidateButton->setToolTip(tr("采用选中的候选译文"));
+    m_adoptCandidateButton->setAccessibleName(tr("采用候选译文"));
     m_adoptCandidateButton->setEnabled(false);
     candidatesLayout->addWidget(m_adoptCandidateButton);
     m_candidatesExpander->setContentWidget(candidatesContent, fluent::WidgetOwnership::Owned);
@@ -329,12 +332,20 @@ QWidget* InspectorPanel::buildSingleHost() {
     singleActionsLayout->setSpacing(8);
     m_singleOcrButton = new Button(tr("OCR"));
     m_singleOcrButton->setObjectName(QStringLiteral("inspectorSingleOcr"));
+    m_singleOcrButton->setToolTip(tr("识别选中区域的文字"));
+    m_singleOcrButton->setAccessibleName(tr("OCR 识别"));
     m_singleTranslateButton = new Button(tr("翻译"));
     m_singleTranslateButton->setObjectName(QStringLiteral("inspectorSingleTranslate"));
+    m_singleTranslateButton->setToolTip(tr("翻译选中区域的文本"));
+    m_singleTranslateButton->setAccessibleName(tr("AI 翻译"));
     m_singleClearButton = new Button(tr("涂抹"));
     m_singleClearButton->setObjectName(QStringLiteral("inspectorSingleClear"));
+    m_singleClearButton->setToolTip(tr("清除选中区域的背景文字"));
+    m_singleClearButton->setAccessibleName(tr("清除背景"));
     m_singleLayoutButton = new Button(tr("排版"));
     m_singleLayoutButton->setObjectName(QStringLiteral("inspectorSingleLayout"));
+    m_singleLayoutButton->setToolTip(tr("对选中区域重新排版"));
+    m_singleLayoutButton->setAccessibleName(tr("应用排版"));
     singleActionsLayout->addWidget(m_singleOcrButton);
     singleActionsLayout->addWidget(m_singleTranslateButton);
     singleActionsLayout->addWidget(m_singleClearButton);
@@ -674,12 +685,20 @@ QWidget* InspectorPanel::buildMultiHost() {
     multiActionsLayout->setSpacing(8);
     m_multiOcrButton = new Button(tr("批量OCR"));
     m_multiOcrButton->setObjectName(QStringLiteral("inspectorMultiOcr"));
+    m_multiOcrButton->setToolTip(tr("批量识别所选区域的文字"));
+    m_multiOcrButton->setAccessibleName(tr("批量 OCR 识别"));
     m_multiTranslateButton = new Button(tr("批量翻译"));
     m_multiTranslateButton->setObjectName(QStringLiteral("inspectorMultiTranslate"));
+    m_multiTranslateButton->setToolTip(tr("批量翻译所选区域的文本"));
+    m_multiTranslateButton->setAccessibleName(tr("批量 AI 翻译"));
     m_multiClearButton = new Button(tr("批量涂抹"));
     m_multiClearButton->setObjectName(QStringLiteral("inspectorMultiClear"));
+    m_multiClearButton->setToolTip(tr("批量清除所选区域的背景文字"));
+    m_multiClearButton->setAccessibleName(tr("批量清除背景"));
     m_multiLayoutButton = new Button(tr("批量排版"));
     m_multiLayoutButton->setObjectName(QStringLiteral("inspectorMultiLayout"));
+    m_multiLayoutButton->setToolTip(tr("对所选区域批量重新排版"));
+    m_multiLayoutButton->setAccessibleName(tr("批量应用排版"));
     multiActionsLayout->addWidget(m_multiOcrButton);
     multiActionsLayout->addWidget(m_multiTranslateButton);
     multiActionsLayout->addWidget(m_multiClearButton);
@@ -857,6 +876,8 @@ QWidget* InspectorPanel::buildMultiHost() {
 
     m_multiDeleteButton = new Button(tr("删除所选区域"), host);
     m_multiDeleteButton->setObjectName(QStringLiteral("inspectorMultiDelete"));
+    m_multiDeleteButton->setToolTip(tr("删除所选的文本区域 (Delete)"));
+    m_multiDeleteButton->setAccessibleName(tr("删除所选区域"));
     m_multiDeleteButton->setCriticalOnHover(true);
     layout->addWidget(m_multiDeleteButton);
     connect(m_multiDeleteButton, &Button::clicked, this, [this]() {

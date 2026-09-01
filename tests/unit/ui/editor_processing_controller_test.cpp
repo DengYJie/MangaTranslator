@@ -370,15 +370,13 @@ private Q_SLOTS:
         const auto pageId = m_viewModel->state().currentPageId;
         const auto regionId = m_viewModel->state().regions.at(0).id;
 
-        m_controller->clearRegion(pageId, regionId);
-        while (m_controller->hasActiveOperation(pageId)) {
-            QCoreApplication::processEvents(QEventLoop::AllEvents, 50);
-        }
+        m_inpaint->nextResponse.regionId = regionId;
+        m_inpaint->nextResponse.affectedBounds = domain::RectGeometry(10.0, 10.0, 100.0, 100.0);
+        m_inpaint->nextResponse.patch = QImage(100, 100, QImage::Format_RGBA8888);
+        m_inpaint->nextResponse.patch.fill(Qt::white);
 
-        // Drains adoption preparation future
-        for (int i = 0; i < 20; ++i) {
-            QCoreApplication::processEvents(QEventLoop::AllEvents, 50);
-        }
+        m_controller->clearRegion(pageId, regionId);
+        QTRY_VERIFY_WITH_TIMEOUT(m_controller->preparedAdoption(pageId) != nullptr, 5000);
 
         QVERIFY(m_controller->hasProposal(pageId));
         const int initialUndo = m_viewModel->undoStackCountForTest();

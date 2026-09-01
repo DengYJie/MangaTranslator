@@ -215,6 +215,7 @@ void ImportPage::setupUi() {
 
     auto* projectNameLabel = new fluent::textfields::Label(tr("项目名称"), this);
     m_projectNameEdit = new fluent::textfields::LineEdit(this);
+    m_projectNameEdit->setAccessibleName(tr("项目名称"));
     m_nameErrorLabel = new fluent::textfields::Label(this);
     m_nameErrorLabel->setFluentTypography(Typography::FontRole::Caption);
     m_nameErrorLabel->setVisible(false);
@@ -222,7 +223,10 @@ void ImportPage::setupUi() {
     auto* saveLocationLabel = new fluent::textfields::Label(tr("保存位置"), this);
     m_saveLocationEdit = new fluent::textfields::LineEdit(this);
     m_saveLocationEdit->setReadOnly(true);
+    m_saveLocationEdit->setAccessibleName(tr("保存位置"));
     m_browseButton = new fluent::basicinput::Button(tr("浏览"), this);
+    m_browseButton->setToolTip(tr("选择项目保存文件夹"));
+    m_browseButton->setAccessibleName(tr("选择保存位置"));
     m_locationErrorLabel = new fluent::textfields::Label(this);
     m_locationErrorLabel->setFluentTypography(Typography::FontRole::Caption);
     m_locationErrorLabel->setVisible(false);
@@ -232,15 +236,19 @@ void ImportPage::setupUi() {
 
     auto* directionLabel = new fluent::textfields::Label(tr("阅读方向"), this);
     m_rtlRadio = new fluent::basicinput::RadioButton(tr("从右到左（日式漫画）"), this);
+    m_rtlRadio->setAccessibleName(tr("从右到左阅读（日式漫画）"));
     m_ltrRadio = new fluent::basicinput::RadioButton(tr("从左到右"), this);
+    m_ltrRadio->setAccessibleName(tr("从左到右阅读"));
     auto* directionLayout = new QVBoxLayout;
     directionLayout->addWidget(m_rtlRadio);
     directionLayout->addWidget(m_ltrRadio);
 
     auto* sourceLangLabel = new fluent::textfields::Label(tr("源语言"), this);
     m_sourceLangCombo = new fluent::basicinput::ComboBox(this);
+    m_sourceLangCombo->setAccessibleName(tr("源语言"));
     auto* targetLangLabel = new fluent::textfields::Label(tr("目标语言"), this);
     m_targetLangCombo = new fluent::basicinput::ComboBox(this);
+    m_targetLangCombo->setAccessibleName(tr("目标语言"));
     m_languageCautionLabel =
         new fluent::textfields::Label(tr("源语言与目标语言相同：此配置适用于校对、重排和再处理场景。"), this);
     m_languageCautionLabel->setFluentTypography(Typography::FontRole::Caption);
@@ -257,8 +265,12 @@ void ImportPage::setupUi() {
     setupCombo(m_targetLangCombo);
 
     m_submitButton = new fluent::basicinput::Button(this);
+    m_submitButton->setAccessibleName(tr("创建并导入"));
+    m_submitButton->setToolTip(tr("创建项目并导入所选页面"));
     m_cancelImportButton = new fluent::basicinput::Button(this);
     m_cancelImportButton->setText(tr("取消导入"));
+    m_cancelImportButton->setAccessibleName(tr("取消导入"));
+    m_cancelImportButton->setToolTip(tr("取消正在进行的导入任务"));
     m_cancelImportButton->setVisible(false);
     auto* buttonsLayout = new QHBoxLayout;
     buttonsLayout->addWidget(m_submitButton, 1);
