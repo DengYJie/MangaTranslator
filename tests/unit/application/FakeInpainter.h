@@ -41,6 +41,13 @@ public:
         } else {
             auto response = nextResponse;
             response.regionId = m_request.regionId;
+            if (response.patch.isNull()) {
+                const int w = m_request.region.width > 0 ? static_cast<int>(m_request.region.width) : 80;
+                const int h = m_request.region.height > 0 ? static_cast<int>(m_request.region.height) : 80;
+                response.patch = QImage(w, h, QImage::Format_RGBA8888);
+                response.patch.fill(Qt::transparent);
+                response.affectedBounds = m_request.region;
+            }
             m_promise->setProgressRange(0, 1);
             m_promise->setProgressValueAndText(1, "clear");
             m_promise->addResult(response);

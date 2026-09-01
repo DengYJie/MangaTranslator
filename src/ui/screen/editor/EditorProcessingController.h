@@ -14,6 +14,7 @@
 #include <QFutureWatcher>
 #include <QHash>
 #include <QObject>
+#include <QPointer>
 #include <QVector>
 
 #include <memory>
@@ -88,6 +89,13 @@ public:
     void handlePageSwitched(const domain::PageId& newPageId);
     void reset();
 
+    [[nodiscard]] EditorViewModel* viewModel() const {
+        return m_viewModel;
+    }
+    void setViewModel(EditorViewModel* vm) {
+        m_viewModel = vm;
+    }
+
     [[nodiscard]] bool hasActiveOperation(const domain::PageId& pageId) const;
     [[nodiscard]] bool hasProposal(const domain::PageId& pageId) const;
     [[nodiscard]] const application::PageProcessingProposal* proposal(const domain::PageId& pageId) const;
@@ -139,6 +147,12 @@ private:
                                       QFutureWatcher<application::Result<application::PageProcessingProposal>>* watcher,
                                       QVector<domain::RegionId> targetRegions,
                                       QHash<domain::RegionId, quint64> expectedRevisions);
+    void handleStageFinished(const WatcherKey& key,
+                             application::OperationId operationId,
+                             quint64 sessionGen,
+                             application::OperationStage stage,
+                             bool success,
+                             const application::ApplicationError* error = nullptr);
     void prepareAdoptionAsync(const WatcherKey& key,
                               const application::PrepareProcessingAdoptionRequest& prepReq,
                               quint64 sessionGen);

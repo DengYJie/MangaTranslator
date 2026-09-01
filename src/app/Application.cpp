@@ -51,6 +51,7 @@ Application::Application(int& argc, char** argv) {
 }
 
 Application::~Application() {
+    m_processingController.reset();
     m_mainWindow.reset();
     if (m_context) {
         m_context->shutdown();
@@ -108,7 +109,7 @@ int Application::run() {
                                                                          m_context->textLayouter(),
                                                                          m_context->derivedAssetStore(),
                                                                          m_context->operationRegistry(),
-                                                                         mainWindow);
+                                                                         nullptr);
 
     ui::navigation::NavigationItemDescriptor editorItem;
     editorItem.routeKey = QStringLiteral("editor");
@@ -121,7 +122,7 @@ int Application::run() {
         m_context->appSettingsStore(), m_context->credentialOperations(), m_context->ocrModelValidator(), mainWindow);
     auto* settingsPage = new ui::screen::settings::SettingsPage(settingsViewModel);
 
-    auto* settingsPanel = new ui::navigation::NavigationPanel(mainWindow->navigationView());
+    auto* settingsPanel = new ui::navigation::NavigationPanel(nullptr);
     mainWindow->registerSurface(QStringLiteral("settings"), settingsPanel);
 
     ui::navigation::NavigationItemDescriptor generalItem;
@@ -466,10 +467,7 @@ int Application::run() {
     }
 
     if (m_smokeTest) {
-        QTimer::singleShot(0, mainWindow, [mainWindow, app = m_app.get()]() {
-            mainWindow->forceClose();
-            app->exit(0);
-        });
+        QTimer::singleShot(0, m_app.get(), [app = m_app.get()]() { app->exit(0); });
     }
     return m_app->exec();
 }

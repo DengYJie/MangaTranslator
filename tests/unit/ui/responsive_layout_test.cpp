@@ -98,8 +98,9 @@ private Q_SLOTS:
         ui::screen::editor::EditorPage page(&viewModel);
 
         // Narrow Breakpoint (720 - 1007)
-        page.resize(800, 700);
         page.show();
+        page.resize(800, 700);
+        QApplication::processEvents();
         QCOMPARE(page.breakpointModeForTest(), ui::screen::editor::EditorPage::BreakpointMode::Narrow);
         // By default in Narrow, both drawers are closed to grant Canvas full viewport
         QVERIFY(!page.isPageDrawerVisible());
@@ -107,6 +108,7 @@ private Q_SLOTS:
 
         // Minimum Breakpoint (< 720)
         page.resize(600, 600);
+        QApplication::processEvents();
         QCOMPARE(page.breakpointModeForTest(), ui::screen::editor::EditorPage::BreakpointMode::Minimum);
         QVERIFY(!page.isPageDrawerVisible());
         QVERIFY(!page.isInspectorDrawerVisible());

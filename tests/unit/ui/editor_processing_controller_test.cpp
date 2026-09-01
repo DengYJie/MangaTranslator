@@ -58,6 +58,11 @@ private:
     std::unique_ptr<EditorViewModel> m_viewModel;
     std::unique_ptr<EditorProcessingController> m_controller;
 
+    void openSession(application::OpenedProjectSession session) {
+        m_viewModel->openProjectSession(std::move(session));
+        QTRY_VERIFY_WITH_TIMEOUT(!m_viewModel->currentPageImage().isNull(), 2000);
+    }
+
 private Q_SLOTS:
     void initTestCase() {
         qRegisterMetaType<domain::PageId>();
@@ -69,6 +74,8 @@ private Q_SLOTS:
     void init() {
         m_thumbnails = std::make_unique<manga::test::FakeThumbnailStore>();
         m_images = std::make_unique<manga::test::FakePageImageLoader>();
+        m_images->nextImage = QImage(1000, 1500, QImage::Format_RGBA8888);
+        m_images->nextImage.fill(Qt::white);
         m_registry = std::make_unique<OperationRegistry>();
         m_repo = std::make_unique<manga::test::FakeProjectRepository>();
         m_ocr = std::make_unique<manga::application::test::FakeOcrEngine>();
@@ -115,7 +122,7 @@ private Q_SLOTS:
     void testEmptyRegionsCanvasNotice() {
         // Open session with a page that has 0 regions
         auto session = createSessionWithRegions(1, 0);
-        m_viewModel->openProjectSession(session);
+        openSession(session);
 
         const auto pageId = m_viewModel->state().currentPageId;
         QVERIFY(pageId.isValid());
@@ -136,7 +143,7 @@ private Q_SLOTS:
         m_tr->deferred = true; // Make translation stay in-flight
 
         auto session = createSessionWithRegions(1, 2);
-        m_viewModel->openProjectSession(session);
+        openSession(session);
         const auto pageId = m_viewModel->state().currentPageId;
 
         // Start first operation
@@ -172,7 +179,7 @@ private Q_SLOTS:
         m_tr->deferred = true;
 
         auto session = createSessionWithRegions(2, 2);
-        m_viewModel->openProjectSession(session);
+        openSession(session);
         const auto page1Id = m_viewModel->state().pages.at(0).id;
         const auto page2Id = m_viewModel->state().pages.at(1).id;
 
@@ -219,7 +226,7 @@ private Q_SLOTS:
         m_tr->deferred = true;
 
         auto session = createSessionWithRegions(2, 2);
-        m_viewModel->openProjectSession(session);
+        openSession(session);
         const auto page1Id = m_viewModel->state().pages.at(0).id;
 
         m_controller->smartTranslatePage(page1Id);
@@ -260,7 +267,7 @@ private Q_SLOTS:
         auto applied = session.project.applyPageRegionEdits(pageId, edits);
         QVERIFY(applied.has_value());
 
-        m_viewModel->openProjectSession(session);
+        openSession(session);
         m_viewModel->selectPage(pageId);
 
         // Run smart translate
@@ -287,12 +294,13 @@ private Q_SLOTS:
         trItem.translation = QStringLiteral("Translated Text");
         m_tr->nextResponse.items.append(trItem);
 
-        m_viewModel->openProjectSession(session);
+        openSession(session);
         const auto pageId = m_viewModel->state().currentPageId;
 
+        QSignalSpy spy(m_controller.get(), &EditorProcessingController::proposalReady);
         m_controller->smartTranslatePage(pageId);
-        while (m_controller->hasActiveOperation(pageId)) {
-            QCoreApplication::processEvents(QEventLoop::AllEvents, 50);
+        if (spy.isEmpty()) {
+            QVERIFY(spy.wait(2000));
         }
 
         QVERIFY(m_controller->hasProposal(pageId));
@@ -323,7 +331,7 @@ private Q_SLOTS:
         trItem.translation = QStringLiteral("Translated Text");
         m_tr->nextResponse.items.append(trItem);
 
-        m_viewModel->openProjectSession(session);
+        openSession(session);
         const auto pageId = m_viewModel->state().currentPageId;
 
         m_controller->smartTranslatePage(pageId);
@@ -346,7 +354,7 @@ private Q_SLOTS:
         m_ocr->nextResponse.text = QStringLiteral("Recognized OCR Text");
 
         auto session = createSessionWithRegions(1, 1);
-        m_viewModel->openProjectSession(session);
+        openSession(session);
         const auto pageId = m_viewModel->state().currentPageId;
         const auto regionId = m_viewModel->state().regions.at(0).id;
 
@@ -366,7 +374,7 @@ private Q_SLOTS:
 
     void testClearRegionAsyncAdoption() {
         auto session = createSessionWithRegions(1, 1);
-        m_viewModel->openProjectSession(session);
+        openSession(session);
         const auto pageId = m_viewModel->state().currentPageId;
         const auto regionId = m_viewModel->state().regions.at(0).id;
 
@@ -391,7 +399,7 @@ private Q_SLOTS:
         m_layout->nextError = makeApplicationError(ErrorCategory::Internal, "internal.layout_failed", "Layout failed");
 
         auto session = createSessionWithRegions(1, 1);
-        m_viewModel->openProjectSession(session);
+        openSession(session);
         const auto pageId = m_viewModel->state().currentPageId;
         const auto regionId = m_viewModel->state().regions.at(0).id;
 

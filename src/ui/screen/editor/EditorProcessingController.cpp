@@ -64,8 +64,18 @@ EditorProcessingController::EditorProcessingController(
 }
 
 EditorProcessingController::~EditorProcessingController() {
-    reset();
-    if (m_viewModel != nullptr && m_viewModel->processingController() == this) {
+    for (auto it = m_activeTasks.begin(); it != m_activeTasks.end(); ++it) {
+        if (m_registry != nullptr) {
+            m_registry->cancelOperation(it.value().operationId);
+        }
+    }
+    m_activeTasks.clear();
+    m_pageProposals.clear();
+    m_preparedAdoptions.clear();
+    m_pageConflictRegions.clear();
+    m_pageSafeMessages.clear();
+    m_pageFailedRegions.clear();
+    if (m_viewModel && m_viewModel->processingController() == this) {
         m_viewModel->setProcessingController(nullptr);
     }
 }

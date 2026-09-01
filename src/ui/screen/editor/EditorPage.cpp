@@ -13,6 +13,7 @@
 #include <QApplication>
 #include <QKeyEvent>
 #include <QResizeEvent>
+#include <QScrollArea>
 #include <QShortcut>
 #include <QSplitter>
 #include <QVBoxLayout>
@@ -218,7 +219,14 @@ void EditorPage::buildUi() {
 
     m_commandBar = new widget::EditorCommandBar(m_viewModel, canvasPaneCard);
     m_commandBar->setObjectName(QStringLiteral("editorCommandBar"));
-    canvasPaneLayout->addWidget(m_commandBar);
+    m_commandBarScrollArea = new QScrollArea(canvasPaneCard);
+    m_commandBarScrollArea->setObjectName(QStringLiteral("editorCommandBarScrollArea"));
+    m_commandBarScrollArea->setFrameShape(QFrame::NoFrame);
+    m_commandBarScrollArea->setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+    m_commandBarScrollArea->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    m_commandBarScrollArea->setWidgetResizable(false);
+    m_commandBarScrollArea->setWidget(m_commandBar);
+    canvasPaneLayout->addWidget(m_commandBarScrollArea);
 
     m_canvas = new ui::manga::MangaCanvas(canvasPaneCard);
     canvasPaneLayout->addWidget(m_canvas, 1);

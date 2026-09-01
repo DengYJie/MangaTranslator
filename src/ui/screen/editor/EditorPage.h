@@ -4,6 +4,7 @@
 #include "ui/manga/MangaCanvas.h"
 
 class QSplitter;
+class QScrollArea;
 
 namespace manga::ui::manga {
 class MangaCanvas;
@@ -90,6 +91,7 @@ private:
 
     EditorViewModel* m_viewModel; // non-owning
     ui::widget::EditorCommandBar* m_commandBar{nullptr};
+    QScrollArea* m_commandBarScrollArea{nullptr};
     QSplitter* m_splitter{nullptr};
     QWidget* m_pagePaneCard{nullptr};
     ui::widget::PageThumbnailList* m_pageList{nullptr};

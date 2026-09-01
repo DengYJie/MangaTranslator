@@ -14,6 +14,7 @@
 
 #include <QFutureWatcher>
 #include <QHash>
+#include <QPointer>
 #include <QUndoStack>
 #include <QVariant>
 

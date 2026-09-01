@@ -119,6 +119,9 @@ bool NavigationWindow::registerSurface(const QString& surfaceId, navigation::Nav
 
     panel->setPaneToggleButtonVisible(false);
     panel->setBackButtonVisible(false);
+    if (surfaceId != m_activeSurfaceId) {
+        panel->hide();
+    }
 
     connect(panel, &navigation::NavigationPanel::itemSelected, this, [this](const QString& routeKey) {
         Q_EMIT navigationRequested(routeKey);

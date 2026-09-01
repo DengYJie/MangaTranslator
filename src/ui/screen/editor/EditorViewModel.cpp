@@ -126,6 +126,9 @@ EditorViewModel::EditorViewModel(application::IThumbnailStore* thumbnailStore,
 
 EditorViewModel::~EditorViewModel() {
     cancelThumbnailRequests();
+    if (m_processingController && m_processingController->viewModel() == this) {
+        m_processingController->setViewModel(nullptr);
+    }
     if (m_operationRegistry && m_pageLoadOperation.isValid()) {
         m_operationRegistry->cancelOperation(m_pageLoadOperation);
     }
