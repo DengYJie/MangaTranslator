@@ -649,6 +649,7 @@ void EditorViewModel::updateInspectorProjection(EditorState& s) const {
         pageState.imageSize = page->imageSize();
         pageState.readingDirection = m_openedSession->project.readingDirection();
         pageState.regionCount = static_cast<int>(page->regions().size());
+        pageState.needsReviewCount = s.processing.needsReviewRegionIds.size();
         for (const auto& region : page->regions()) {
             if (!region.source().text.empty()) {
                 ++pageState.ocrCompletedCount;

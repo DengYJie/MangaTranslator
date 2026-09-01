@@ -12,10 +12,12 @@
 #include <QListWidget>
 #include <QPainter>
 #include <QRegularExpression>
+#include <QResizeEvent>
 #include <QStackedWidget>
 #include <QTextEdit>
 #include <QVBoxLayout>
 
+#include <array>
 #include <cmath>
 
 namespace manga::ui::widget {
@@ -130,6 +132,21 @@ InspectorPanel::InspectorPanel(QWidget* parent) : QWidget(parent) {
     setInspectorState(screen::editor::PageInspectorState{});
 }
 
+void InspectorPanel::resizeEvent(QResizeEvent* event) {
+    QWidget::resizeEvent(event);
+    syncContentWidth();
+}
+
+void InspectorPanel::syncContentWidth() {
+    if (m_scrollView == nullptr || m_stack == nullptr || m_scrollView->viewport() == nullptr) {
+        return;
+    }
+
+    const int contentWidth = m_scrollView->viewport()->width();
+    m_stack->setMinimumWidth(contentWidth);
+    m_stack->setMaximumWidth(contentWidth);
+}
+
 void InspectorPanel::buildUi() {
     using fluent::layout::Field;
     using fluent::textfields::Label;
@@ -155,12 +172,19 @@ void InspectorPanel::buildUi() {
     m_scrollView = new TransparentScrollView(this);
     m_scrollView->setWidgetResizable(true);
     m_scrollView->setHorizontalScrollBarVisibility(fluent::scrolling::ScrollView::ScrollBarVisibility::Hidden);
+    m_scrollView->viewport()->installEventFilter(this);
     root->addWidget(m_scrollView, 1);
 
     m_stack = new QStackedWidget();
     m_pageHost = buildPageHost();
     m_singleHost = buildSingleHost();
     m_multiHost = buildMultiHost();
+    m_stack->setMinimumWidth(0);
+    m_stack->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
+    for (auto* host : {m_pageHost, m_singleHost, m_multiHost}) {
+        host->setMinimumWidth(0);
+        host->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
+    }
     m_stack->addWidget(m_pageHost);
     m_stack->addWidget(m_singleHost);
     m_stack->addWidget(m_multiHost);
@@ -179,19 +203,59 @@ QWidget* InspectorPanel::buildPageHost() {
     m_pageSummaryLabel = new Label(host);
     m_pageSummaryLabel->setObjectName(QStringLiteral("inspectorPageSummary"));
     m_pageSummaryLabel->setWordWrap(true);
+    m_pageSummaryLabel->setFluentTypography(Typography::FontRole::Subtitle);
     layout->addWidget(m_pageSummaryLabel);
 
-    m_pageGuidanceLabel = new Label(host);
-    m_pageGuidanceLabel->setObjectName(QStringLiteral("inspectorPageGuidance"));
-    m_pageGuidanceLabel->setTextColorRole(Label::TextColorRole::Secondary);
-    m_pageGuidanceLabel->setWordWrap(true);
-    layout->addWidget(m_pageGuidanceLabel);
+    m_pageMetaLabel = new Label(host);
+    m_pageMetaLabel->setObjectName(QStringLiteral("inspectorPageMeta"));
+    m_pageMetaLabel->setTextColorRole(Label::TextColorRole::Secondary);
+    m_pageMetaLabel->setWordWrap(true);
+    layout->addWidget(m_pageMetaLabel);
 
-    m_pageShortcutsLabel = new Label(host);
-    m_pageShortcutsLabel->setObjectName(QStringLiteral("inspectorPageShortcuts"));
-    m_pageShortcutsLabel->setTextColorRole(Label::TextColorRole::Tertiary);
-    m_pageShortcutsLabel->setWordWrap(true);
-    layout->addWidget(m_pageShortcutsLabel);
+    auto* statsHeading = new Label(tr("页面信息"), host);
+    statsHeading->setFluentTypography(Typography::FontRole::BodyStrong);
+    layout->addSpacing(8);
+    layout->addWidget(statsHeading);
+
+    m_pageStatsHost = new QWidget(host);
+    auto* statsHostLayout = new QVBoxLayout(m_pageStatsHost);
+    statsHostLayout->setContentsMargins(0, 0, 0, 0);
+    auto* statsCard = new fluent::layout::Card(m_pageStatsHost);
+    statsCard->setAppearance(fluent::layout::Card::LayerAlt);
+    statsCard->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
+    auto* statsLayout = new QVBoxLayout(statsCard);
+    statsLayout->setContentsMargins(12, 8, 12, 8);
+    statsLayout->setSpacing(0);
+    const std::array<QString, 4> statLabels{tr("文本区域"), tr("OCR"), tr("翻译"), tr("需要检查")};
+    const std::array<QString, 4> statIcons{Typography::Icons::glyph(QStringLiteral("ic_fluent_textbox_20_regular")),
+                                           Typography::Icons::glyph(QStringLiteral("ic_fluent_scan_text_20_regular")),
+                                           Typography::Icons::glyph(QStringLiteral("ic_fluent_translate_20_regular")),
+                                           Typography::Icons::glyph(QStringLiteral("ic_fluent_warning_20_regular"))};
+    for (int i = 0; i < statLabels.size(); ++i) {
+        auto* row = new QWidget(statsCard);
+        row->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+        auto* rowLayout = new QHBoxLayout(row);
+        rowLayout->setContentsMargins(0, 5, 0, 5);
+        rowLayout->setSpacing(8);
+        auto* icon = new Label(row);
+        icon->setFont(QFont(Typography::FontFamily::FluentIcons, 16));
+        icon->setText(statIcons.at(i));
+        icon->setTextColorRole(Label::TextColorRole::Secondary);
+        auto* label = new Label(statLabels.at(i), row);
+        label->setTextColorRole(Label::TextColorRole::Secondary);
+        label->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Fixed);
+        auto* value = new Label(row);
+        value->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
+        value->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+        rowLayout->addWidget(icon);
+        rowLayout->addWidget(label);
+        rowLayout->addStretch(1);
+        rowLayout->addWidget(value);
+        statsLayout->addWidget(row);
+        m_pageStatValues.append(value);
+    }
+    statsHostLayout->addWidget(statsCard);
+    layout->addWidget(m_pageStatsHost);
 
     layout->addStretch(1);
     return host;
@@ -920,26 +984,25 @@ void InspectorPanel::populatePage(const screen::editor::PageInspectorState& stat
     m_headerSubtitle->clear();
 
     if (state.pageNumber <= 0) {
+        m_pageStatsHost->setVisible(false);
         m_pageSummaryLabel->setText(tr("未打开项目"));
-        m_pageGuidanceLabel->setText(tr("打开项目后，此处显示当前页面的摘要信息。"));
-        m_pageShortcutsLabel->clear();
+        m_pageMetaLabel->clear();
+        for (auto* value : m_pageStatValues) {
+            value->setText(QStringLiteral("—"));
+        }
         return;
     }
 
     const QString direction =
         state.readingDirection == domain::ReadingDirection::RightToLeft ? tr("从右到左") : tr("从左到右");
-    m_pageSummaryLabel->setText(
-        tr("第 %1 / %2 页\n分辨率：%3 × %4\n阅读方向：%5\n文本区域：%6\nOCR 完成：%7\n翻译完成：%8")
-            .arg(state.pageNumber)
-            .arg(state.pageCount)
-            .arg(state.imageSize.width)
-            .arg(state.imageSize.height)
-            .arg(direction)
-            .arg(state.regionCount)
-            .arg(state.ocrCompletedCount)
-            .arg(state.translatedCount));
-    m_pageGuidanceLabel->setText(tr("选择画布中的文本区域以编辑其文本与排版。"));
-    m_pageShortcutsLabel->setText(tr("Ctrl+A 全选区域 · Delete 删除所选"));
+    m_pageStatsHost->setVisible(true);
+    m_pageSummaryLabel->setText(tr("第 %1 / %2 页").arg(state.pageNumber).arg(state.pageCount));
+    m_pageMetaLabel->setText(
+        tr("%1 × %2 px · %3").arg(state.imageSize.width).arg(state.imageSize.height).arg(direction));
+    m_pageStatValues.at(0)->setText(QString::number(state.regionCount));
+    m_pageStatValues.at(1)->setText(tr("%1 / %2").arg(state.ocrCompletedCount).arg(state.regionCount));
+    m_pageStatValues.at(2)->setText(tr("%1 / %2").arg(state.translatedCount).arg(state.regionCount));
+    m_pageStatValues.at(3)->setText(QString::number(state.needsReviewCount));
 }
 
 void InspectorPanel::populateSingle(const screen::editor::SingleRegionInspectorState& state) {
@@ -1157,8 +1220,13 @@ void InspectorPanel::emitFieldEdit(screen::editor::InspectorField field, const Q
 }
 
 bool InspectorPanel::eventFilter(QObject* watched, QEvent* event) {
-    // The filter is installed only on the two inner text editors; a FocusOut here
-    // always means a text control lost focus and the merge batch must be sealed.
+    if (m_scrollView != nullptr && watched == m_scrollView->viewport()) {
+        if (event->type() == QEvent::Resize) {
+            syncContentWidth();
+        }
+        return QWidget::eventFilter(watched, event);
+    }
+
     if (event->type() == QEvent::FocusOut) {
         Q_EMIT textEditingSessionFinished();
     } else if (event->type() == QEvent::InputMethod) {

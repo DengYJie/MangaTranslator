@@ -58,6 +58,7 @@ struct PageInspectorState {
     int regionCount{0};
     int ocrCompletedCount{0};
     int translatedCount{0};
+    int needsReviewCount{0};
 
     bool operator==(const PageInspectorState&) const = default;
 };

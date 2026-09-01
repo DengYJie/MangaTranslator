@@ -8,6 +8,7 @@
 #include <QWidget>
 
 class QListWidget;
+class QResizeEvent;
 class QStackedWidget;
 
 namespace fluent::basicinput {
@@ -16,6 +17,7 @@ class ComboBox;
 class ToggleSwitch;
 } // namespace fluent::basicinput
 namespace fluent::layout {
+class Card;
 class Expander;
 class Field;
 } // namespace fluent::layout
@@ -25,7 +27,6 @@ class LineEdit;
 class NumberBox;
 class TextEdit;
 } // namespace fluent::textfields
-
 namespace manga::ui::widget {
 
 class ColorSwatchButton;
@@ -79,9 +80,11 @@ Q_SIGNALS:
 
 protected:
     bool eventFilter(QObject* watched, QEvent* event) override;
+    void resizeEvent(QResizeEvent* event) override;
 
 private:
     void buildUi();
+    void syncContentWidth();
     QWidget* buildPageHost();
     QWidget* buildSingleHost();
     QWidget* buildMultiHost();
@@ -123,8 +126,9 @@ private:
 
     // Page host.
     fluent::textfields::Label* m_pageSummaryLabel{nullptr};
-    fluent::textfields::Label* m_pageGuidanceLabel{nullptr};
-    fluent::textfields::Label* m_pageShortcutsLabel{nullptr};
+    fluent::textfields::Label* m_pageMetaLabel{nullptr};
+    QVector<fluent::textfields::Label*> m_pageStatValues;
+    QWidget* m_pageStatsHost{nullptr};
 
     // Single host: translation.
     fluent::layout::Expander* m_translationExpander{nullptr};
