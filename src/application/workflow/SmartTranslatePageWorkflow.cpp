@@ -5,6 +5,7 @@
 
 #include <QCoreApplication>
 #include <QPromise>
+#include <QSet>
 #include <QSharedPointer>
 
 namespace manga::application {
@@ -36,6 +37,7 @@ public:
         m_targetLanguage = std::move(targetLanguage);
         m_pageImage = std::move(pageImage);
         m_sessionGeneration = sessionGeneration;
+        m_clearFailedRegions.clear();
 
         OperationDescriptor rootDesc{
             OperationStage::Project, projectId, pageId, std::nullopt, QStringLiteral("Workflow"), true};
@@ -117,6 +119,15 @@ private:
 
         auto self = shared_from_this();
         future.then([this, self, index, target](Result<OcrResponse> res) {
+            if (m_rootContext.stopToken.stop_requested()) {
+                m_proposal.issues.append({target.regionId,
+                                          QStringLiteral("Ocr"),
+                                          makeApplicationError(ErrorCategory::Cancelled,
+                                                               QStringLiteral("cancelled"),
+                                                               QStringLiteral("Cancelled"))});
+                finishWithProposal();
+                return;
+            }
             if (res.has_value()) {
                 m_proposal.ocr.append(res.value());
                 m_targets[index].sourceText = res.value().text;
@@ -171,6 +182,8 @@ private:
                 }
             } else {
                 m_proposal.issues.append({std::nullopt, QStringLiteral("Translate"), res.error()});
+                finishWithProposal();
+                return;
             }
             QMetaObject::invokeMethod(qApp, [this, self]() { runClearStep(0); }, Qt::QueuedConnection);
         });
@@ -213,6 +226,7 @@ private:
                 m_proposal.clear.append(res.value());
             } else {
                 m_proposal.issues.append({target.regionId, QStringLiteral("Clear"), res.error()});
+                m_clearFailedRegions.insert(target.regionId);
             }
             QMetaObject::invokeMethod(qApp, [this, self, index]() { runClearStep(index + 1); }, Qt::QueuedConnection);
         });
@@ -231,6 +245,17 @@ private:
 
         auto& target = m_targets[index];
         if (target.effectiveTranslation.isEmpty()) {
+            QMetaObject::invokeMethod(
+                qApp, [this, self = shared_from_this(), index]() { runLayoutStep(index + 1); }, Qt::QueuedConnection);
+            return;
+        }
+
+        if (m_clearFailedRegions.contains(target.regionId)) {
+            m_proposal.issues.append({target.regionId,
+                                      QStringLiteral("Layout"),
+                                      makeApplicationError(ErrorCategory::Cancelled,
+                                                           QStringLiteral("skipped.clear_failed"),
+                                                           QStringLiteral("Layout skipped because clear failed"))});
             QMetaObject::invokeMethod(
                 qApp, [this, self = shared_from_this(), index]() { runLayoutStep(index + 1); }, Qt::QueuedConnection);
             return;
@@ -278,6 +303,7 @@ private:
 
     std::shared_ptr<QPromise<Result<PageProcessingProposal>>> m_promise;
     PageProcessingProposal m_proposal;
+    QSet<domain::RegionId> m_clearFailedRegions;
 };
 
 SmartTranslatePageWorkflow::SmartTranslatePageWorkflow(RecognizeRegionUseCase* ocrUseCase,

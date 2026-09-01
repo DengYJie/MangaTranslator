@@ -19,6 +19,7 @@ private Q_SLOTS:
     void testTranslationDuplicateId();
     void testLayoutWarningOrOverflow();
     void testClearPrepareIoFailure();
+    void testPipelinePreparesAllStages();
 
 private:
     class PrepareProcessingAdoptionTestPrivate* d_ptr{nullptr};

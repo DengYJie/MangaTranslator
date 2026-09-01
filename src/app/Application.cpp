@@ -8,6 +8,7 @@
 #include "ui/navigation/NavigationPanel.h"
 #include "ui/navigation/NavigationTypes.h"
 #include "ui/screen/editor/EditorPage.h"
+#include "ui/screen/editor/EditorProcessingController.h"
 #include "ui/screen/editor/EditorViewModel.h"
 #include "ui/screen/home/HomePage.h"
 #include "ui/screen/home/HomeViewModel.h"
@@ -99,6 +100,15 @@ int Application::run() {
                                                                     m_context->projectRepository(),
                                                                     mainWindow);
     auto* editorPage = new ui::screen::editor::EditorPage(editorViewModel);
+    m_processingController =
+        std::make_unique<ui::screen::editor::EditorProcessingController>(editorViewModel,
+                                                                         m_context->ocrEngine(),
+                                                                         m_context->translator(),
+                                                                         m_context->inpainter(),
+                                                                         m_context->textLayouter(),
+                                                                         m_context->derivedAssetStore(),
+                                                                         m_context->operationRegistry(),
+                                                                         mainWindow);
 
     ui::navigation::NavigationItemDescriptor editorItem;
     editorItem.routeKey = QStringLiteral("editor");
@@ -108,7 +118,7 @@ int Application::run() {
     mainWindow->registerRoute(QStringLiteral("editor"), editorPage, QStringLiteral("main"));
 
     auto* settingsViewModel = new ui::screen::settings::SettingsViewModel(
-        m_context->appSettingsStore(), m_context->credentialStore(), m_context->ocrModelValidator(), mainWindow);
+        m_context->appSettingsStore(), m_context->credentialOperations(), m_context->ocrModelValidator(), mainWindow);
     auto* settingsPage = new ui::screen::settings::SettingsPage(settingsViewModel);
 
     auto* settingsPanel = new ui::navigation::NavigationPanel(mainWindow->navigationView());

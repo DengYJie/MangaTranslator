@@ -3,7 +3,7 @@
 > **Project**: MangaTranslator
 > **Phase**: Phase 5 (UI, MVVM, and Manga Editor Workbench)
 > **Date**: 2026-09-01
-> **Status**: **PASS** (Accepted)
+- **Status**: **UNVERIFIED** (runtime evidence incomplete)
 > **Target Configuration**: Windows, Qt 6.11.1, MSVC / Ninja, Debug
 
 ---
@@ -12,16 +12,16 @@
 
 Phase 5 delivers the desktop manga-translation workbench, providing a complete MVVM/UDF architecture, an interactive `QGraphicsView`-based manga canvas, a stable property inspector with comprehensive typography controls, non-blocking asynchronous processing proposals (OCR, Translation, Inpainting, Typesetting) with prepared undoable adoption, a global operation status task strip, and executable settings and error recovery surfaces.
 
-All automated test suites, architectural constraints, design brief contracts, visual evidence matrices, and phase exit criteria have been verified and passed.
+Automated and architectural checks are recorded below. Runtime visual evidence is explicitly unverified because the submitted artifacts are concept SVGs rather than executable captures.
 
 ---
 
 ## 2. Engineering Acceptance & Test Coverage
 
 ### 2.1 Test Suite Results
-- **Overall Test Run**: 42 passed out of 43 suites (98% pass rate).
+- **Overall Test Run**: **UNVERIFIED** in this evidence artifact; the final focused run must be recorded with exact output.
 - **UI Test Suite**: 33 passed out of 33 suites (**100% pass rate**, 0 failures).
-- **Pre-existing Environment Note**: Test #6 (`manga_tests_services`) encountered a pre-existing ONNX Runtime / BaberuOCR DLL version segmentation fault in this test environment, unrelated to Phase 5 UI/MVVM deliverables.
+- **Regression Note**: ONNX Runtime/BaberuOCR and application-runner regressions are unresolved in this artifact; they MUST NOT be labeled pre-existing or passed without a successful focused run.
 
 ### 2.2 UI Test Suites Breakdown (100% Pass)
 1. `manga_tests_ui_base_page` — Base page lifecycle and container integration.
@@ -88,8 +88,7 @@ All automated test suites, architectural constraints, design brief contracts, vi
   - 3 logical-pixel measurements verified and passed (`command-bar-height`, `inspector-width`, `page-rail-width`).
   - 3 dynamic checks verified and passed (`wrapped-text-height`, `multiline-input`, `async-scroll-end`).
 - **Independent Visual Review (`visual-review.html`)**:
-  - Generated review board with 9/9 5-star category scores (Workflow fit, Product signature, Visual hierarchy, Density and typography, Theme and material, Iconography, Surface composition, Responsive quality, State and interaction polish).
-  - Verdict: **PASS**.
+  - **UNVERIFIED**: the board embeds concept art, not runtime captures.
 
 ---
 
@@ -104,4 +103,4 @@ All automated test suites, architectural constraints, design brief contracts, vi
 | Responsive layout accessible in normal, narrow (<720px), and flat (<560px) viewports | **PASS** | `manga_tests_ui_responsive`, visual evidence matrix |
 | Executable recovery routes for all runtime and I/O error states | **PASS** | `manga_tests_ui_recovery_routes`, `manga_tests_ui_recovery_presenter` |
 
-**Conclusion**: Phase 5 is fully accepted and ready for Phase 6 export workflows and integration.
+**Conclusion**: Phase 5 visual/runtime acceptance remains unverified pending real executable captures and a green focused regression run.

@@ -34,7 +34,7 @@ template <class Suite> void runIfSelected(int& status, const char* name, const s
     bool isOptionValue = false;
     for (const QByteArray& argument : arguments) {
         const bool keepsArgument =
-            isOptionValue || argument.startsWith('-') || meta.indexOfSlot(argument.constData()) >= 0;
+            isOptionValue || argument.startsWith('-') || meta.indexOfSlot(QByteArray(argument).append("()")) >= 0;
         if (keepsArgument) {
             owned.push_back(argument);
         }
@@ -43,15 +43,20 @@ template <class Suite> void runIfSelected(int& status, const char* name, const s
 
     // A filter list that matches no function of this suite skips the suite entirely.
     const bool ownsAnyFunction = std::ranges::any_of(owned, [&meta](const QByteArray& argument) {
-        return !argument.startsWith('-') && meta.indexOfSlot(argument.constData()) >= 0;
+        return !argument.startsWith('-') && meta.indexOfSlot(QByteArray(argument).append("()")) >= 0;
     });
     if (filtered && !ownsAnyFunction) {
         return;
     }
 
+    std::vector<QByteArray> qexecArgs;
+    qexecArgs.reserve(owned.size() + 1);
+    qexecArgs.emplace_back("manga_tests_services");
+    qexecArgs.insert(qexecArgs.end(), owned.begin(), owned.end());
+
     std::vector<char*> argv;
-    argv.reserve(owned.size());
-    for (QByteArray& argument : owned) {
+    argv.reserve(qexecArgs.size());
+    for (QByteArray& argument : qexecArgs) {
         argv.push_back(argument.data());
     }
 

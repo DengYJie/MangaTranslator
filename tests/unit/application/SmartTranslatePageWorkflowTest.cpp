@@ -61,8 +61,14 @@ void SmartTranslatePageWorkflowTest::testSuccessfulPipeline() {
                     false});
 
     OperationId opId;
-    auto future = workflow.execute(
-        {}, {}, targets, QStringLiteral("ja"), QStringLiteral("en"), QImage(10, 10, QImage::Format_RGB32), 0, opId);
+    auto future = workflow.execute(manga::domain::ProjectId::generate(),
+                                   manga::domain::PageId::generate(),
+                                   targets,
+                                   QStringLiteral("ja"),
+                                   QStringLiteral("en"),
+                                   QImage(10, 10, QImage::Format_RGB32),
+                                   0,
+                                   opId);
     while (future.isRunning()) {
         QCoreApplication::processEvents(QEventLoop::AllEvents, 100);
     }
@@ -103,8 +109,14 @@ void SmartTranslatePageWorkflowTest::testFailsAtDependencyStopsSubsequent() {
                     false});
 
     OperationId opId;
-    auto future = workflow.execute(
-        {}, {}, targets, QStringLiteral("ja"), QStringLiteral("en"), QImage(10, 10, QImage::Format_RGB32), 0, opId);
+    auto future = workflow.execute(manga::domain::ProjectId::generate(),
+                                   manga::domain::PageId::generate(),
+                                   targets,
+                                   QStringLiteral("ja"),
+                                   QStringLiteral("en"),
+                                   QImage(10, 10, QImage::Format_RGB32),
+                                   0,
+                                   opId);
 
     // Process queued invoke methods for `.then()` continuations
     while (future.isRunning()) {
@@ -146,8 +158,14 @@ void SmartTranslatePageWorkflowTest::testCancelOperation() {
                     false});
 
     OperationId opId;
-    auto future = workflow.execute(
-        {}, {}, targets, QStringLiteral("ja"), QStringLiteral("en"), QImage(10, 10, QImage::Format_RGB32), 0, opId);
+    auto future = workflow.execute(manga::domain::ProjectId::generate(),
+                                   manga::domain::PageId::generate(),
+                                   targets,
+                                   QStringLiteral("ja"),
+                                   QStringLiteral("en"),
+                                   QImage(10, 10, QImage::Format_RGB32),
+                                   0,
+                                   opId);
 
     workflow.cancel(opId);
     fakeOcr.complete();
@@ -186,8 +204,14 @@ void SmartTranslatePageWorkflowTest::testManualOverrideSkipsProcessing() {
                     true});
 
     OperationId opId;
-    auto future = workflow.execute(
-        {}, {}, targets, QStringLiteral("ja"), QStringLiteral("en"), QImage(10, 10, QImage::Format_RGB32), 0, opId);
+    auto future = workflow.execute(manga::domain::ProjectId::generate(),
+                                   manga::domain::PageId::generate(),
+                                   targets,
+                                   QStringLiteral("ja"),
+                                   QStringLiteral("en"),
+                                   QImage(10, 10, QImage::Format_RGB32),
+                                   0,
+                                   opId);
 
     while (future.isRunning()) {
         QCoreApplication::processEvents(QEventLoop::AllEvents, 100);
@@ -225,8 +249,14 @@ void SmartTranslatePageWorkflowTest::testPartialSuccessRetainsProposals() {
                     false});
 
     OperationId opId;
-    auto future = workflow.execute(
-        {}, {}, targets, QStringLiteral("ja"), QStringLiteral("en"), QImage(10, 10, QImage::Format_RGB32), 0, opId);
+    auto future = workflow.execute(manga::domain::ProjectId::generate(),
+                                   manga::domain::PageId::generate(),
+                                   targets,
+                                   QStringLiteral("ja"),
+                                   QStringLiteral("en"),
+                                   QImage(10, 10, QImage::Format_RGB32),
+                                   0,
+                                   opId);
 
     while (future.isRunning()) {
         QCoreApplication::processEvents(QEventLoop::AllEvents, 100);
@@ -264,14 +294,18 @@ void SmartTranslatePageWorkflowTest::testSessionGenerationChangeYieldsStale() {
                     false});
 
     OperationId opId;
-    // Session generation = 0
-    auto future = workflow.execute(
-        {}, {}, targets, QStringLiteral("ja"), QStringLiteral("en"), QImage(10, 10, QImage::Format_RGB32), 0, opId);
-
-    // Simulate bumping generation in registry causing stale error in adapters
     fakeOcr.nextError =
         makeApplicationError(ErrorCategory::Cancelled, QStringLiteral("stale"), QStringLiteral("Stale"));
     fakeOcr.shouldFail = true;
+    // Session generation = 0
+    auto future = workflow.execute(manga::domain::ProjectId::generate(),
+                                   manga::domain::PageId::generate(),
+                                   targets,
+                                   QStringLiteral("ja"),
+                                   QStringLiteral("en"),
+                                   QImage(10, 10, QImage::Format_RGB32),
+                                   0,
+                                   opId);
 
     while (future.isRunning()) {
         QCoreApplication::processEvents(QEventLoop::AllEvents, 100);

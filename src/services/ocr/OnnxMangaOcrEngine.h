@@ -26,6 +26,7 @@ class BoundedTaskExecutor;
 class OnnxMangaOcrEngine final : public application::IOcrEngine {
 public:
     OnnxMangaOcrEngine(Ort::Env* env, BoundedTaskExecutor* executor, QString modelDir);
+    OnnxMangaOcrEngine(std::unique_ptr<Ort::Env> env, BoundedTaskExecutor* executor, QString modelDir);
     ~OnnxMangaOcrEngine() override;
 
     [[nodiscard]] QFuture<application::Result<application::OcrResponse>>

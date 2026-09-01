@@ -42,6 +42,7 @@ struct PreparedClearChange {
     domain::ProjectId projectId;
     domain::PageId pageId;
     domain::RegionId regionId;
+    quint64 expectedRevision{0};
     QString beforeRef;
     QString afterRef;
     bool beforeState{false};
@@ -178,6 +179,7 @@ public:
                         PreparedClearChange change{request.projectId,
                                                    request.pageId,
                                                    request.expectedRegionId,
+                                                   request.expectedRevision,
                                                    relativePath,
                                                    committed->relativePath,
                                                    beforeState,

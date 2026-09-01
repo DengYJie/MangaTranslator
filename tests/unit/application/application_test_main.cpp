@@ -12,6 +12,7 @@
 #include "ProjectUseCasesTest.h"
 #include "RecognizeRegionUseCaseTest.h"
 #include "RegionUseCasesTest.h"
+#include "SmartTranslatePageWorkflowTest.h"
 #include "TaskProgressTest.h"
 #include "TextUseCasesTest.h"
 #include "ThumbnailUseCasesTest.h"
@@ -107,6 +108,10 @@ int main(int argc, char* argv[]) {
     {
         AppSettingsUseCasesTest suite;
         runSuite("AppSettingsUseCasesTest", &suite);
+    }
+    {
+        SmartTranslatePageWorkflowTest suite;
+        runSuite("SmartTranslatePageWorkflowTest", &suite);
     }
 
     return status;

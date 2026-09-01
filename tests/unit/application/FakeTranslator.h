@@ -21,6 +21,7 @@ public:
         m_request = request;
         m_context = context;
         m_promise = std::make_unique<QPromise<Result<TranslationResponse>>>();
+        m_promise->start();
         auto future = m_promise->future();
         if (!deferred) {
             complete();
@@ -40,7 +41,13 @@ public:
         } else {
             m_promise->setProgressRange(0, 0); // Indeterminate progress for translation
             m_promise->setProgressValueAndText(1, "translate");
-            m_promise->addResult(nextResponse);
+            auto response = nextResponse;
+            if (response.items.isEmpty()) {
+                for (const auto& region : m_request.regions) {
+                    response.items.append({region.regionId, region.sourceText, QStringLiteral("translated"), {}});
+                }
+            }
+            m_promise->addResult(response);
         }
         m_promise->finish();
         m_promise.reset();

@@ -165,6 +165,9 @@ public:
     [[nodiscard]] quint64 viewGeneration() const noexcept {
         return m_state.viewGeneration;
     }
+    [[nodiscard]] const QImage& currentPageImage() const noexcept {
+        return m_currentPageImage;
+    }
 
 Q_SIGNALS:
     void stateChanged(const EditorState& state);
@@ -257,6 +260,7 @@ private:
     std::unique_ptr<TextEditSession> m_textEditSession;
 
     QFutureWatcher<application::Result<QImage>> m_pageLoadWatcher;
+    QImage m_currentPageImage;
     quint64 m_pageLoadToken{0};
     application::OperationId m_pageLoadOperation{};
 

@@ -1,5 +1,6 @@
 #include "application/ports/IAppSettingsStore.h"
 #include "application/ports/IOcrModelValidator.h"
+#include "application/usecase/credential/CredentialUseCases.h"
 #include "ui/screen/settings/SettingsPage.h"
 #include "ui/screen/settings/SettingsViewModel.h"
 #include "unit/application/FakeCredentialStore.h"
@@ -16,20 +17,16 @@ class FakeAppSettingsStore : public ::manga::application::IAppSettingsStore {
 public:
     std::optional<QVariant> readSetting(const QString& key) const override {
         auto it = m_values.constFind(key);
-        if (it != m_values.cend()) {
+        if (it != m_values.cend())
             return it.value();
-        }
         return std::nullopt;
     }
-
     void writeSetting(const QString& key, const QVariant& value) override {
         m_values.insert(key, value);
     }
-
     void removeSetting(const QString& key) override {
         m_values.remove(key);
     }
-
     QHash<QString, QVariant> m_values;
 };
 
@@ -59,45 +56,35 @@ private Q_SLOTS:
 void SettingsLifetimeTest::testViewModelPageDestructionCleanliness() {
     FakeAppSettingsStore store;
     ::manga::application::test::FakeCredentialStore credStore;
+    ::manga::application::CredentialOperations credentialOperations(&credStore);
     FakeOcrModelValidator validator;
-
     {
-        auto* vm = new SettingsViewModel(&store, &credStore, &validator);
+        auto* vm = new SettingsViewModel(&store, &credentialOperations, &validator);
         auto* page = new SettingsPage(vm);
         page->resize(800, 600);
         page->show();
         QTest::qWait(20);
-
         vm->setRecentProjectLimit(15);
         QVERIFY(vm->isDirty());
-
         delete page;
         delete vm;
     }
-    // Verifies no crash or heap corruption during teardown
 }
 
 void SettingsLifetimeTest::testLeaveInterceptionAndThemeRevertOnDiscard() {
     FakeAppSettingsStore store;
     ::manga::application::test::FakeCredentialStore credStore;
+    ::manga::application::CredentialOperations credentialOperations(&credStore);
     FakeOcrModelValidator validator;
-
-    SettingsViewModel vm(&store, &credStore, &validator);
-
+    SettingsViewModel vm(&store, &credentialOperations, &validator);
     QSignalSpy themeSpy(&vm, &SettingsViewModel::themePreviewRequested);
-
-    // Change theme -> preview signal emitted
     vm.setTheme(::manga::application::AppTheme::Dark);
     QCOMPARE(themeSpy.count(), 1);
     QCOMPARE(themeSpy.at(0).at(0).value<::manga::application::AppTheme>(), ::manga::application::AppTheme::Dark);
-
-    // Request leave -> intercepted
     QSignalSpy leaveSpy(&vm, &SettingsViewModel::leaveDecisionRequested);
     bool leaveProceed = false;
     vm.requestLeave([&leaveProceed](bool proceed) { leaveProceed = proceed; });
     QCOMPARE(leaveSpy.count(), 1);
-
-    // User chooses "不保存" -> theme reverted to persisted
     vm.confirmLeaveWithoutSave([&leaveProceed](bool proceed) { leaveProceed = proceed; });
     QVERIFY(leaveProceed);
     QCOMPARE(themeSpy.count(), 2);
@@ -107,16 +94,12 @@ void SettingsLifetimeTest::testLeaveInterceptionAndThemeRevertOnDiscard() {
 void SettingsLifetimeTest::testCredentialOperationsDestructionSafety() {
     FakeAppSettingsStore store;
     ::manga::application::test::FakeCredentialStore credStore;
+    ::manga::application::CredentialOperations credentialOperations(&credStore);
     FakeOcrModelValidator validator;
-
-    SettingsViewModel vm(&store, &credStore, &validator);
-
-    // Pass SecretBytes as transient argument
+    SettingsViewModel vm(&store, &credentialOperations, &validator);
     ::manga::application::SecretBytes key(QByteArray("my-secret-key"));
     vm.setCredential(std::move(key));
     QCOMPARE(vm.state().credentialStatus, ::manga::application::CredentialState::Configured);
-
-    // Remove credential
     vm.removeCredential();
     QCOMPARE(vm.state().credentialStatus, ::manga::application::CredentialState::Missing);
 }

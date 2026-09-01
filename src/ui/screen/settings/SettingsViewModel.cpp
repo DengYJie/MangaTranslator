@@ -30,10 +30,10 @@ bool isValidEndpointUrl(const QString& endpoint) {
 } // namespace
 
 SettingsViewModel::SettingsViewModel(application::IAppSettingsStore* settingsStore,
-                                     application::ICredentialStore* credentialStore,
+                                     application::CredentialOperations* credentialOperations,
                                      application::IOcrModelValidator* ocrModelValidator,
                                      QObject* parent)
-    : BaseViewModel(parent), m_settingsStore(settingsStore), m_credentialStore(credentialStore),
+    : BaseViewModel(parent), m_settingsStore(settingsStore), m_credentialOperations(credentialOperations),
       m_ocrModelValidator(ocrModelValidator) {
     loadSettings();
 }
@@ -170,9 +170,8 @@ void SettingsViewModel::setRetryCount(int count) {
 }
 
 void SettingsViewModel::setCredential(application::SecretBytes key) {
-    if (m_credentialStore != nullptr) {
-        application::SetCredentialUseCase useCase(m_credentialStore);
-        const auto res = useCase.execute({m_state.draft.providerId, std::move(key)});
+    if (m_credentialOperations != nullptr) {
+        const auto res = m_credentialOperations->set(m_state.draft.providerId, std::move(key));
         if (!res) {
             updateState([&res](SettingsState& state) {
                 state.saveError = ui::error::RecoveryPresenter::localizedSafeMessage(res.error());
@@ -183,9 +182,8 @@ void SettingsViewModel::setCredential(application::SecretBytes key) {
 }
 
 void SettingsViewModel::removeCredential() {
-    if (m_credentialStore != nullptr) {
-        application::ClearCredentialUseCase useCase(m_credentialStore);
-        const auto res = useCase.execute({m_state.draft.providerId});
+    if (m_credentialOperations != nullptr) {
+        const auto res = m_credentialOperations->clear(m_state.draft.providerId);
         if (!res) {
             updateState([&res](SettingsState& state) {
                 state.saveError = ui::error::RecoveryPresenter::localizedSafeMessage(res.error());
@@ -406,12 +404,11 @@ bool SettingsViewModel::validateDraft(SettingsState& state,
 }
 
 void SettingsViewModel::refreshCredentialStatus(SettingsState& state) {
-    if (m_credentialStore == nullptr) {
+    if (m_credentialOperations == nullptr) {
         state.credentialStatus = application::CredentialState::Unavailable;
         return;
     }
-    application::CheckCredentialStatusUseCase useCase(m_credentialStore);
-    const auto result = useCase.execute({state.draft.providerId});
+    const auto result = m_credentialOperations->status(state.draft.providerId);
     state.credentialStatus = result ? result->state : application::CredentialState::Unavailable;
 }
 

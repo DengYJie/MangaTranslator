@@ -2,7 +2,6 @@
 
 #include "application/dto/AppSettingsDto.h"
 #include "application/ports/IAppSettingsStore.h"
-#include "application/ports/ICredentialStore.h"
 #include "application/ports/IOcrModelValidator.h"
 #include "application/usecase/credential/CredentialUseCases.h"
 #include "application/usecase/settings/AppSettingsUseCases.h"
@@ -14,7 +13,6 @@
 namespace manga::ui::screen::settings {
 
 using IAppSettingsStore = ::manga::application::IAppSettingsStore;
-using ICredentialStore = ::manga::application::ICredentialStore;
 using IOcrModelValidator = ::manga::application::IOcrModelValidator;
 using SecretBytes = ::manga::application::SecretBytes;
 
@@ -24,7 +22,7 @@ class SettingsViewModel : public base::BaseViewModel<SettingsViewModel, Settings
     Q_OBJECT
 public:
     explicit SettingsViewModel(IAppSettingsStore* settingsStore,
-                               ICredentialStore* credentialStore,
+                               application::CredentialOperations* credentialOperations,
                                IOcrModelValidator* ocrModelValidator,
                                QObject* parent = nullptr);
     ~SettingsViewModel() override = default;
@@ -85,9 +83,9 @@ private:
     void refreshCredentialStatus(SettingsState& state);
     void validateOcrModelDirectory(SettingsState& state);
 
-    IAppSettingsStore* m_settingsStore;      // non-owning
-    ICredentialStore* m_credentialStore;     // non-owning
-    IOcrModelValidator* m_ocrModelValidator; // non-owning
+    IAppSettingsStore* m_settingsStore;                        // non-owning
+    application::CredentialOperations* m_credentialOperations; // non-owning
+    IOcrModelValidator* m_ocrModelValidator;                   // non-owning
 };
 
 } // namespace manga::ui::screen::settings

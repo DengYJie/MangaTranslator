@@ -10,7 +10,8 @@ constexpr int kBaseBackoffMs = 500;
 
 } // namespace
 
-RetryPolicy::RetryPolicy(Clock clock, Rng rng) : m_clock(std::move(clock)), m_rng(std::move(rng)) {}
+RetryPolicy::RetryPolicy(Clock clock, Rng rng, int maxRetries)
+    : m_clock(std::move(clock)), m_rng(std::move(rng)), m_maxRetries(std::clamp(maxRetries, 0, kMaxAttempts - 1)) {}
 
 int RetryPolicy::jitterDelayMs(int attemptIndex) const {
     const double ceiling = static_cast<double>(kBaseBackoffMs) * std::pow(2.0, attemptIndex);
@@ -23,7 +24,7 @@ RetryDecision RetryPolicy::decide(const HttpFailure& failure,
                                   int attemptIndex,
                                   const QByteArray& retryAfterHeader,
                                   int remainingDeadlineMs) const {
-    if (!failure.retryable || attemptIndex + 1 >= kMaxAttempts || remainingDeadlineMs <= 0) {
+    if (!failure.retryable || attemptIndex >= m_maxRetries || remainingDeadlineMs <= 0) {
         return {};
     }
     int delayMs = jitterDelayMs(attemptIndex);

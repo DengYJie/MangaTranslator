@@ -21,6 +21,7 @@ public:
         m_request = request;
         m_context = context;
         m_promise = std::make_unique<QPromise<Result<LayoutResponse>>>();
+        m_promise->start();
         auto future = m_promise->future();
         if (!deferred) {
             complete();

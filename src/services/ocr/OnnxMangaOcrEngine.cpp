@@ -25,6 +25,7 @@
 namespace manga::services {
 
 struct OnnxMangaOcrEngine::Impl {
+    std::unique_ptr<Ort::Env> ownedEnv;
     Ort::Env* env{nullptr};
     BoundedTaskExecutor* executor{nullptr};
     QString modelDir;
@@ -44,6 +45,14 @@ struct OnnxMangaOcrEngine::Impl {
 OnnxMangaOcrEngine::OnnxMangaOcrEngine(Ort::Env* env, BoundedTaskExecutor* executor, QString modelDir)
     : m_impl(std::make_unique<Impl>()) {
     m_impl->env = env;
+    m_impl->executor = executor;
+    m_impl->modelDir = std::move(modelDir);
+}
+
+OnnxMangaOcrEngine::OnnxMangaOcrEngine(std::unique_ptr<Ort::Env> env, BoundedTaskExecutor* executor, QString modelDir)
+    : m_impl(std::make_unique<Impl>()) {
+    m_impl->ownedEnv = std::move(env);
+    m_impl->env = m_impl->ownedEnv.get();
     m_impl->executor = executor;
     m_impl->modelDir = std::move(modelDir);
 }

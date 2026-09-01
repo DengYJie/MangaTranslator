@@ -17,6 +17,7 @@ class IInpainter;
 class ITextLayouter;
 class IDerivedAssetStore;
 class ICredentialStore;
+class CredentialOperations;
 } // namespace manga::application
 
 namespace manga::data {
@@ -93,6 +94,9 @@ public:
     [[nodiscard]] application::ICredentialStore* credentialStore() const {
         return m_credentialStore.get();
     }
+    [[nodiscard]] application::CredentialOperations* credentialOperations() const {
+        return m_credentialOperations.get();
+    }
     [[nodiscard]] application::IOcrModelValidator* ocrModelValidator() const {
         return m_ocrModelValidator.get();
     }
@@ -117,6 +121,7 @@ private:
     std::unique_ptr<application::IInpainter> m_inpainter;
     std::unique_ptr<application::ITextLayouter> m_textLayouter;
     std::unique_ptr<application::IDerivedAssetStore> m_derivedAssetStore;
+    std::unique_ptr<application::CredentialOperations> m_credentialOperations;
     std::unique_ptr<application::ICredentialStore> m_credentialStore;
     std::unique_ptr<application::IOcrModelValidator> m_ocrModelValidator;
     bool m_shutdown{false};

@@ -50,7 +50,13 @@ PrepareProcessingAdoptionUseCase::execute(const PrepareProcessingAdoptionRequest
     PreparedProcessingAdoption prepared;
     prepared.stage = request.stage;
 
-    if (request.stage == OperationStage::Ocr) {
+    // A smart-translate proposal uses Translate as its root stage while
+    // carrying all applicable stage payloads. Keep them in one prepared value.
+    const bool pipeline =
+        request.stage == OperationStage::Translate && (!request.ocr.isEmpty() || request.translation.has_value() ||
+                                                       !request.clear.isEmpty() || !request.layout.isEmpty());
+
+    if (request.stage == OperationStage::Ocr || pipeline) {
         for (const auto& ocr : request.ocr) {
             quint64 expectedRev = request.expectedRevisions.value(ocr.regionId, 0);
             auto r = checkRegion(ocr.regionId, expectedRev);
@@ -93,8 +99,10 @@ PrepareProcessingAdoptionUseCase::execute(const PrepareProcessingAdoptionRequest
 
             prepared.changes.append(change);
         }
-        return makeReadyFuture<PreparedProcessingAdoption>(prepared);
-    } else if (request.stage == OperationStage::Translate) {
+        if (!pipeline)
+            return makeReadyFuture<PreparedProcessingAdoption>(prepared);
+    }
+    if (request.stage == OperationStage::Translate || pipeline) {
         if (request.translation.has_value()) {
             QHash<QString, int> translationIdCounts;
             for (const auto& item : request.translation->items) {
@@ -165,8 +173,10 @@ PrepareProcessingAdoptionUseCase::execute(const PrepareProcessingAdoptionRequest
                 prepared.changes.append(change);
             }
         }
-        return makeReadyFuture<PreparedProcessingAdoption>(prepared);
-    } else if (request.stage == OperationStage::Layout) {
+        if (!pipeline)
+            return makeReadyFuture<PreparedProcessingAdoption>(prepared);
+    }
+    if (request.stage == OperationStage::Layout || pipeline) {
         for (const auto& item : request.layout) {
             quint64 expectedRev = request.expectedRevisions.value(item.regionId, 0);
             auto r = checkRegion(item.regionId, expectedRev);
@@ -210,8 +220,10 @@ PrepareProcessingAdoptionUseCase::execute(const PrepareProcessingAdoptionRequest
                 prepared.skipped.append(issue);
             }
         }
-        return makeReadyFuture<PreparedProcessingAdoption>(prepared);
-    } else if (request.stage == OperationStage::Clear) {
+        if (!pipeline)
+            return makeReadyFuture<PreparedProcessingAdoption>(prepared);
+    }
+    if (request.stage == OperationStage::Clear || pipeline) {
         if (!request.clear.isEmpty()) {
             const auto& clearData = request.clear.first();
             quint64 expectedRev = request.expectedRevisions.value(
@@ -262,9 +274,8 @@ PrepareProcessingAdoptionUseCase::execute(const PrepareProcessingAdoptionRequest
             return future;
         }
         return makeReadyFuture<PreparedProcessingAdoption>(prepared);
-    } else {
-        return makeReadyFuture<PreparedProcessingAdoption>(prepared);
     }
+    return makeReadyFuture<PreparedProcessingAdoption>(prepared);
 }
 
 } // namespace manga::application

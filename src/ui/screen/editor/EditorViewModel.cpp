@@ -777,6 +777,7 @@ void EditorViewModel::updateInspectorProjection(EditorState& s) const {
 }
 
 void EditorViewModel::startPageLoad(const domain::PageId& pageId) {
+    m_currentPageImage = QImage{};
     if (!m_pageLoadUseCase || !m_operationRegistry) {
         updateState([&](EditorState& s) {
             EditorNotice notice;
@@ -815,6 +816,7 @@ void EditorViewModel::handlePageLoadFinished() {
     m_pageLoadOperation = application::OperationId{};
 
     if (result.has_value()) {
+        m_currentPageImage = result.value();
         PageImageDelivery delivery;
         delivery.pageId = m_state.currentPageId;
         delivery.image = result.value();
@@ -1292,7 +1294,8 @@ EditorViewModel::adoptProcessingProposal(const application::PreparedProcessingAd
         const auto* region = page->findRegion(c.regionId);
         // Is region valid? Wait, before state is enough?
         // Wait, if contentRevision didn't change, we are good.
-        if (!region || region->isLocked() || region->isCleared() != c.beforeState) {
+        if (!region || region->isLocked() || region->isCleared() != c.beforeState ||
+            region->contentRevision() != c.expectedRevision) {
             return std::unexpected(application::detail::applyError(
                 application::ErrorCategory::Input, "input.stale_revision", "Stale clear state"));
         }

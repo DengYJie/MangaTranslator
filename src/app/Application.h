@@ -11,6 +11,9 @@ class ApplicationContext;
 namespace manga::ui::window {
 class MainWindow;
 }
+namespace manga::ui::screen::editor {
+class EditorProcessingController;
+}
 
 namespace manga::app {
 
@@ -32,6 +35,7 @@ private:
     std::unique_ptr<QApplication> m_app;
     std::unique_ptr<ApplicationContext> m_context;
     std::unique_ptr<ui::window::MainWindow> m_mainWindow;
+    std::unique_ptr<ui::screen::editor::EditorProcessingController> m_processingController;
     bool m_smokeTest{false};
     bool m_initFailed{false};
 };

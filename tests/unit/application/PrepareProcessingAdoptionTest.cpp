@@ -4,6 +4,7 @@
 #include "application/usecase/apply/PrepareProcessingAdoptionUseCases.h"
 #include "domain/model/ComicProject.h"
 
+#include <QDir>
 #include <QSignalSpy>
 #include <QTest>
 
@@ -396,4 +397,55 @@ void PrepareProcessingAdoptionTest::testClearPrepareIoFailure() {
     QVERIFY(future.isFinished());
     QVERIFY(!future.result().has_value());
     QCOMPARE(future.result().error().code, QString("clear.layer_commit_failed"));
+}
+
+void PrepareProcessingAdoptionTest::testPipelinePreparesAllStages() {
+    FakeDerivedAssetStore store;
+    PrepareClearResultUseCase clearUseCase(d_ptr->project, &store);
+    PrepareProcessingAdoptionUseCase useCase(d_ptr->project, &clearUseCase);
+
+    PrepareProcessingAdoptionRequest req;
+    req.projectId = d_ptr->project->id();
+    req.pageId = d_ptr->pageId;
+    req.stage = OperationStage::Translate;
+    req.sessionGeneration = 1;
+    req.currentSessionGeneration = 1;
+    req.pageSize = QSize(800, 600);
+    req.projectRoot = QDir::tempPath();
+    req.expectedRevisions.insert(d_ptr->regionId, 10);
+
+    OcrResponse ocr;
+    ocr.regionId = d_ptr->regionId;
+    ocr.text = "OCR text";
+    ocr.confidence = 0.95;
+    req.ocr.append(ocr);
+
+    TranslationResponseItem translated;
+    translated.regionId = d_ptr->regionId;
+    translated.translation = "Translated text";
+    TranslationResponse translation;
+    translation.providerId = "provider";
+    translation.items.append(translated);
+    req.translation = translation;
+
+    ClearResponse clear;
+    clear.regionId = d_ptr->regionId;
+    clear.affectedBounds = RectGeometry(10, 10, 100, 50);
+    clear.patch = QImage(100, 50, QImage::Format_RGBA8888);
+    clear.patch.fill(0xFFFFFFFF);
+    req.clear.append(clear);
+
+    LayoutResponse layout;
+    layout.regionId = d_ptr->regionId;
+    layout.resolvedLayout.fontSizePt = 14.0;
+    layout.resolvedLayout.fontFamily = "Arial";
+    req.layout.append(layout);
+
+    auto future = useCase.execute(req);
+    future.waitForFinished();
+    QVERIFY(future.isFinished());
+    QVERIFY(future.result().has_value());
+    const auto prepared = future.result().value();
+    QCOMPARE(prepared.changes.size(), 3);
+    QVERIFY(prepared.clearAssetChange.has_value());
 }

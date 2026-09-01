@@ -111,4 +111,23 @@ private:
     ICredentialStore* m_store;
 };
 
+/// Application-facing credential boundary for ViewModels; storage remains an infrastructure concern.
+class CredentialOperations {
+public:
+    explicit CredentialOperations(ICredentialStore* store) : m_store(store) {}
+
+    [[nodiscard]] Result<CredentialStatusResult> status(const QString& providerId) const {
+        return CheckCredentialStatusUseCase(m_store).execute({providerId});
+    }
+    [[nodiscard]] Result<void> set(QString providerId, SecretBytes key) const {
+        return SetCredentialUseCase(m_store).execute({std::move(providerId), std::move(key)});
+    }
+    [[nodiscard]] Result<void> clear(const QString& providerId) const {
+        return ClearCredentialUseCase(m_store).execute({providerId});
+    }
+
+private:
+    ICredentialStore* m_store;
+};
+
 } // namespace manga::application

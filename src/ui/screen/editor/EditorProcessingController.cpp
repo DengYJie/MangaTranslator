@@ -142,13 +142,15 @@ void EditorProcessingController::smartTranslatePage(const domain::PageId& pageId
 
     application::OperationId opId;
     const quint64 sessionGen = m_viewModel->projectSessionGeneration();
-    QImage dummyImage(page->imageSize().width > 0 ? page->imageSize().width : 800,
-                      page->imageSize().height > 0 ? page->imageSize().height : 1200,
-                      QImage::Format_RGB32);
-    dummyImage.fill(Qt::white);
+    const QImage pageImage = m_viewModel->currentPageImage();
+    if (pageImage.isNull()) {
+        m_pageSafeMessages[pageId] = tr("页面图像尚未加载，请稍后重试");
+        updateProcessingStateForCurrentPage();
+        return;
+    }
 
     auto future =
-        m_smartWorkflow->execute(projectId, pageId, targets, sourceLang, targetLang, dummyImage, sessionGen, opId);
+        m_smartWorkflow->execute(projectId, pageId, targets, sourceLang, targetLang, pageImage, sessionGen, opId);
 
     ActiveTask activeTask;
     activeTask.operationId = opId;
@@ -740,19 +742,28 @@ void EditorProcessingController::adoptProposal(const domain::PageId& pageId) {
     }
 
     if (m_preparedAdoptions.contains(pageId)) {
-        auto prepared = m_preparedAdoptions.take(pageId);
+        const auto prepared = m_preparedAdoptions.value(pageId);
+        const auto result = m_viewModel->adoptProcessingProposal(prepared);
+        if (!result) {
+            m_pageSafeMessages[pageId] = result.error().safeMessage;
+            if (pageId == m_viewModel->state().currentPageId) {
+                EditorNotice notice;
+                notice.safeMessage = result.error().safeMessage;
+                notice.retryable = true;
+                m_viewModel->setNotice(notice);
+                updateProcessingStateForCurrentPage();
+            }
+            return;
+        }
+        m_preparedAdoptions.remove(pageId);
         m_pageProposals.remove(pageId);
         m_pageConflictRegions.remove(pageId);
         m_pageSafeMessages.remove(pageId);
-        [[maybe_unused]] auto result = m_viewModel->adoptProcessingProposal(prepared);
         updateProcessingStateForCurrentPage();
         Q_EMIT proposalAdopted(pageId);
     } else if (m_pageProposals.contains(pageId)) {
-        m_pageProposals.remove(pageId);
-        m_pageConflictRegions.remove(pageId);
-        m_pageSafeMessages.remove(pageId);
+        m_pageSafeMessages[pageId] = tr("候选结果尚未准备好，请稍后重试");
         updateProcessingStateForCurrentPage();
-        Q_EMIT proposalAdopted(pageId);
     }
 }
 

@@ -9,7 +9,7 @@
 
 namespace manga::network {
 
-/// First attempt plus at most two retries.
+/// First attempt plus a configurable number of retries.
 constexpr int kMaxAttempts = 3;
 constexpr int kMaxRetryAfterSeconds = 60;
 constexpr int kMaxBackoffMs = 8000;
@@ -26,7 +26,7 @@ public:
     using Clock = std::function<QDateTime()>;
     using Rng = std::function<double()>;
 
-    explicit RetryPolicy(Clock clock = nullptr, Rng rng = nullptr);
+    explicit RetryPolicy(Clock clock = nullptr, Rng rng = nullptr, int maxRetries = kMaxAttempts - 1);
 
     /// attemptIndex is zero for the first attempt. remainingDeadlineMs is what is left of the
     /// operation deadline after this failure.
@@ -40,6 +40,7 @@ private:
 
     Clock m_clock;
     Rng m_rng;
+    int m_maxRetries;
 };
 
 } // namespace manga::network

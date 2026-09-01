@@ -21,6 +21,7 @@ public:
         m_request = request;
         m_context = context;
         m_promise = std::make_unique<QPromise<Result<OcrResponse>>>();
+        m_promise->start();
         auto future = m_promise->future();
         if (!deferred) {
             complete();
@@ -40,6 +41,9 @@ public:
         } else {
             auto response = nextResponse;
             response.regionId = m_request.regionId;
+            if (response.text.isEmpty()) {
+                response.text = QStringLiteral("recognized");
+            }
             m_promise->setProgressRange(0, 1);
             m_promise->setProgressValueAndText(1, "ocr");
             m_promise->addResult(response);

@@ -8,6 +8,7 @@ target_sources(manga_services
         inpaint/SolidColorInpainter.cpp
         ocr/BaberuManifest.cpp
         ocr/OcrModelValidator.cpp
+        ocr/OcrFactory.cpp
         ocr/BaberuVocab.cpp
         ocr/BaberuOcrPreprocessor.cpp
         ocr/OnnxMangaOcrEngine.cpp
