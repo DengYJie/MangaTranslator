@@ -1,11 +1,13 @@
 #include "ui/screen/editor/EditorProcessingController.h"
 
+#include "application/ports/ITextDetector.h"
 #include "application/usecase/apply/PrepareProcessingAdoptionUseCases.h"
 #include "application/usecase/processing/ProcessingUseCases.h"
 #include "application/workflow/OperationRegistry.h"
 #include "application/workflow/SmartTranslatePageWorkflow.h"
 #include "domain/model/LanguageCode.h"
 #include "domain/model/TextContent.h"
+#include "rendering/inpaint/StrokeMaskRasterizer.h"
 #include "ui/screen/editor/EditorViewModel.h"
 
 #include <QCoreApplication>
@@ -18,11 +20,14 @@ EditorProcessingController::EditorProcessingController(EditorViewModel* viewMode
                                                        application::IOcrEngine* ocrEngine,
                                                        application::ITranslator* translator,
                                                        application::IInpainter* inpainter,
+                                                       application::IPageInpainter* pageInpainter,
                                                        application::ITextLayouter* layouter,
                                                        application::IDerivedAssetStore* assetStore,
                                                        application::OperationRegistry* registry,
+                                                       application::ITextDetector* textDetector,
                                                        QObject* parent)
-    : QObject(parent), m_viewModel(viewModel), m_registry(registry), m_assetStore(assetStore) {
+    : QObject(parent), m_viewModel(viewModel), m_registry(registry), m_assetStore(assetStore),
+      m_pageInpainter(pageInpainter), m_textDetector(textDetector) {
     if (m_registry != nullptr) {
         m_ownedOcrUseCase = std::make_unique<application::RecognizeRegionUseCase>(ocrEngine, m_registry);
         m_ownedTranslateUseCase = std::make_unique<application::TranslatePageUseCase>(translator, m_registry);
@@ -93,6 +98,78 @@ void EditorProcessingController::cancelMatchingTask(const WatcherKey& key) {
 
 void EditorProcessingController::smartTranslatePage(const domain::PageId& pageId) {
     smartTranslate(pageId, {});
+}
+
+void EditorProcessingController::detectRegions(const domain::PageId& pageId) {
+    if (m_viewModel == nullptr || !m_viewModel->hasSession() || m_textDetector == nullptr) {
+        return;
+    }
+    const auto& image = m_viewModel->currentPageImage();
+    if (image.isNull() || !pageId.isValid()) {
+        return;
+    }
+
+    auto* project = m_viewModel->projectAggregate();
+    if (project == nullptr) {
+        return;
+    }
+
+    WatcherKey key;
+    key.projectId = project->id();
+    key.pageId = pageId;
+    key.stage = application::OperationStage::Detect;
+
+    cancelMatchingTask(key);
+
+    application::OperationDescriptor descriptor;
+    descriptor.projectId = project->id();
+    descriptor.pageId = pageId;
+    descriptor.stage = application::OperationStage::Detect;
+    const quint64 sessionGen = m_viewModel->projectSessionGeneration();
+    auto operation = m_registry != nullptr
+                         ? m_registry->createOperation(descriptor, sessionGen, m_viewModel->viewGeneration())
+                         : application::OperationContext{application::OperationId::generate(), sessionGen};
+    const auto opId = operation.operationId;
+
+    ActiveTask task;
+    task.operationId = opId;
+    task.sessionGeneration = sessionGen;
+    task.key = key;
+    m_activeTasks[key] = task;
+
+    application::TextDetectionRequest req;
+    req.pageId = pageId;
+    req.image = image;
+    req.readingDirection = domain::ReadingDirection::RightToLeft;
+    req.minConfidence = 0.35;
+
+    auto future = m_textDetector->detect(std::move(req), operation);
+    auto* watcher = new QFutureWatcher<application::Result<application::TextDetectionResponse>>(this);
+    connect(watcher, &QFutureWatcherBase::finished, this, [this, watcher, key, opId, sessionGen]() {
+        if (m_activeTasks.contains(key) && m_activeTasks[key].operationId == opId) {
+            m_activeTasks.remove(key);
+        }
+        if (m_registry != nullptr) {
+            m_registry->markFinished(opId);
+        }
+
+        if (m_viewModel != nullptr && m_viewModel->hasSession() &&
+            sessionGen == m_viewModel->projectSessionGeneration()) {
+            auto result = watcher->result();
+            if (result.has_value()) {
+                m_viewModel->applyDetectedRegions(key.pageId, result->detectedRegions);
+                Q_EMIT processingFinished(key.pageId, true);
+            } else {
+                Q_EMIT processingFinished(key.pageId, false);
+            }
+        }
+        watcher->deleteLater();
+        updateProcessingStateForCurrentPage();
+    });
+    watcher->setFuture(future);
+
+    updateProcessingStateForCurrentPage();
+    Q_EMIT processingStarted(pageId, opId);
 }
 
 void EditorProcessingController::smartTranslateRegions(const domain::PageId& pageId,
@@ -506,6 +583,105 @@ void EditorProcessingController::clearSelectedRegions() {
     }
 }
 
+void EditorProcessingController::inpaintStroke(const domain::PageId& pageId,
+                                               const QVector<QPointF>& points,
+                                               double diameter) {
+    if (m_viewModel == nullptr || !m_viewModel->hasSession() || !pageId.isValid() || m_registry == nullptr ||
+        m_assetStore == nullptr || points.isEmpty())
+        return;
+    auto* project = m_viewModel->projectAggregate();
+    if (project == nullptr || pageId != m_viewModel->state().currentPageId)
+        return;
+    const auto* page = project->findPage(pageId);
+    const QImage source = m_viewModel->currentPageImage();
+    if (page == nullptr || source.isNull())
+        return;
+    const auto raster = rendering::StrokeMaskRasterizer::rasterize(source.size(), points, diameter);
+    if (raster.mask.isNull() || !raster.dirtyBounds.isValid())
+        return;
+
+    const WatcherKey key{project->id(), pageId, std::nullopt, application::OperationStage::Clear};
+    // A page may have only one in-flight inpaint stroke. Unlike region clear, a new
+    // stroke must not cancel or replace the existing job.
+    if (m_activeTasks.contains(key))
+        return;
+    application::OperationDescriptor descriptor;
+    descriptor.projectId = project->id();
+    descriptor.pageId = pageId;
+    descriptor.stage = application::OperationStage::Clear;
+    const quint64 sessionGen = m_viewModel->projectSessionGeneration();
+    auto operation = m_registry->createOperation(descriptor, sessionGen, m_viewModel->viewGeneration());
+    auto workflow = std::make_shared<application::ManualInpaintWorkflow>(m_assetStore, m_pageInpainter);
+    application::ManualPageInpaintRequest request;
+    request.projectId = project->id();
+    request.pageId = pageId;
+    request.pageImage = source;
+    request.mask = raster.mask;
+    request.dirtyBounds = raster.dirtyBounds;
+    request.projectRoot = m_viewModel->projectRootPath();
+    request.expectedSessionGeneration = sessionGen;
+    request.currentSessionGeneration = sessionGen;
+    request.expectedPageSize = source.size();
+    request.expectedClearLayerRef =
+        page->clearLayerAsset().has_value() ? QString::fromStdString(*page->clearLayerAsset()) : QString();
+    request.context = operation;
+    const auto opId = operation.operationId;
+    auto future = workflow->execute(std::move(request));
+    ActiveTask active{opId, sessionGen, key, {}, {}};
+    m_activeTasks.insert(key, active);
+    auto* watcher = new QFutureWatcher<application::Result<application::PreparedPageInpaintChange>>(this);
+    QPointer<EditorProcessingController> self(this);
+    connect(watcher, &QFutureWatcherBase::finished, this, [self, watcher, key, opId, sessionGen]() {
+        if (self == nullptr)
+            return;
+        auto* vm = self->m_viewModel;
+        if (vm != nullptr && vm->hasSession() && sessionGen == vm->projectSessionGeneration() &&
+            self->m_activeTasks.contains(key) && self->m_activeTasks.value(key).operationId == opId) {
+            self->m_activeTasks.remove(key);
+            const auto result = watcher->result();
+            bool snapshotStillCurrent = false;
+            if (result.has_value()) {
+                const auto* currentProject = vm->projectAggregate();
+                const auto* currentPage = currentProject != nullptr ? currentProject->findPage(key.pageId) : nullptr;
+                const QSize currentPageSize =
+                    currentPage != nullptr ? QSize(currentPage->imageSize().width, currentPage->imageSize().height)
+                                           : QSize();
+                const QString currentClearLayerRef =
+                    currentPage != nullptr && currentPage->clearLayerAsset().has_value()
+                        ? QString::fromStdString(*currentPage->clearLayerAsset())
+                        : QString();
+                snapshotStillCurrent =
+                    currentProject != nullptr && currentProject->id() == key.projectId && currentPage != nullptr &&
+                    sessionGen == vm->projectSessionGeneration() && key.pageId == vm->state().currentPageId &&
+                    currentPageSize == result->expectedPageSize && currentClearLayerRef == result->beforeRef;
+            }
+            if (result.has_value() && snapshotStillCurrent && vm->applyPageInpaintChange(result.value())) {
+                self->m_registry->markFinished(opId);
+                self->updateProcessingStateForCurrentPage();
+                Q_EMIT self->processingFinished(key.pageId, true);
+            } else if (!result.has_value() && !result.error().isCancelled()) {
+                self->m_registry->markFinished(opId, result.error());
+                vm->setNotice(EditorNotice{result.error().safeMessage,
+                                           QString(),
+                                           application::RecoveryAction::None,
+                                           result.error().retryable});
+                self->updateProcessingStateForCurrentPage();
+                Q_EMIT self->processingFinished(key.pageId, false);
+            } else if (result.has_value() && !snapshotStillCurrent) {
+                self->m_registry->markFinished(
+                    opId,
+                    application::makeApplicationError(application::ErrorCategory::Cancelled,
+                                                      QStringLiteral("cancelled.stale_clear_layer"),
+                                                      QStringLiteral("Clear layer changed before commit")));
+            }
+        }
+        watcher->deleteLater();
+    });
+    watcher->setFuture(future);
+    updateProcessingStateForCurrentPage();
+    Q_EMIT processingStarted(pageId, opId);
+}
+
 void EditorProcessingController::clearRegion(const domain::PageId& pageId, const domain::RegionId& regionId) {
     if (m_viewModel == nullptr || !m_viewModel->hasSession() || !pageId.isValid() || !regionId.isValid() ||
         m_clearUseCase == nullptr || m_registry == nullptr) {
@@ -837,7 +1013,16 @@ void EditorProcessingController::rejectProposal(const domain::PageId& pageId) {
     Q_EMIT proposalRejected(pageId);
 }
 
-void EditorProcessingController::handlePageSwitched(const domain::PageId&) {
+void EditorProcessingController::handlePageSwitched(const domain::PageId& pageId) {
+    for (auto it = m_activeTasks.begin(); it != m_activeTasks.end();) {
+        if (it.key().pageId != pageId) {
+            if (m_registry != nullptr)
+                m_registry->cancelOperation(it.value().operationId);
+            it = m_activeTasks.erase(it);
+        } else {
+            ++it;
+        }
+    }
     updateProcessingStateForCurrentPage();
 }
 

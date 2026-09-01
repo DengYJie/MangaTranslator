@@ -8,6 +8,7 @@
 #include "application/usecase/region/RegionUseCases.h"
 #include "application/usecase/thumbnail/ThumbnailUseCases.h"
 #include "application/workflow/OperationRegistry.h"
+#include "ui/command/PageClearLayerCommand.h"
 #include "ui/command/ProcessingAdoptionCommands.h"
 #include "ui/command/RegionCommands.h"
 #include "ui/command/RegionPropertyCommand.h"
@@ -318,6 +319,8 @@ void EditorViewModel::completeProjectClose() {
     const QString ocrUnavailableReason = m_state.ocrUnavailableReason;
     const bool isTranslationAvailable = m_state.isTranslationAvailable;
     const QString translationUnavailableReason = m_state.translationUnavailableReason;
+    const bool isInpaintAvailable = m_state.isInpaintAvailable;
+    const QString inpaintUnavailableReason = m_state.inpaintUnavailableReason;
     updateState([&](EditorState& s) {
         s = EditorState{};
         s.projectSessionGeneration = projGen;
@@ -326,6 +329,8 @@ void EditorViewModel::completeProjectClose() {
         s.ocrUnavailableReason = ocrUnavailableReason;
         s.isTranslationAvailable = isTranslationAvailable;
         s.translationUnavailableReason = translationUnavailableReason;
+        s.isInpaintAvailable = isInpaintAvailable;
+        s.inpaintUnavailableReason = inpaintUnavailableReason;
     });
 
     Q_EMIT thumbnailsInvalidated();
@@ -661,6 +666,21 @@ void EditorViewModel::requestPreview(const domain::PageId& pageId) {
     m_previewWatcher.setFuture(builder.executePreview(request, context));
 }
 
+void EditorViewModel::invalidatePreviewAndRequestCurrentPage() {
+    if (m_operationRegistry && m_previewOperation.isValid()) {
+        m_operationRegistry->cancelOperation(m_previewOperation);
+    }
+    m_previewOperation = application::OperationId{};
+    ++m_previewToken;
+    m_previewPageId = domain::PageId{};
+    m_previewSessionGeneration = 0;
+    m_previewContentRevision = 0;
+    m_cachedPreviewImage = QImage{};
+    if (m_hasSession && m_state.currentPageId.isValid()) {
+        requestPreview(m_state.currentPageId);
+    }
+}
+
 void EditorViewModel::handlePreviewFinished() {
     const quint64 token = m_previewToken;
     if (token == 0 || m_previewWatcher.isCanceled()) {
@@ -722,6 +742,7 @@ void EditorViewModel::rebuildCurrentPageProjection() {
         RegionProjection rp;
         rp.id = region.id();
         rp.geometry = region.geometry();
+        rp.bubbleGeometry = region.bubbleGeometry();
         rp.orderIndex = region.orderIndex();
         rp.contentRevision = region.contentRevision();
         rp.isLocked = region.isLocked();
@@ -1117,6 +1138,69 @@ const application::PageDescriptor* EditorViewModel::findPage(const domain::PageI
         }
     }
     return nullptr;
+}
+
+void EditorViewModel::detectRegionsOnCurrentPage() {
+    if (!m_hasSession || !m_state.currentPageId.isValid() || m_currentPageImage.isNull()) {
+        return;
+    }
+    if (m_processingController != nullptr) {
+        m_processingController->detectRegions(m_state.currentPageId);
+    }
+}
+
+void EditorViewModel::applyDetectedRegions(const domain::PageId& pageId,
+                                           const QVector<application::DetectedRegionItem>& detected) {
+    if (!m_hasSession || !m_undoStack || !m_commandContext || pageId != m_state.currentPageId || detected.isEmpty()) {
+        return;
+    }
+
+    const auto pageSize = m_commandContext->pageSize(pageId);
+    const auto* page = m_openedSession->project.findPage(pageId);
+    const int startOrderIndex = page ? static_cast<int>(page->regions().size()) : 0;
+
+    QVector<command::CreateRegionsBatchCommand::Entry> entries;
+    QVector<domain::RegionId> newRegionIds;
+    entries.reserve(detected.size());
+    newRegionIds.reserve(detected.size());
+
+    int orderOffset = 0;
+    for (const auto& item : detected) {
+        if (!item.rect.isValid() || !item.rect.isWithinBounds(pageSize)) {
+            continue;
+        }
+        if (item.rect.width < canvas::kMinRegionDimension || item.rect.height < canvas::kMinRegionDimension) {
+            continue;
+        }
+
+        const auto regionId = domain::RegionId::generate();
+        entries.append(command::CreateRegionsBatchCommand::Entry{.regionId = regionId,
+                                                                 .geometry = item.rect,
+                                                                 .bubbleGeometry = item.bubbleRect,
+                                                                 .orderIndex = startOrderIndex + orderOffset++});
+        newRegionIds.append(regionId);
+    }
+
+    if (entries.isEmpty()) {
+        return;
+    }
+
+    sealActiveTextSession();
+    auto* cmd = new command::CreateRegionsBatchCommand(m_commandContext.get(), pageId, std::move(entries));
+    m_undoStack->push(cmd);
+    if (cmd->hasFaulted()) {
+        m_undoHistoryFaulted = true;
+    }
+
+    updateState([&newRegionIds](EditorState& s) {
+        s.selectedRegionIds = newRegionIds;
+        s.primaryRegionId = newRegionIds.isEmpty() ? domain::RegionId{} : newRegionIds.first();
+        s.inspectorMode = newRegionIds.size() > 1
+                              ? InspectorMode::Multi
+                              : (newRegionIds.size() == 1 ? InspectorMode::Single : InspectorMode::None);
+    });
+    rebuildCurrentPageProjection();
+    refreshUndoState();
 }
 
 void EditorViewModel::createRegion(const domain::RectGeometry& geometry) {
@@ -1552,6 +1636,8 @@ void EditorViewModel::undo() {
     }
 
     sealActiveTextSession();
+    const bool clearLayerChanged =
+        dynamic_cast<const command::PageClearLayerCommand*>(m_undoStack->command(m_undoStack->index())) != nullptr;
     m_undoStack->undo();
 
     // The just-undone command sits at the stack index after undo.
@@ -1571,6 +1657,9 @@ void EditorViewModel::undo() {
 
     rebuildCurrentPageProjection();
     refreshUndoState();
+    if (clearLayerChanged) {
+        invalidatePreviewAndRequestCurrentPage();
+    }
 }
 
 void EditorViewModel::redo() {
@@ -1587,6 +1676,8 @@ void EditorViewModel::redo() {
     const auto* pendingCmd = dynamic_cast<const command::RegionCommand*>(m_undoStack->command(m_undoStack->index()));
     const auto* pendingAdoption =
         dynamic_cast<const command::ProcessingAdoptionCommand*>(m_undoStack->command(m_undoStack->index()));
+    const bool clearLayerChanged =
+        dynamic_cast<const command::PageClearLayerCommand*>(m_undoStack->command(m_undoStack->index())) != nullptr;
     domain::PageId targetPage;
     if (pendingCmd != nullptr) {
         targetPage = pendingCmd->pageId();
@@ -1609,6 +1700,9 @@ void EditorViewModel::redo() {
 
     rebuildCurrentPageProjection();
     refreshUndoState();
+    if (clearLayerChanged) {
+        invalidatePreviewAndRequestCurrentPage();
+    }
 }
 
 void EditorViewModel::refreshUndoState() {
@@ -1926,6 +2020,29 @@ void EditorViewModel::cancelClose() {}
 
 void EditorViewModel::setProcessingController(EditorProcessingController* controller) {
     m_processingController = controller;
+}
+
+bool EditorViewModel::applyPageInpaintChange(const application::PreparedPageInpaintChange& change) {
+    if (!m_hasSession || !m_undoStack || !m_commandContext || change.projectId != m_state.projectId ||
+        change.expectedSessionGeneration != m_state.projectSessionGeneration ||
+        change.pageId != m_state.currentPageId) {
+        return false;
+    }
+    auto* command =
+        new command::PageClearLayerCommand(m_commandContext.get(), change, [this](const domain::PageId& pageId) {
+            if (pageId == m_state.currentPageId)
+                rebuildCurrentPageProjection();
+        });
+    m_undoStack->push(command);
+    if (command->hasFaulted()) {
+        m_undoHistoryFaulted = true;
+        refreshUndoState();
+        return false;
+    }
+    rebuildCurrentPageProjection();
+    refreshUndoState();
+    invalidatePreviewAndRequestCurrentPage();
+    return true;
 }
 
 void EditorViewModel::updateProcessingState(const EditorProcessingState& processingState) {

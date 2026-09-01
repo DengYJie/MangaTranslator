@@ -34,6 +34,7 @@ RegionOverlayItem::RegionOverlayItem(::manga::domain::RegionId id, QGraphicsItem
 
 void RegionOverlayItem::updateFromDisplay(const canvas::RegionDisplay& display) {
     setRect(display.geometry.x, display.geometry.y, display.geometry.width, display.geometry.height);
+    m_bubbleGeometry = display.bubbleGeometry;
     setSelected(display.selected);
     layoutHandles();
 }
@@ -49,11 +50,37 @@ void RegionOverlayItem::setTransientGeometry(const ::manga::domain::RectGeometry
 }
 
 QRectF RegionOverlayItem::boundingRect() const {
-    return QGraphicsRectItem::boundingRect().adjusted(-2.0, -2.0, 2.0, 2.0);
+    QRectF br = QGraphicsRectItem::boundingRect().adjusted(-2.0, -2.0, 2.0, 2.0);
+    if (m_bubbleGeometry.has_value()) {
+        const auto& bg = *m_bubbleGeometry;
+        br = br.united(QRectF(bg.x, bg.y, bg.width, bg.height).adjusted(-2.0, -2.0, 2.0, 2.0));
+    }
+    return br;
 }
 
 void RegionOverlayItem::paint(QPainter* painter, const QStyleOptionGraphicsItem*, QWidget*) {
     painter->save();
+
+    // If selected or hovered and an associated bubble exists, draw its outline
+    if ((m_selected || m_hovered) && m_bubbleGeometry.has_value()) {
+        const auto& bg = *m_bubbleGeometry;
+        const QRectF bRect(bg.x, bg.y, bg.width, bg.height);
+
+        // Subtle dark underlay for contrast
+        QPen bubbleHalo(QColor(0, 0, 0, 160), 2.5);
+        bubbleHalo.setCosmetic(true);
+        painter->setPen(bubbleHalo);
+        painter->setBrush(Qt::NoBrush);
+        painter->drawRoundedRect(bRect, 6.0, 6.0);
+
+        // Dashed accent outline
+        QColor strokeColor = m_selected ? m_selectedStroke : QColor(0, 120, 215, 180);
+        QPen bubblePen(strokeColor, 1.2, Qt::DashLine);
+        bubblePen.setCosmetic(true);
+        painter->setPen(bubblePen);
+        painter->drawRoundedRect(bRect, 6.0, 6.0);
+    }
+
     QColor fill = m_selectedStroke;
     fill.setAlpha(m_selected ? 22 : (m_hovered ? 14 : 0));
     painter->setBrush(fill.alpha() > 0 ? QBrush(fill) : Qt::NoBrush);

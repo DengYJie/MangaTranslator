@@ -19,12 +19,17 @@ public:
     explicit TextRegion(RegionId id) : m_id(id) {}
     TextRegion(RegionId id, RectGeometry geometry, int orderIndex = 0)
         : m_id(id), m_geometry(geometry), m_orderIndex(orderIndex) {}
+    TextRegion(RegionId id, RectGeometry geometry, std::optional<RectGeometry> bubbleGeometry, int orderIndex = 0)
+        : m_id(id), m_geometry(geometry), m_orderIndex(orderIndex), m_bubbleGeometry(bubbleGeometry) {}
 
     [[nodiscard]] const RegionId& id() const noexcept {
         return m_id;
     }
     [[nodiscard]] const RectGeometry& geometry() const noexcept {
         return m_geometry;
+    }
+    [[nodiscard]] const std::optional<RectGeometry>& bubbleGeometry() const noexcept {
+        return m_bubbleGeometry;
     }
     [[nodiscard]] int orderIndex() const noexcept {
         return m_orderIndex;
@@ -62,6 +67,7 @@ public:
 
     // Controlled mutators. All content modifications strictly increment m_contentRevision
     void setGeometry(RectGeometry geometry);
+    void setBubbleGeometry(std::optional<RectGeometry> geometry);
     void setOrderIndex(int index) noexcept {
         m_orderIndex = index;
     }
@@ -119,6 +125,7 @@ public:
 private:
     RegionId m_id;
     RectGeometry m_geometry;
+    std::optional<RectGeometry> m_bubbleGeometry;
     int m_orderIndex{0};
 
     TextContent m_source;

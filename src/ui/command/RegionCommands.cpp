@@ -37,6 +37,37 @@ void CreateRegionCommand::redo() {
     }
 }
 
+// CreateRegionsBatchCommand
+
+CreateRegionsBatchCommand::CreateRegionsBatchCommand(EditorCommandContext* context,
+                                                     domain::PageId pageId,
+                                                     QVector<Entry> entries)
+    : RegionCommand(QStringLiteral("Auto Detect Regions")), m_context(context), m_pageId(pageId),
+      m_entries(std::move(entries)) {}
+
+void CreateRegionsBatchCommand::undo() {
+    // Remove in reverse order
+    for (int i = m_entries.size() - 1; i >= 0; --i) {
+        const auto result = m_context->removeRegion(m_pageId, m_entries[i].regionId);
+        if (!result.has_value()) {
+            markFaulted();
+        }
+    }
+}
+
+void CreateRegionsBatchCommand::redo() {
+    if (m_firstRedo) {
+        m_firstRedo = false;
+    }
+    for (const auto& entry : std::as_const(m_entries)) {
+        domain::TextRegion region(entry.regionId, entry.geometry, entry.bubbleGeometry, entry.orderIndex);
+        const auto result = m_context->insertRegion(m_pageId, region, entry.orderIndex);
+        if (!result.has_value()) {
+            markFaulted();
+        }
+    }
+}
+
 // DeleteRegionsCommand
 
 DeleteRegionsCommand::DeleteRegionsCommand(EditorCommandContext* context,

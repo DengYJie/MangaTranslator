@@ -7,6 +7,7 @@
 #include "application/operation/OperationId.h"
 #include "application/operation/OperationStage.h"
 #include "application/usecase/apply/PrepareProcessingAdoptionUseCases.h"
+#include "application/usecase/processing/ManualInpaintWorkflow.h"
 #include "application/workflow/SmartTranslatePageWorkflow.h"
 #include "domain/model/ComicProject.h"
 #include "domain/model/Uuid.h"
@@ -31,8 +32,10 @@ class OperationRegistry;
 class IOcrEngine;
 class ITranslator;
 class IInpainter;
+class IPageInpainter;
 class ITextLayouter;
 class IDerivedAssetStore;
+class ITextDetector;
 } // namespace manga::application
 
 namespace manga::ui::screen::editor {
@@ -40,7 +43,7 @@ namespace manga::ui::screen::editor {
 class EditorViewModel;
 
 /// GUI-thread controller coordinating asynchronous page and region processing tasks
-/// (OCR, Translate, Clear, Layout, SmartTranslate). Owns QFutureWatchers, handles
+/// (OCR, Translate, Clear, Layout, SmartTranslate, Detect). Owns QFutureWatchers, handles
 /// same-target cancellation, project close teardown, and proposal lifecycle.
 class EditorProcessingController : public QObject {
     Q_OBJECT
@@ -49,9 +52,11 @@ public:
                                application::IOcrEngine* ocrEngine,
                                application::ITranslator* translator,
                                application::IInpainter* inpainter,
+                               application::IPageInpainter* pageInpainter,
                                application::ITextLayouter* layouter,
                                application::IDerivedAssetStore* assetStore,
                                application::OperationRegistry* registry,
+                               application::ITextDetector* textDetector = nullptr,
                                QObject* parent = nullptr);
 
     EditorProcessingController(EditorViewModel* viewModel,
@@ -69,11 +74,13 @@ public:
     // Commands / User Intents
     void smartTranslatePage(const domain::PageId& pageId);
     void smartTranslateRegions(const domain::PageId& pageId, const QVector<domain::RegionId>& regionIds);
+    void detectRegions(const domain::PageId& pageId);
     void recognizeSelectedRegions();
     void recognizeRegion(const domain::PageId& pageId, const domain::RegionId& regionId);
     void translatePage(const domain::PageId& pageId);
     void clearSelectedRegions();
     void clearRegion(const domain::PageId& pageId, const domain::RegionId& regionId);
+    void inpaintStroke(const domain::PageId& pageId, const QVector<QPointF>& points, double diameter);
     void layoutSelectedRegions();
     void layoutRegion(const domain::PageId& pageId, const domain::RegionId& regionId);
 
@@ -166,6 +173,8 @@ private:
     EditorViewModel* m_viewModel{nullptr};                  // non-owning
     application::OperationRegistry* m_registry{nullptr};    // non-owning
     application::IDerivedAssetStore* m_assetStore{nullptr}; // non-owning
+    application::IPageInpainter* m_pageInpainter{nullptr};  // non-owning
+    application::ITextDetector* m_textDetector{nullptr};    // non-owning
 
     // Owned UseCases when created from ports
     std::unique_ptr<application::RecognizeRegionUseCase> m_ownedOcrUseCase;

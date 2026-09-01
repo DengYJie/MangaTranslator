@@ -81,6 +81,24 @@ EditorPage::EditorPage(EditorViewModel* viewModel, QWidget* parent) : base::Base
 
     connect(m_canvas, &ui::manga::MangaCanvas::viewTransformChanged, m_viewModel, &EditorViewModel::noteViewTransform);
     connect(m_canvas, &ui::manga::MangaCanvas::placeholderActionActivated, this, &EditorPage::handlePlaceholderAction);
+    connect(m_canvas,
+            &ui::manga::MangaCanvas::removeStrokeCommitted,
+            this,
+            [this](const QVector<QPointF>& points, double diameter) {
+                const auto& state = m_viewModel->state();
+                if (state.processing.isRunning) {
+                    return;
+                }
+                if (state.isInpaintAvailable) {
+                    if (auto* controller = m_viewModel->processingController())
+                        controller->inpaintStroke(state.currentPageId, points, diameter);
+                } else {
+                    m_viewModel->setNotice(EditorNotice{state.inpaintUnavailableReason,
+                                                        QStringLiteral("打开设置"),
+                                                        application::RecoveryAction::OpenSettings,
+                                                        false});
+                }
+            });
 
     connect(m_canvas,
             &ui::manga::MangaCanvas::regionCreateCommitted,
@@ -666,6 +684,12 @@ void EditorPage::render(const EditorState& state) {
             canvasTool = ui::manga::CanvasTool::Remove;
             break;
     }
+    // A render in progress invalidates any in-flight Remove gesture. Selecting
+    // Select here also cancels the uncommitted stroke in MangaCanvas itself;
+    // disabling the rail button alone would leave the gesture active.
+    if (state.processing.isRunning && canvasTool == ui::manga::CanvasTool::Remove) {
+        canvasTool = ui::manga::CanvasTool::Select;
+    }
     m_canvas->setTool(canvasTool);
     if (m_canvasToolRail != nullptr) {
         if (auto* button =
@@ -683,6 +707,8 @@ void EditorPage::render(const EditorState& state) {
         if (auto* button =
                 m_canvasToolRail->findChild<fluent::basicinput::Button*>(QStringLiteral("canvasRemoveButton"))) {
             button->setChecked(state.activeTool == CanvasTool::Remove);
+            button->setEnabled(state.isInpaintAvailable && state.currentPageId.isValid() &&
+                               !state.processing.isRunning);
         }
     }
 
@@ -692,6 +718,7 @@ void EditorPage::render(const EditorState& state) {
         ui::manga::CanvasRegionDisplay display;
         display.id = rp.id;
         display.geometry = rp.geometry;
+        display.bubbleGeometry = rp.bubbleGeometry;
         display.selected = state.selectedRegionIds.contains(rp.id);
         displayRegions.append(display);
     }

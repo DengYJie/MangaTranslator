@@ -59,6 +59,35 @@ private:
     bool m_firstRedo{true};
 };
 
+/// Creates a batch of regions (e.g. from automatic layout detection) on first redo; removes them on undo.
+class CreateRegionsBatchCommand : public RegionCommand {
+public:
+    struct Entry {
+        domain::RegionId regionId;
+        domain::RectGeometry geometry;
+        std::optional<domain::RectGeometry> bubbleGeometry;
+        int orderIndex{0};
+    };
+
+    CreateRegionsBatchCommand(EditorCommandContext* context, domain::PageId pageId, QVector<Entry> entries);
+
+    void undo() override;
+    void redo() override;
+
+    [[nodiscard]] domain::PageId pageId() const noexcept override {
+        return m_pageId;
+    }
+    [[nodiscard]] const QVector<Entry>& entries() const noexcept {
+        return m_entries;
+    }
+
+private:
+    EditorCommandContext* m_context; // non-owning
+    domain::PageId m_pageId;
+    QVector<Entry> m_entries;
+    bool m_firstRedo{true};
+};
+
 /// Deletes a batch of regions on first redo; reinserts them on undo.
 /// Snapshots (full TextRegion + orderIndex) are captured at construction time sorted by order.
 class DeleteRegionsCommand : public RegionCommand {

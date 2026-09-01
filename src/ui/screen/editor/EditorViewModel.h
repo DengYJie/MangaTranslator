@@ -3,11 +3,14 @@
 #include "application/dto/ExportDto.h"
 #include "application/dto/ImportDto.h"
 #include "application/dto/ProjectDto.h"
+#include "application/dto/TextDetectionDto.h"
 #include "application/operation/AsyncResult.h"
 #include "application/usecase/apply/PrepareProcessingAdoptionUseCases.h"
 #include "application/usecase/export/ExportUseCases.h"
+#include "application/usecase/processing/ManualInpaintWorkflow.h"
 #include "ui/base/BaseViewModel.h"
 #include "ui/command/EditorCommandContext.h"
+#include "ui/command/PageClearLayerCommand.h"
 #include "ui/command/RegionPropertyCommand.h"
 #include "ui/error/RecoveryPresenter.h"
 #include "ui/manga/RegionInteraction.h"
@@ -70,10 +73,22 @@ public:
             s.ocrUnavailableReason = available ? QString() : unavailableReason;
         });
     }
+    void setDetectionAvailability(bool available, const QString& unavailableReason = QString()) {
+        updateState([&](EditorState& s) {
+            s.isDetectionAvailable = available;
+            s.detectionUnavailableReason = available ? QString() : unavailableReason;
+        });
+    }
     void setTranslationAvailability(bool available, const QString& unavailableReason) {
         updateState([&](EditorState& s) {
             s.isTranslationAvailable = available;
             s.translationUnavailableReason = available ? QString() : unavailableReason;
+        });
+    }
+    void setInpaintAvailability(bool available, const QString& unavailableReason) {
+        updateState([&](EditorState& s) {
+            s.isInpaintAvailable = available;
+            s.inpaintUnavailableReason = available ? QString() : unavailableReason;
         });
     }
     /// Records the live canvas transform for the current page. Memory-only, no State churn.
@@ -93,6 +108,11 @@ public:
     void setPreviewMode(PreviewMode mode);
     /// Requests a composed preview for the current page. Delivery is generation and revision guarded.
     void requestPreview(const domain::PageId& pageId);
+
+    /// Triggers automatic layout and text detection on the current page.
+    void detectRegionsOnCurrentPage();
+    /// Pushes a batch of detected text regions into undo history and selects them.
+    void applyDetectedRegions(const domain::PageId& pageId, const QVector<application::DetectedRegionItem>& detected);
 
     /// Creates a region on the current page. Validates geometry (>= 8x8 inside page bounds)
     /// and generates RegionId before pushing the command.
@@ -203,6 +223,9 @@ public:
         return m_currentPageImage;
     }
 
+    /// Pushes one page-level clear-layer change onto the session undo stack.
+    bool applyPageInpaintChange(const application::PreparedPageInpaintChange& change);
+
 Q_SIGNALS:
     void stateChanged(const EditorState& state);
     void pageImageReady(const PageImageDelivery& delivery);
@@ -238,6 +261,7 @@ private:
     void startPageLoad(const domain::PageId& pageId);
     void handlePageLoadFinished();
     void handlePreviewFinished();
+    void invalidatePreviewAndRequestCurrentPage();
     void startThumbnail(const domain::PageId& pageId);
     void handleThumbnailFinished(const domain::PageId& pageId);
     void pumpThumbnailQueue();

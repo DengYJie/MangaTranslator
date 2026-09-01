@@ -49,6 +49,7 @@ enum class HandlePosition {
 struct RegionDisplay {
     domain::RegionId id;
     domain::RectGeometry geometry;
+    std::optional<domain::RectGeometry> bubbleGeometry;
     bool selected{false};
 
     bool operator==(const RegionDisplay&) const = default;

@@ -620,8 +620,14 @@ void MangaCanvas::keyPressEvent(QKeyEvent* event) {
             QVector<canvas::RegionDisplay> updated;
             for (auto it = m_overlays.constBegin(); it != m_overlays.constEnd(); ++it) {
                 auto geom = it.value()->currentGeometry();
+                auto bubble = it.value()->bubbleGeometry();
                 bool sel = (it.key() == ids[nextIndex]);
-                updated.append({it.key(), geom, sel});
+                canvas::RegionDisplay display;
+                display.id = it.key();
+                display.geometry = geom;
+                display.bubbleGeometry = bubble;
+                display.selected = sel;
+                updated.append(display);
             }
             setRegions(updated);
             Q_EMIT regionSelectionRequested(ids[nextIndex], canvas::SelectionIntent::Replace);

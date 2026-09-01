@@ -74,6 +74,7 @@ enum class InspectorMode {
 struct RegionProjection {
     domain::RegionId id;
     domain::RectGeometry geometry;
+    std::optional<domain::RectGeometry> bubbleGeometry;
     int orderIndex{0};
     quint64 contentRevision{0};
     bool isLocked{false};
@@ -154,8 +155,12 @@ struct EditorState {
     QVector<QString> exportFailureSummaries;
     bool isOcrAvailable{true};
     QString ocrUnavailableReason;
+    bool isDetectionAvailable{true};
+    QString detectionUnavailableReason;
     bool isTranslationAvailable{true};
     QString translationUnavailableReason;
+    bool isInpaintAvailable{false};
+    QString inpaintUnavailableReason;
 
     /// Current page region projections sorted by orderIndex.
     QVector<RegionProjection> regions;

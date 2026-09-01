@@ -43,6 +43,11 @@ public:
     /// Returns the current scene-space geometry.
     [[nodiscard]] ::manga::domain::RectGeometry currentGeometry() const noexcept;
 
+    /// Returns the optional bubble geometry.
+    [[nodiscard]] const std::optional<::manga::domain::RectGeometry>& bubbleGeometry() const noexcept {
+        return m_bubbleGeometry;
+    }
+
     /// Positions all eight handles at their anchor points for the current rect.
     void layoutHandles();
 
@@ -59,6 +64,7 @@ private:
     void setSelected(bool selected);
 
     ::manga::domain::RegionId m_id;
+    std::optional<::manga::domain::RectGeometry> m_bubbleGeometry;
     bool m_selected{false};
     bool m_hovered{false};
     int m_order{0};
