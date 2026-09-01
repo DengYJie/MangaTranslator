@@ -125,6 +125,7 @@ ExportSnapshotBuilder::execute(const Request& request, const application::Operat
         int currentIndex{0};
         QVector<application::ExportPageSnapshot> snapshots;
         std::shared_ptr<QPromise<application::Result<QVector<application::ExportPageSnapshot>>>> promise;
+        std::shared_ptr<std::function<void()>> processNextPage;
     };
 
     auto state = std::make_shared<BuilderState>(BuilderState{
@@ -141,6 +142,7 @@ ExportSnapshotBuilder::execute(const Request& request, const application::Operat
     });
 
     auto processNextPage = std::make_shared<std::function<void()>>();
+    state->processNextPage = processNextPage;
     const std::weak_ptr<std::function<void()>> weakProcessNextPage = processNextPage;
     *processNextPage = [state, weakProcessNextPage]() {
         if (state->context.stopToken.stop_requested()) {
@@ -148,12 +150,14 @@ ExportSnapshotBuilder::execute(const Request& request, const application::Operat
                 std::unexpected(application::makeApplicationError(application::ErrorCategory::Cancelled,
                                                                   QStringLiteral("cancelled.during_export"),
                                                                   QStringLiteral("Export was cancelled"))));
+            state->processNextPage.reset();
             state->promise->finish();
             return;
         }
 
         if (state->currentIndex >= state->pages.size()) {
             state->promise->addResult(state->snapshots);
+            state->processNextPage.reset();
             state->promise->finish();
             return;
         }
@@ -175,6 +179,7 @@ ExportSnapshotBuilder::execute(const Request& request, const application::Operat
         loadFuture.then([state, weakProcessNextPage, page](application::Result<QImage> loadRes) {
             if (!loadRes.has_value()) {
                 state->promise->addResult(std::unexpected(loadRes.error()));
+                state->processNextPage.reset();
                 state->promise->finish();
                 return;
             }
@@ -257,6 +262,7 @@ ExportSnapshotBuilder::execute(const Request& request, const application::Operat
                     manualFuture.then([state, onManualLoaded](application::Result<QImage> manualRes) mutable {
                         if (!manualRes.has_value()) {
                             state->promise->addResult(std::unexpected(manualRes.error()));
+                            state->processNextPage.reset();
                             state->promise->finish();
                             return;
                         }
@@ -284,6 +290,7 @@ ExportSnapshotBuilder::execute(const Request& request, const application::Operat
                 clearFuture.then([state, onClearLoaded](application::Result<QImage> clearRes) mutable {
                     if (!clearRes.has_value()) {
                         state->promise->addResult(std::unexpected(clearRes.error()));
+                        state->processNextPage.reset();
                         state->promise->finish();
                         return;
                     }
