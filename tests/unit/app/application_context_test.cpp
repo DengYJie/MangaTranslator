@@ -1,6 +1,8 @@
+#include "FakeTransport.h"
 #include "app/ApplicationContext.h"
 #include "application/operation/AsyncResult.h"
 #include "application/ports/IAppSettingsStore.h"
+#include "application/ports/IComicExporter.h"
 #include "application/ports/IComicImporter.h"
 #include "application/ports/ICredentialStore.h"
 #include "application/ports/IDerivedAssetStore.h"
@@ -12,8 +14,14 @@
 #include "application/ports/IRecentProjectsStore.h"
 #include "application/ports/ITextLayouter.h"
 #include "application/ports/IThumbnailStore.h"
-#include "application/ports/ITranslator.h"
+#include "domain/model/LanguageCode.h"
+#include "domain/model/TextRegion.h"
+#include "network/translation/OpenAiCompatibleTranslator.h"
+#include "network/translation/ProviderConfig.h"
 
+#include <QCoreApplication>
+#include <QSettings>
+#include <QTemporaryDir>
 #include <QtTest>
 
 namespace {
@@ -104,7 +112,7 @@ public:
         return true;
     }
     Result<SecretBytes> readApiKey(const QString&) override {
-        return SecretBytes{};
+        return SecretBytes{QByteArrayLiteral("sk-test-key")};
     }
     Result<void> writeApiKey(const QString&, SecretBytes) override {
         return {};
@@ -227,6 +235,106 @@ private Q_SLOTS:
         QVERIFY(context.comicImporter() == nullptr);
         QVERIFY(context.credentialStore() == nullptr);
         QVERIFY(context.ocrModelValidator() == nullptr);
+    }
+
+    void productionContextStartsWithoutModelCredentialOrNetwork() {
+        QTemporaryDir tempDir;
+        QVERIFY(tempDir.isValid());
+        QCoreApplication::setOrganizationName(QStringLiteral("MangaTranslatorTests"));
+        QCoreApplication::setApplicationName(QStringLiteral("ApplicationContextTest"));
+        QSettings::setDefaultFormat(QSettings::IniFormat);
+        QSettings::setPath(QSettings::IniFormat, QSettings::UserScope, tempDir.path());
+        QSettings settings;
+        settings.clear();
+        settings.sync();
+
+        manga::app::ApplicationContext context;
+        QVERIFY(context.ocrEngine() != nullptr);
+        QVERIFY(context.translator() != nullptr);
+        QVERIFY(context.comicExporter() != nullptr);
+
+        manga::application::OcrRequest request;
+        request.regionId = manga::domain::RegionId::generate();
+        QImage testImage(64, 64, QImage::Format_RGB888);
+        testImage.fill(Qt::white);
+        request.image = testImage;
+        request.rect = manga::domain::RectGeometry(0, 0, 64, 64);
+
+        auto future = context.ocrEngine()->recognize(std::move(request), {});
+        future.waitForFinished();
+        auto result = future.result();
+        QVERIFY(!result.has_value());
+        QCOMPARE(result.error().category, manga::application::ErrorCategory::Model);
+    }
+
+    void manualMainlinePortsAvailableWhenProcessingDegraded() {
+        QTemporaryDir tempDir;
+        QVERIFY(tempDir.isValid());
+        QCoreApplication::setOrganizationName(QStringLiteral("MangaTranslatorTests"));
+        QCoreApplication::setApplicationName(QStringLiteral("ApplicationContextTest"));
+        QSettings::setDefaultFormat(QSettings::IniFormat);
+        QSettings::setPath(QSettings::IniFormat, QSettings::UserScope, tempDir.path());
+        QSettings settings;
+        settings.clear();
+        settings.sync();
+
+        manga::app::ApplicationContext context;
+        QVERIFY(context.projectRepository() != nullptr);
+        QVERIFY(context.comicImporter() != nullptr);
+        QVERIFY(context.pageImageLoader() != nullptr);
+        QVERIFY(context.comicExporter() != nullptr);
+        QVERIFY(context.thumbnailStore() != nullptr);
+        QVERIFY(context.derivedAssetStore() != nullptr);
+    }
+
+    void translatorReadsLatestProviderConfigSnapshot() {
+        StubCredentialStore store;
+        auto transport = std::make_unique<manga::network::test::FakeTransport>();
+        manga::network::HttpResponse resp;
+        resp.httpStatus = 200;
+        resp.body = QByteArrayLiteral(
+            "{\"choices\":[{\"finish_reason\":\"stop\",\"message\":{\"role\":\"assistant\",\"content\":\"{\\\"items\\\":"
+            "[{\\\"regionId\\\":\\\"11111111-1111-4111-8111-111111111111\\\",\\\"sourceText\\\":\\\"こんにちは\\\","
+            "\\\"translation\\\":\\\"你好\\\",\\\"candidates\\\":[]}]}\"}}]}");
+        transport->responses.push_back(resp);
+        transport->responses.push_back(resp);
+        auto* rawTransport = transport.get();
+
+        manga::network::ProviderConfig initialConfig;
+        initialConfig.providerId = QStringLiteral("provider-1");
+        initialConfig.endpoint = QUrl(QStringLiteral("https://api.initial.com/v1/chat/completions"));
+        initialConfig.model = QStringLiteral("model-initial");
+
+        auto configSnapshot = std::make_shared<const manga::network::ProviderConfig>(initialConfig);
+        auto translator =
+            std::make_unique<manga::network::OpenAiCompatibleTranslator>(configSnapshot, &store, std::move(transport));
+
+        manga::application::TranslationRequest req;
+        req.sourceLanguage = manga::domain::languages::Japanese;
+        req.targetLanguage = manga::domain::languages::SimplifiedChinese;
+        manga::application::TranslationRegion r;
+        r.regionId = manga::domain::RegionId::parse("11111111-1111-4111-8111-111111111111").value();
+        r.sourceText = QStringLiteral("こんにちは");
+        req.regions.push_back(r);
+
+        auto future1 = translator->translate(req, {});
+        future1.waitForFinished();
+        QVERIFY(future1.result().has_value());
+        QCOMPARE(rawTransport->requests.size(), 1);
+        QCOMPARE(rawTransport->requests.at(0).url(),
+                 QUrl(QStringLiteral("https://api.initial.com/v1/chat/completions")));
+
+        // Replace snapshot
+        manga::network::ProviderConfig updatedConfig = initialConfig;
+        updatedConfig.endpoint = QUrl(QStringLiteral("https://api.updated.com/v1/chat/completions"));
+        translator->updateConfig(std::make_shared<const manga::network::ProviderConfig>(updatedConfig));
+
+        auto future2 = translator->translate(req, {});
+        future2.waitForFinished();
+        QVERIFY(future2.result().has_value());
+        QCOMPARE(rawTransport->requests.size(), 2);
+        QCOMPARE(rawTransport->requests.at(1).url(),
+                 QUrl(QStringLiteral("https://api.updated.com/v1/chat/completions")));
     }
 };
 

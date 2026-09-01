@@ -102,15 +102,6 @@ find_file(MANGA_QT_OFFSCREEN_PLUGIN_DEBUG
 )
 
 function(manga_deploy_qt_runtime target)
-    if(WIN32 AND ONNXRuntime_DLL)
-        add_custom_command(TARGET ${target} POST_BUILD
-            COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                "${ONNXRuntime_DLL}"
-                "$<TARGET_FILE_DIR:${target}>"
-            COMMENT "Deploying ONNX Runtime for ${target}"
-        )
-    endif()
-
     if(WIN32 AND MANGA_WINDEPLOYQT_EXECUTABLE)
         add_custom_command(TARGET ${target} POST_BUILD
             COMMAND "${MANGA_WINDEPLOYQT_EXECUTABLE}"
@@ -119,6 +110,22 @@ function(manga_deploy_qt_runtime target)
                 --no-opengl-sw
                 "$<TARGET_FILE:${target}>"
             COMMENT "Deploying Qt runtime for ${target}"
+        )
+    endif()
+
+    if(TARGET onnxruntime::onnxruntime)
+        add_custom_command(TARGET ${target} POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy
+                "$<TARGET_PROPERTY:onnxruntime::onnxruntime,IMPORTED_LOCATION>"
+                "$<TARGET_FILE_DIR:${target}>"
+            COMMENT "Deploying ONNX Runtime for ${target}"
+        )
+    elseif(WIN32 AND ONNXRuntime_DLL)
+        add_custom_command(TARGET ${target} POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy
+                "${ONNXRuntime_DLL}"
+                "$<TARGET_FILE_DIR:${target}>"
+            COMMENT "Deploying ONNX Runtime for ${target}"
         )
     endif()
 

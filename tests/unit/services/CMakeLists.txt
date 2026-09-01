@@ -26,11 +26,6 @@ target_link_libraries(manga_tests_services
         onnxruntime::onnxruntime
 )
 
-add_custom_command(TARGET manga_tests_services POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E copy_if_different
-    $<TARGET_FILE:onnxruntime::onnxruntime>
-    $<TARGET_FILE_DIR:manga_tests_services>
-)
 
 target_compile_definitions(manga_tests_services
     PRIVATE

@@ -1,5 +1,6 @@
 #include "app/ApplicationContext.h"
 
+#include "application/ports/IComicExporter.h"
 #include "application/ports/IComicImporter.h"
 #include "application/ports/ICredentialStore.h"
 #include "application/ports/IDerivedAssetStore.h"
@@ -15,6 +16,7 @@
 #include "application/workflow/OperationRegistry.h"
 #include "data/derived/FileSystemDerivedAssetStore.h"
 #include "data/derived/FileSystemThumbnailStore.h"
+#include "data/export/FileSystemComicExporter.h"
 #include "data/import/FileSystemComicImporter.h"
 #include "data/import/FileSystemPageImageLoader.h"
 #include "data/project/FileSystemProjectRepository.h"
@@ -36,6 +38,7 @@ namespace manga::app {
 
 struct ApplicationContext::ProductionAdapters {
     std::unique_ptr<data::ProjectIoCoordinator> ioCoordinator;
+    services::UniqueOrtEnv ocrEnv;
     std::unique_ptr<services::BoundedTaskExecutor> executor;
 };
 
@@ -50,22 +53,33 @@ ApplicationContext::ApplicationContext()
     m_pageImageLoader = std::make_unique<data::FileSystemPageImageLoader>(m_production->ioCoordinator.get());
     m_derivedAssetStore = std::make_unique<data::FileSystemDerivedAssetStore>(m_production->ioCoordinator.get());
     m_comicImporter = std::make_unique<data::FileSystemComicImporter>(m_production->ioCoordinator.get());
+    m_comicExporter = std::make_unique<data::FileSystemComicExporter>();
+
     // Credential material stays in Windows Credential Manager; QSettings only holds non-secret settings.
     m_credentialStore = std::make_unique<network::WindowsCredentialStore>();
     m_credentialOperations = std::make_unique<application::CredentialOperations>(m_credentialStore.get());
     m_ocrModelValidator = std::make_unique<services::OcrModelValidator>();
+    m_production->ocrEnv = services::createOcrEnv();
     m_production->executor = std::make_unique<services::BoundedTaskExecutor>();
+
     const auto settings = application::LoadAppSettingsUseCase(m_appSettingsStore.get()).execute();
     m_inpainter = std::make_unique<services::SolidColorInpainter>(m_production->executor.get());
     m_textLayouter = std::make_unique<services::QtTextLayouter>(m_production->executor.get());
-    m_ocrEngine = services::createOcrEngine(m_production->executor.get(), settings.ocrModelDirectory);
+    m_ocrEngine =
+        services::createOcrEngine(m_production->ocrEnv.get(), m_production->executor.get(), settings.ocrModelDirectory);
+
     network::ProviderConfig provider;
     provider.providerId = settings.providerId;
     provider.endpoint = QUrl(settings.endpoint);
     provider.model = settings.modelName;
     provider.timeoutMs = settings.timeoutSeconds * 1000;
+    auto providerSnapshot = std::make_shared<const network::ProviderConfig>(std::move(provider));
+    m_providerConfig.store(providerSnapshot);
     m_translator = std::make_unique<network::OpenAiCompatibleTranslator>(
-        provider, m_credentialStore.get(), nullptr, network::RetryPolicy(nullptr, nullptr, settings.retryCount));
+        providerSnapshot,
+        m_credentialStore.get(),
+        nullptr,
+        network::RetryPolicy(nullptr, nullptr, settings.retryCount));
 }
 
 ApplicationContext::ApplicationContext(std::unique_ptr<application::IProjectRepository> projectRepository,
@@ -74,6 +88,7 @@ ApplicationContext::ApplicationContext(std::unique_ptr<application::IProjectRepo
     : ApplicationContext(std::move(projectRepository),
                          std::move(recentProjectsStore),
                          std::move(appSettingsStore),
+                         nullptr,
                          nullptr,
                          nullptr,
                          nullptr,
@@ -97,18 +112,30 @@ ApplicationContext::ApplicationContext(std::unique_ptr<application::IProjectRepo
                                        std::unique_ptr<application::ITextLayouter> textLayouter,
                                        std::unique_ptr<application::IDerivedAssetStore> derivedAssetStore,
                                        std::unique_ptr<application::ICredentialStore> credentialStore,
-                                       std::unique_ptr<application::IOcrModelValidator> ocrModelValidator)
+                                       std::unique_ptr<application::IOcrModelValidator> ocrModelValidator,
+                                       std::unique_ptr<application::IComicExporter> comicExporter)
     : m_projectRepository(std::move(projectRepository)), m_recentProjectsStore(std::move(recentProjectsStore)),
       m_appSettingsStore(std::move(appSettingsStore)),
       m_operationRegistry(std::make_unique<application::OperationRegistry>()),
       m_thumbnailStore(std::move(thumbnailStore)), m_pageImageLoader(std::move(pageImageLoader)),
-      m_comicImporter(std::move(comicImporter)), m_ocrEngine(std::move(ocrEngine)), m_translator(std::move(translator)),
-      m_inpainter(std::move(inpainter)), m_textLayouter(std::move(textLayouter)),
-      m_derivedAssetStore(std::move(derivedAssetStore)), m_credentialStore(std::move(credentialStore)),
-      m_ocrModelValidator(std::move(ocrModelValidator)) {}
+      m_comicImporter(std::move(comicImporter)), m_comicExporter(std::move(comicExporter)),
+      m_ocrEngine(std::move(ocrEngine)), m_translator(std::move(translator)), m_inpainter(std::move(inpainter)),
+      m_textLayouter(std::move(textLayouter)), m_derivedAssetStore(std::move(derivedAssetStore)),
+      m_credentialStore(std::move(credentialStore)), m_ocrModelValidator(std::move(ocrModelValidator)) {}
 
 ApplicationContext::~ApplicationContext() {
     shutdown();
+}
+
+void ApplicationContext::updateProviderConfig(std::shared_ptr<const network::ProviderConfig> config) {
+    m_providerConfig.store(config);
+    if (auto* openAi = dynamic_cast<network::OpenAiCompatibleTranslator*>(m_translator.get())) {
+        openAi->updateConfig(std::move(config));
+    }
+}
+
+std::shared_ptr<const network::ProviderConfig> ApplicationContext::providerConfig() const {
+    return m_providerConfig.load();
 }
 
 void ApplicationContext::shutdown() {

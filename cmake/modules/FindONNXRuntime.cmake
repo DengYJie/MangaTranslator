@@ -19,13 +19,6 @@ option(MANGA_DOWNLOAD_ONNXRUNTIME "Allow CMake to download a verified ONNX Runti
 set(MANGA_ONNXRUNTIME_VERSION "" CACHE STRING "ONNX Runtime version to download")
 set(MANGA_ONNXRUNTIME_SHA256 "" CACHE STRING "SHA-256 of the ONNX Runtime archive to download")
 
-# First try the upstream or vcpkg-provided Config module
-find_package(onnxruntime CONFIG QUIET)
-if(onnxruntime_FOUND)
-    set(ONNXRuntime_FOUND TRUE)
-    # The config module usually provides onnxruntime::onnxruntime
-    return()
-endif()
 
 unset(ONNXRuntime_INCLUDE_DIR CACHE)
 unset(ONNXRuntime_LIBRARY CACHE)
@@ -61,6 +54,40 @@ if(WIN32)
         NO_DEFAULT_PATH
         DOC "ONNX Runtime DLL"
     )
+    find_library(ONNXRuntime_LIBRARY
+        NAMES onnxruntime
+        HINTS "${ONNXRUNTIME_ROOT_DIR}" "$ENV{ONNXRUNTIME_ROOT_DIR}"
+        PATH_SUFFIXES lib lib64
+        NO_DEFAULT_PATH
+        DOC "ONNX Runtime library"
+    )
+    if(WIN32)
+        find_file(ONNXRuntime_DLL
+            NAMES onnxruntime.dll
+            HINTS "${ONNXRUNTIME_ROOT_DIR}" "$ENV{ONNXRUNTIME_ROOT_DIR}"
+            PATH_SUFFIXES lib bin
+            NO_DEFAULT_PATH
+            DOC "ONNX Runtime DLL"
+        )
+    endif()
+else()
+    find_path(ONNXRuntime_INCLUDE_DIR
+        NAMES onnxruntime_cxx_api.h
+        PATH_SUFFIXES include
+        DOC "ONNX Runtime include directory"
+    )
+    find_library(ONNXRuntime_LIBRARY
+        NAMES onnxruntime
+        PATH_SUFFIXES lib lib64
+        DOC "ONNX Runtime library"
+    )
+    if(WIN32)
+        find_file(ONNXRuntime_DLL
+            NAMES onnxruntime.dll
+            PATH_SUFFIXES lib bin
+            DOC "ONNX Runtime DLL"
+        )
+    endif()
 endif()
 
 # Downloads are opt-in so ordinary configure and rebuilds remain offline.
@@ -176,14 +203,14 @@ endif()
 
 if(ONNXRuntime_FOUND AND NOT TARGET onnxruntime::onnxruntime)
     if(WIN32)
-        add_library(onnxruntime::onnxruntime SHARED IMPORTED)
+        add_library(onnxruntime::onnxruntime SHARED IMPORTED GLOBAL)
         set_target_properties(onnxruntime::onnxruntime PROPERTIES
             IMPORTED_IMPLIB "${ONNXRuntime_LIBRARY}"
             IMPORTED_LOCATION "${ONNXRuntime_DLL}"
             INTERFACE_INCLUDE_DIRECTORIES "${ONNXRuntime_INCLUDE_DIR}"
         )
     else()
-        add_library(onnxruntime::onnxruntime UNKNOWN IMPORTED)
+        add_library(onnxruntime::onnxruntime UNKNOWN IMPORTED GLOBAL)
         set_target_properties(onnxruntime::onnxruntime PROPERTIES
             IMPORTED_LOCATION "${ONNXRuntime_LIBRARY}"
             INTERFACE_INCLUDE_DIRECTORIES "${ONNXRuntime_INCLUDE_DIR}"

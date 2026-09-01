@@ -6,6 +6,7 @@
 #include "network/translation/ProviderConfig.h"
 #include "network/translation/RetryPolicy.h"
 
+#include <atomic>
 #include <memory>
 
 namespace manga::network {
@@ -15,6 +16,11 @@ namespace manga::network {
 /// endpoint never needs a restart. Results are suggestions: nothing here writes the Domain.
 class OpenAiCompatibleTranslator final : public application::ITranslator {
 public:
+    OpenAiCompatibleTranslator(std::shared_ptr<const ProviderConfig> config,
+                               application::ICredentialStore* store,
+                               std::unique_ptr<IHttpTransport> transport = nullptr,
+                               RetryPolicy retryPolicy = RetryPolicy(nullptr, nullptr),
+                               EndpointPolicy endpointPolicy = EndpointPolicy::HttpsOnly);
     OpenAiCompatibleTranslator(ProviderConfig config,
                                application::ICredentialStore* store,
                                std::unique_ptr<IHttpTransport> transport = nullptr,
@@ -25,13 +31,16 @@ public:
     OpenAiCompatibleTranslator(const OpenAiCompatibleTranslator&) = delete;
     OpenAiCompatibleTranslator& operator=(const OpenAiCompatibleTranslator&) = delete;
 
+    void updateConfig(std::shared_ptr<const ProviderConfig> config);
+    [[nodiscard]] std::shared_ptr<const ProviderConfig> config() const;
+
     [[nodiscard]] QFuture<application::Result<application::TranslationResponse>>
     translate(application::TranslationRequest request, application::OperationContext context) override;
 
 private:
     struct Job;
 
-    ProviderConfig m_config;
+    std::atomic<std::shared_ptr<const ProviderConfig>> m_config;
     application::ICredentialStore* m_store;
     std::shared_ptr<IHttpTransport> m_transport;
     RetryPolicy m_retryPolicy;

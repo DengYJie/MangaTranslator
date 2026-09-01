@@ -299,7 +299,7 @@ struct OpenAiCompatibleTranslator::Job : public std::enable_shared_from_this<Job
     }
 };
 
-OpenAiCompatibleTranslator::OpenAiCompatibleTranslator(ProviderConfig config,
+OpenAiCompatibleTranslator::OpenAiCompatibleTranslator(std::shared_ptr<const ProviderConfig> config,
                                                        application::ICredentialStore* store,
                                                        std::unique_ptr<IHttpTransport> transport,
                                                        RetryPolicy retryPolicy,
@@ -309,7 +309,26 @@ OpenAiCompatibleTranslator::OpenAiCompatibleTranslator(ProviderConfig config,
                             : std::make_shared<QtHttpTransport>()),
       m_retryPolicy(std::move(retryPolicy)), m_endpointPolicy(endpointPolicy) {}
 
+OpenAiCompatibleTranslator::OpenAiCompatibleTranslator(ProviderConfig config,
+                                                       application::ICredentialStore* store,
+                                                       std::unique_ptr<IHttpTransport> transport,
+                                                       RetryPolicy retryPolicy,
+                                                       EndpointPolicy endpointPolicy)
+    : OpenAiCompatibleTranslator(std::make_shared<const ProviderConfig>(std::move(config)),
+                                 store,
+                                 std::move(transport),
+                                 std::move(retryPolicy),
+                                 endpointPolicy) {}
+
 OpenAiCompatibleTranslator::~OpenAiCompatibleTranslator() = default;
+
+void OpenAiCompatibleTranslator::updateConfig(std::shared_ptr<const ProviderConfig> config) {
+    m_config.store(std::move(config));
+}
+
+std::shared_ptr<const ProviderConfig> OpenAiCompatibleTranslator::config() const {
+    return m_config.load();
+}
 
 QFuture<application::Result<application::TranslationResponse>>
 OpenAiCompatibleTranslator::translate(application::TranslationRequest request, application::OperationContext context) {
@@ -323,8 +342,15 @@ OpenAiCompatibleTranslator::translate(application::TranslationRequest request, a
         return future;
     }
 
+    auto configSnapshot = m_config.load();
+    if (!configSnapshot) {
+        promise->addResult(std::unexpected(translateUnavailable()));
+        promise->finish();
+        return future;
+    }
+
     auto job = std::make_shared<Job>();
-    job->config = m_config;
+    job->config = *configSnapshot;
     job->store = m_store;
     job->transport = m_transport;
     job->retryPolicy = m_retryPolicy;

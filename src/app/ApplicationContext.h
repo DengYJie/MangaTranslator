@@ -1,27 +1,31 @@
 #pragma once
 
-#include <memory>
+#include "application/ports/IAppSettingsStore.h"
+#include "application/ports/IComicExporter.h"
+#include "application/ports/IComicImporter.h"
+#include "application/ports/ICredentialStore.h"
+#include "application/ports/IDerivedAssetStore.h"
+#include "application/ports/IInpainter.h"
+#include "application/ports/IOcrEngine.h"
+#include "application/ports/IOcrModelValidator.h"
+#include "application/ports/IPageImageLoader.h"
+#include "application/ports/IProjectRepository.h"
+#include "application/ports/IRecentProjectsStore.h"
+#include "application/ports/ITextLayouter.h"
+#include "application/ports/IThumbnailStore.h"
+#include "application/ports/ITranslator.h"
+#include "application/usecase/credential/CredentialUseCases.h"
+#include "application/workflow/OperationRegistry.h"
 
-namespace manga::application {
-class IAppSettingsStore;
-class IProjectRepository;
-class IRecentProjectsStore;
-class OperationRegistry;
-class IComicImporter;
-class IPageImageLoader;
-class IThumbnailStore;
-class IOcrEngine;
-class IOcrModelValidator;
-class ITranslator;
-class IInpainter;
-class ITextLayouter;
-class IDerivedAssetStore;
-class ICredentialStore;
-class CredentialOperations;
-} // namespace manga::application
+#include <atomic>
+#include <memory>
 
 namespace manga::data {
 class ProjectIoCoordinator;
+}
+
+namespace manga::network {
+struct ProviderConfig;
 }
 
 namespace manga::app {
@@ -48,7 +52,8 @@ public:
                        std::unique_ptr<application::ITextLayouter> textLayouter,
                        std::unique_ptr<application::IDerivedAssetStore> derivedAssetStore,
                        std::unique_ptr<application::ICredentialStore> credentialStore,
-                       std::unique_ptr<application::IOcrModelValidator> ocrModelValidator);
+                       std::unique_ptr<application::IOcrModelValidator> ocrModelValidator,
+                       std::unique_ptr<application::IComicExporter> comicExporter = nullptr);
     ~ApplicationContext();
 
     ApplicationContext(const ApplicationContext&) = delete;
@@ -74,6 +79,9 @@ public:
     }
     [[nodiscard]] application::IComicImporter* comicImporter() const {
         return m_comicImporter.get();
+    }
+    [[nodiscard]] application::IComicExporter* comicExporter() const {
+        return m_comicExporter.get();
     }
 
     [[nodiscard]] application::IOcrEngine* ocrEngine() const {
@@ -101,6 +109,9 @@ public:
         return m_ocrModelValidator.get();
     }
 
+    void updateProviderConfig(std::shared_ptr<const network::ProviderConfig> config);
+    [[nodiscard]] std::shared_ptr<const network::ProviderConfig> providerConfig() const;
+
     /// Deterministic reverse-order teardown entry point. Idempotent.
     void shutdown();
 
@@ -116,6 +127,7 @@ private:
     std::unique_ptr<application::IThumbnailStore> m_thumbnailStore;
     std::unique_ptr<application::IPageImageLoader> m_pageImageLoader;
     std::unique_ptr<application::IComicImporter> m_comicImporter;
+    std::unique_ptr<application::IComicExporter> m_comicExporter;
     std::unique_ptr<application::IOcrEngine> m_ocrEngine;
     std::unique_ptr<application::ITranslator> m_translator;
     std::unique_ptr<application::IInpainter> m_inpainter;
@@ -124,6 +136,7 @@ private:
     std::unique_ptr<application::CredentialOperations> m_credentialOperations;
     std::unique_ptr<application::ICredentialStore> m_credentialStore;
     std::unique_ptr<application::IOcrModelValidator> m_ocrModelValidator;
+    std::atomic<std::shared_ptr<const network::ProviderConfig>> m_providerConfig;
     bool m_shutdown{false};
 };
 

@@ -7,6 +7,19 @@
 
 namespace manga::services {
 
+void OrtEnvDeleter::operator()(Ort::Env* env) const {
+    delete env;
+}
+
+UniqueOrtEnv createOcrEnv() {
+    return UniqueOrtEnv(new Ort::Env(ORT_LOGGING_LEVEL_WARNING, "MangaTranslator"));
+}
+
+std::unique_ptr<application::IOcrEngine>
+createOcrEngine(Ort::Env* env, BoundedTaskExecutor* executor, QString modelDirectory) {
+    return std::make_unique<OnnxMangaOcrEngine>(env, executor, std::move(modelDirectory));
+}
+
 std::unique_ptr<application::IOcrEngine> createOcrEngine(BoundedTaskExecutor* executor, QString modelDirectory) {
     auto env = std::make_unique<Ort::Env>(ORT_LOGGING_LEVEL_WARNING, "MangaTranslator");
     return std::make_unique<OnnxMangaOcrEngine>(std::move(env), executor, std::move(modelDirectory));
