@@ -242,7 +242,7 @@ void ManualOfflineScenarioTest::manualOfflineMainline() {
     // 6. Close project & Reopen
     QSignalSpy closeSpy(&viewModel, &EditorViewModel::projectClosed);
     viewModel.requestCloseProject();
-    QCOMPARE(closeSpy.count(), 1);
+    QVERIFY(closeSpy.wait(kAwaitTimeoutMs));
     QVERIFY(!viewModel.hasSession());
     QThreadPool::globalInstance()->waitForDone();
 
@@ -436,7 +436,7 @@ void ManualOfflineScenarioTest::reopenYieldsIdenticalDomainWithEmptyUndoHistory(
     // Close
     QSignalSpy closeSpy(&viewModel, &EditorViewModel::projectClosed);
     viewModel.requestCloseProject();
-    QCOMPARE(closeSpy.count(), 1);
+    QVERIFY(closeSpy.wait(kAwaitTimeoutMs));
     QThreadPool::globalInstance()->waitForDone();
 
     // Reopen via OpenProjectUseCase
@@ -621,7 +621,7 @@ void ManualOfflineScenarioTest::sourceImagesUnchangedAcrossMainline() {
 
     QSignalSpy closeSpy(&viewModel, &EditorViewModel::projectClosed);
     viewModel.requestCloseProject();
-    QCOMPARE(closeSpy.count(), 1);
+    QVERIFY(closeSpy.wait(kAwaitTimeoutMs));
     QThreadPool::globalInstance()->waitForDone();
 
     // Reopen and export

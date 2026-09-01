@@ -4,6 +4,7 @@
 #include "ui/widget/PageThumbnailDelegate.h"
 
 #include <FluentQt/TextFields.h>
+#include <QApplication>
 #include <QHBoxLayout>
 #include <QListView>
 #include <QScrollBar>
@@ -40,7 +41,7 @@ PageThumbnailList::PageThumbnailList(QWidget* parent)
     // with Fluent token painting in the delegate is the documented porting gap.
     m_view->setModel(m_model);
     m_view->setVerticalScrollMode(QAbstractItemView::ScrollPerPixel);
-    m_view->setSelectionMode(QAbstractItemView::SingleSelection);
+    m_view->setSelectionMode(QAbstractItemView::ExtendedSelection);
     m_view->setFrameShape(QFrame::NoFrame);
     m_view->setAutoFillBackground(false);
     m_view->viewport()->setAutoFillBackground(false);
@@ -49,9 +50,22 @@ PageThumbnailList::PageThumbnailList(QWidget* parent)
     m_view->setItemDelegate(m_delegate);
 
     connect(m_view, &QListView::clicked, this, [this](const QModelIndex& index) {
+        if (QApplication::keyboardModifiers().testFlag(Qt::ControlModifier) ||
+            QApplication::keyboardModifiers().testFlag(Qt::ShiftModifier)) {
+            return;
+        }
         if (auto pageId = m_model->pageIdAt(index.row())) {
             Q_EMIT pageActivated(*pageId);
         }
+    });
+    connect(m_view->selectionModel(), &QItemSelectionModel::selectionChanged, this, [this]() {
+        QVector<domain::PageId> selected;
+        for (const auto& index : m_view->selectionModel()->selectedIndexes()) {
+            if (const auto pageId = m_model->pageIdAt(index.row())) {
+                selected.append(*pageId);
+            }
+        }
+        Q_EMIT pagesSelected(selected);
     });
 
     connect(m_view->verticalScrollBar(), &QScrollBar::valueChanged, this, [this]() { requestVisibleThumbnails(); });
@@ -97,6 +111,13 @@ void PageThumbnailList::setCurrentPageId(const domain::PageId& pageId) {
         if (!m_view->verticalScrollBar()->isSliderDown()) {
             m_view->scrollTo(index);
         }
+        QVector<domain::PageId> selected;
+        for (const auto& selectedIndex : m_view->selectionModel()->selectedIndexes()) {
+            if (const auto selectedId = m_model->pageIdAt(selectedIndex.row())) {
+                selected.append(*selectedId);
+            }
+        }
+        Q_EMIT pagesSelected(selected);
     }
 }
 

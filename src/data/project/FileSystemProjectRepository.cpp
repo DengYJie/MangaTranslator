@@ -24,6 +24,7 @@ namespace manga::data {
 namespace {
 
 constexpr qint64 kWriteMarginBytes = 64 * 1024;
+constexpr int kProjectCloseTimeoutMs = 10'000;
 
 application::ApplicationError makeDiskFullError() {
     auto error = application::makeApplicationError(application::ErrorCategory::Persistence,
@@ -984,8 +985,16 @@ QFuture<application::Result<void>> FileSystemProjectRepository::closeProject(app
                                                   QStringLiteral("The project session is not open")));
         }
         const QString canonicalRoot = session->canonicalRoot;
-        auto closeTicket = m_coordinator->beginClose(canonicalRoot);
+        auto closeTicket = m_coordinator->beginClose(canonicalRoot, kProjectCloseTimeoutMs);
         if (!closeTicket) {
+            if (closeTicket.error() == ProjectIoCoordinator::CloseFailure::Timeout) {
+                return std::unexpected(application::makeApplicationError(
+                    application::ErrorCategory::Project,
+                    QStringLiteral("project.close_timeout"),
+                    QStringLiteral("The project is still busy and could not be closed yet"),
+                    application::RecoveryAction::Retry,
+                    true));
+            }
             return std::unexpected(
                 application::makeApplicationError(application::ErrorCategory::Project,
                                                   QStringLiteral("project.not_open"),

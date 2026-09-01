@@ -54,6 +54,7 @@ protected:
 
 Q_SIGNALS:
     void pageActivated(const ::manga::domain::PageId& pageId);
+    void pagesSelected(const QVector<::manga::domain::PageId>& pageIds);
     void thumbnailRequested(const ::manga::domain::PageId& pageId, bool force);
 
 private:

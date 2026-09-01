@@ -6,6 +6,7 @@
 #include "domain/model/ComicProject.h"
 
 #include <QFuture>
+#include <QImage>
 #include <QString>
 #include <QVector>
 
@@ -34,6 +35,9 @@ public:
 
     [[nodiscard]] QFuture<application::Result<QVector<application::ExportPageSnapshot>>>
     execute(const Request& request, const application::OperationContext& context);
+
+    [[nodiscard]] QFuture<application::Result<QImage>> executePreview(const Request& request,
+                                                                      const application::OperationContext& context);
 
 private:
     domain::ComicProject* m_project;

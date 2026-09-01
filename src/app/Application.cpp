@@ -4,6 +4,7 @@
 #include "application/ports/IAppSettingsStore.h"
 #include "application/usecase/settings/AppSettingsUseCases.h"
 #include "application/workflow/OperationRegistry.h"
+#include "network/translation/ProviderConfig.h"
 #include "ui/navigation/NavigationController.h"
 #include "ui/navigation/NavigationPanel.h"
 #include "ui/navigation/NavigationTypes.h"
@@ -18,6 +19,7 @@
 #include "ui/screen/settings/SettingsState.h"
 #include "ui/screen/settings/SettingsViewModel.h"
 #include "ui/widget/AppStatusTaskStrip.h"
+#include "ui/widget/EditorCommandBar.h"
 #include "ui/window/MainWindow.h"
 
 #include <FluentQt/Design.h>
@@ -25,6 +27,7 @@
 #include <FluentQt/FluentQt.h>
 #include <QApplication>
 #include <QDir>
+#include <QFileDialog>
 #include <QFileInfo>
 #include <QGuiApplication>
 #include <QLabel>
@@ -130,6 +133,20 @@ int Application::run() {
                                                                     mainWindow);
     editorViewModel->setExportDependencies(m_context->comicExporter(), m_context->derivedAssetStore());
     auto* editorPage = new ui::screen::editor::EditorPage(editorViewModel, mainWindow);
+    QObject::connect(editorPage,
+                     &ui::screen::editor::EditorPage::chooseExportPathRequested,
+                     editorPage->commandBarForTest(),
+                     &ui::widget::EditorCommandBar::chooseExportPathRequested);
+    QObject::connect(editorPage->commandBarForTest(),
+                     &ui::widget::EditorCommandBar::chooseExportPathRequested,
+                     mainWindow,
+                     [editorViewModel, mainWindow]() {
+                         const QString path = QFileDialog::getExistingDirectory(
+                             mainWindow, QCoreApplication::translate("Application", "选择导出目录"));
+                         if (!path.isEmpty()) {
+                             editorViewModel->retryExportInDirectory(path);
+                         }
+                     });
     m_processingController =
         std::make_unique<ui::screen::editor::EditorProcessingController>(editorViewModel,
                                                                          m_context->ocrEngine(),
@@ -149,14 +166,18 @@ int Application::run() {
 
     auto* settingsViewModel = new ui::screen::settings::SettingsViewModel(
         m_context->appSettingsStore(), m_context->credentialOperations(), m_context->ocrModelValidator(), mainWindow);
-    auto* generalSettingsPage = ui::screen::settings::SettingsPage::createLazyPage(
-        settingsViewModel, ui::screen::settings::SettingsCategory::General);
-    auto* ocrSettingsPage = ui::screen::settings::SettingsPage::createLazyPage(
-        settingsViewModel, ui::screen::settings::SettingsCategory::Ocr);
-    auto* translationSettingsPage = ui::screen::settings::SettingsPage::createLazyPage(
-        settingsViewModel, ui::screen::settings::SettingsCategory::AiTranslation);
-    auto* appearanceSettingsPage = ui::screen::settings::SettingsPage::createLazyPage(
-        settingsViewModel, ui::screen::settings::SettingsCategory::Appearance);
+    QObject::connect(settingsViewModel,
+                     &ui::screen::settings::SettingsViewModel::settingsSaved,
+                     mainWindow,
+                     [this, settingsViewModel]() {
+                         const auto& saved = settingsViewModel->state().persisted;
+                         auto config = std::make_shared<network::ProviderConfig>();
+                         config->providerId = saved.providerId;
+                         config->endpoint = QUrl(saved.endpoint);
+                         config->model = saved.modelName;
+                         config->timeoutMs = saved.timeoutSeconds * 1000;
+                         m_context->updateProviderConfig(std::move(config));
+                     });
 
     auto* settingsPanel = new ui::navigation::NavigationPanel(nullptr);
     mainWindow->registerSurface(QStringLiteral("settings"), settingsPanel);
@@ -250,109 +271,108 @@ int Application::run() {
             },
             Qt::QueuedConnection);
     };
+}
+
+const QString action = *pendingAction;
+QMetaObject::invokeMethod(
+    mainWindow,
+    [mainWindow, controller, action]() {
+        if (action.isEmpty()) {
+            mainWindow->forceClose();
+        } else {
+            mainWindow->forceNavigate(action);
         }
+    },
+    Qt::QueuedConnection);
+};
 
-        const QString action = *pendingAction;
-        QMetaObject::invokeMethod(
-            mainWindow,
-            [mainWindow, controller, action]() {
-                if (action.isEmpty()) {
-                    mainWindow->forceClose();
-                } else {
-                    mainWindow->forceNavigate(action);
-                }
-            },
-            Qt::QueuedConnection);
-    };
+QObject::connect(mainWindow,
+                 &ui::window::MainWindow::closeRequested,
+                 mainWindow,
+                 [editorViewModel, settingsViewModel, pendingAction, mainWindow]() {
+                     *pendingAction = QString();
+                     if (mainWindow->activeNavigationSurfaceId() == QLatin1String("settings") &&
+                         settingsViewModel->state().fieldErrors.contains(QStringLiteral("persist"))) {
+                         return;
+                     }
+                     editorViewModel->requestCloseProject();
+                 });
 
-    QObject::connect(mainWindow,
-                     &ui::window::MainWindow::closeRequested,
-                     mainWindow,
-                     [editorViewModel, settingsViewModel, pendingAction, mainWindow]() {
-                         *pendingAction = QString();
-                         if (mainWindow->activeNavigationSurfaceId() == QLatin1String("settings") &&
-                             settingsViewModel->state().fieldErrors.contains(QStringLiteral("persist"))) {
-                             return;
-                         }
+QObject::connect(homeViewModel,
+                 &ui::screen::home::HomeViewModel::projectOpenRequested,
+                 mainWindow,
+                 [homeViewModel, editorViewModel, pendingProjectPath](const QString& path) {
+                     const auto normalizePath = [](const QString& value) {
+                         const QFileInfo info(value);
+                         const QString canonical = info.canonicalFilePath();
+                         return QDir::cleanPath(canonical.isEmpty() ? info.absoluteFilePath() : canonical);
+                     };
+                     if (editorViewModel->hasSession() &&
+                         normalizePath(path).compare(normalizePath(editorViewModel->projectRootPath()),
+                                                     Qt::CaseInsensitive) == 0) {
+                         return;
+                     }
+
+                     *pendingProjectPath = path;
+                     if (editorViewModel->hasSession() && editorViewModel->state().saveState.isDirty) {
                          editorViewModel->requestCloseProject();
-                     });
+                     } else {
+                         pendingProjectPath->clear();
+                         homeViewModel->openProjectPath(path);
+                     }
+                 });
 
-    QObject::connect(homeViewModel,
-                     &ui::screen::home::HomeViewModel::projectOpenRequested,
-                     mainWindow,
-                     [homeViewModel, editorViewModel, pendingProjectPath](const QString& path) {
-                         const auto normalizePath = [](const QString& value) {
-                             const QFileInfo info(value);
-                             const QString canonical = info.canonicalFilePath();
-                             return QDir::cleanPath(canonical.isEmpty() ? info.absoluteFilePath() : canonical);
-                         };
-                         if (editorViewModel->hasSession() &&
-                             normalizePath(path).compare(normalizePath(editorViewModel->projectRootPath()),
-                                                         Qt::CaseInsensitive) == 0) {
-                             return;
-                         }
-
-                         *pendingProjectPath = path;
-                         if (editorViewModel->hasSession() && editorViewModel->state().saveState.isDirty) {
-                             editorViewModel->requestCloseProject();
-                         } else {
-                             pendingProjectPath->clear();
-                             homeViewModel->openProjectPath(path);
-                         }
-                     });
-
-    QObject::connect(mainWindow,
-                     &ui::window::MainWindow::navigationInterceptRequested,
-                     mainWindow,
-                     [settingsViewModel, pendingAction, controller, mainWindow](const QString& routeKey) {
-                         *pendingAction = routeKey;
-                         if (routeKey.startsWith(QLatin1String("settings"))) {
-                             controller->navigate(routeKey);
-                             return;
-                         }
-
-                         if (mainWindow->activeNavigationSurfaceId() == QLatin1String("settings") &&
-                             settingsViewModel->state().fieldErrors.contains(QStringLiteral("persist"))) {
-                             return;
-                         }
-
+QObject::connect(mainWindow,
+                 &ui::window::MainWindow::navigationInterceptRequested,
+                 mainWindow,
+                 [settingsViewModel, pendingAction, controller, mainWindow](const QString& routeKey) {
+                     *pendingAction = routeKey;
+                     if (routeKey.startsWith(QLatin1String("settings"))) {
                          controller->navigate(routeKey);
-                     });
+                         return;
+                     }
 
-    QObject::connect(
-        editorViewModel, &ui::screen::editor::EditorViewModel::projectClosed, mainWindow, handleProjectClose);
+                     if (mainWindow->activeNavigationSurfaceId() == QLatin1String("settings") &&
+                         settingsViewModel->state().fieldErrors.contains(QStringLiteral("persist"))) {
+                         return;
+                     }
 
-    QObject::connect(
-        settingsViewModel,
-        &ui::screen::settings::SettingsViewModel::leaveDecisionRequested,
-        mainWindow,
-        [settingsViewModel, mainWindow](const std::function<void(bool proceed)>& callback) {
-            auto* dialog = new fluent::dialogs_flyouts::ContentDialog(mainWindow);
-            dialog->setAttribute(Qt::WA_DeleteOnClose);
-            dialog->setTitle(QCoreApplication::translate("Application", "保留未保存的设置？"));
-            dialog->setContent(
-                new QLabel(QCoreApplication::translate("Application", "设置中有未保存的更改，是否在离开前保存？")));
-            dialog->setPrimaryButtonText(QCoreApplication::translate("Application", "保存并离开"));
-            dialog->setSecondaryButtonText(QCoreApplication::translate("Application", "不保存"));
-            dialog->setCloseButtonText(QCoreApplication::translate("Application", "取消"));
+                     controller->navigate(routeKey);
+                 });
 
-            QObject::connect(dialog,
-                             &fluent::dialogs_flyouts::ContentDialog::primaryButtonClicked,
-                             settingsViewModel,
-                             [settingsViewModel, callback]() { settingsViewModel->confirmLeaveWithSave(callback); });
-            QObject::connect(dialog,
-                             &fluent::dialogs_flyouts::ContentDialog::secondaryButtonClicked,
-                             settingsViewModel,
-                             [settingsViewModel, callback]() { settingsViewModel->confirmLeaveWithoutSave(callback); });
-            QObject::connect(
-                dialog, &fluent::dialogs_flyouts::ContentDialog::closeButtonClicked, settingsViewModel, [callback]() {
-                    if (callback) {
-                        callback(false);
-                    }
-                });
+QObject::connect(editorViewModel, &ui::screen::editor::EditorViewModel::projectClosed, mainWindow, handleProjectClose);
 
-            dialog->show();
-        });
+QObject::connect(
+    settingsViewModel,
+    &ui::screen::settings::SettingsViewModel::leaveDecisionRequested,
+    mainWindow,
+    [settingsViewModel, mainWindow](const std::function<void(bool proceed)>& callback) {
+        auto* dialog = new fluent::dialogs_flyouts::ContentDialog(mainWindow);
+        dialog->setAttribute(Qt::WA_DeleteOnClose);
+        dialog->setTitle(QCoreApplication::translate("Application", "保留未保存的设置？"));
+        dialog->setContent(
+            new QLabel(QCoreApplication::translate("Application", "设置中有未保存的更改，是否在离开前保存？")));
+        dialog->setPrimaryButtonText(QCoreApplication::translate("Application", "保存并离开"));
+        dialog->setSecondaryButtonText(QCoreApplication::translate("Application", "不保存"));
+        dialog->setCloseButtonText(QCoreApplication::translate("Application", "取消"));
+
+        QObject::connect(dialog,
+                         &fluent::dialogs_flyouts::ContentDialog::primaryButtonClicked,
+                         settingsViewModel,
+                         [settingsViewModel, callback]() { settingsViewModel->confirmLeaveWithSave(callback); });
+        QObject::connect(dialog,
+                         &fluent::dialogs_flyouts::ContentDialog::secondaryButtonClicked,
+                         settingsViewModel,
+                         [settingsViewModel, callback]() { settingsViewModel->confirmLeaveWithoutSave(callback); });
+        QObject::connect(
+            dialog, &fluent::dialogs_flyouts::ContentDialog::closeButtonClicked, settingsViewModel, [callback]() {
+                if (callback) {
+                    callback(false);
+                }
+            });
+
+        dialog->show();
+    });
 
     QObject::connect(
         editorViewModel,
@@ -360,29 +380,27 @@ int Application::run() {
         mainWindow,
         [editorViewModel, mainWindow, handleProjectClose](
             const manga::ui::screen::editor::ProjectCloseSummary& summary) {
-            auto* dialog = new fluent::dialogs_flyouts::ContentDialog(mainWindow);
-            dialog->setAttribute(Qt::WA_DeleteOnClose);
-            dialog->setTitle(summary.projectName);
-            dialog->setContent(new QLabel(summary.safeMessage));
-            dialog->setPrimaryButtonText(QCoreApplication::translate("Application", "保存并关闭"));
-            dialog->setSecondaryButtonText(QCoreApplication::translate("Application", "不保存"));
-            dialog->setCloseButtonText(QCoreApplication::translate("Application", "取消"));
+    auto* dialog = new fluent::dialogs_flyouts::ContentDialog(mainWindow);
+    dialog->setAttribute(Qt::WA_DeleteOnClose);
+    dialog->setTitle(summary.projectName);
+    dialog->setContent(new QLabel(summary.safeMessage));
+    dialog->setPrimaryButtonText(QCoreApplication::translate("Application", "保存并关闭"));
+    dialog->setSecondaryButtonText(QCoreApplication::translate("Application", "不保存"));
+    dialog->setCloseButtonText(QCoreApplication::translate("Application", "取消"));
 
-            QObject::connect(
-                editorViewModel, &ui::screen::editor::EditorViewModel::projectClosed, dialog, &QWidget::close);
+    QObject::connect(editorViewModel, &ui::screen::editor::EditorViewModel::projectClosed, dialog, &QWidget::close);
 
-            QObject::connect(dialog,
-                             &fluent::dialogs_flyouts::ContentDialog::primaryButtonClicked,
-                             editorViewModel,
-                             [editorViewModel, mainWindow, handleProjectClose, dialog]() {
-                                 dialog->close();
-                                 // When saving finishes, EditorViewModel emits saveCompleted. We connect a
-                                 // one-off lambda to catch it.
-                                 auto saveConn = std::make_shared<QMetaObject::Connection>();
-                                 auto failConn = std::make_shared<QMetaObject::Connection>();
+    QObject::connect(dialog,
+                     &fluent::dialogs_flyouts::ContentDialog::primaryButtonClicked,
+                     editorViewModel,
+                     [editorViewModel, mainWindow, handleProjectClose, dialog]() {
+                         dialog->close();
+                         // When saving finishes, EditorViewModel emits saveCompleted. We connect a
+                         // one-off lambda to catch it.
+                         auto saveConn = std::make_shared<QMetaObject::Connection>();
+                         auto failConn = std::make_shared<QMetaObject::Connection>();
 
-                                 *saveConn =
-                                     QObject::connect(editorViewModel,
+                         *saveConn = QObject::connect(editorViewModel,
                                                       &ui::screen::editor::EditorViewModel::saveCompleted,
                                                       mainWindow,
                                                       [editorViewModel, handleProjectClose, saveConn, failConn]() {
@@ -391,13 +409,13 @@ int Application::run() {
                                                           editorViewModel->confirmDiscardAndClose();
                                                       });
 
-                                 *failConn = QObject::connect(editorViewModel,
-                                                              &ui::screen::editor::EditorViewModel::saveFailed,
-                                                              mainWindow,
-                                                              [saveConn, failConn]() {
-                                                                  QObject::disconnect(*saveConn);
-                                                                  QObject::disconnect(*failConn);
-                                                              });
+                         *failConn = QObject::connect(editorViewModel,
+                                                      &ui::screen::editor::EditorViewModel::saveFailed,
+                                                      mainWindow,
+                                                      [saveConn, failConn]() {
+                                                          QObject::disconnect(*saveConn);
+                                                          QObject::disconnect(*failConn);
+                                                      });
 
                          QObject::connect(dialog,
                                           &fluent::dialogs_flyouts::ContentDialog::secondaryButtonClicked,
@@ -411,23 +429,23 @@ int Application::run() {
                                               editorViewModel->cancelClose();
                                           });
 
-            QObject::connect(dialog,
-                             &fluent::dialogs_flyouts::ContentDialog::secondaryButtonClicked,
-                             editorViewModel,
-                             [editorViewModel, dialog]() {
-                                 dialog->close();
-                                 editorViewModel->confirmDiscardAndClose();
-                             });
-            QObject::connect(dialog,
-                             &fluent::dialogs_flyouts::ContentDialog::closeButtonClicked,
-                             editorViewModel,
-                             [editorViewModel, dialog]() {
-                                 dialog->close();
-                                 editorViewModel->cancelClose();
-                             });
+                         QObject::connect(dialog,
+                                          &fluent::dialogs_flyouts::ContentDialog::secondaryButtonClicked,
+                                          editorViewModel,
+                                          [editorViewModel, dialog]() {
+                                              dialog->close();
+                                              editorViewModel->confirmDiscardAndClose();
+                                          });
+                         QObject::connect(dialog,
+                                          &fluent::dialogs_flyouts::ContentDialog::closeButtonClicked,
+                                          editorViewModel,
+                                          [editorViewModel, dialog]() {
+                                              dialog->close();
+                                              editorViewModel->cancelClose();
+                                          });
 
-            dialog->show();
-        });
+                         dialog->show();
+                     });
     // --- End Close/Navigation Interception Workflow ---
 
     QObject::connect(homeViewModel,
@@ -571,4 +589,4 @@ int Application::run() {
     return EXIT_SUCCESS;
 }
 
-} // namespace manga::app
+    } // namespace manga::app

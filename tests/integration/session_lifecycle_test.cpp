@@ -521,8 +521,8 @@ void SessionLifecycleTest::projectSwitchRejectsLateCompletions() {
     const quint64 p1SessionGen = viewModel->projectSessionGeneration();
 
     // 2. Close P1 and Open P2
+    QSignalSpy projectClosedSpy(viewModel.get(), &EditorViewModel::projectClosed);
     viewModel->closeProjectSession();
-    QVERIFY(!viewModel->hasSession());
 
     OpenedProjectSession sessionP2{
         .project = p2,
@@ -531,6 +531,7 @@ void SessionLifecycleTest::projectSwitchRejectsLateCompletions() {
         .warnings = {},
     };
     viewModel->openProjectSession(std::move(sessionP2));
+    QVERIFY(projectClosedSpy.wait(kAwaitTimeoutMs));
     QVERIFY(viewModel->hasSession());
     QCOMPARE(viewModel->projectAggregate()->id(), p2.id());
     const auto p2PageId = viewModel->state().pages.first().id;
@@ -651,7 +652,7 @@ void SessionLifecycleTest::confirmedCloseRunsTeardownInOrder() {
     // Execute confirmed close
     QSignalSpy projectClosedSpy(fixture.viewModel.get(), &EditorViewModel::projectClosed);
     fixture.viewModel->confirmDiscardAndClose();
-    QCOMPARE(projectClosedSpy.count(), 1);
+    QVERIFY(projectClosedSpy.wait(kAwaitTimeoutMs));
 
     // 1. Session is destroyed and stops accepting commands
     QVERIFY(!fixture.viewModel->hasSession());

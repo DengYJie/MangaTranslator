@@ -2,6 +2,8 @@
 
 #include <QDir>
 
+#include <algorithm>
+
 namespace manga::data {
 namespace {
 
@@ -163,16 +165,25 @@ ProjectIoCoordinator::beginWrite(const QString& canonicalRoot) {
     return WriteTicket(state);
 }
 
-std::optional<ProjectIoCoordinator::WriteTicket> ProjectIoCoordinator::beginClose(const QString& canonicalRoot) {
+std::expected<ProjectIoCoordinator::WriteTicket, ProjectIoCoordinator::CloseFailure>
+ProjectIoCoordinator::beginClose(const QString& canonicalRoot, int timeoutMs) {
     auto state = findState(canonicalRoot);
     if (!state) {
-        return std::nullopt;
+        return std::unexpected(CloseFailure::NotOpen);
     }
-    state->writeMutex.lock();
+    QDeadlineTimer deadline(std::max(timeoutMs, 0));
+    if (!state->writeMutex.tryLock(deadline)) {
+        return std::unexpected(CloseFailure::Timeout);
+    }
     QMutexLocker locker(&state->stateMutex);
     state->closed = true;
     while (state->leases > 0) {
-        state->noLeases.wait(&state->stateMutex);
+        if (!state->noLeases.wait(&state->stateMutex, deadline)) {
+            state->closed = false;
+            locker.unlock();
+            state->writeMutex.unlock();
+            return std::unexpected(CloseFailure::Timeout);
+        }
     }
     return WriteTicket(state);
 }

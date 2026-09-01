@@ -9,6 +9,7 @@
 #include "application/dto/OcrDto.h"
 #include "application/dto/ProjectDto.h"
 #include "application/dto/TranslationDto.h"
+#include "application/ports/IComicExporter.h"
 #include "application/usecase/apply/ApplyUseCases.h"
 #include "application/usecase/apply/PrepareProcessingAdoptionUseCases.h"
 #include "application/usecase/import/ImportUseCases.h"
@@ -46,6 +47,17 @@ using namespace manga;
 using namespace manga::test;
 using namespace manga::application;
 using namespace manga::ui::error;
+
+class ChoosePathFailingExporter final : public IComicExporter {
+public:
+    QFuture<Result<ExportResponse>> exportPages(ExportRequest, OperationContext) override {
+        return makeFailedFuture<ExportResponse>(
+            makeApplicationError(ErrorCategory::Persistence,
+                                 QStringLiteral("export.output_unavailable"),
+                                 QStringLiteral("The export destination is unavailable"),
+                                 RecoveryAction::ChoosePath));
+    }
+};
 using namespace manga::ui::manga;
 using namespace manga::ui::screen::editor;
 
@@ -201,9 +213,7 @@ void RecoveryMatrixTest::missingImageKeepsProjectAndPageSelection() {
 
     // Page 1 is initial currentPageId and loads
     vm->selectPage(p1Id);
-    while (vm->state().isPageLoading) {
-        QCoreApplication::processEvents();
-    }
+    QTRY_VERIFY_WITH_TIMEOUT(!vm->state().isPageLoading, kAwaitTimeoutMs);
     QVERIFY(!vm->state().isPageLoading);
     QVERIFY(!vm->state().notice.has_value());
     QVERIFY(editorPage.canvasForTest()->hasPageImageForTest());
@@ -221,9 +231,7 @@ void RecoveryMatrixTest::missingImageKeepsProjectAndPageSelection() {
 
     // Select page 2
     vm->selectPage(p2Id);
-    while (vm->state().isPageLoading) {
-        QCoreApplication::processEvents();
-    }
+    QTRY_VERIFY_WITH_TIMEOUT(!vm->state().isPageLoading, kAwaitTimeoutMs);
     QVERIFY(!vm->state().isPageLoading);
 
     // Assert: project and page selection preserved
@@ -242,9 +250,7 @@ void RecoveryMatrixTest::missingImageKeepsProjectAndPageSelection() {
     QVERIFY(QFileInfo::exists(p2OriginalAbs));
 
     vm->retryPageLoad();
-    while (vm->state().isPageLoading) {
-        QCoreApplication::processEvents();
-    }
+    QTRY_VERIFY_WITH_TIMEOUT(!vm->state().isPageLoading, kAwaitTimeoutMs);
     QVERIFY(!vm->state().isPageLoading);
     QVERIFY(!vm->state().notice.has_value());
     QVERIFY(editorPage.canvasForTest()->hasPageImageForTest());
@@ -260,9 +266,7 @@ void RecoveryMatrixTest::ocrModelMissingKeepsManualEditingSaveExport() {
     auto* vm = fixture.viewModel.get();
     const auto pageId = fixture.pageIds[0];
     vm->selectPage(pageId);
-    while (vm->state().isPageLoading) {
-        QCoreApplication::processEvents();
-    }
+    QTRY_VERIFY_WITH_TIMEOUT(!vm->state().isPageLoading, kAwaitTimeoutMs);
 
     const domain::RectGeometry geom{40.0, 40.0, 100.0, 50.0};
     vm->createRegion(geom);
@@ -327,9 +331,7 @@ void RecoveryMatrixTest::credentialMissingOr401KeepsManualTranslationAndCandidat
     auto* vm = fixture.viewModel.get();
     const auto pageId = fixture.pageIds[0];
     vm->selectPage(pageId);
-    while (vm->state().isPageLoading) {
-        QCoreApplication::processEvents();
-    }
+    QTRY_VERIFY_WITH_TIMEOUT(!vm->state().isPageLoading, kAwaitTimeoutMs);
 
     const domain::RectGeometry geom{50.0, 50.0, 120.0, 60.0};
     vm->createRegion(geom);
@@ -443,9 +445,7 @@ void RecoveryMatrixTest::rateLimitTimeoutOfflineKeepAdoptedResults() {
     auto* vm = fixture.viewModel.get();
     const auto pageId = fixture.pageIds[0];
     vm->selectPage(pageId);
-    while (vm->state().isPageLoading) {
-        QCoreApplication::processEvents();
-    }
+    QTRY_VERIFY_WITH_TIMEOUT(!vm->state().isPageLoading, kAwaitTimeoutMs);
 
     const domain::RectGeometry geom{60.0, 60.0, 140.0, 70.0};
     vm->createRegion(geom);
@@ -547,9 +547,7 @@ void RecoveryMatrixTest::clearLayoutFailureWritesNoPartialDerivedAsset() {
     auto* vm = fixture.viewModel.get();
     const auto pageId = fixture.pageIds[0];
     vm->selectPage(pageId);
-    while (vm->state().isPageLoading) {
-        QCoreApplication::processEvents();
-    }
+    QTRY_VERIFY_WITH_TIMEOUT(!vm->state().isPageLoading, kAwaitTimeoutMs);
 
     const domain::RectGeometry geom{50.0, 50.0, 100.0, 50.0};
     vm->createRegion(geom);
@@ -678,9 +676,7 @@ void RecoveryMatrixTest::saveFailureKeepsDirtyAndLastValidFile() {
     auto* vm = fixture.viewModel.get();
     const auto pageId = fixture.pageIds[0];
     vm->selectPage(pageId);
-    while (vm->state().isPageLoading) {
-        QCoreApplication::processEvents();
-    }
+    QTRY_VERIFY_WITH_TIMEOUT(!vm->state().isPageLoading, kAwaitTimeoutMs);
 
     const QString projectJsonPath = fixture.projectRoot + QStringLiteral("/project.json");
     QFile jsonFile(projectJsonPath);
@@ -752,9 +748,7 @@ void RecoveryMatrixTest::exportFailureKeepsProjectAndExistingOutputs() {
     auto* vm = fixture.viewModel.get();
     const auto pageId = fixture.pageIds[0];
     vm->selectPage(pageId);
-    while (vm->state().isPageLoading) {
-        QCoreApplication::processEvents();
-    }
+    QTRY_VERIFY_WITH_TIMEOUT(!vm->state().isPageLoading, kAwaitTimeoutMs);
 
     const domain::RectGeometry geom{45.0, 45.0, 100.0, 50.0};
     vm->createRegion(geom);
@@ -771,28 +765,8 @@ void RecoveryMatrixTest::exportFailureKeepsProjectAndExistingOutputs() {
     const auto existingTreeBefore = sha256Tree(exportDir);
     QCOMPARE(existingTreeBefore.size(), 1);
 
-    // Try setting directory read-only
-    QFile::setPermissions(exportDir,
-                          QFileDevice::ReadOwner | QFileDevice::ReadUser | QFileDevice::ReadGroup |
-                              QFileDevice::ReadOther | QFileDevice::ExeOwner | QFileDevice::ExeUser |
-                              QFileDevice::ExeGroup | QFileDevice::ExeOther);
-
-    // Probe whether OS truly enforces directory read-only
-    bool isReadOnlyEnforced = false;
-    const QString probePath = QDir(exportDir).filePath(QStringLiteral(".test_probe.tmp"));
-    QFile probeFile(probePath);
-    if (!probeFile.open(QIODevice::WriteOnly)) {
-        isReadOnlyEnforced = true;
-    } else {
-        probeFile.close();
-        probeFile.remove();
-    }
-
-    if (!isReadOnlyEnforced) {
-        // Restore permissions before skipping
-        QFile::setPermissions(exportDir, QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner);
-        QSKIP("Filesystem does not enforce read-only directory permissions on user folders");
-    }
+    ChoosePathFailingExporter failingExporter;
+    vm->setExportDependencies(&failingExporter, fixture.stack.derivedAssetStore.get());
 
     // Export to read-only directory
     QSignalSpy failSpy(vm, &EditorViewModel::exportFailed);
@@ -814,10 +788,8 @@ void RecoveryMatrixTest::exportFailureKeepsProjectAndExistingOutputs() {
     const auto existingTreeAfter = sha256Tree(exportDir);
     QCOMPARE(existingTreeAfter, existingTreeBefore);
 
-    // Restore permissions and retry export to a valid directory -> succeeds
-    QFile::setPermissions(exportDir,
-                          QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner |
-                              QFileDevice::ReadUser | QFileDevice::WriteUser | QFileDevice::ExeUser);
+    // Retry with the real exporter at a valid destination.
+    vm->setExportDependencies(fixture.stack.exporter.get(), fixture.stack.derivedAssetStore.get());
 
     const QString validExportDir = fixture.stack.projectRoot(QStringLiteral("valid_export_dir"));
     QSignalSpy successSpy(vm, &EditorViewModel::exportCompleted);
@@ -933,8 +905,8 @@ void RecoveryMatrixTest::projectSwitchRejectsLateResults() {
     const quint64 p1SessionGen = viewModel->projectSessionGeneration();
 
     // 2. Close P1 and Open P2
+    QSignalSpy projectClosedSpy(viewModel.get(), &EditorViewModel::projectClosed);
     viewModel->closeProjectSession();
-    QVERIFY(!viewModel->hasSession());
 
     OpenedProjectSession sessionP2{
         .project = p2,
@@ -943,6 +915,7 @@ void RecoveryMatrixTest::projectSwitchRejectsLateResults() {
         .warnings = {},
     };
     viewModel->openProjectSession(std::move(sessionP2));
+    QVERIFY(projectClosedSpy.wait(kAwaitTimeoutMs));
     QVERIFY(viewModel->hasSession());
     QCOMPARE(viewModel->projectAggregate()->id(), p2.id());
     const auto p2PageId = viewModel->state().pages.first().id;

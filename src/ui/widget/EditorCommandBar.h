@@ -6,9 +6,12 @@
 #include <FluentQt/Foundation.h>
 #include <QWidget>
 
+#include <functional>
+
 class QPaintEvent;
 class QResizeEvent;
 class QAction;
+class QMenu;
 
 namespace fluent::basicinput {
 class Button;
@@ -58,6 +61,7 @@ public:
     }
 
 Q_SIGNALS:
+    void chooseExportPathRequested();
     void zoomInRequested();
     void zoomOutRequested();
     void fitToPageRequested();
@@ -110,6 +114,12 @@ private:
     QAction* m_rejectOverflowAction{nullptr};
     bool m_overflowActive{false};
     bool m_hasProposal{false};
+    fluent::basicinput::Button* m_exportButton{nullptr};
+    QMenu* m_exportMenu{nullptr};
+    QAction* m_exportCurrentPageAction{nullptr};
+    QAction* m_exportSelectedPagesAction{nullptr};
+    QAction* m_exportAllPagesAction{nullptr};
+    std::function<QString()> m_outputDirProvider;
 };
 
 } // namespace manga::ui::widget

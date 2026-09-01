@@ -130,15 +130,63 @@ void MangaCanvas::setPageImage(const QImage& image) {
     m_pageItem->setPixmap(m_pagePixmap);
     m_pageItem->setVisible(true);
 
-    m_scene->setSceneRect(QRectF(m_pagePixmap.rect()).adjusted(-24, -24, 24, 24));
+    m_pageItem->setPos(0, 0);
+    if (m_translationItem && m_previewMode == 2) {
+        m_translationItem->setPos(m_pagePixmap.width() + 32.0, 0);
+        m_scene->setSceneRect(QRectF(0, 0, m_pagePixmap.width() * 2 + 32.0, m_pagePixmap.height()));
+    } else {
+        m_scene->setSceneRect(QRectF(m_pagePixmap.rect()).adjusted(-24, -24, 24, 24));
+    }
     setContentStateInternal(ContentState::Image, QString(), QString(), false);
+}
+
+void MangaCanvas::setTranslatedPreview(const QImage& image) {
+    m_translationPixmap = image.isNull() ? QPixmap() : QPixmap::fromImage(image);
+    if (!m_translationItem) {
+        m_translationItem = new QGraphicsPixmapItem();
+        m_translationItem->setZValue(canvas::kZTextLayer);
+        m_scene->addItem(m_translationItem);
+    }
+    m_translationItem->setPixmap(m_translationPixmap);
+    const qreal gap = 32.0;
+    const bool compare = m_previewMode == 2;
+    if (m_pageItem == nullptr) {
+        m_translationItem->setVisible(false);
+        return;
+    }
+    m_pageItem->setPos(0, 0);
+    m_translationItem->setPos(compare ? m_pagePixmap.width() + gap : 0, 0);
+    m_translationItem->setVisible(m_previewMode != 0 && !m_translationPixmap.isNull());
+    if (compare && !m_pagePixmap.isNull()) {
+        m_scene->setSceneRect(QRectF(0, 0, m_pagePixmap.width() * 2 + gap, m_pagePixmap.height()));
+    }
+}
+
+void MangaCanvas::setPreviewMode(int mode) {
+    m_previewMode = mode;
+    if (m_translationItem && m_pageItem) {
+        const qreal gap = 32.0;
+        const bool compare = mode == 2;
+        m_pageItem->setPos(0, 0);
+        m_translationItem->setPos(compare ? m_pagePixmap.width() + gap : 0, 0);
+        m_translationItem->setVisible(mode != 0 && !m_translationPixmap.isNull());
+        if (!m_pagePixmap.isNull()) {
+            m_scene->setSceneRect(compare ? QRectF(0, 0, m_pagePixmap.width() * 2 + gap, m_pagePixmap.height())
+                                          : QRectF(m_pagePixmap.rect()).adjusted(-24, -24, 24, 24));
+        }
+    }
 }
 
 void MangaCanvas::clearPageImage() {
     m_pagePixmap = QPixmap();
+    m_translationPixmap = QPixmap();
     if (m_pageItem) {
         m_pageItem->setPixmap(m_pagePixmap);
         m_pageItem->setVisible(false);
+    }
+    if (m_translationItem) {
+        m_translationItem->setPixmap(QPixmap());
+        m_translationItem->setVisible(false);
     }
 }
 

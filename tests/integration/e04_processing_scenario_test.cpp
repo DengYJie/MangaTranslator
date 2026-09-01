@@ -465,7 +465,7 @@ void ProcessingScenarioTest::fullProcessingMainlineProducesConsistentExport() {
 
     QSignalSpy closeSpy(fixture.viewModel.get(), &EditorViewModel::projectClosed);
     fixture.viewModel->requestCloseProject();
-    QCOMPARE(closeSpy.count(), 1);
+    QVERIFY(closeSpy.wait(kAwaitTimeoutMs));
     // The close is a queued data operation; drain it so the reopen cannot race it.
     QThreadPool::globalInstance()->waitForDone();
 

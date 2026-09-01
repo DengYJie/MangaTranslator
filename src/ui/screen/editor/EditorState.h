@@ -1,6 +1,7 @@
 #pragma once
 
 #include "application/dto/ProjectDto.h"
+#include "application/error/ApplicationError.h"
 #include "application/operation/OperationId.h"
 #include "application/operation/OperationStage.h"
 #include "domain/model/Geometry.h"
@@ -34,6 +35,8 @@ struct EditorPageEntry {
 /// Page-level recoverable problem surfaced by the canvas placeholder.
 struct EditorNotice {
     QString safeMessage;
+    QString actionText;
+    application::RecoveryAction action{application::RecoveryAction::None};
     bool retryable{false};
     bool operator==(const EditorNotice&) const = default;
 };
@@ -146,6 +149,8 @@ struct EditorState {
     quint64 projectSessionGeneration{0};
     bool isPageLoading{false};
     std::optional<EditorNotice> notice;
+    std::optional<EditorNotice> exportNotice;
+    QVector<QString> exportFailureSummaries;
 
     /// Current page region projections sorted by orderIndex.
     QVector<RegionProjection> regions;

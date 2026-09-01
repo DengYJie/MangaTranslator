@@ -65,6 +65,8 @@ public:
 
     /// Replaces the page image and switches to the Image state. GUI thread only.
     void setPageImage(const QImage& image);
+    void setTranslatedPreview(const QImage& image);
+    void setPreviewMode(int mode);
     void clearPageImage();
 
     /// Loading clears any previous page image so a stale page never poses as the new one.
@@ -155,14 +157,17 @@ private:
     /// Propagates resolved FluentQt semantic colors to overlay items and the creation box.
     void applyThemeColorsToItems();
 
-    QGraphicsScene* m_scene{nullptr};         // owned via QGraphicsView::setScene
-    QGraphicsPixmapItem* m_pageItem{nullptr}; // scene-owned
+    QGraphicsScene* m_scene{nullptr};                // owned via QGraphicsView::setScene
+    QGraphicsPixmapItem* m_pageItem{nullptr};        // scene-owned
+    QGraphicsPixmapItem* m_translationItem{nullptr}; // scene-owned
     fluent::layout::Card* m_placeholderCard{nullptr};
     fluent::textfields::Label* m_placeholderIcon{nullptr};
     fluent::textfields::Label* m_placeholderTitle{nullptr};
     fluent::textfields::Label* m_placeholderDescription{nullptr};
     fluent::basicinput::Button* m_placeholderAction{nullptr};
     QPixmap m_pagePixmap;
+    QPixmap m_translationPixmap;
+    int m_previewMode{0};
     ContentState m_contentState{ContentState::NoProject};
     QString m_placeholderMessage;
     double m_zoomFactor{1.0};

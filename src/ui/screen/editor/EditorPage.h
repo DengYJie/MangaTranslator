@@ -79,6 +79,7 @@ public:
 Q_SIGNALS:
     void openProjectRequested();
     void importPagesRequested();
+    void chooseExportPathRequested();
 
 protected:
     void paintEvent(QPaintEvent* event) override;

@@ -107,8 +107,10 @@ struct OpenAiCompatibleTranslator::Job : public std::enable_shared_from_this<Job
                 timerToCancel->stop();
                 timerToCancel->deleteLater();
             });
-            settle(std::unexpected(cancelledError()));
         }
+        // Settle even when neither request nor retry timer was published yet.
+        // Their setup paths observe settled under the same mutex and cancel themselves.
+        settle(std::unexpected(cancelledError()));
     }
 
     static void run(const std::shared_ptr<Job>& job) {

@@ -79,6 +79,8 @@ public:
     void selectAllRegionsOnCurrentPage();
     /// Sets the preview mode for comparing original and translated content.
     void setPreviewMode(PreviewMode mode);
+    /// Requests a composed preview for the current page. Delivery is generation and revision guarded.
+    void requestPreview(const domain::PageId& pageId);
 
     /// Creates a region on the current page. Validates geometry (>= 8x8 inside page bounds)
     /// and generates RegionId before pushing the command.
@@ -132,6 +134,7 @@ public:
     /// the GUI thread from an aggregate snapshot; image I/O and writing run on workers.
     /// Duplicate intents while an export is running are ignored.
     void exportPages(application::ExportScope scope, const QString& outputDir);
+    void retryExportInDirectory(const QString& outputDir);
 
     /// Test-only hook: removes a region via RemoveRegionUseCase and rebuilds projection.
     /// Production intents must not use this method.
@@ -188,6 +191,7 @@ public:
 Q_SIGNALS:
     void stateChanged(const EditorState& state);
     void pageImageReady(const PageImageDelivery& delivery);
+    void previewImageReady(const PageImageDelivery& delivery);
     void thumbnailReady(const domain::PageId& pageId, const QImage& image);
     void thumbnailFailed(const domain::PageId& pageId, const QString& safeMessage);
     /// viewGeneration bumped: in-flight thumbnail binds are discarded, rows must re-request.
@@ -218,11 +222,14 @@ private:
 
     void startPageLoad(const domain::PageId& pageId);
     void handlePageLoadFinished();
+    void handlePreviewFinished();
     void startThumbnail(const domain::PageId& pageId);
     void handleThumbnailFinished(const domain::PageId& pageId);
     void pumpThumbnailQueue();
     void cancelThumbnailRequests();
     void handleSaveFinished();
+    void handleProjectCloseFinished();
+    void completeProjectClose();
     void cancelExport();
     void handleExportSnapshotFinished();
     void handleExportFinished();
@@ -273,7 +280,7 @@ private:
     QHash<QString, ViewTransform> m_viewTransforms; // key: PageId string
 
     /// Undo stack and command context. Created in openProjectSession after aggregate stored,
-    /// destroyed in closeProjectSession before releasing aggregate.
+    /// and destroyed only after repository close succeeds.
     std::unique_ptr<QUndoStack> m_undoStack;
     std::unique_ptr<command::EditorCommandContext> m_commandContext;
     bool m_undoHistoryFaulted{false};
@@ -287,6 +294,14 @@ private:
     quint64 m_pageLoadToken{0};
     application::OperationId m_pageLoadOperation{};
 
+    QFutureWatcher<application::Result<QImage>> m_previewWatcher;
+    quint64 m_previewToken{0};
+    quint64 m_previewContentRevision{0};
+    quint64 m_previewSessionGeneration{0};
+    domain::PageId m_previewPageId;
+    application::OperationId m_previewOperation{};
+    QImage m_cachedPreviewImage;
+
     QHash<QString, ThumbnailTicket> m_thumbnailInFlight; // key: PageId string
     QVector<domain::PageId> m_thumbnailQueue;
     QHash<QString, QFutureWatcher<application::Result<QImage>>*> m_thumbnailWatchers;
@@ -294,6 +309,10 @@ private:
     QFutureWatcher<application::Result<application::SaveProjectResult>> m_saveWatcher;
     quint64 m_saveToken{0};
     application::OperationId m_saveOperation{};
+
+    QFutureWatcher<application::Result<void>> m_closeWatcher;
+    bool m_closeInProgress{false};
+    std::optional<application::OpenedProjectSession> m_pendingSession;
 
     /// Export pipeline ports, injected via setExportDependencies. Non-owning.
     application::IComicExporter* m_exporter{nullptr};

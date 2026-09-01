@@ -16,6 +16,7 @@
 
 #include <QFileInfo>
 #include <QSet>
+#include <QTimer>
 
 #include <algorithm>
 
@@ -120,10 +121,18 @@ EditorViewModel::EditorViewModel(application::IThumbnailStore* thumbnailStore,
             &QFutureWatcher<application::Result<QImage>>::finished,
             this,
             &EditorViewModel::handlePageLoadFinished);
+    connect(&m_previewWatcher,
+            &QFutureWatcher<application::Result<QImage>>::finished,
+            this,
+            &EditorViewModel::handlePreviewFinished);
     connect(&m_saveWatcher,
             &QFutureWatcher<application::Result<application::SaveProjectResult>>::finished,
             this,
             &EditorViewModel::handleSaveFinished);
+    connect(&m_closeWatcher,
+            &QFutureWatcher<application::Result<void>>::finished,
+            this,
+            &EditorViewModel::handleProjectCloseFinished);
     connect(&m_snapshotWatcher,
             &QFutureWatcher<application::Result<QVector<application::ExportPageSnapshot>>>::finished,
             this,
@@ -142,10 +151,17 @@ EditorViewModel::~EditorViewModel() {
     if (m_operationRegistry && m_pageLoadOperation.isValid()) {
         m_operationRegistry->cancelOperation(m_pageLoadOperation);
     }
+    if (m_operationRegistry && m_previewOperation.isValid()) {
+        m_operationRegistry->cancelOperation(m_previewOperation);
+    }
     cancelExport();
 }
 
 void EditorViewModel::openProjectSession(application::OpenedProjectSession session) {
+    if (m_closeInProgress) {
+        m_pendingSession = std::move(session);
+        return;
+    }
     if (!m_thumbnailStore || !m_pageImageLoader || !m_operationRegistry) {
         updateState([&](EditorState& s) {
             EditorNotice notice;
@@ -222,6 +238,10 @@ void EditorViewModel::openProjectSession(application::OpenedProjectSession sessi
 }
 
 void EditorViewModel::closeProjectSession() {
+    if (m_closeInProgress || !m_hasSession || !m_openedSession) {
+        return;
+    }
+    m_closeInProgress = true;
     cancelThumbnailRequests();
     if (m_operationRegistry && m_pageLoadOperation.isValid()) {
         m_operationRegistry->cancelOperation(m_pageLoadOperation);
@@ -233,25 +253,58 @@ void EditorViewModel::closeProjectSession() {
     // P5-D 项目任务取消钩子
     cancelProjectTasks();
 
-    // Stop accepting commands by destroying undo infrastructure before releasing the aggregate.
-    m_undoStack.reset();
-    m_commandContext.reset();
-    m_undoHistoryFaulted = false;
-    m_textEditSession->reset();
-
-    // Call repository close
-    if (m_hasSession && m_openedSession && m_projectRepository && m_operationRegistry) {
+    // Keep the aggregate alive until repository close completes. The repository
+    // task may still access its session-owned paths and data during close.
+    if (m_projectRepository && m_operationRegistry) {
         auto context = m_operationRegistry->createOperation(m_state.projectSessionGeneration, m_state.viewGeneration);
         application::CloseProjectUseCase useCase(m_projectRepository);
         application::CloseProjectRequest request;
         request.projectId = m_session.projectId;
         request.projectRoot = m_session.projectRootPath;
-        useCase.execute(request, context); // Fire and forget
+        m_closeWatcher.setFuture(useCase.execute(request, context));
+        return;
     }
 
+    completeProjectClose();
+}
+
+void EditorViewModel::handleProjectCloseFinished() {
+    if (!m_closeInProgress) {
+        return;
+    }
+    const auto result = m_closeWatcher.result();
+    if (!result.has_value()) {
+        m_closeInProgress = false;
+        const auto presentation = m_recoveryPresenter.present(result.error());
+        updateState([&](EditorState& s) {
+            EditorNotice notice;
+            if (presentation) {
+                notice.safeMessage = presentation->safeMessage;
+                notice.actionText = presentation->actionText;
+                notice.action = presentation->action;
+                notice.retryable = presentation->action == application::RecoveryAction::Retry;
+            } else {
+                notice.safeMessage = result.error().safeMessage;
+                notice.action = application::RecoveryAction::Retry;
+                notice.retryable = true;
+            }
+            s.notice = notice;
+        });
+        return;
+    }
+
+    completeProjectClose();
+}
+
+void EditorViewModel::completeProjectClose() {
     if (m_processingController != nullptr) {
         m_processingController->reset();
     }
+
+    m_undoStack.reset();
+    m_commandContext.reset();
+    m_undoHistoryFaulted = false;
+    m_textEditSession->reset();
 
     m_hasSession = false;
     m_session = application::ProjectSessionDescriptor{};
@@ -267,6 +320,13 @@ void EditorViewModel::closeProjectSession() {
     });
 
     Q_EMIT thumbnailsInvalidated();
+    m_closeInProgress = false;
+    Q_EMIT projectClosed();
+    if (m_pendingSession) {
+        auto pendingSession = std::move(*m_pendingSession);
+        m_pendingSession.reset();
+        openProjectSession(std::move(pendingSession));
+    }
 }
 
 void EditorViewModel::selectPage(const domain::PageId& pageId) {
@@ -551,6 +611,67 @@ void EditorViewModel::setPreviewMode(PreviewMode mode) {
         return;
     }
     updateState([&](EditorState& s) { s.previewMode = mode; });
+}
+
+void EditorViewModel::requestPreview(const domain::PageId& pageId) {
+    if (!m_hasSession || !m_openedSession || !m_operationRegistry || !m_derivedAssetStore ||
+        pageId != m_state.currentPageId) {
+        return;
+    }
+    if (!findPage(pageId)) {
+        return;
+    }
+
+    quint64 contentRevision = 0;
+    for (const auto& region : m_state.regions) {
+        contentRevision = contentRevision * 1315423911u + region.contentRevision;
+    }
+    const quint64 sessionGeneration = m_state.projectSessionGeneration;
+    if (m_previewPageId == pageId && m_previewSessionGeneration == sessionGeneration &&
+        m_previewContentRevision == contentRevision &&
+        (m_previewOperation.isValid() || !m_cachedPreviewImage.isNull())) {
+        return;
+    }
+
+    if (m_previewOperation.isValid()) {
+        m_operationRegistry->cancelOperation(m_previewOperation);
+    }
+    ++m_previewToken;
+    const auto context = m_operationRegistry->createOperation(sessionGeneration, m_state.viewGeneration);
+    m_previewOperation = context.operationId;
+    m_previewPageId = pageId;
+    m_previewSessionGeneration = sessionGeneration;
+    m_previewContentRevision = contentRevision;
+    m_cachedPreviewImage = QImage{};
+    Q_EMIT previewImageReady(PageImageDelivery{pageId, QImage{}});
+
+    ExportSnapshotBuilder builder(&m_openedSession->project, m_pageImageLoader, m_derivedAssetStore);
+    ExportSnapshotBuilder::Request request;
+    request.projectRoot = m_session.projectRootPath;
+    request.pageIds = {pageId};
+    m_previewWatcher.setFuture(builder.executePreview(request, context));
+}
+
+void EditorViewModel::handlePreviewFinished() {
+    const quint64 token = m_previewToken;
+    if (token == 0 || m_previewWatcher.isCanceled()) {
+        return;
+    }
+    auto result = m_previewWatcher.result();
+    m_previewOperation = application::OperationId{};
+    quint64 currentRevision = 0;
+    if (m_state.currentPageId == m_previewPageId) {
+        for (const auto& region : m_state.regions) {
+            currentRevision = currentRevision * 1315423911u + region.contentRevision;
+        }
+    }
+    if (!result.has_value() || token != m_previewToken || !m_hasSession ||
+        m_state.projectSessionGeneration != m_previewSessionGeneration || m_state.currentPageId != m_previewPageId ||
+        currentRevision != m_previewContentRevision) {
+        return;
+    }
+    m_cachedPreviewImage = result.value();
+    Q_EMIT previewImageReady(PageImageDelivery{m_previewPageId, m_cachedPreviewImage});
 }
 
 bool EditorViewModel::removeRegionForTest(const domain::RegionId& regionId) {
@@ -1581,7 +1702,12 @@ void EditorViewModel::exportPages(application::ExportScope scope, const QString&
     m_exportSelectedPageIds = m_state.selectedPageIds;
     m_exportToken = ++m_exportSequence;
 
-    updateState([](EditorState& s) { s.isExporting = true; });
+    updateState([](EditorState& s) {
+        s.isExporting = true;
+        s.notice.reset();
+        s.exportNotice.reset();
+        s.exportFailureSummaries.clear();
+    });
 
     // The snapshot chain reads pages on worker threads, so it must not touch the
     // live aggregate: a concurrent session close would free it under the chain.
@@ -1592,6 +1718,12 @@ void EditorViewModel::exportPages(application::ExportScope scope, const QString&
     snapshotRequest.projectRoot = m_session.projectRootPath;
     snapshotRequest.pageIds = targetPageIds;
     m_snapshotWatcher.setFuture(builder.execute(snapshotRequest, context));
+}
+
+void EditorViewModel::retryExportInDirectory(const QString& outputDir) {
+    if (!outputDir.trimmed().isEmpty()) {
+        exportPages(m_exportScope, outputDir);
+    }
 }
 
 void EditorViewModel::cancelExport() {
@@ -1639,14 +1771,38 @@ void EditorViewModel::handleExportFinished() {
 
     auto result = m_exportWatcher.result();
     if (result.has_value()) {
+        const auto& response = result.value();
         if (m_operationRegistry && m_exportOperation.isValid()) {
-            m_operationRegistry->markFinished(m_exportOperation);
+            if (!response.failures.isEmpty()) {
+                m_operationRegistry->markFinished(m_exportOperation, response.failures.constFirst().error);
+            } else {
+                m_operationRegistry->markFinished(m_exportOperation);
+            }
         }
         m_exportOperation = application::OperationId{};
         m_exportContext = {};
         m_exportProjectSnapshot.reset();
-        updateState([](EditorState& s) { s.isExporting = false; });
-        Q_EMIT exportCompleted(result.value());
+        updateState([&](EditorState& s) {
+            s.isExporting = false;
+            s.notice.reset();
+            s.exportFailureSummaries.clear();
+            for (const auto& failure : response.failures) {
+                s.exportFailureSummaries.append(failure.error.safeMessage);
+            }
+            s.exportNotice.reset();
+            if (!response.failures.isEmpty()) {
+                const auto presentation = m_recoveryPresenter.present(response.failures.constFirst().error);
+                if (presentation) {
+                    EditorNotice notice;
+                    notice.safeMessage = presentation->safeMessage;
+                    notice.actionText = presentation->actionText;
+                    notice.action = presentation->action;
+                    notice.retryable = presentation->action == application::RecoveryAction::Retry;
+                    s.exportNotice = notice;
+                }
+            }
+        });
+        Q_EMIT exportCompleted(response);
     } else {
         failExport(result.error());
     }
@@ -1661,11 +1817,15 @@ void EditorViewModel::failExport(const application::ApplicationError& error) {
     m_exportProjectSnapshot.reset();
     updateState([&](EditorState& s) {
         s.isExporting = false;
+        s.exportFailureSummaries.clear();
+        s.exportNotice.reset();
         if (error.category != application::ErrorCategory::Cancelled) {
             const auto presentation = m_recoveryPresenter.present(error);
             if (presentation) {
                 EditorNotice notice;
                 notice.safeMessage = presentation->safeMessage;
+                notice.actionText = presentation->actionText;
+                notice.action = presentation->action;
                 notice.retryable = presentation->action == application::RecoveryAction::Retry;
                 s.notice = notice;
             }
@@ -1688,7 +1848,6 @@ void EditorViewModel::requestCloseProject() {
         Q_EMIT closeDecisionRequested(summary);
     } else {
         closeProjectSession();
-        Q_EMIT projectClosed();
     }
 }
 
@@ -1696,7 +1855,6 @@ void EditorViewModel::confirmDiscardAndClose() {
     if (m_hasSession) {
         closeProjectSession();
     }
-    Q_EMIT projectClosed();
 }
 
 void EditorViewModel::cancelClose() {}

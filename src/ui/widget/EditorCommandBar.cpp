@@ -7,6 +7,7 @@
 #include <FluentQt/TextFields.h>
 #include <QApplication>
 #include <QButtonGroup>
+#include <QFileDialog>
 #include <QFrame>
 #include <QHBoxLayout>
 #include <QLineEdit>
@@ -175,8 +176,10 @@ void EditorCommandBar::buildUi() {
         m_viewModel->setActiveTool(CanvasTool::CreateRegion);
     });
     connect(m_previewSelectorButton, &fluent::basicinput::Button::clicked, this, [this]() {
-        auto mode =
-            m_viewModel->state().previewMode == PreviewMode::Original ? PreviewMode::Translated : PreviewMode::Original;
+        const auto current = m_viewModel->state().previewMode;
+        const auto mode = current == PreviewMode::Original
+                              ? PreviewMode::Translated
+                              : (current == PreviewMode::Translated ? PreviewMode::Compare : PreviewMode::Original);
         m_viewModel->setPreviewMode(mode);
     });
     connect(m_smartTranslateButton, &fluent::basicinput::Button::clicked, this, [this]() {
@@ -326,8 +329,10 @@ void EditorCommandBar::setupShortcuts() {
     makeGlobal(QStringLiteral("R"), [this]() { m_viewModel->setActiveTool(CanvasTool::CreateRegion); });
     makeGlobal(QStringLiteral("H"), [this]() { m_viewModel->setActiveTool(CanvasTool::Pan); });
     makeGlobal(QStringLiteral("Space"), [this]() {
-        auto mode =
-            m_viewModel->state().previewMode == PreviewMode::Original ? PreviewMode::Translated : PreviewMode::Original;
+        const auto current = m_viewModel->state().previewMode;
+        const auto mode = current == PreviewMode::Original
+                              ? PreviewMode::Translated
+                              : (current == PreviewMode::Translated ? PreviewMode::Compare : PreviewMode::Original);
         m_viewModel->setPreviewMode(mode);
     });
     makeGlobal(QStringLiteral("+"), [this]() { Q_EMIT zoomInRequested(); });

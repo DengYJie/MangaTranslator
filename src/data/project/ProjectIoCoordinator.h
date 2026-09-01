@@ -2,6 +2,7 @@
 
 #include "domain/model/Uuid.h"
 
+#include <QDeadlineTimer>
 #include <QMutex>
 #include <QString>
 #include <QWaitCondition>
@@ -26,6 +27,11 @@ public:
         NotOpen,
         ProjectMismatch,
         RootClosing,
+    };
+
+    enum class CloseFailure {
+        NotOpen,
+        Timeout,
     };
 
     /// Held for the duration of one write operation on a project root. Blocks other write
@@ -80,8 +86,8 @@ public:
     /// Stops new asset access before a session moves away from a root.
     void unbindProject(const QString& canonicalRoot);
     /// Marks the root closing, waits for active leases, and returns a ticket that releases the
-    /// write lock; returns nullopt when the root has no runtime state.
-    [[nodiscard]] std::optional<WriteTicket> beginClose(const QString& canonicalRoot);
+    /// write lock. A timeout restores the open state so the caller can retry safely.
+    [[nodiscard]] std::expected<WriteTicket, CloseFailure> beginClose(const QString& canonicalRoot, int timeoutMs);
     /// Drops the runtime state for a root so a later operation on the same path starts fresh.
     void discardRoot(const QString& canonicalRoot);
 

@@ -248,8 +248,10 @@ void E05PageExportTest::conflictFileNamesAppendSuffixWithoutOverwrite() {
         const QByteArray marker = QByteArrayLiteral("preexisting bytes");
         QCOMPARE(preexisting.write(marker), marker.size());
     }
+    QFile beforeFile(preexistingPath);
+    QVERIFY(beforeFile.open(QIODevice::ReadOnly));
     const QByteArray preexistingDigest =
-        QCryptographicHash::hash(QFile(preexistingPath).readAll(), QCryptographicHash::Sha256).toHex();
+        QCryptographicHash::hash(beforeFile.readAll(), QCryptographicHash::Sha256).toHex();
 
     ExportResponse response;
     QVERIFY(fixture.runExportToCompletion(ExportScope::AllPages, outputDir.path(), response));
@@ -258,8 +260,9 @@ void E05PageExportTest::conflictFileNamesAppendSuffixWithoutOverwrite() {
     QCOMPARE(response.exported.size(), 3);
     // The conflicting page got a suffix; the old file kept its exact bytes.
     QCOMPARE(QFileInfo(response.exported[0].path).fileName(), QStringLiteral("page_0001_translated_001.png"));
-    QCOMPARE(QCryptographicHash::hash(QFile(preexistingPath).readAll(), QCryptographicHash::Sha256).toHex(),
-             preexistingDigest);
+    QFile afterFile(preexistingPath);
+    QVERIFY(afterFile.open(QIODevice::ReadOnly));
+    QCOMPARE(QCryptographicHash::hash(afterFile.readAll(), QCryptographicHash::Sha256).toHex(), preexistingDigest);
     QCOMPARE(QFileInfo(response.exported[1].path).fileName(), QStringLiteral("page_0002_translated.png"));
     QCOMPARE(fixture.pngFileNames(outputDir.path()).size(), 4);
 }

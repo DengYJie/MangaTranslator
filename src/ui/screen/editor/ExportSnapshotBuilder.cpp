@@ -23,6 +23,40 @@ ExportSnapshotBuilder::ExportSnapshotBuilder(domain::ComicProject* project,
                                              application::IDerivedAssetStore* derivedStore)
     : m_project(project), m_loader(loader), m_derivedStore(derivedStore) {}
 
+QFuture<application::Result<QImage>>
+ExportSnapshotBuilder::executePreview(const Request& request, const application::OperationContext& context) {
+    return execute(request, context)
+        .then([](application::Result<QVector<application::ExportPageSnapshot>> result) -> application::Result<QImage> {
+            if (!result.has_value()) {
+                return std::unexpected(result.error());
+            }
+            if (result.value().isEmpty()) {
+                return std::unexpected(application::makeApplicationError(application::ErrorCategory::Input,
+                                                                         QStringLiteral("input.invalid_page_selection"),
+                                                                         QStringLiteral("Preview page was not found")));
+            }
+
+            const auto& page = result.value().first();
+            QImage composite(page.sourceImage.size(), QImage::Format_RGBA8888_Premultiplied);
+            composite.setColorSpace(QColorSpace(QColorSpace::SRgb));
+            composite.fill(Qt::transparent);
+            QPainter painter(&composite);
+            painter.setCompositionMode(QPainter::CompositionMode_SourceOver);
+            painter.drawImage(0, 0, page.sourceImage);
+            if (!page.clearLayer.isNull()) {
+                painter.drawImage(0, 0, page.clearLayer);
+            }
+            if (!page.translationLayer.isNull()) {
+                painter.drawImage(0, 0, page.translationLayer);
+            }
+            if (!page.manualOverrideLayer.isNull()) {
+                painter.drawImage(0, 0, page.manualOverrideLayer);
+            }
+            painter.end();
+            return composite.convertToFormat(QImage::Format_RGBA8888);
+        });
+}
+
 QFuture<application::Result<QVector<application::ExportPageSnapshot>>>
 ExportSnapshotBuilder::execute(const Request& request, const application::OperationContext& context) {
     if (m_project == nullptr || m_loader == nullptr || m_derivedStore == nullptr) {
@@ -107,7 +141,8 @@ ExportSnapshotBuilder::execute(const Request& request, const application::Operat
     });
 
     auto processNextPage = std::make_shared<std::function<void()>>();
-    *processNextPage = [state, processNextPage]() {
+    const std::weak_ptr<std::function<void()>> weakProcessNextPage = processNextPage;
+    *processNextPage = [state, weakProcessNextPage]() {
         if (state->context.stopToken.stop_requested()) {
             state->promise->addResult(
                 std::unexpected(application::makeApplicationError(application::ErrorCategory::Cancelled,
@@ -137,7 +172,7 @@ ExportSnapshotBuilder::execute(const Request& request, const application::Operat
         application::LoadPageImageUseCase loadUseCase(state->loader);
         auto loadFuture = loadUseCase.execute(loadReq, state->context);
 
-        loadFuture.then([state, processNextPage, page](application::Result<QImage> loadRes) {
+        loadFuture.then([state, weakProcessNextPage, page](application::Result<QImage> loadRes) {
             if (!loadRes.has_value()) {
                 state->promise->addResult(std::unexpected(loadRes.error()));
                 state->promise->finish();
@@ -151,9 +186,9 @@ ExportSnapshotBuilder::execute(const Request& request, const application::Operat
             sourceImage.setColorSpace(QColorSpace(QColorSpace::SRgb));
 
             // 2. Read clear layer if present
-            auto onClearLoaded = [state, processNextPage, page, sourceImage](QImage clearLayer) mutable {
+            auto onClearLoaded = [state, weakProcessNextPage, page, sourceImage](QImage clearLayer) mutable {
                 // 3. Read manual override layer if present
-                auto onManualLoaded = [state, processNextPage, page, sourceImage, clearLayer](
+                auto onManualLoaded = [state, weakProcessNextPage, page, sourceImage, clearLayer](
                                           QImage manualOverrideLayer) mutable {
                     // 4. Build translation layer
                     QImage translationLayer;
@@ -205,7 +240,9 @@ ExportSnapshotBuilder::execute(const Request& request, const application::Operat
 
                     state->snapshots.append(snapshot);
                     state->currentIndex++;
-                    (*processNextPage)();
+                    if (const auto nextPage = weakProcessNextPage.lock()) {
+                        (*nextPage)();
+                    }
                 };
 
                 if (page.manualOverrideLayerAsset().has_value()) {

@@ -58,6 +58,7 @@ EditorPage::EditorPage(EditorViewModel* viewModel, QWidget* parent) : base::Base
     buildUi();
 
     connect(m_pageList, &widget::PageThumbnailList::pageActivated, m_viewModel, &EditorViewModel::selectPage);
+    connect(m_pageList, &widget::PageThumbnailList::pagesSelected, m_viewModel, &EditorViewModel::setSelectedPages);
     connect(m_pageList,
             &widget::PageThumbnailList::thumbnailRequested,
             m_viewModel,
@@ -108,6 +109,9 @@ EditorPage::EditorPage(EditorViewModel* viewModel, QWidget* parent) : base::Base
             [this](const domain::RegionId& regionId) { m_viewModel->deleteRegions({regionId}); });
 
     connect(m_viewModel, &EditorViewModel::pageImageReady, this, &EditorPage::handlePageImageReady);
+    connect(m_viewModel, &EditorViewModel::previewImageReady, this, [this](const PageImageDelivery& delivery) {
+        m_canvas->setTranslatedPreview(delivery.image);
+    });
 
     connect(m_inspector,
             &widget::InspectorPanel::deleteRegionsRequested,
@@ -538,6 +542,8 @@ void EditorPage::render(const EditorState& state) {
         displayRegions.append(display);
     }
     m_canvas->setRegions(displayRegions);
+    m_canvas->setPreviewMode(static_cast<int>(state.previewMode));
+    m_viewModel->requestPreview(state.currentPageId);
 
     for (const auto& p : state.pages) {
         if (p.id == state.currentPageId) {
@@ -554,8 +560,11 @@ void EditorPage::render(const EditorState& state) {
         m_canvas->setContentState(m_lastPlaceholder, tr("项目中还没有页面"), tr("导入页面"));
     } else if (state.notice) {
         m_lastPlaceholder = ui::manga::MangaCanvas::ContentState::Error;
-        m_canvas->setContentState(
-            m_lastPlaceholder, state.notice->safeMessage, state.notice->retryable ? tr("重试加载") : QString());
+        m_canvas->setContentState(m_lastPlaceholder,
+                                  state.notice->safeMessage,
+                                  state.notice->action == application::RecoveryAction::ChoosePath
+                                      ? state.notice->actionText
+                                      : (state.notice->retryable ? tr("重试加载") : QString()));
     } else if (state.isPageLoading) {
         m_lastPlaceholder = ui::manga::MangaCanvas::ContentState::Loading;
         QString displayName;
@@ -588,7 +597,12 @@ void EditorPage::handlePlaceholderAction() {
             Q_EMIT importPagesRequested();
             break;
         case ui::manga::MangaCanvas::ContentState::Error:
-            m_viewModel->retryPageLoad();
+            if (m_viewModel->state().notice.has_value() &&
+                m_viewModel->state().notice->action == application::RecoveryAction::ChoosePath) {
+                Q_EMIT chooseExportPathRequested();
+            } else {
+                m_viewModel->retryPageLoad();
+            }
             break;
         default:
             break;
