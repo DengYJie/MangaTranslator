@@ -1,5 +1,6 @@
 #include "application/ports/IAppSettingsStore.h"
 #include "application/ports/IOcrModelValidator.h"
+#include "application/usecase/credential/CredentialUseCases.h"
 #include "ui/screen/settings/SettingsViewModel.h"
 #include "unit/application/FakeCredentialStore.h"
 
@@ -82,7 +83,8 @@ void SettingsViewModelTest::testInitialObserveReplay() {
     ::manga::application::test::FakeCredentialStore credStore;
     FakeOcrModelValidator validator;
 
-    SettingsViewModel vm(&store, &credStore, &validator);
+    ::manga::application::CredentialOperations credentialOperations(&credStore);
+    SettingsViewModel vm(&store, &credentialOperations, &validator);
 
     bool observed = false;
     SettingsState receivedState;
@@ -103,7 +105,8 @@ void SettingsViewModelTest::testCategoryNavigationAndScrollPositions() {
     ::manga::application::test::FakeCredentialStore credStore;
     FakeOcrModelValidator validator;
 
-    SettingsViewModel vm(&store, &credStore, &validator);
+    ::manga::application::CredentialOperations credentialOperations(&credStore);
+    SettingsViewModel vm(&store, &credentialOperations, &validator);
 
     vm.setCurrentCategory(SettingsCategory::Ocr);
     QCOMPARE(vm.state().currentCategory, SettingsCategory::Ocr);
@@ -122,7 +125,8 @@ void SettingsViewModelTest::testGeneralDraftEditingAndValidation() {
     ::manga::application::test::FakeCredentialStore credStore;
     FakeOcrModelValidator validator;
 
-    SettingsViewModel vm(&store, &credStore, &validator);
+    ::manga::application::CredentialOperations credentialOperations(&credStore);
+    SettingsViewModel vm(&store, &credentialOperations, &validator);
 
     vm.setRestoreLastProject(false);
     QVERIFY(vm.isDirty());
@@ -148,7 +152,8 @@ void SettingsViewModelTest::testOcrDraftEditingAndValidation() {
     ::manga::application::test::FakeCredentialStore credStore;
     FakeOcrModelValidator validator;
 
-    SettingsViewModel vm(&store, &credStore, &validator);
+    ::manga::application::CredentialOperations credentialOperations(&credStore);
+    SettingsViewModel vm(&store, &credentialOperations, &validator);
 
     vm.setOcrModelDirectory(QStringLiteral("C:/models/baberu"));
     QVERIFY(vm.state().modelStatus.isValid);
@@ -174,7 +179,8 @@ void SettingsViewModelTest::testAiTranslationDraftEditingAndCredentials() {
     ::manga::application::test::FakeCredentialStore credStore;
     FakeOcrModelValidator validator;
 
-    SettingsViewModel vm(&store, &credStore, &validator);
+    ::manga::application::CredentialOperations credentialOperations(&credStore);
+    SettingsViewModel vm(&store, &credentialOperations, &validator);
 
     vm.setProviderId(QStringLiteral("openai-compatible"));
     QCOMPARE(vm.state().credentialStatus, ::manga::application::CredentialState::Missing);
@@ -222,7 +228,8 @@ void SettingsViewModelTest::testAppearanceDraftEditingAndInstantThemePreview() {
     ::manga::application::test::FakeCredentialStore credStore;
     FakeOcrModelValidator validator;
 
-    SettingsViewModel vm(&store, &credStore, &validator);
+    ::manga::application::CredentialOperations credentialOperations(&credStore);
+    SettingsViewModel vm(&store, &credentialOperations, &validator);
 
     QSignalSpy themeSpy(&vm, &SettingsViewModel::themePreviewRequested);
 
@@ -251,7 +258,8 @@ void SettingsViewModelTest::testSaveWorkflowSuccess() {
     ::manga::application::test::FakeCredentialStore credStore;
     FakeOcrModelValidator validator;
 
-    SettingsViewModel vm(&store, &credStore, &validator);
+    ::manga::application::CredentialOperations credentialOperations(&credStore);
+    SettingsViewModel vm(&store, &credentialOperations, &validator);
 
     QSignalSpy savedSpy(&vm, &SettingsViewModel::settingsSaved);
 
@@ -276,7 +284,8 @@ void SettingsViewModelTest::testSaveWorkflowValidationFailure() {
     ::manga::application::test::FakeCredentialStore credStore;
     FakeOcrModelValidator validator;
 
-    SettingsViewModel vm(&store, &credStore, &validator);
+    ::manga::application::CredentialOperations credentialOperations(&credStore);
+    SettingsViewModel vm(&store, &credentialOperations, &validator);
 
     QSignalSpy savedSpy(&vm, &SettingsViewModel::settingsSaved);
     QSignalSpy focusSpy(&vm, &SettingsViewModel::focusFieldRequested);
@@ -299,7 +308,8 @@ void SettingsViewModelTest::testRestoreDefaultsAndRevert() {
     ::manga::application::test::FakeCredentialStore credStore;
     FakeOcrModelValidator validator;
 
-    SettingsViewModel vm(&store, &credStore, &validator);
+    ::manga::application::CredentialOperations credentialOperations(&credStore);
+    SettingsViewModel vm(&store, &credentialOperations, &validator);
 
     QSignalSpy themeSpy(&vm, &SettingsViewModel::themePreviewRequested);
 
@@ -324,7 +334,8 @@ void SettingsViewModelTest::testLeaveDecisionWorkflow() {
     ::manga::application::test::FakeCredentialStore credStore;
     FakeOcrModelValidator validator;
 
-    SettingsViewModel vm(&store, &credStore, &validator);
+    ::manga::application::CredentialOperations credentialOperations(&credStore);
+    SettingsViewModel vm(&store, &credentialOperations, &validator);
 
     // Clean state -> immediately proceeds
     bool proceedResult = false;

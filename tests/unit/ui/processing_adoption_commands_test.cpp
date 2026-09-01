@@ -163,10 +163,16 @@ private Q_SLOTS:
         EditorCommandContext ctx(&project);
 
         PreparedProcessingAdoption prepared;
-        // PreparedClearChange is defined as: { projectId, pageId, regionId, beforeRef, afterRef, beforeState,
-        // afterState }
-        prepared.clearAssetChange = PreparedClearChange{
-            project.id(), pageId, regionId, QStringLiteral(""), QStringLiteral("asset.png"), false, true};
+        // PreparedClearChange is defined as: { projectId, pageId, regionId, expectedRevision, beforeRef, afterRef,
+        // beforeState, afterState }
+        prepared.clearAssetChange = PreparedClearChange{project.id(),
+                                                        pageId,
+                                                        regionId,
+                                                        region.contentRevision(),
+                                                        QStringLiteral(""),
+                                                        QStringLiteral("asset.png"),
+                                                        false,
+                                                        true};
 
         auto* cmd = new ProcessingAdoptionCommand(&ctx, prepared);
         QUndoStack stack;

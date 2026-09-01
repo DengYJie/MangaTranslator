@@ -1,5 +1,6 @@
 #include "application/ports/IAppSettingsStore.h"
 #include "application/ports/IOcrModelValidator.h"
+#include "application/usecase/credential/CredentialUseCases.h"
 #include "ui/screen/settings/SettingsPage.h"
 #include "ui/screen/settings/SettingsViewModel.h"
 #include "ui/widget/SettingsGroup.h"
@@ -66,7 +67,8 @@ void SettingsPageTest::testInitialRendering() {
     ::manga::application::test::FakeCredentialStore credStore;
     FakeOcrModelValidator validator;
 
-    SettingsViewModel vm(&store, &credStore, &validator);
+    ::manga::application::CredentialOperations credentialOperations(&credStore);
+    SettingsViewModel vm(&store, &credentialOperations, &validator);
     SettingsPage page(&vm);
     page.resize(800, 600);
     page.show();
@@ -84,7 +86,8 @@ void SettingsPageTest::testCategorySwitching() {
     ::manga::application::test::FakeCredentialStore credStore;
     FakeOcrModelValidator validator;
 
-    SettingsViewModel vm(&store, &credStore, &validator);
+    ::manga::application::CredentialOperations credentialOperations(&credStore);
+    SettingsViewModel vm(&store, &credentialOperations, &validator);
     SettingsPage page(&vm);
     page.resize(800, 600);
 
@@ -105,7 +108,8 @@ void SettingsPageTest::testResponsiveModePreservesWidgetAndFocus() {
     ::manga::application::test::FakeCredentialStore credStore;
     FakeOcrModelValidator validator;
 
-    SettingsViewModel vm(&store, &credStore, &validator);
+    ::manga::application::CredentialOperations credentialOperations(&credStore);
+    SettingsViewModel vm(&store, &credentialOperations, &validator);
     SettingsPage page(&vm);
     page.resize(800, 600);
     page.show();
@@ -141,7 +145,8 @@ void SettingsPageTest::testRowErrorDisplayExpandsContent() {
     ::manga::application::test::FakeCredentialStore credStore;
     FakeOcrModelValidator validator;
 
-    SettingsViewModel vm(&store, &credStore, &validator);
+    ::manga::application::CredentialOperations credentialOperations(&credStore);
+    SettingsViewModel vm(&store, &credentialOperations, &validator);
     SettingsPage page(&vm);
     page.resize(800, 600);
     page.show();
@@ -165,7 +170,8 @@ void SettingsPageTest::testSaveAndRestoreDefaultsButtons() {
     ::manga::application::test::FakeCredentialStore credStore;
     FakeOcrModelValidator validator;
 
-    SettingsViewModel vm(&store, &credStore, &validator);
+    ::manga::application::CredentialOperations credentialOperations(&credStore);
+    SettingsViewModel vm(&store, &credentialOperations, &validator);
     SettingsPage page(&vm);
     page.resize(800, 600);
 
