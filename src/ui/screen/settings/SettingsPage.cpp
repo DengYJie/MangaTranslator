@@ -3,6 +3,7 @@
 #include "ui/screen/settings/SettingsViewModel.h"
 #include "ui/widget/SettingsGroup.h"
 #include "ui/widget/SettingsRow.h"
+#include "ui/widget/TransparentScrollView.h"
 
 #include <FluentQt/BasicInput.h>
 #include <FluentQt/Design.h>
@@ -83,18 +84,10 @@ void SettingsPage::buildUi() {
     rootLayout->setContentsMargins(0, 0, 0, 0);
     rootLayout->setSpacing(0);
 
-    m_scrollView = new fluent::scrolling::ScrollView(this);
+    m_scrollView = new widget::TransparentScrollView(this);
     m_scrollView->setWidgetResizable(true);
     m_scrollView->setFrameShape(QFrame::NoFrame);
     m_scrollView->setHorizontalScrollBarVisibility(fluent::scrolling::ScrollView::ScrollBarVisibility::Hidden);
-    m_scrollView->setAutoFillBackground(false);
-    if (auto* vp = m_scrollView->viewport()) {
-        vp->setAutoFillBackground(false);
-        QPalette pal = vp->palette();
-        pal.setColor(QPalette::Window, Qt::transparent);
-        pal.setColor(QPalette::Base, Qt::transparent);
-        vp->setPalette(pal);
-    }
     rootLayout->addWidget(m_scrollView);
 
     m_scrollContent = new QWidget(m_scrollView);

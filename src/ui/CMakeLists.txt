@@ -107,6 +107,8 @@ add_library(manga_ui STATIC
     widget/SettingsGroup.h
     widget/SettingsRow.cpp
     widget/SettingsRow.h
+    widget/TransparentScrollView.cpp
+    widget/TransparentScrollView.h
     window/MainWindow.cpp
     window/MainWindow.h
     window/NavigationWindow.cpp

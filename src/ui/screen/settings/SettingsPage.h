@@ -32,6 +32,7 @@ class PasswordBox;
 namespace manga::ui::widget {
 class SettingsGroup;
 class SettingsRow;
+class TransparentScrollView;
 } // namespace manga::ui::widget
 
 namespace manga::ui::screen::settings {
@@ -79,7 +80,7 @@ private:
     bool m_isCredentialEditMode{false};
 
     // Chrome & structure
-    fluent::scrolling::ScrollView* m_scrollView{nullptr};
+    widget::TransparentScrollView* m_scrollView{nullptr};
     QWidget* m_scrollContent{nullptr};
     QBoxLayout* m_scrollContentLayout{nullptr};
     QWidget* m_columnContainer{nullptr};
