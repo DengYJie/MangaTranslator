@@ -13,8 +13,6 @@ using manga::ui::screen::editor::EditorViewModel;
 using manga::ui::screen::editor::InspectorCandidateProjection;
 using manga::ui::screen::editor::InspectorMode;
 using manga::ui::screen::editor::InspectorState;
-using manga::ui::screen::editor::MultiRegionInspectorState;
-using manga::ui::screen::editor::PageInspectorState;
 using manga::ui::screen::editor::RegionSelectionMode;
 using manga::ui::screen::editor::SingleRegionInspectorState;
 
@@ -94,7 +92,7 @@ private Q_SLOTS:
         qRegisterMetaType<domain::RegionId>();
     }
 
-    void emptySelectionProjectsPageSummary() {
+    void emptySelectionYieldsNulloptInspector() {
         domain::TextRegion withText(domain::RegionId::generate(), makeGeometry(10.0, 10.0), 0);
         withText.updateSource([](domain::TextContent& source) { source.setOcrResult("hello", 0.9, "fake-ocr"); });
         withText.updateTranslation([](domain::TranslationEntry& translation) { translation.setModelResult("world"); });
@@ -104,26 +102,15 @@ private Q_SLOTS:
         EditorViewModel viewModel(&f.thumbnailStore, &f.imageLoader, &f.registry);
         viewModel.openProjectSession(makeSession({withText, emptyRegion}, 1));
 
-        QCOMPARE(viewModel.state().inspectorMode, InspectorMode::Page);
-        const auto* pageState = std::get_if<PageInspectorState>(&viewModel.state().inspector);
-        QVERIFY2(pageState != nullptr, "empty selection must project the page summary surface");
-        QCOMPARE(pageState->pageNumber, 1);
-        QCOMPARE(pageState->pageCount, 2);
-        QCOMPARE(pageState->imageSize, (domain::ImageSize{1200, 1800}));
-        QCOMPARE(pageState->readingDirection, domain::ReadingDirection::LeftToRight);
-        QCOMPARE(pageState->regionCount, 2);
-        QCOMPARE(pageState->ocrCompletedCount, 1);
-        QCOMPARE(pageState->translatedCount, 1);
+        QCOMPARE(viewModel.state().inspectorMode, InspectorMode::None);
+        QVERIFY(!viewModel.state().inspector.has_value());
     }
 
-    void noSessionProjectsEmptyPageSummary() {
+    void noSessionYieldsNulloptInspector() {
         Fixture f;
         EditorViewModel viewModel(&f.thumbnailStore, &f.imageLoader, &f.registry);
-        const auto* pageState = std::get_if<PageInspectorState>(&viewModel.state().inspector);
-        QVERIFY(pageState != nullptr);
-        QCOMPARE(pageState->pageNumber, 0);
-        QCOMPARE(pageState->pageCount, 0);
-        QCOMPARE(pageState->regionCount, 0);
+        QCOMPARE(viewModel.state().inspectorMode, InspectorMode::None);
+        QVERIFY(!viewModel.state().inspector.has_value());
     }
 
     void singleSelectionProjectsFullRegion() {
@@ -160,39 +147,39 @@ private Q_SLOTS:
         viewModel.selectRegion(regionAt(session, 0, 0), RegionSelectionMode::Replace);
 
         QCOMPARE(viewModel.state().inspectorMode, InspectorMode::Single);
-        const auto* single = std::get_if<SingleRegionInspectorState>(&viewModel.state().inspector);
-        QVERIFY2(single != nullptr, "single selection must project the single region surface");
-        QCOMPARE(single->pageId, pageAt(session, 0));
-        QCOMPARE(single->regionId, regionAt(session, 0, 0));
-        QCOMPARE(single->sourceText, QStringLiteral("source text"));
-        QCOMPARE(single->sourceType, domain::TextSourceType::OcrAuto);
-        QCOMPARE(single->sourceConfidence, 0.75);
-        QVERIFY(single->hasManualTranslation);
-        QCOMPARE(single->manualTranslation, QStringLiteral("manual override"));
-        QCOMPARE(single->effectiveTranslation, QStringLiteral("manual override"));
-        QCOMPARE(single->candidates.size(), 2);
-        QCOMPARE(single->candidates.at(0).id, QStringLiteral("c1"));
-        QCOMPARE(single->candidates.at(0).text, QStringLiteral("candidate one"));
-        QCOMPARE(single->candidates.at(0).provider, QStringLiteral("provider-a"));
-        QVERIFY(!single->candidates.at(0).isSelected);
-        QCOMPARE(single->candidates.at(1).id, QStringLiteral("c2"));
-        QVERIFY(single->candidates.at(1).isSelected);
-        QVERIFY(single->isCleared);
-        QVERIFY(!single->isLocked);
-        QCOMPARE(single->geometry, geometry);
-        QCOMPARE(single->orderIndex, 0);
-        QCOMPARE(single->fontFamily, QStringLiteral("Comic Sans"));
-        QCOMPARE(single->fontSizePt, 18.0);
-        QCOMPARE(single->fontWeight, 700);
-        QCOMPARE(single->letterSpacingEm, 0.05);
-        QCOMPARE(single->orientation, domain::TextOrientation::Vertical);
-        QCOMPARE(single->horizontalAlignment, domain::HorizontalAlignment::Left);
-        QCOMPARE(single->verticalAlignment, domain::VerticalAlignment::Top);
-        QCOMPARE(single->lineSpacing, 1.5);
-        QCOMPARE(single->margins, (domain::Margins{1.0, 2.0, 3.0, 4.0}));
-        QCOMPARE(single->textColorHex, QStringLiteral("#112233"));
-        QCOMPARE(single->strokeColorHex, QStringLiteral("#AABBCC"));
-        QCOMPARE(single->strokeWidthPx, 2.5);
+        QVERIFY(viewModel.state().inspector.has_value());
+        const auto& single = *viewModel.state().inspector;
+        QCOMPARE(single.pageId, pageAt(session, 0));
+        QCOMPARE(single.regionId, regionAt(session, 0, 0));
+        QCOMPARE(single.sourceText, QStringLiteral("source text"));
+        QCOMPARE(single.sourceType, domain::TextSourceType::OcrAuto);
+        QCOMPARE(single.sourceConfidence, 0.75);
+        QVERIFY(single.hasManualTranslation);
+        QCOMPARE(single.manualTranslation, QStringLiteral("manual override"));
+        QCOMPARE(single.effectiveTranslation, QStringLiteral("manual override"));
+        QCOMPARE(single.candidates.size(), 2);
+        QCOMPARE(single.candidates.at(0).id, QStringLiteral("c1"));
+        QCOMPARE(single.candidates.at(0).text, QStringLiteral("candidate one"));
+        QCOMPARE(single.candidates.at(0).provider, QStringLiteral("provider-a"));
+        QVERIFY(!single.candidates.at(0).isSelected);
+        QCOMPARE(single.candidates.at(1).id, QStringLiteral("c2"));
+        QVERIFY(single.candidates.at(1).isSelected);
+        QVERIFY(single.isCleared);
+        QVERIFY(!single.isLocked);
+        QCOMPARE(single.geometry, geometry);
+        QCOMPARE(single.orderIndex, 0);
+        QCOMPARE(single.fontFamily, QStringLiteral("Comic Sans"));
+        QCOMPARE(single.fontSizePt, 18.0);
+        QCOMPARE(single.fontWeight, 700);
+        QCOMPARE(single.letterSpacingEm, 0.05);
+        QCOMPARE(single.orientation, domain::TextOrientation::Vertical);
+        QCOMPARE(single.horizontalAlignment, domain::HorizontalAlignment::Left);
+        QCOMPARE(single.verticalAlignment, domain::VerticalAlignment::Top);
+        QCOMPARE(single.lineSpacing, 1.5);
+        QCOMPARE(single.margins, (domain::Margins{1.0, 2.0, 3.0, 4.0}));
+        QCOMPARE(single.textColorHex, QStringLiteral("#112233"));
+        QCOMPARE(single.strokeColorHex, QStringLiteral("#AABBCC"));
+        QCOMPARE(single.strokeWidthPx, 2.5);
     }
 
     void singleSelectionEffectiveTranslationFallsBackToCandidate() {
@@ -208,13 +195,13 @@ private Q_SLOTS:
         viewModel.openProjectSession(session);
         viewModel.selectRegion(regionAt(session, 0, 0), RegionSelectionMode::Replace);
 
-        const auto* single = std::get_if<SingleRegionInspectorState>(&viewModel.state().inspector);
-        QVERIFY(single != nullptr);
-        QVERIFY(!single->hasManualTranslation);
-        QCOMPARE(single->effectiveTranslation, QStringLiteral("candidate one"));
+        QVERIFY(viewModel.state().inspector.has_value());
+        const auto& single = *viewModel.state().inspector;
+        QVERIFY(!single.hasManualTranslation);
+        QCOMPARE(single.effectiveTranslation, QStringLiteral("candidate one"));
     }
 
-    void multiSelectionProjectsSafeIntersection() {
+    void multiSelectionYieldsNulloptInspector() {
         domain::TextRegion first(domain::RegionId::generate(), makeGeometry(10.0, 10.0), 0);
         first.updateLayout([](domain::TextLayout& layout) { layout = makeLayout("Comic Sans", 18.0, 700, "#111111"); });
         first.updateSource([](domain::TextContent& source) { source.setPureManual("first source"); });
@@ -229,98 +216,38 @@ private Q_SLOTS:
         viewModel.selectRegion(regionAt(session, 0, 0), RegionSelectionMode::Replace);
         viewModel.selectRegion(regionAt(session, 0, 1), RegionSelectionMode::Toggle);
 
-        QCOMPARE(viewModel.state().inspectorMode, InspectorMode::Multi);
-        const auto* multi = std::get_if<MultiRegionInspectorState>(&viewModel.state().inspector);
-        QVERIFY2(multi != nullptr, "multi selection must project the multi region surface");
-        QCOMPARE(multi->pageId, pageAt(session, 0));
-        QCOMPARE(multi->regionIds.size(), 2);
-        QCOMPARE(multi->regionIds.at(0), regionAt(session, 0, 0));
-        QCOMPARE(multi->regionIds.at(1), regionAt(session, 0, 1));
-        QVERIFY(multi->fontFamily.has_value());
-        QCOMPARE(*multi->fontFamily, QStringLiteral("Comic Sans"));
-        QVERIFY(multi->fontSizePt.has_value());
-        QCOMPARE(*multi->fontSizePt, 18.0);
-        QVERIFY(multi->fontWeight.has_value());
-        QCOMPARE(*multi->fontWeight, 700);
-        QVERIFY(multi->textColorHex.has_value());
-        QCOMPARE(*multi->textColorHex, QStringLiteral("#111111"));
-        QVERIFY(multi->horizontalAlignment.has_value());
-        QVERIFY(multi->verticalAlignment.has_value());
-        QVERIFY(multi->orientation.has_value());
-        QVERIFY(multi->isCleared.has_value());
-        QVERIFY2(!*multi->isCleared, "equal cleared flags stay a concrete value");
-        QVERIFY(!multi->allLocked);
+        QCOMPARE(viewModel.state().inspectorMode, InspectorMode::None);
+        QVERIFY(!viewModel.state().inspector.has_value());
     }
 
-    void mixedValuesUseNulloptNotFirstValue() {
-        domain::TextRegion first(domain::RegionId::generate(), makeGeometry(10.0, 10.0), 0);
-        first.updateLayout([](domain::TextLayout& layout) { layout = makeLayout("Comic Sans", 18.0, 700, "#111111"); });
-        domain::TextRegion second(domain::RegionId::generate(), makeGeometry(10.0, 110.0), 1);
-        second.updateLayout([](domain::TextLayout& layout) {
-            layout = makeLayout(
-                "Serif", 12.0, 400, "#222222", domain::TextOrientation::Vertical, domain::HorizontalAlignment::Left);
-            layout.strokeColorHex = "#DDDDDD";
-        });
-        second.setIsCleared(true);
-        second.setLocked(true);
-
-        Fixture f;
-        EditorViewModel viewModel(&f.thumbnailStore, &f.imageLoader, &f.registry);
-        const auto session = makeSession({first, second}, 0);
-        viewModel.openProjectSession(session);
-        viewModel.selectRegion(regionAt(session, 0, 0), RegionSelectionMode::Replace);
-        viewModel.selectRegion(regionAt(session, 0, 1), RegionSelectionMode::Toggle);
-
-        const auto* multi = std::get_if<MultiRegionInspectorState>(&viewModel.state().inspector);
-        QVERIFY(multi != nullptr);
-        QVERIFY2(!multi->fontFamily.has_value(), "mixed font family must be nullopt");
-        QVERIFY(!multi->fontSizePt.has_value());
-        QVERIFY(!multi->fontWeight.has_value());
-        QVERIFY(!multi->textColorHex.has_value());
-        QVERIFY(!multi->strokeColorHex.has_value());
-        QVERIFY(!multi->orientation.has_value());
-        QVERIFY(!multi->horizontalAlignment.has_value());
-        QVERIFY2(multi->verticalAlignment.has_value(), "equal vertical alignment stays a concrete value");
-        QVERIFY(!multi->isCleared.has_value());
-        QVERIFY(!multi->allLocked);
-    }
-
-    void deletingSelectionFallsBackToPageSummary() {
+    void deletingSelectionFallsBackToNullopt() {
         domain::TextRegion region(domain::RegionId::generate(), makeGeometry(10.0, 10.0), 0);
         Fixture f;
         EditorViewModel viewModel(&f.thumbnailStore, &f.imageLoader, &f.registry);
         const auto session = makeSession({region}, 0);
         viewModel.openProjectSession(session);
         viewModel.selectRegion(regionAt(session, 0, 0), RegionSelectionMode::Replace);
-        QVERIFY(std::holds_alternative<SingleRegionInspectorState>(viewModel.state().inspector));
+        QVERIFY(viewModel.state().inspector.has_value());
 
         viewModel.deleteRegions({regionAt(session, 0, 0)});
 
-        QCOMPARE(viewModel.state().inspectorMode, InspectorMode::Page);
-        const auto* pageState = std::get_if<PageInspectorState>(&viewModel.state().inspector);
-        QVERIFY2(pageState != nullptr, "deleting the selected region must return to the page summary");
-        QCOMPARE(pageState->regionCount, 0);
-        QCOMPARE(pageState->pageNumber, 1);
+        QCOMPARE(viewModel.state().inspectorMode, InspectorMode::None);
+        QVERIFY(!viewModel.state().inspector.has_value());
     }
 
-    void pageSwitchResetsInspectorToPageSummary() {
+    void pageSwitchResetsInspectorToNullopt() {
         domain::TextRegion region(domain::RegionId::generate(), makeGeometry(10.0, 10.0), 0);
         Fixture f;
         EditorViewModel viewModel(&f.thumbnailStore, &f.imageLoader, &f.registry);
         const auto session = makeSession({region}, 1);
         viewModel.openProjectSession(session);
         viewModel.selectRegion(regionAt(session, 0, 0), RegionSelectionMode::Replace);
-        QVERIFY(std::holds_alternative<SingleRegionInspectorState>(viewModel.state().inspector));
+        QVERIFY(viewModel.state().inspector.has_value());
 
         viewModel.selectPage(pageAt(session, 1));
 
-        QCOMPARE(viewModel.state().inspectorMode, InspectorMode::Page);
-        const auto* pageState = std::get_if<PageInspectorState>(&viewModel.state().inspector);
-        QVERIFY(pageState != nullptr);
-        QCOMPARE(pageState->pageNumber, 2);
-        QCOMPARE(pageState->pageCount, 2);
-        QCOMPARE(pageState->imageSize, (domain::ImageSize{800, 1200}));
-        QCOMPARE(pageState->regionCount, 0);
+        QCOMPARE(viewModel.state().inspectorMode, InspectorMode::None);
+        QVERIFY(!viewModel.state().inspector.has_value());
     }
 
     void closingSessionResetsInspector() {
@@ -330,14 +257,12 @@ private Q_SLOTS:
         const auto session = makeSession({region}, 0);
         viewModel.openProjectSession(session);
         viewModel.selectRegion(regionAt(session, 0, 0), RegionSelectionMode::Replace);
-        QVERIFY(std::holds_alternative<SingleRegionInspectorState>(viewModel.state().inspector));
+        QVERIFY(viewModel.state().inspector.has_value());
 
         viewModel.closeProjectSession();
 
-        const auto* pageState = std::get_if<PageInspectorState>(&viewModel.state().inspector);
-        QVERIFY(pageState != nullptr);
-        QCOMPARE(pageState->pageNumber, 0);
-        QCOMPARE(pageState->pageCount, 0);
+        QCOMPARE(viewModel.state().inspectorMode, InspectorMode::None);
+        QVERIFY(!viewModel.state().inspector.has_value());
     }
 };
 

@@ -221,7 +221,7 @@ void EditorViewModel::openProjectSession(application::OpenedProjectSession sessi
         s.primaryRegionId = domain::RegionId{};
         s.activeTool = CanvasTool::Select;
         s.previewMode = PreviewMode::Original;
-        s.inspectorMode = InspectorMode::Page;
+        s.inspectorMode = InspectorMode::None;
         updateInspectorProjection(s);
         s.canUndo = false;
         s.canRedo = false;
@@ -360,7 +360,7 @@ void EditorViewModel::selectPage(const domain::PageId& pageId) {
         // Page switch clears region selection.
         s.selectedRegionIds.clear();
         s.primaryRegionId = domain::RegionId{};
-        s.inspectorMode = InspectorMode::Page;
+        s.inspectorMode = InspectorMode::None;
         updateInspectorProjection(s);
     });
 
@@ -571,13 +571,9 @@ void EditorViewModel::selectRegion(const domain::RegionId& regionId, RegionSelec
                   });
 
         // Derive inspector mode from selection count.
+        s.inspectorMode = s.selectedRegionIds.size() == 1 ? InspectorMode::Single : InspectorMode::None;
         if (s.selectedRegionIds.isEmpty()) {
-            s.inspectorMode = InspectorMode::Page;
             s.primaryRegionId = domain::RegionId{};
-        } else if (s.selectedRegionIds.size() == 1) {
-            s.inspectorMode = InspectorMode::Single;
-        } else {
-            s.inspectorMode = InspectorMode::Multi;
         }
         updateInspectorProjection(s);
     });
@@ -591,7 +587,7 @@ void EditorViewModel::clearRegionSelection() {
     updateState([&](EditorState& s) {
         s.selectedRegionIds.clear();
         s.primaryRegionId = domain::RegionId{};
-        s.inspectorMode = InspectorMode::Page;
+        s.inspectorMode = InspectorMode::None;
         updateInspectorProjection(s);
     });
 }
@@ -608,10 +604,10 @@ void EditorViewModel::selectAllRegionsOnCurrentPage() {
         }
         if (!s.selectedRegionIds.isEmpty()) {
             s.primaryRegionId = s.selectedRegionIds.first();
-            s.inspectorMode = s.selectedRegionIds.size() == 1 ? InspectorMode::Single : InspectorMode::Multi;
+            s.inspectorMode = s.selectedRegionIds.size() == 1 ? InspectorMode::Single : InspectorMode::None;
         } else {
             s.primaryRegionId = domain::RegionId{};
-            s.inspectorMode = InspectorMode::Page;
+            s.inspectorMode = InspectorMode::None;
         }
         updateInspectorProjection(s);
     });
@@ -759,12 +755,7 @@ void EditorViewModel::rebuildCurrentPageProjection() {
         sanitizedPrimary = sanitizedSelection.isEmpty() ? domain::RegionId{} : sanitizedSelection.first();
     }
 
-    InspectorMode mode = InspectorMode::Page;
-    if (sanitizedSelection.size() == 1) {
-        mode = InspectorMode::Single;
-    } else if (sanitizedSelection.size() > 1) {
-        mode = InspectorMode::Multi;
-    }
+    InspectorMode mode = sanitizedSelection.size() == 1 ? InspectorMode::Single : InspectorMode::None;
 
     updateState([&](EditorState& s) {
         s.regions = projections;
@@ -776,155 +767,70 @@ void EditorViewModel::rebuildCurrentPageProjection() {
 }
 
 void EditorViewModel::updateInspectorProjection(EditorState& s) const {
-    if (!m_hasSession || !m_openedSession || !s.currentPageId.isValid()) {
-        s.inspector = PageInspectorState{};
+    if (!m_hasSession || !m_openedSession || !s.currentPageId.isValid() || s.selectedRegionIds.size() != 1) {
+        s.inspector = std::nullopt;
+        s.inspectorMode = InspectorMode::None;
         return;
     }
 
     const auto* page = m_openedSession->project.findPage(s.currentPageId);
     if (page == nullptr) {
-        s.inspector = PageInspectorState{};
+        s.inspector = std::nullopt;
+        s.inspectorMode = InspectorMode::None;
         return;
     }
 
-    const auto projectPageCount = static_cast<int>(m_openedSession->project.pages().size());
-
-    if (s.selectedRegionIds.isEmpty()) {
-        PageInspectorState pageState;
-        pageState.pageNumber = page->orderIndex() + 1;
-        pageState.pageCount = projectPageCount;
-        pageState.imageSize = page->imageSize();
-        pageState.readingDirection = m_openedSession->project.readingDirection();
-        pageState.regionCount = static_cast<int>(page->regions().size());
-        pageState.needsReviewCount = s.processing.needsReviewRegionIds.size();
-        for (const auto& region : page->regions()) {
-            if (!region.source().text.empty()) {
-                ++pageState.ocrCompletedCount;
-            }
-            if (!region.translation().effectiveText().empty()) {
-                ++pageState.translatedCount;
-            }
-        }
-        s.inspector = pageState;
+    const auto* region = page->findRegion(s.selectedRegionIds.first());
+    if (region == nullptr) {
+        s.inspector = std::nullopt;
+        s.inspectorMode = InspectorMode::None;
         return;
     }
 
-    if (s.selectedRegionIds.size() == 1) {
-        const auto* region = page->findRegion(s.selectedRegionIds.first());
-        if (region == nullptr) {
-            s.inspector = PageInspectorState{};
-            return;
-        }
-        const auto& layout = region->layout();
-        const auto& translation = region->translation();
+    const auto& layout = region->layout();
+    const auto& translation = region->translation();
 
-        SingleRegionInspectorState single;
-        single.pageId = page->id();
-        single.regionId = region->id();
-        single.sourceText = QString::fromStdString(region->source().text);
-        single.sourceType = region->source().sourceType;
-        single.sourceConfidence = region->source().confidence;
-        single.hasManualTranslation = translation.hasManualText();
-        if (translation.manualText().has_value()) {
-            single.manualTranslation = QString::fromStdString(*translation.manualText());
-        }
-        single.effectiveTranslation = QString::fromStdString(translation.effectiveText());
-        single.candidates.reserve(static_cast<int>(translation.candidates().size()));
-        for (const auto& candidate : translation.candidates()) {
-            InspectorCandidateProjection projection;
-            projection.id = QString::fromStdString(candidate.id);
-            projection.text = QString::fromStdString(candidate.text);
-            projection.confidence = candidate.confidence;
-            projection.provider = QString::fromStdString(candidate.provider);
-            projection.isSelected =
-                translation.selectedCandidateId().has_value() && *translation.selectedCandidateId() == candidate.id;
-            single.candidates.append(projection);
-        }
-        single.isLocked = region->isLocked();
-        single.isCleared = region->isCleared();
-        single.geometry = region->geometry();
-        single.orderIndex = region->orderIndex();
-        single.fontFamily = QString::fromStdString(layout.fontFamily);
-        single.fontSizePt = layout.fontSizePt;
-        single.fontWeight = layout.fontWeight;
-        single.letterSpacingEm = layout.letterSpacingEm;
-        single.orientation = layout.orientation;
-        single.horizontalAlignment = layout.alignment.horizontal;
-        single.verticalAlignment = layout.alignment.vertical;
-        single.lineSpacing = layout.lineSpacing;
-        single.margins = layout.margins;
-        single.textColorHex = QString::fromStdString(layout.textColorHex);
-        single.strokeColorHex = QString::fromStdString(layout.strokeColorHex);
-        single.strokeWidthPx = layout.strokeWidthPx;
-        s.inspector = single;
-        return;
+    SingleRegionInspectorState single;
+    single.pageId = page->id();
+    single.regionId = region->id();
+    single.sourceText = QString::fromStdString(region->source().text);
+    single.sourceType = region->source().sourceType;
+    single.sourceConfidence = region->source().confidence;
+    single.hasManualTranslation = translation.hasManualText();
+    if (translation.manualText().has_value()) {
+        single.manualTranslation = QString::fromStdString(*translation.manualText());
     }
-
-    MultiRegionInspectorState multi;
-    multi.pageId = page->id();
-    multi.regionIds = s.selectedRegionIds;
-    multi.allLocked = true;
-
-    bool first = true;
-    for (const auto& regionId : s.selectedRegionIds) {
-        const auto* region = page->findRegion(regionId);
-        if (region == nullptr) {
-            continue;
-        }
-        const auto& layout = region->layout();
-
-        const QString fontFamily = QString::fromStdString(layout.fontFamily);
-        const QString textColorHex = QString::fromStdString(layout.textColorHex);
-        const QString strokeColorHex = QString::fromStdString(layout.strokeColorHex);
-        if (first) {
-            multi.fontFamily = fontFamily;
-            multi.fontWeight = layout.fontWeight;
-            multi.fontSizePt = layout.fontSizePt;
-            multi.horizontalAlignment = layout.alignment.horizontal;
-            multi.verticalAlignment = layout.alignment.vertical;
-            multi.orientation = layout.orientation;
-            multi.textColorHex = textColorHex;
-            multi.strokeColorHex = strokeColorHex;
-            multi.isCleared = region->isCleared();
-            first = false;
-        } else {
-            // A mismatch across the selection reports mixed (nullopt), never the first value.
-            if (multi.fontFamily.has_value() && *multi.fontFamily != fontFamily) {
-                multi.fontFamily.reset();
-            }
-            if (multi.fontWeight.has_value() && *multi.fontWeight != layout.fontWeight) {
-                multi.fontWeight.reset();
-            }
-            if (multi.fontSizePt.has_value() && *multi.fontSizePt != layout.fontSizePt) {
-                multi.fontSizePt.reset();
-            }
-            if (multi.horizontalAlignment.has_value() && *multi.horizontalAlignment != layout.alignment.horizontal) {
-                multi.horizontalAlignment.reset();
-            }
-            if (multi.verticalAlignment.has_value() && *multi.verticalAlignment != layout.alignment.vertical) {
-                multi.verticalAlignment.reset();
-            }
-            if (multi.orientation.has_value() && *multi.orientation != layout.orientation) {
-                multi.orientation.reset();
-            }
-            if (multi.textColorHex.has_value() && *multi.textColorHex != textColorHex) {
-                multi.textColorHex.reset();
-            }
-            if (multi.strokeColorHex.has_value() && *multi.strokeColorHex != strokeColorHex) {
-                multi.strokeColorHex.reset();
-            }
-            if (multi.isCleared.has_value() && *multi.isCleared != region->isCleared()) {
-                multi.isCleared.reset();
-            }
-        }
-        multi.allLocked = multi.allLocked && region->isLocked();
+    single.effectiveTranslation = QString::fromStdString(translation.effectiveText());
+    single.candidates.reserve(static_cast<int>(translation.candidates().size()));
+    for (const auto& candidate : translation.candidates()) {
+        InspectorCandidateProjection projection;
+        projection.id = QString::fromStdString(candidate.id);
+        projection.text = QString::fromStdString(candidate.text);
+        projection.confidence = candidate.confidence;
+        projection.provider = QString::fromStdString(candidate.provider);
+        projection.isSelected =
+            translation.selectedCandidateId().has_value() && *translation.selectedCandidateId() == candidate.id;
+        single.candidates.append(projection);
     }
-    if (first) {
-        // No selected id resolved to a live region; fall back to the page summary.
-        s.inspector = PageInspectorState{};
-        return;
-    }
-    s.inspector = multi;
+    single.isLocked = region->isLocked();
+    single.isCleared = region->isCleared();
+    single.geometry = region->geometry();
+    single.orderIndex = region->orderIndex();
+    single.fontFamily = QString::fromStdString(layout.fontFamily);
+    single.fontSizePt = layout.fontSizePt;
+    single.fontWeight = layout.fontWeight;
+    single.letterSpacingEm = layout.letterSpacingEm;
+    single.orientation = layout.orientation;
+    single.horizontalAlignment = layout.alignment.horizontal;
+    single.verticalAlignment = layout.alignment.vertical;
+    single.lineSpacing = layout.lineSpacing;
+    single.margins = layout.margins;
+    single.textColorHex = QString::fromStdString(layout.textColorHex);
+    single.strokeColorHex = QString::fromStdString(layout.strokeColorHex);
+    single.strokeWidthPx = layout.strokeWidthPx;
+
+    s.inspector = single;
+    s.inspectorMode = InspectorMode::Single;
 }
 
 void EditorViewModel::startPageLoad(const domain::PageId& pageId) {
@@ -1509,7 +1415,7 @@ EditorViewModel::adoptProcessingProposal(const application::PreparedProcessingAd
         updateState([&](EditorState& s) {
             s.selectedRegionIds = targetRegionIds;
             s.primaryRegionId = targetRegionIds.first();
-            s.inspectorMode = targetRegionIds.size() > 1 ? InspectorMode::Multi : InspectorMode::Single;
+            s.inspectorMode = targetRegionIds.size() == 1 ? InspectorMode::Single : InspectorMode::None;
             updateInspectorProjection(s);
         });
     }

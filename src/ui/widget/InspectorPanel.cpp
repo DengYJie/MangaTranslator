@@ -130,33 +130,20 @@ private:
 
 InspectorPanel::InspectorPanel(QWidget* parent) : QWidget(parent) {
     buildUi();
-    setInspectorState(screen::editor::PageInspectorState{});
+    setInspectorState(std::nullopt);
 }
 
 void InspectorPanel::setOcrAvailability(bool available, const QString& unavailableReason) {
     m_ocrAvailable = available;
-    const QString guidance =
-        available ? tr("识别选中区域的文字")
-                  : tr("OCR 模型不可用：%1。请在设置 > OCR 中选择包含 manifest.json 的模型目录，然后重启应用。")
-                        .arg(unavailableReason.isEmpty() ? tr("尚未配置模型目录") : unavailableReason);
-    if (m_multiOcrButton != nullptr) {
-        m_multiOcrButton->setEnabled(available);
-        m_multiOcrButton->setToolTip(guidance);
-    }
-    if (m_multiOcrUnavailableLabel != nullptr) {
-        m_multiOcrUnavailableLabel->setText(guidance);
-        m_multiOcrUnavailableLabel->setVisible(!available);
-    }
+    m_ocrUnavailableReason = available ? QString() : unavailableReason;
 }
 
 void InspectorPanel::setTranslationAvailability(bool available, const QString& unavailableReason) {
     m_translationAvailable = available;
     m_translationUnavailableReason = available ? QString() : unavailableReason;
-    for (auto* button : {m_singleTranslateButton, m_multiTranslateButton}) {
-        if (button != nullptr) {
-            button->setEnabled(available);
-            button->setToolTip(available ? tr("使用当前 AI 服务重新翻译") : tr("请先配置 AI 翻译服务"));
-        }
+    if (m_singleTranslateButton != nullptr) {
+        m_singleTranslateButton->setEnabled(available && m_mode == screen::editor::InspectorMode::Single);
+        m_singleTranslateButton->setToolTip(available ? tr("使用当前 AI 服务重新翻译") : tr("请先配置 AI 翻译服务"));
     }
     updateTranslationInfoBar();
 }
@@ -208,13 +195,13 @@ void InspectorPanel::resizeEvent(QResizeEvent* event) {
 }
 
 void InspectorPanel::syncContentWidth() {
-    if (m_scrollView == nullptr || m_stack == nullptr || m_scrollView->viewport() == nullptr) {
+    if (m_scrollView == nullptr || m_contentHost == nullptr || m_scrollView->viewport() == nullptr) {
         return;
     }
 
     const int contentWidth = m_scrollView->viewport()->width();
-    m_stack->setMinimumWidth(contentWidth);
-    m_stack->setMaximumWidth(contentWidth);
+    m_contentHost->setMinimumWidth(contentWidth);
+    m_contentHost->setMaximumWidth(contentWidth);
 }
 
 void InspectorPanel::buildUi() {
@@ -245,90 +232,10 @@ void InspectorPanel::buildUi() {
     m_scrollView->viewport()->installEventFilter(this);
     root->addWidget(m_scrollView, 1);
 
-    m_stack = new QStackedWidget();
-    m_pageHost = buildPageHost();
-    m_singleHost = buildSingleHost();
-    m_multiHost = buildMultiHost();
-    m_stack->setMinimumWidth(0);
-    m_stack->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
-    for (auto* host : {m_pageHost, m_singleHost, m_multiHost}) {
-        host->setMinimumWidth(0);
-        host->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
-    }
-    m_stack->addWidget(m_pageHost);
-    m_stack->addWidget(m_singleHost);
-    m_stack->addWidget(m_multiHost);
-    m_stack->setCurrentWidget(m_pageHost);
-    m_scrollView->setContentWidget(m_stack, fluent::WidgetOwnership::Owned);
-}
-
-QWidget* InspectorPanel::buildPageHost() {
-    using fluent::textfields::Label;
-
-    auto* host = new QWidget();
-    auto* layout = new QVBoxLayout(host);
-    layout->setContentsMargins(0, 8, 0, 8);
-    layout->setSpacing(8);
-
-    m_pageSummaryLabel = new Label(host);
-    m_pageSummaryLabel->setObjectName(QStringLiteral("inspectorPageSummary"));
-    m_pageSummaryLabel->setWordWrap(true);
-    m_pageSummaryLabel->setFluentTypography(Typography::FontRole::Subtitle);
-    layout->addWidget(m_pageSummaryLabel);
-
-    m_pageMetaLabel = new Label(host);
-    m_pageMetaLabel->setObjectName(QStringLiteral("inspectorPageMeta"));
-    m_pageMetaLabel->setTextColorRole(Label::TextColorRole::Secondary);
-    m_pageMetaLabel->setWordWrap(true);
-    layout->addWidget(m_pageMetaLabel);
-
-    auto* statsHeading = new Label(tr("页面信息"), host);
-    statsHeading->setFluentTypography(Typography::FontRole::BodyStrong);
-    layout->addSpacing(8);
-    layout->addWidget(statsHeading);
-
-    m_pageStatsHost = new QWidget(host);
-    auto* statsHostLayout = new QVBoxLayout(m_pageStatsHost);
-    statsHostLayout->setContentsMargins(0, 0, 0, 0);
-    auto* statsCard = new fluent::layout::Card(m_pageStatsHost);
-    statsCard->setAppearance(fluent::layout::Card::LayerAlt);
-    statsCard->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
-    auto* statsLayout = new QVBoxLayout(statsCard);
-    statsLayout->setContentsMargins(12, 8, 12, 8);
-    statsLayout->setSpacing(0);
-    const std::array<QString, 4> statLabels{tr("文本区域"), tr("OCR"), tr("翻译"), tr("需要检查")};
-    const std::array<QString, 4> statIcons{Typography::Icons::glyph(QStringLiteral("ic_fluent_textbox_20_regular")),
-                                           Typography::Icons::glyph(QStringLiteral("ic_fluent_scan_text_20_regular")),
-                                           Typography::Icons::glyph(QStringLiteral("ic_fluent_translate_20_regular")),
-                                           Typography::Icons::glyph(QStringLiteral("ic_fluent_warning_20_regular"))};
-    for (int i = 0; i < statLabels.size(); ++i) {
-        auto* row = new QWidget(statsCard);
-        row->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
-        auto* rowLayout = new QHBoxLayout(row);
-        rowLayout->setContentsMargins(0, 5, 0, 5);
-        rowLayout->setSpacing(8);
-        auto* icon = new Label(row);
-        icon->setFont(QFont(Typography::FontFamily::FluentIcons, 16));
-        icon->setText(statIcons.at(i));
-        icon->setTextColorRole(Label::TextColorRole::Secondary);
-        auto* label = new Label(statLabels.at(i), row);
-        label->setTextColorRole(Label::TextColorRole::Secondary);
-        label->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Fixed);
-        auto* value = new Label(row);
-        value->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
-        value->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
-        rowLayout->addWidget(icon);
-        rowLayout->addWidget(label);
-        rowLayout->addStretch(1);
-        rowLayout->addWidget(value);
-        statsLayout->addWidget(row);
-        m_pageStatValues.append(value);
-    }
-    statsHostLayout->addWidget(statsCard);
-    layout->addWidget(m_pageStatsHost);
-
-    layout->addStretch(1);
-    return host;
+    m_contentHost = buildContentHost();
+    m_contentHost->setMinimumWidth(0);
+    m_contentHost->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
+    m_scrollView->setContentWidget(m_contentHost, fluent::WidgetOwnership::Owned);
 }
 
 namespace {
@@ -354,7 +261,7 @@ void clearFieldError(fluent::layout::Field* field) {
 
 } // namespace
 
-QWidget* InspectorPanel::buildSingleHost() {
+QWidget* InspectorPanel::buildContentHost() {
     using fluent::basicinput::Button;
     using fluent::basicinput::ComboBox;
     using fluent::layout::Expander;
@@ -422,9 +329,6 @@ QWidget* InspectorPanel::buildSingleHost() {
         }
     });
 
-    // The project undo stack is the single authoritative text history. The control
-    // keeps only selection, cursor and uncommitted IME preedit; FocusOut seals the
-    // ViewModel merge batch via the event filter.
     for (auto* edit : {m_sourceEdit, m_translationEdit}) {
         if (auto* inner = edit->findChild<QTextEdit*>()) {
             inner->setUndoRedoEnabled(false);
@@ -444,8 +348,6 @@ QWidget* InspectorPanel::buildSingleHost() {
     auto* candidatesLayout = new QVBoxLayout(candidatesContent);
     candidatesLayout->setContentsMargins(12, 8, 12, 12);
     candidatesLayout->setSpacing(8);
-    // FluentQt ListView is avoided for interactive row lists in this project; the
-    // candidates list is an encapsulated raw QListWidget fed with Fluent tokens.
     m_candidatesList = new QListWidget();
     m_candidatesList->setObjectName(QStringLiteral("inspectorCandidatesList"));
     m_candidatesList->setAccessibleName(tr("候选译文列表"));
@@ -470,9 +372,9 @@ QWidget* InspectorPanel::buildSingleHost() {
     m_singleTranslateButton->setFluentStyle(Button::Accent);
     m_singleTranslateButton->setToolTip(tr("使用当前 AI 服务重新翻译"));
     m_singleTranslateButton->setAccessibleName(tr("AI 重译"));
-    m_singleTranslateButton->setMinimumWidth(104);
     singleActionsLayout->addWidget(m_singleTranslateButton);
     translationLayout->addWidget(singleActionsRow);
+
     connect(m_singleTranslateButton, &Button::clicked, this, [this]() {
         if (m_currentPageId.isValid() && !m_currentRegionIds.isEmpty()) {
             Q_EMIT translateRequested(m_currentPageId, m_currentRegionIds);
@@ -720,291 +622,12 @@ QWidget* InspectorPanel::buildSingleHost() {
     m_typesettingExpander->setExpanded(true);
     layout->addWidget(m_typesettingExpander);
 
-    // Region section (collapsed by default). Geometry is displayed read-only; the
-    // canvas owns geometry commits in this version.
-    m_regionExpander = new Expander(host);
-    m_regionExpander->setHeaderText(tr("区域"));
-    auto* regionContent = new QWidget();
-    auto* regionLayout = new QVBoxLayout(regionContent);
-    regionLayout->setContentsMargins(12, 8, 12, 12);
-    regionLayout->setSpacing(8);
-
-    auto* geometryRow = new QWidget();
-    auto* geometryGrid = new QHBoxLayout(geometryRow);
-    geometryGrid->setContentsMargins(0, 0, 0, 0);
-    geometryGrid->setSpacing(8);
-    const char* geometryLabels[4] = {"X", "Y", "W", "H"};
-    fluent::textfields::NumberBox* geometryBoxes[4] = {nullptr, nullptr, nullptr, nullptr};
-    for (int i = 0; i < 4; ++i) {
-        auto* field = new Field();
-        field->setLabelText(QString::fromLatin1(geometryLabels[i]));
-        auto* box = new NumberBox();
-        box->setRange(0.0, 99999.0);
-        box->setDisplayPrecision(1);
-        box->setSpinButtonPlacementMode(NumberBox::SpinButtonPlacementMode::Hidden);
-        box->setReadOnly(true);
-        field->setEditor(box, fluent::WidgetOwnership::Owned);
-        geometryGrid->addWidget(field);
-        geometryBoxes[i] = box;
-    }
-    m_regionXBox = geometryBoxes[0];
-    m_regionYBox = geometryBoxes[1];
-    m_regionWidthBox = geometryBoxes[2];
-    m_regionHeightBox = geometryBoxes[3];
-    regionLayout->addWidget(geometryRow);
-
-    m_regionOrderLabel = new Label();
-    m_regionOrderLabel->setObjectName(QStringLiteral("inspectorRegionOrder"));
-    m_regionOrderLabel->setTextColorRole(Label::TextColorRole::Secondary);
-    regionLayout->addWidget(m_regionOrderLabel);
-
-    m_regionExpander->setContentWidget(regionContent, fluent::WidgetOwnership::Owned);
-    layout->addWidget(m_regionExpander);
-
-    layout->addStretch(1);
-    return host;
-}
-
-QWidget* InspectorPanel::buildMultiHost() {
-    using fluent::basicinput::Button;
-    using fluent::basicinput::ComboBox;
-    using fluent::basicinput::ToggleSwitch;
-    using fluent::layout::Field;
-    using fluent::textfields::Label;
-    using fluent::textfields::LineEdit;
-    using fluent::textfields::NumberBox;
-
-    auto* host = new QWidget();
-    auto* layout = new QVBoxLayout(host);
-    layout->setContentsMargins(0, 8, 0, 8);
-    layout->setSpacing(12);
-
-    m_multiHintLabel = new Label(host);
-    m_multiHintLabel->setObjectName(QStringLiteral("inspectorMultiHint"));
-    m_multiHintLabel->setTextColorRole(Label::TextColorRole::Secondary);
-    m_multiHintLabel->setWordWrap(true);
-    layout->addWidget(m_multiHintLabel);
-
-    auto* multiActionsRow = new QWidget();
-    auto* multiActionsLayout = new QHBoxLayout(multiActionsRow);
-    multiActionsLayout->setContentsMargins(0, 4, 0, 4);
-    multiActionsLayout->setSpacing(8);
-    m_multiOcrButton = new Button(tr("批量OCR"));
-    m_multiOcrButton->setObjectName(QStringLiteral("inspectorMultiOcr"));
-    m_multiOcrButton->setToolTip(tr("批量识别所选区域的文字"));
-    m_multiOcrButton->setAccessibleName(tr("批量 OCR 识别"));
-    m_multiTranslateButton = new Button(tr("批量翻译"));
-    m_multiTranslateButton->setObjectName(QStringLiteral("inspectorMultiTranslate"));
-    m_multiTranslateButton->setToolTip(tr("批量翻译所选区域的文本"));
-    m_multiTranslateButton->setAccessibleName(tr("批量 AI 翻译"));
-    m_multiClearButton = new Button(tr("批量涂抹"));
-    m_multiClearButton->setObjectName(QStringLiteral("inspectorMultiClear"));
-    m_multiClearButton->setToolTip(tr("批量清除所选区域的背景文字"));
-    m_multiClearButton->setAccessibleName(tr("批量清除背景"));
-    m_multiLayoutButton = new Button(tr("批量排版"));
-    m_multiLayoutButton->setObjectName(QStringLiteral("inspectorMultiLayout"));
-    m_multiLayoutButton->setToolTip(tr("对所选区域批量重新排版"));
-    m_multiLayoutButton->setAccessibleName(tr("批量应用排版"));
-    multiActionsLayout->addWidget(m_multiOcrButton);
-    multiActionsLayout->addWidget(m_multiTranslateButton);
-    multiActionsLayout->addWidget(m_multiClearButton);
-    multiActionsLayout->addWidget(m_multiLayoutButton);
-    layout->addWidget(multiActionsRow);
-
-    m_multiOcrUnavailableLabel = new Label(host);
-    m_multiOcrUnavailableLabel->setObjectName(QStringLiteral("inspectorMultiOcrUnavailable"));
-    m_multiOcrUnavailableLabel->setTextColorRole(Label::TextColorRole::Secondary);
-    m_multiOcrUnavailableLabel->setWordWrap(true);
-    m_multiOcrUnavailableLabel->hide();
-    layout->addWidget(m_multiOcrUnavailableLabel);
-
-    connect(m_multiOcrButton, &Button::clicked, this, [this]() {
-        if (m_currentPageId.isValid() && !m_currentRegionIds.isEmpty()) {
-            Q_EMIT ocrRequested(m_currentPageId, m_currentRegionIds);
-        }
-    });
-    connect(m_multiTranslateButton, &Button::clicked, this, [this]() {
-        if (m_currentPageId.isValid() && !m_currentRegionIds.isEmpty()) {
-            Q_EMIT translateRequested(m_currentPageId, m_currentRegionIds);
-        }
-    });
-    connect(m_multiClearButton, &Button::clicked, this, [this]() {
-        if (m_currentPageId.isValid() && !m_currentRegionIds.isEmpty()) {
-            Q_EMIT clearRequested(m_currentPageId, m_currentRegionIds);
-        }
-    });
-    connect(m_multiLayoutButton, &Button::clicked, this, [this]() {
-        if (m_currentPageId.isValid() && !m_currentRegionIds.isEmpty()) {
-            Q_EMIT layoutRequested(m_currentPageId, m_currentRegionIds);
-        }
-    });
-
-    auto* fontFamilyField = new Field();
-    fontFamilyField->setLabelText(tr("字体"));
-    m_multiFontFamilyCombo = new ComboBox();
-    m_multiFontFamilyCombo->setObjectName(QStringLiteral("inspectorMultiFontFamily"));
-    m_multiFontFamilyCombo->setEditable(true);
-    m_multiFontFamilyCombo->addItems({QStringLiteral("Sans-Serif"),
-                                      QStringLiteral("Serif"),
-                                      QStringLiteral("Monospace"),
-                                      QStringLiteral("Microsoft YaHei"),
-                                      QStringLiteral("SimSun"),
-                                      QStringLiteral("KaiTi")});
-    fontFamilyField->setEditor(m_multiFontFamilyCombo, fluent::WidgetOwnership::Owned);
-    layout->addWidget(fontFamilyField);
-    connect(m_multiFontFamilyCombo, &ComboBox::activated, this, [this](int) {
-        if (!m_updating) {
-            emitFieldEdit(InspectorField::FontFamily, m_multiFontFamilyCombo->currentText());
-        }
-    });
-
-    auto* fontWeightField = new Field();
-    fontWeightField->setLabelText(tr("字重"));
-    m_multiFontWeightCombo = new ComboBox();
-    m_multiFontWeightCombo->setObjectName(QStringLiteral("inspectorMultiFontWeight"));
-    for (int weight = 100; weight <= 900; weight += 100) {
-        m_multiFontWeightCombo->addItem(QString::number(weight));
-    }
-    fontWeightField->setEditor(m_multiFontWeightCombo, fluent::WidgetOwnership::Owned);
-    layout->addWidget(fontWeightField);
-    connect(m_multiFontWeightCombo, &ComboBox::activated, this, [this](int index) {
-        if (!m_updating) {
-            emitFieldEdit(InspectorField::FontWeight, (index + 1) * 100);
-        }
-    });
-
-    auto [fontSizeField, fontSizeBox] = makeNumericRow(tr("字号"), 6.0, 72.0, 1, layout);
-    m_multiFontSizeField = fontSizeField;
-    m_multiFontSizeBox = fontSizeBox;
-    m_multiFontSizeField->setObjectName(QStringLiteral("inspectorMultiFontSizeField"));
-    m_multiFontSizeBox->setObjectName(QStringLiteral("inspectorMultiFontSize"));
-    connect(m_multiFontSizeBox, &NumberBox::valueChanged, this, [this](double value) {
-        if (!m_updating) {
-            handleNumericCommit(m_multiFontSizeField, InspectorField::FontSizePt, value);
-        }
-    });
-
-    auto* orientationField = new Field();
-    orientationField->setLabelText(tr("方向"));
-    m_multiOrientationCombo = new ComboBox();
-    m_multiOrientationCombo->setObjectName(QStringLiteral("inspectorMultiOrientation"));
-    m_multiOrientationCombo->addItems({tr("横排"), tr("竖排")});
-    orientationField->setEditor(m_multiOrientationCombo, fluent::WidgetOwnership::Owned);
-    layout->addWidget(orientationField);
-    connect(m_multiOrientationCombo, &ComboBox::activated, this, [this](int index) {
-        if (!m_updating) {
-            emitFieldEdit(InspectorField::Orientation, index);
-        }
-    });
-
-    auto* hAlignField = new Field();
-    hAlignField->setLabelText(tr("水平对齐"));
-    m_multiHAlignCombo = new ComboBox();
-    m_multiHAlignCombo->addItems({tr("左对齐"), tr("居中对齐"), tr("右对齐"), tr("两端对齐")});
-    hAlignField->setEditor(m_multiHAlignCombo, fluent::WidgetOwnership::Owned);
-    layout->addWidget(hAlignField);
-    connect(m_multiHAlignCombo, &ComboBox::activated, this, [this](int index) {
-        if (!m_updating) {
-            emitFieldEdit(InspectorField::HorizontalAlignment, index);
-        }
-    });
-
-    auto* vAlignField = new Field();
-    vAlignField->setLabelText(tr("垂直对齐"));
-    m_multiVAlignCombo = new ComboBox();
-    m_multiVAlignCombo->addItems({tr("顶部对齐"), tr("垂直居中"), tr("底部对齐")});
-    vAlignField->setEditor(m_multiVAlignCombo, fluent::WidgetOwnership::Owned);
-    layout->addWidget(vAlignField);
-    connect(m_multiVAlignCombo, &ComboBox::activated, this, [this](int index) {
-        if (!m_updating) {
-            emitFieldEdit(InspectorField::VerticalAlignment, index);
-        }
-    });
-
-    m_multiTextColorField = new Field();
-    m_multiTextColorField->setLabelText(tr("文字颜色"));
-    auto* textColorRow = new QWidget();
-    auto* textColorLayout = new QHBoxLayout(textColorRow);
-    textColorLayout->setContentsMargins(0, 0, 0, 0);
-    textColorLayout->setSpacing(8);
-    m_multiTextColorSwatch = new ColorSwatchButton();
-    m_multiTextColorSwatch->setAccessibleName(tr("选择文字颜色"));
-    m_multiTextColorHexEdit = new LineEdit();
-    m_multiTextColorHexEdit->setObjectName(QStringLiteral("inspectorMultiTextColorHex"));
-    m_multiTextColorHexEdit->setAccessibleName(tr("文字颜色十六进制值"));
-    textColorLayout->addWidget(m_multiTextColorSwatch);
-    textColorLayout->addWidget(m_multiTextColorHexEdit, 1);
-    m_multiTextColorField->setEditor(textColorRow, fluent::WidgetOwnership::Owned);
-    layout->addWidget(m_multiTextColorField);
-    connect(m_multiTextColorHexEdit, &LineEdit::editingFinished, this, [this]() {
-        if (!m_updating) {
-            handleHexCommit(
-                m_multiTextColorHexEdit, m_multiTextColorField, m_multiTextColorSwatch, InspectorField::TextColorHex);
-        }
-    });
-    connect(m_multiTextColorSwatch, &ColorSwatchButton::clicked, this, [this]() {
-        openColorFlyout(m_multiTextColorSwatch, m_multiTextColorHexEdit, InspectorField::TextColorHex);
-    });
-
-    m_multiStrokeColorField = new Field();
-    m_multiStrokeColorField->setLabelText(tr("描边颜色"));
-    auto* strokeColorRow = new QWidget();
-    auto* strokeColorLayout = new QHBoxLayout(strokeColorRow);
-    strokeColorLayout->setContentsMargins(0, 0, 0, 0);
-    strokeColorLayout->setSpacing(8);
-    m_multiStrokeColorSwatch = new ColorSwatchButton();
-    m_multiStrokeColorSwatch->setAccessibleName(tr("选择描边颜色"));
-    m_multiStrokeColorHexEdit = new LineEdit();
-    m_multiStrokeColorHexEdit->setObjectName(QStringLiteral("inspectorMultiStrokeColorHex"));
-    m_multiStrokeColorHexEdit->setAccessibleName(tr("描边颜色十六进制值"));
-    strokeColorLayout->addWidget(m_multiStrokeColorSwatch);
-    strokeColorLayout->addWidget(m_multiStrokeColorHexEdit, 1);
-    m_multiStrokeColorField->setEditor(strokeColorRow, fluent::WidgetOwnership::Owned);
-    layout->addWidget(m_multiStrokeColorField);
-    connect(m_multiStrokeColorHexEdit, &LineEdit::editingFinished, this, [this]() {
-        if (!m_updating) {
-            handleHexCommit(m_multiStrokeColorHexEdit,
-                            m_multiStrokeColorField,
-                            m_multiStrokeColorSwatch,
-                            InspectorField::StrokeColorHex);
-        }
-    });
-    connect(m_multiStrokeColorSwatch, &ColorSwatchButton::clicked, this, [this]() {
-        openColorFlyout(m_multiStrokeColorSwatch, m_multiStrokeColorHexEdit, InspectorField::StrokeColorHex);
-    });
-
-    m_multiClearedField = new Field();
-    m_multiClearedField->setLabelText(tr("标记已清除"));
-    m_multiClearedSwitch = new ToggleSwitch();
-    m_multiClearedSwitch->setObjectName(QStringLiteral("inspectorMultiCleared"));
-    m_multiClearedSwitch->setOnContent(tr("已清除"));
-    m_multiClearedSwitch->setOffContent(tr("未清除"));
-    m_multiClearedField->setEditor(m_multiClearedSwitch, fluent::WidgetOwnership::Owned);
-    layout->addWidget(m_multiClearedField);
-    connect(m_multiClearedSwitch, &ToggleSwitch::toggled, this, [this](bool on) {
-        if (!m_updating) {
-            emitFieldEdit(InspectorField::Cleared, on);
-        }
-    });
-
-    m_multiDeleteButton = new Button(tr("删除所选区域"), host);
-    m_multiDeleteButton->setObjectName(QStringLiteral("inspectorMultiDelete"));
-    m_multiDeleteButton->setToolTip(tr("删除所选的文本区域 (Delete)"));
-    m_multiDeleteButton->setAccessibleName(tr("删除所选区域"));
-    m_multiDeleteButton->setCriticalOnHover(true);
-    layout->addWidget(m_multiDeleteButton);
-    connect(m_multiDeleteButton, &Button::clicked, this, [this]() {
-        if (!m_currentRegionIds.isEmpty()) {
-            Q_EMIT deleteRegionsRequested(m_currentPageId, m_currentRegionIds);
-        }
-    });
-
     layout->addStretch(1);
     return host;
 }
 
 void InspectorPanel::focusTranslationEditor() {
-    if (m_translationEdit != nullptr && m_translationEdit->isVisible()) {
+    if (m_translationEdit != nullptr && m_translationEdit->isVisible() && m_translationEdit->isEnabled()) {
         m_translationEdit->setFocus(Qt::OtherFocusReason);
     }
 }
@@ -1012,57 +635,70 @@ void InspectorPanel::focusTranslationEditor() {
 void InspectorPanel::setInspectorState(const screen::editor::InspectorState& state) {
     m_updating = true;
 
-    if (const auto* page = std::get_if<screen::editor::PageInspectorState>(&state)) {
-        m_mode = screen::editor::InspectorMode::Page;
+    if (!state.has_value()) {
+        m_mode = screen::editor::InspectorMode::None;
         m_currentPageId = domain::PageId{};
         m_currentRegionIds.clear();
-        m_stack->setCurrentWidget(m_pageHost);
-        populatePage(*page);
-    } else if (const auto* single = std::get_if<screen::editor::SingleRegionInspectorState>(&state)) {
-        m_mode = screen::editor::InspectorMode::Single;
-        m_stack->setCurrentWidget(m_singleHost);
-        populateSingle(*single);
+
+        m_headerTitle->setText(tr("属性"));
+        m_headerSubtitle->setText(tr("未选中文字框"));
+        m_headerSubtitle->setToolTip(QString());
+
+        m_contentHost->setEnabled(false);
+
+        // Reset fields to placeholders
+        setTextPreservingCursor(m_sourceEdit, QString());
+        m_sourceMetaLabel->clear();
+        setTextPreservingCursor(m_translationEdit, QString());
+        m_translationMetaLabel->clear();
+        m_candidatesList->clear();
+        m_candidatesExpander->setVisible(false);
+        m_adoptCandidateButton->setEnabled(false);
+
+        m_fontSizeBox->setValue(14.0);
+        clearFieldError(m_fontSizeField);
+        m_letterSpacingBox->setValue(0.0);
+        clearFieldError(m_letterSpacingField);
+        m_lineSpacingBox->setValue(1.2);
+        clearFieldError(m_lineSpacingField);
+        m_marginTopBox->setValue(0.0);
+        m_marginRightBox->setValue(0.0);
+        m_marginBottomBox->setValue(0.0);
+        m_marginLeftBox->setValue(0.0);
+        clearFieldError(m_marginTopField);
+        clearFieldError(m_marginRightField);
+        clearFieldError(m_marginBottomField);
+        clearFieldError(m_marginLeftField);
+
+        m_textColorHexEdit->clear();
+        m_textColorSwatch->setSwatchColor(QColor());
+        m_textColorSwatch->setToolTip(QString());
+        clearFieldError(m_textColorField);
+
+        m_strokeColorHexEdit->clear();
+        m_strokeColorSwatch->setSwatchColor(QColor());
+        m_strokeColorSwatch->setToolTip(QString());
+        clearFieldError(m_strokeColorField);
+
+        m_strokeWidthBox->setValue(0.0);
+        clearFieldError(m_strokeWidthField);
     } else {
-        const auto& multi = std::get<screen::editor::MultiRegionInspectorState>(state);
-        m_mode = screen::editor::InspectorMode::Multi;
-        m_stack->setCurrentWidget(m_multiHost);
-        populateMulti(multi);
+        m_mode = screen::editor::InspectorMode::Single;
+        m_contentHost->setEnabled(true);
+        populateSingle(*state);
     }
 
     m_updating = false;
 }
 
-void InspectorPanel::populatePage(const screen::editor::PageInspectorState& state) {
-    m_headerTitle->setText(tr("页面"));
-    m_headerSubtitle->clear();
-
-    if (state.pageNumber <= 0) {
-        m_pageStatsHost->setVisible(false);
-        m_pageSummaryLabel->setText(tr("未打开项目"));
-        m_pageMetaLabel->clear();
-        for (auto* value : m_pageStatValues) {
-            value->setText(QStringLiteral("—"));
-        }
-        return;
-    }
-
-    const QString direction =
-        state.readingDirection == domain::ReadingDirection::RightToLeft ? tr("从右到左") : tr("从左到右");
-    m_pageStatsHost->setVisible(true);
-    m_pageSummaryLabel->setText(tr("第 %1 / %2 页").arg(state.pageNumber).arg(state.pageCount));
-    m_pageMetaLabel->setText(
-        tr("%1 × %2 px · %3").arg(state.imageSize.width).arg(state.imageSize.height).arg(direction));
-    m_pageStatValues.at(0)->setText(QString::number(state.regionCount));
-    m_pageStatValues.at(1)->setText(tr("%1 / %2").arg(state.ocrCompletedCount).arg(state.regionCount));
-    m_pageStatValues.at(2)->setText(tr("%1 / %2").arg(state.translatedCount).arg(state.regionCount));
-    m_pageStatValues.at(3)->setText(QString::number(state.needsReviewCount));
-}
-
 void InspectorPanel::populateSingle(const screen::editor::SingleRegionInspectorState& state) {
-    m_headerTitle->setText(tr("文本区域"));
-    const QString regionIdText = QString::fromStdString(state.regionId.toString());
-    m_headerSubtitle->setText(regionIdText);
-    m_headerSubtitle->setToolTip(regionIdText);
+    m_headerTitle->setText(tr("文字框属性"));
+    const QString subtitle = tr("序号 #%1 · %2 × %3")
+                                 .arg(state.orderIndex + 1)
+                                 .arg(static_cast<int>(state.geometry.width))
+                                 .arg(static_cast<int>(state.geometry.height));
+    m_headerSubtitle->setText(subtitle);
+    m_headerSubtitle->setToolTip(QString::fromStdString(state.regionId.toString()));
 
     m_currentPageId = state.pageId;
     m_currentRegionIds = {state.regionId};
@@ -1141,105 +777,7 @@ void InspectorPanel::populateSingle(const screen::editor::SingleRegionInspectorS
     m_strokeWidthBox->setValue(state.strokeWidthPx);
     clearFieldError(m_strokeWidthField);
 
-    m_regionXBox->setValue(state.geometry.x);
-    m_regionYBox->setValue(state.geometry.y);
-    m_regionWidthBox->setValue(state.geometry.width);
-    m_regionHeightBox->setValue(state.geometry.height);
-    m_regionOrderLabel->setText(tr("阅读顺序：%1").arg(state.orderIndex + 1));
-
     setLockedEditing(state.isLocked);
-}
-
-void InspectorPanel::populateMulti(const screen::editor::MultiRegionInspectorState& state) {
-    m_headerTitle->setText(tr("文本区域"));
-    m_headerSubtitle->setText(tr("已选择 %1 个区域").arg(state.regionIds.size()));
-
-    m_currentPageId = state.pageId;
-    m_currentRegionIds = state.regionIds;
-
-    m_multiHintLabel->setText(tr("批量编辑仅显示可安全修改的共有属性；值不一致时显示“混合”。"));
-
-    const QString mixed = tr("混合");
-
-    if (state.fontFamily.has_value()) {
-        if (m_multiFontFamilyCombo->findText(*state.fontFamily) < 0 && !state.fontFamily->isEmpty()) {
-            m_multiFontFamilyCombo->addItem(*state.fontFamily);
-        }
-        m_multiFontFamilyCombo->setCurrentText(*state.fontFamily);
-    } else {
-        m_multiFontFamilyCombo->setCurrentText(QString());
-        if (auto* edit = m_multiFontFamilyCombo->lineEdit()) {
-            edit->setPlaceholderText(mixed);
-        }
-    }
-
-    if (state.fontWeight.has_value()) {
-        m_multiFontWeightCombo->setCurrentIndex(qBound(0, *state.fontWeight / 100 - 1, 8));
-    } else {
-        m_multiFontWeightCombo->setCurrentIndex(-1);
-    }
-
-    if (state.fontSizePt.has_value()) {
-        m_multiFontSizeBox->setValue(*state.fontSizePt);
-        m_multiFontSizeBox->setPlaceholderText(QString());
-    } else {
-        m_multiFontSizeBox->clear();
-        m_multiFontSizeBox->setPlaceholderText(mixed);
-    }
-    clearFieldError(m_multiFontSizeField);
-
-    const auto setCombo = [](fluent::basicinput::ComboBox* combo, const auto& value) {
-        if (value.has_value()) {
-            combo->setCurrentIndex(static_cast<int>(*value));
-        } else {
-            combo->setCurrentIndex(-1);
-        }
-    };
-    setCombo(m_multiOrientationCombo, state.orientation);
-    setCombo(m_multiHAlignCombo, state.horizontalAlignment);
-    setCombo(m_multiVAlignCombo, state.verticalAlignment);
-
-    const auto setColorRow = [&mixed](ColorSwatchButton* swatch,
-                                      fluent::textfields::LineEdit* hexEdit,
-                                      fluent::layout::Field* field,
-                                      const std::optional<QString>& value) {
-        if (value.has_value()) {
-            hexEdit->setText(*value);
-            hexEdit->setPlaceholderText(QStringLiteral("#RRGGBB"));
-            swatch->setSwatchColor(QColor(*value));
-            swatch->setToolTip(*value);
-        } else {
-            hexEdit->clear();
-            hexEdit->setPlaceholderText(mixed);
-            swatch->setSwatchColor(QColor());
-            swatch->setToolTip(mixed);
-        }
-        clearFieldError(field);
-    };
-    setColorRow(m_multiTextColorSwatch, m_multiTextColorHexEdit, m_multiTextColorField, state.textColorHex);
-    setColorRow(m_multiStrokeColorSwatch, m_multiStrokeColorHexEdit, m_multiStrokeColorField, state.strokeColorHex);
-
-    m_multiClearedSwitch->setIsOn(state.isCleared.value_or(false));
-    if (state.isCleared.has_value()) {
-        m_multiClearedField->setHelperText(QString());
-    } else {
-        m_multiClearedField->setHelperText(tr("所选区域的清除状态不一致"));
-    }
-
-    const bool editable = !state.allLocked;
-    m_multiOcrButton->setEnabled(editable && m_ocrAvailable);
-    m_multiFontFamilyCombo->setEnabled(editable);
-    m_multiFontWeightCombo->setEnabled(editable);
-    m_multiFontSizeBox->setEnabled(editable);
-    m_multiOrientationCombo->setEnabled(editable);
-    m_multiHAlignCombo->setEnabled(editable);
-    m_multiVAlignCombo->setEnabled(editable);
-    m_multiTextColorHexEdit->setEnabled(editable);
-    m_multiTextColorSwatch->setEnabled(editable);
-    m_multiStrokeColorHexEdit->setEnabled(editable);
-    m_multiStrokeColorSwatch->setEnabled(editable);
-    m_multiClearedSwitch->setEnabled(editable);
-    m_multiDeleteButton->setEnabled(editable);
 }
 
 void InspectorPanel::setLockedEditing(bool locked) {
@@ -1353,7 +891,7 @@ void InspectorPanel::openColorFlyout(ColorSwatchButton* swatch,
 
 void InspectorPanel::onThemeUpdated() {
     const auto& colors = themeColorsRef();
-    for (auto* swatch : {m_textColorSwatch, m_strokeColorSwatch, m_multiTextColorSwatch, m_multiStrokeColorSwatch}) {
+    for (auto* swatch : {m_textColorSwatch, m_strokeColorSwatch}) {
         if (swatch != nullptr) {
             swatch->setBorderColor(colors.strokeSecondary);
         }

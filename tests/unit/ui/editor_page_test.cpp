@@ -210,7 +210,7 @@ private Q_SLOTS:
         auto session = makeSession(1);
         domain::TextRegion region(domain::RegionId::generate(), domain::RectGeometry{10.0, 10.0, 80.0, 40.0}, 0);
         const auto regionId = region.id();
-        session.project.findPage(pageAt(session, 0))->addRegion(std::move(region));
+        session.project.addRegionToPage(pageAt(session, 0), std::move(region));
         viewModel.openProjectSession(session);
         viewModel.selectRegion(regionId, ui::screen::editor::RegionSelectionMode::Replace);
 
@@ -241,7 +241,7 @@ private Q_SLOTS:
         QVERIFY(layoutBtn == nullptr);
     }
 
-    void unavailableOcrDisablesRemainingBatchActionWithGuidance() {
+    void unavailableOcrDisablesActionWithGuidance() {
         test::FakeThumbnailStore thumbnails;
         test::FakePageImageLoader images;
         application::OperationRegistry registry;
@@ -249,11 +249,11 @@ private Q_SLOTS:
         viewModel.setOcrAvailability(false, QStringLiteral("manifest.json not found"));
         ui::screen::editor::EditorPage page(&viewModel);
 
-        auto* multiButton = page.findChild<fluent::basicinput::Button*>(QStringLiteral("inspectorMultiOcr"));
-        QVERIFY(multiButton != nullptr);
-        QVERIFY(!multiButton->isEnabled());
-        QVERIFY(multiButton->toolTip().contains(QStringLiteral("manifest.json")));
-        QVERIFY(multiButton->toolTip().contains(QStringLiteral("设置 > OCR")));
+        auto* ocrButton = page.findChild<fluent::basicinput::Button*>(QStringLiteral("ocrButton"));
+        QVERIFY(ocrButton != nullptr);
+        QVERIFY(!ocrButton->isEnabled());
+        QVERIFY(ocrButton->toolTip().contains(QStringLiteral("manifest.json")));
+        QVERIFY(ocrButton->toolTip().contains(QStringLiteral("设置 > OCR")));
     }
 
     void commandbarHidesSeparatorsForEmptyGroups() {

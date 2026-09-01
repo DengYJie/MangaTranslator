@@ -11,7 +11,6 @@ using manga::ui::command::RegionPropertyField;
 using manga::ui::command::TextEditSessionKey;
 using manga::ui::screen::editor::EditorViewModel;
 using manga::ui::screen::editor::InspectorField;
-using manga::ui::screen::editor::MultiRegionInspectorState;
 using manga::ui::screen::editor::RegionSelectionMode;
 using manga::ui::screen::editor::SingleRegionInspectorState;
 using manga::ui::screen::editor::TextEditSession;
@@ -84,7 +83,7 @@ struct Fixture {
 };
 
 SingleRegionInspectorState singleInspector(const EditorViewModel& viewModel) {
-    return std::get<SingleRegionInspectorState>(viewModel.state().inspector);
+    return *viewModel.state().inspector;
 }
 
 } // namespace
@@ -392,14 +391,11 @@ private Q_SLOTS:
         viewModel.commitInspectorFieldEdit(pageId, regionIds, InspectorField::FontSizePt, 20.0);
 
         QCOMPARE(viewModel.undoStackCountForTest(), 1);
-        const auto multi = std::get<MultiRegionInspectorState>(viewModel.state().inspector);
-        QVERIFY(multi.fontSizePt.has_value());
-        QCOMPARE(*multi.fontSizePt, 20.0);
+        viewModel.selectRegion(regionIds.first(), RegionSelectionMode::Replace);
+        QCOMPARE(singleInspector(viewModel).fontSizePt, 20.0);
 
         viewModel.undo();
-        const auto reverted = std::get<MultiRegionInspectorState>(viewModel.state().inspector);
-        QVERIFY(reverted.fontSizePt.has_value());
-        QCOMPARE(*reverted.fontSizePt, 14.0);
+        QCOMPARE(singleInspector(viewModel).fontSizePt, 14.0);
     }
 
     void batchStyleEditWithInvalidTargetIsNotCommitted() {

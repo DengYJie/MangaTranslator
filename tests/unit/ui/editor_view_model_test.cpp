@@ -308,19 +308,20 @@ private slots:
         viewModel.selectRegion(r1, RegionSelectionMode::Toggle);
         QCOMPARE(viewModel.state().selectedRegionIds.size(), 2);
         QCOMPARE(viewModel.state().primaryRegionId, r1);
-        QCOMPARE(viewModel.state().inspectorMode, InspectorMode::Multi);
+        QCOMPARE(viewModel.state().inspectorMode, InspectorMode::None);
 
         // Toggle off r0.
         viewModel.selectRegion(r0, RegionSelectionMode::Toggle);
         QCOMPARE(viewModel.state().selectedRegionIds.size(), 1);
         QCOMPARE(viewModel.state().selectedRegionIds.first(), r1);
         QCOMPARE(viewModel.state().primaryRegionId, r1);
+        QCOMPARE(viewModel.state().inspectorMode, InspectorMode::Single);
 
         // Toggle off the primary.
         viewModel.selectRegion(r1, RegionSelectionMode::Toggle);
         QVERIFY(viewModel.state().selectedRegionIds.isEmpty());
         QVERIFY(!viewModel.state().primaryRegionId.isValid());
-        QCOMPARE(viewModel.state().inspectorMode, InspectorMode::Page);
+        QCOMPARE(viewModel.state().inspectorMode, InspectorMode::None);
     }
 
     void selectRegionRangeSelectsContiguousSpan() {
@@ -431,7 +432,7 @@ private slots:
         viewModel.clearRegionSelection();
         QVERIFY(viewModel.state().selectedRegionIds.isEmpty());
         QVERIFY(!viewModel.state().primaryRegionId.isValid());
-        QCOMPARE(viewModel.state().inspectorMode, InspectorMode::Page);
+        QCOMPARE(viewModel.state().inspectorMode, InspectorMode::None);
     }
 
     void selectAllRegionsOnCurrentPage() {
@@ -444,7 +445,7 @@ private slots:
         viewModel.selectAllRegionsOnCurrentPage();
         QCOMPARE(viewModel.state().selectedRegionIds.size(), 3);
         QCOMPARE(viewModel.state().primaryRegionId, viewModel.state().regions.first().id);
-        QCOMPARE(viewModel.state().inspectorMode, InspectorMode::Multi);
+        QCOMPARE(viewModel.state().inspectorMode, InspectorMode::None);
     }
 
     void pageSwitchClearsSelection() {
@@ -462,7 +463,7 @@ private slots:
         viewModel.selectPage(secondPageId);
         QVERIFY(viewModel.state().selectedRegionIds.isEmpty());
         QVERIFY(!viewModel.state().primaryRegionId.isValid());
-        QCOMPARE(viewModel.state().inspectorMode, InspectorMode::Page);
+        QCOMPARE(viewModel.state().inspectorMode, InspectorMode::None);
     }
 
     void removeRegionForTestDropsStaleSelectedIds() {

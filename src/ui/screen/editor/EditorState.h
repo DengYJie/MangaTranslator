@@ -64,9 +64,8 @@ enum class RegionSelectionMode {
 
 /// Inspector panel mode derived from selection count.
 enum class InspectorMode {
-    Page,
-    Single,
-    Multi
+    None,
+    Single
 };
 
 /// Value-typed projection of one text region on the current page.
@@ -167,7 +166,7 @@ struct EditorState {
     /// Page preview mode.
     PreviewMode previewMode{PreviewMode::Original};
     /// Inspector mode derived from selection count.
-    InspectorMode inspectorMode{InspectorMode::Page};
+    InspectorMode inspectorMode{InspectorMode::None};
     /// Inspector surface projection driven by selectedRegionIds.
     InspectorState inspector;
 

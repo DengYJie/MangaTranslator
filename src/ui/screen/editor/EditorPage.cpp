@@ -4,6 +4,7 @@
 #include "ui/screen/editor/EditorProcessingController.h"
 #include "ui/screen/editor/EditorState.h"
 #include "ui/screen/editor/EditorViewModel.h"
+#include "ui/screen/editor/InspectorState.h"
 #include "ui/widget/EditorCommandBar.h"
 #include "ui/widget/InspectorPanel.h"
 #include "ui/widget/PageListModel.h"
