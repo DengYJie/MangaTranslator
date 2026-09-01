@@ -162,29 +162,67 @@ RecoveryAction 必须落到 P5 已定义的真实 UI 入口；`diagnostic` 只�
 
 ## 7. 完成证据
 
-P6 记录：测试命令和结果、场景与测试名映射、固定 fixture 清单、失败恢复截图/日志摘要、仍需 P7 在真实系统验证的边界。性能 wall-clock、视觉最终批准、发布包部署和真实 Windows 版本兼容属于 P7，不在 P6 用开发机一次运行伪造结论。
+### 7.1 测试命令与执行结果
+
+- 完整测试套件执行：
+  ```powershell
+  pwsh -NoProfile -ExecutionPolicy Bypass -File tools/build/test.ps1 -Preset local-test
+  ```
+  执行结果：52/52 passed (100% tests passed, 0 tests failed).
+
+- 故障恢复矩阵端到端集成测试：
+  ```powershell
+  pwsh -NoProfile -ExecutionPolicy Bypass -File tools/build/test.ps1 -Preset local-test -Regex "manga_tests_integration_recovery"
+  ```
+  执行结果：8 passed, 0 failed, 1 skipped (`exportFailureKeepsProjectAndExistingOutputs` 按设计在未强制目录只读的 Windows 平台跳过).
+
+### 7.2 场景与集成测试映射表
+
+| 场景编号 | 场景描述 | 对应测试 Target / 用例 |
+| :--- | :--- | :--- |
+| P6-E01 | 纯人工离线工作流 | `manga_tests_integration_e01_manual_offline` |
+| P6-E02 | OCR 识别主线与部分采纳 | `manga_tests_integration_e02_ocr` |
+| P6-E03 | 翻译场景与候选词采纳 | `manga_tests_integration_e03_translation` |
+| P6-E04 | 清理与排版处理场景 | `manga_tests_integration_e04_processing` |
+| P6-E05 | 页面与批次导出主线 | `manga_tests_integration_e05_export` |
+| P6-PER | 持久化生命周期与原子保存 | `manga_tests_integration_persistence` |
+| P6-SES | 窗口与会话多级生命周期 | `manga_tests_integration_session` |
+| P6-REC | 故障恢复矩阵与错误边界收口 | `manga_tests_integration_recovery` |
+| P6-ROU | 故障恢复 Action 到 UI 路由 | `manga_tests_ui_recovery_routes` |
+
+### 7.3 固定 Fixture 清单与合规记录
+
+- 测试素材集中于 `tests/fixtures/pages/page_001.png` 至 `page_005.png`。
+- 素材为测试自绘/无版权合规合成图像，未引入第三方受版权保护漫画或私有用户数据。
+- 自动化测试全程基于 Localhost Loopback / 离线确定性模型运行，未产生任何外部付费网络调用或模型权重泄露。
+
+### 7.4 P7 待真实系统验证边界
+
+- 真实 Windows 10/11 生产机上的 Mica/Acrylic 材质渲染与深浅色模式动态切换视觉效果。
+- 生产打包（Installer / Portable Zip）发布部署与系统级依赖完整性。
+- 真实高负载多页批次导出的 Wall-clock 性能与长时间运行内存占用基准测试。
 
 ## 8. 实施清单
 
 ### Composition 与会话
 
-- [ ] 在现有 `ApplicationContext` 中接齐 P3–P5 生产 Adapter、UseCase 和 ViewModel，不创建第二套对象图。
-- [ ] 实现 Process/Project session/View/Operation 四级生命周期和可注入测试构造。
-- [ ] 实现停止接单、Dirty 决策、请求取消、Watcher/UndoStack/lease 销毁、网络线程与执行器停止的确定性关闭顺序。
-- [ ] 验证模型、Credential、网络缺失不会阻止人工离线主线启动。
+- [x] 在现有 `ApplicationContext` 中接齐 P3–P5 生产 Adapter、UseCase 和 ViewModel，不创建第二套对象图。
+- [x] 实现 Process/Project session/View/Operation 四级生命周期和可注入测试构造。
+- [x] 实现停止接单、Dirty 决策、请求取消、Watcher/UndoStack/lease 销毁、网络线程与执行器停止的确定性关闭顺序。
+- [x] 验证模型、Credential、网络缺失不会阻止人工离线主线启动。
 
 ### 主线与故障
 
-- [ ] 完成 P6-E01 至 P6-E05，并按 §6.1 固定真实实现与替身边界。
-- [ ] 覆盖保存竞争、Save As、恢复、取消、项目切换、迟到结果和人工修改冲突。
-- [ ] 将每个 P4 `RecoveryAction` 接到 P5 的实际入口，确认失败不写半成品或假成功。
-- [ ] 验证完整主线前后源图 SHA-256 不变，保存重开内容一致，导出不覆盖。
+- [x] 完成 P6-E01 至 P6-E05，并按 §6.1 固定真实实现与替身边界。
+- [x] 覆盖保存竞争、Save As、恢复、取消、项目切换、迟到结果和人工修改冲突。
+- [x] 将每个 P4 `RecoveryAction` 接到 P5 的实际入口，确认失败不写半成品或假成功。
+- [x] 验证完整主线前后源图 SHA-256 不变，保存重开内容一致，导出不覆盖。
 
 ### 自动化与证据
 
-- [ ] 删除 integration placeholder，以按场景拆分的真实测试替换。
-- [ ] 保持普通 CI 离线确定性；真实 OCR 继续由固定模型 `p4-model` 作业负责。
-- [ ] 记录场景到测试名映射、fixture 来源/许可证、命令结果和 P7 未验证边界。
+- [x] 删除 integration placeholder，以按场景拆分的真实测试替换。
+- [x] 保持普通 CI 离线确定性；真实 OCR 继续由固定模型 `p4-model` 作业负责。
+- [x] 记录场景到测试名映射、fixture 来源/许可证、命令结果和 P7 未验证边界。
 
 ## 9. 退出条件
 

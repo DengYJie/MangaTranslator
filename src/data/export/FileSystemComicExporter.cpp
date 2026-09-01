@@ -41,7 +41,8 @@ constexpr int kStaleLockTimeMs = 5000;
 }
 
 [[nodiscard]] application::ApplicationError makeExportError(const QString& code, const QString& message) {
-    return application::makeApplicationError(application::ErrorCategory::Persistence, code, message);
+    return application::makeApplicationError(
+        application::ErrorCategory::Persistence, code, message, application::RecoveryAction::ChoosePath);
 }
 
 } // namespace
@@ -61,7 +62,8 @@ FileSystemComicExporter::exportPages(application::ExportRequest request, applica
             return std::unexpected(
                 application::makeApplicationError(application::ErrorCategory::Input,
                                                   QStringLiteral("export.invalid_request"),
-                                                  QStringLiteral("The export output directory is empty or invalid")));
+                                                  QStringLiteral("The export output directory is empty or invalid"),
+                                                  application::RecoveryAction::ChoosePath));
         }
 
         QDir dir(cleanDir);
@@ -69,7 +71,8 @@ FileSystemComicExporter::exportPages(application::ExportRequest request, applica
             return std::unexpected(
                 application::makeApplicationError(application::ErrorCategory::Persistence,
                                                   QStringLiteral("export.invalid_request"),
-                                                  QStringLiteral("The export output directory could not be created")));
+                                                  QStringLiteral("The export output directory could not be created"),
+                                                  application::RecoveryAction::ChoosePath));
         }
 
         const bool isJpeg = (request.format == application::ExportFormat::Jpeg);

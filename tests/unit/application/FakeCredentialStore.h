@@ -30,8 +30,10 @@ public:
         }
         const auto it = m_keys.constFind(providerId);
         if (it == m_keys.cend()) {
-            return std::unexpected(makeApplicationError(
-                ErrorCategory::Network, "network.credentials_missing", "No API key is stored for this provider"));
+            return std::unexpected(makeApplicationError(ErrorCategory::Network,
+                                                        "network.credentials_missing",
+                                                        "No API key is stored for this provider",
+                                                        RecoveryAction::Reauthenticate));
         }
         return SecretBytes(it.value());
     }

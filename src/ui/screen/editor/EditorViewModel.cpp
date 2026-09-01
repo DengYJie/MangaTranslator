@@ -861,7 +861,7 @@ void EditorViewModel::handlePageLoadFinished() {
                 if (presentation) {
                     EditorNotice notice;
                     notice.safeMessage = presentation->safeMessage;
-                    notice.retryable = error.retryable || presentation->action == application::RecoveryAction::Retry;
+                    notice.retryable = true;
                     s.notice = notice;
                 }
             }

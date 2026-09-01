@@ -115,14 +115,14 @@ function(manga_deploy_qt_runtime target)
 
     if(TARGET onnxruntime::onnxruntime)
         add_custom_command(TARGET ${target} POST_BUILD
-            COMMAND ${CMAKE_COMMAND} -E copy
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
                 "$<TARGET_PROPERTY:onnxruntime::onnxruntime,IMPORTED_LOCATION>"
                 "$<TARGET_FILE_DIR:${target}>"
             COMMENT "Deploying ONNX Runtime for ${target}"
         )
     elseif(WIN32 AND ONNXRuntime_DLL)
         add_custom_command(TARGET ${target} POST_BUILD
-            COMMAND ${CMAKE_COMMAND} -E copy
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
                 "${ONNXRuntime_DLL}"
                 "$<TARGET_FILE_DIR:${target}>"
             COMMENT "Deploying ONNX Runtime for ${target}"
