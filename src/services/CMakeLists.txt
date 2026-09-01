@@ -4,6 +4,11 @@ add_library(manga_services STATIC)
 
 target_sources(manga_services
     PRIVATE
+        detection/KoharuLayoutManifest.cpp
+        detection/DetectionModelValidator.cpp
+        detection/KoharuLayoutPreprocessor.cpp
+        detection/KoharuLayoutPostprocessor.cpp
+        detection/OnnxKoharuLayoutDetector.cpp
         execution/BoundedTaskExecutor.cpp
         inpaint/InpaintManifest.cpp
         inpaint/InpaintModelValidator.cpp

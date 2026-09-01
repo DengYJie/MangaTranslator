@@ -1,9 +1,14 @@
 add_library(manga_application STATIC
+    dto/DetectionModelDto.h
     dto/PageInpaintDto.h
+    dto/TextDetectionDto.h
     usecase/processing/ManualInpaintWorkflow.cpp
     usecase/processing/ManualInpaintWorkflow.h
     operation/OperationProgressReporter.cpp
+    ports/IDetectionModelValidator.h
+    ports/IInpaintModelValidator.h
     ports/IPageInpainter.h
+    ports/ITextDetector.h
     workflow/OperationRegistry.cpp
     workflow/SmartTranslatePageWorkflow.cpp
     usecase/export/ExportUseCases.cpp

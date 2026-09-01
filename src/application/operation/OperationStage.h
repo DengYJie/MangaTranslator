@@ -6,6 +6,7 @@ enum class OperationStage {
     Project,
     Import,
     LoadImage,
+    Detect,
     Ocr,
     Translate,
     Clear,
