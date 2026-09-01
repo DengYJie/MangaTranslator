@@ -20,13 +20,36 @@
 #include "ui/widget/AppStatusTaskStrip.h"
 #include "ui/window/MainWindow.h"
 
+#include <FluentQt/Design.h>
 #include <FluentQt/DialogsFlyouts.h>
 #include <FluentQt/FluentQt.h>
 #include <QApplication>
+#include <QGuiApplication>
 #include <QLabel>
+#include <QStyleHints>
 #include <QTimer>
 
 namespace manga::app {
+
+namespace {
+
+void applyFluentTheme(application::AppTheme theme) {
+    switch (theme) {
+        case application::AppTheme::Light:
+            fluent::FluentElement::setTheme(fluent::FluentElement::Light);
+            break;
+        case application::AppTheme::Dark:
+            fluent::FluentElement::setTheme(fluent::FluentElement::Dark);
+            break;
+        case application::AppTheme::System:
+            fluent::FluentElement::setTheme(QGuiApplication::styleHints()->colorScheme() == Qt::ColorScheme::Dark
+                                                ? fluent::FluentElement::Dark
+                                                : fluent::FluentElement::Light);
+            break;
+    }
+}
+
+} // namespace
 
 Application::Application(int& argc, char** argv) {
     // FluentQt constraint: High DPI must be prepared before QApplication exists.
@@ -62,17 +85,7 @@ Application::~Application() {
 
 void Application::applyThemeFromSettings() {
     const application::LoadAppSettingsUseCase loadSettings(m_context->appSettingsStore());
-    switch (loadSettings.execute().theme) {
-        case application::AppTheme::Light:
-            fluent::FluentElement::setTheme(fluent::FluentElement::Light);
-            break;
-        case application::AppTheme::Dark:
-            fluent::FluentElement::setTheme(fluent::FluentElement::Dark);
-            break;
-        case application::AppTheme::System:
-            // FluentQt publishes only Light and Dark, so System keeps its default resolution.
-            break;
-    }
+    applyFluentTheme(loadSettings.execute().theme);
 }
 
 int Application::run() {
@@ -120,7 +133,14 @@ int Application::run() {
 
     auto* settingsViewModel = new ui::screen::settings::SettingsViewModel(
         m_context->appSettingsStore(), m_context->credentialOperations(), m_context->ocrModelValidator(), mainWindow);
-    auto* settingsPage = new ui::screen::settings::SettingsPage(settingsViewModel);
+    auto* generalSettingsPage = ui::screen::settings::SettingsPage::createLazyPage(
+        settingsViewModel, ui::screen::settings::SettingsCategory::General);
+    auto* ocrSettingsPage = ui::screen::settings::SettingsPage::createLazyPage(
+        settingsViewModel, ui::screen::settings::SettingsCategory::Ocr);
+    auto* translationSettingsPage = ui::screen::settings::SettingsPage::createLazyPage(
+        settingsViewModel, ui::screen::settings::SettingsCategory::AiTranslation);
+    auto* appearanceSettingsPage = ui::screen::settings::SettingsPage::createLazyPage(
+        settingsViewModel, ui::screen::settings::SettingsCategory::Appearance);
 
     auto* settingsPanel = new ui::navigation::NavigationPanel(nullptr);
     mainWindow->registerSurface(QStringLiteral("settings"), settingsPanel);
@@ -128,36 +148,38 @@ int Application::run() {
     ui::navigation::NavigationItemDescriptor generalItem;
     generalItem.routeKey = QStringLiteral("settings/general");
     generalItem.text = QCoreApplication::translate("Application", "常规");
-    generalItem.iconGlyph = QStringLiteral("\uE713");
+    generalItem.iconGlyph = Typography::Icons::Settings;
     mainWindow->addNavigationItem(generalItem, QStringLiteral("settings"));
-    mainWindow->registerRoute(QStringLiteral("settings/general"), settingsPage, QStringLiteral("settings"));
+    mainWindow->registerRoute(QStringLiteral("settings/general"), generalSettingsPage, QStringLiteral("settings"));
 
     ui::navigation::NavigationItemDescriptor ocrItem;
     ocrItem.routeKey = QStringLiteral("settings/ocr");
     ocrItem.text = QCoreApplication::translate("Application", "OCR");
-    ocrItem.iconGlyph = QStringLiteral("\uE8C1");
+    ocrItem.iconGlyph = Typography::Icons::glyph(QStringLiteral("ic_fluent_scan_text_20_regular"));
     mainWindow->addNavigationItem(ocrItem, QStringLiteral("settings"));
-    mainWindow->registerRoute(QStringLiteral("settings/ocr"), settingsPage, QStringLiteral("settings"));
+    mainWindow->registerRoute(QStringLiteral("settings/ocr"), ocrSettingsPage, QStringLiteral("settings"));
 
     ui::navigation::NavigationItemDescriptor translationItem;
     translationItem.routeKey = QStringLiteral("settings/ai-translation");
     translationItem.text = QCoreApplication::translate("Application", "AI 翻译");
-    translationItem.iconGlyph = QStringLiteral("\uF2B7");
+    translationItem.iconGlyph = Typography::Icons::glyph(QStringLiteral("ic_fluent_translate_20_regular"));
     mainWindow->addNavigationItem(translationItem, QStringLiteral("settings"));
-    mainWindow->registerRoute(QStringLiteral("settings/ai-translation"), settingsPage, QStringLiteral("settings"));
+    mainWindow->registerRoute(
+        QStringLiteral("settings/ai-translation"), translationSettingsPage, QStringLiteral("settings"));
 
     ui::navigation::NavigationItemDescriptor appearanceItem;
     appearanceItem.routeKey = QStringLiteral("settings/appearance");
     appearanceItem.text = QCoreApplication::translate("Application", "外观");
-    appearanceItem.iconGlyph = QStringLiteral("\uE790");
+    appearanceItem.iconGlyph = Typography::Icons::Brush;
     mainWindow->addNavigationItem(appearanceItem, QStringLiteral("settings"));
-    mainWindow->registerRoute(QStringLiteral("settings/appearance"), settingsPage, QStringLiteral("settings"));
+    mainWindow->registerRoute(
+        QStringLiteral("settings/appearance"), appearanceSettingsPage, QStringLiteral("settings"));
 
     // Main surface footer item for Settings
     ui::navigation::NavigationItemDescriptor settingsFooterItem;
     settingsFooterItem.routeKey = QStringLiteral("settings/general");
     settingsFooterItem.text = QCoreApplication::translate("Application", "设置");
-    settingsFooterItem.iconGlyph = QStringLiteral("\uE713");
+    settingsFooterItem.iconGlyph = Typography::Icons::Settings;
     settingsFooterItem.position = ui::navigation::NavigationItemPosition::Bottom;
     mainWindow->addNavigationItem(settingsFooterItem, QStringLiteral("main"));
 
@@ -165,26 +187,21 @@ int Application::run() {
     QObject::connect(settingsViewModel,
                      &ui::screen::settings::SettingsViewModel::themePreviewRequested,
                      mainWindow,
-                     [](application::AppTheme theme) {
-                         switch (theme) {
-                             case application::AppTheme::Light:
-                                 fluent::FluentElement::setTheme(fluent::FluentElement::Light);
-                                 break;
-                             case application::AppTheme::Dark:
-                                 fluent::FluentElement::setTheme(fluent::FluentElement::Dark);
-                                 break;
-                             case application::AppTheme::System:
-                                 break;
+                     [](application::AppTheme theme) { applyFluentTheme(theme); });
+
+    QObject::connect(QGuiApplication::styleHints(),
+                     &QStyleHints::colorSchemeChanged,
+                     mainWindow,
+                     [settingsViewModel](Qt::ColorScheme) {
+                         if (settingsViewModel->state().persisted.theme == application::AppTheme::System) {
+                             applyFluentTheme(application::AppTheme::System);
                          }
                      });
 
     QObject::connect(controller,
                      &ui::navigation::NavigationController::routeChanged,
                      mainWindow,
-                     [settingsViewModel, mainWindow](const QString& routeKey) {
-                         if (const auto category = ui::screen::settings::settingsCategoryFromRouteKey(routeKey)) {
-                             settingsViewModel->setCurrentCategory(*category);
-                         }
+                     [mainWindow](const QString& routeKey) {
                          if (auto* panel = mainWindow->activeNavigationPanel()) {
                              panel->setCurrentItem(routeKey);
                          }

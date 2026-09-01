@@ -87,7 +87,7 @@ void SettingsGroup::rebuildCards() {
         auto* card = new fluent::layout::Card(this);
         card->setAppearance(fluent::layout::Card::Layer);
         card->setBorderVisible(true);
-        card->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+        card->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
 
         auto* cardLayout = new QVBoxLayout(card);
         cardLayout->setContentsMargins(0, 0, 0, 0);

@@ -14,8 +14,7 @@ using IAppSettingsStore = ::manga::application::IAppSettingsStore;
 using IOcrModelValidator = ::manga::application::IOcrModelValidator;
 using SecretBytes = ::manga::application::SecretBytes;
 
-/// ViewModel managing persisted settings, validation, secure credential mutations,
-/// instant theme preview, and category scroll positions.
+/// ViewModel managing persisted settings, validation, secure credential mutations, and instant theme preview.
 class SettingsViewModel : public base::BaseViewModel<SettingsViewModel, SettingsState> {
     Q_OBJECT
 public:
@@ -27,8 +26,6 @@ public:
 
     // --- Navigation & Lifetime ---
     void loadSettings();
-    void setCurrentCategory(SettingsCategory category);
-    void setScrollPosition(SettingsCategory category, int scrollY);
 
     // --- General Category Intents ---
     void setRestoreLastProject(bool enabled);

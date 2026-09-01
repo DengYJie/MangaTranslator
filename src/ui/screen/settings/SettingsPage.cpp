@@ -16,7 +16,7 @@
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QScrollBar>
-#include <QStackedWidget>
+#include <QShowEvent>
 #include <QVBoxLayout>
 
 namespace manga::ui::screen::settings {
@@ -33,15 +33,46 @@ constexpr int kMarginBottomWide = 24;
 constexpr int kMarginTopNarrow = 16;
 constexpr int kMarginBottomNarrow = 16;
 
+class LazySettingsPage final : public QWidget {
+public:
+    LazySettingsPage(SettingsViewModel* viewModel, SettingsCategory category, QWidget* parent = nullptr)
+        : QWidget(parent), m_viewModel(viewModel), m_category(category) {
+        setAutoFillBackground(false);
+        auto* layout = new QVBoxLayout(this);
+        layout->setContentsMargins(0, 0, 0, 0);
+    }
+
+protected:
+    void showEvent(QShowEvent* event) override {
+        QWidget::showEvent(event);
+        if (m_page != nullptr) {
+            return;
+        }
+
+        m_page = new SettingsPage(m_viewModel, m_category, this);
+        layout()->addWidget(m_page);
+    }
+
+private:
+    SettingsViewModel* m_viewModel;
+    SettingsCategory m_category;
+    SettingsPage* m_page{nullptr};
+};
+
 } // namespace
 
-SettingsPage::SettingsPage(SettingsViewModel* viewModel, QWidget* parent) : BasePage(parent), m_viewModel(viewModel) {
+SettingsPage::SettingsPage(SettingsViewModel* viewModel, SettingsCategory category, QWidget* parent)
+    : BasePage(parent), m_viewModel(viewModel), m_category(category) {
     buildUi();
 
     if (m_viewModel != nullptr) {
         m_viewModel->observe(this, &SettingsPage::render);
         connect(m_viewModel, &SettingsViewModel::focusFieldRequested, this, &SettingsPage::focusField);
     }
+}
+
+QWidget* SettingsPage::createLazyPage(SettingsViewModel* viewModel, SettingsCategory category, QWidget* parent) {
+    return new LazySettingsPage(viewModel, category, parent);
 }
 
 void SettingsPage::buildUi() {
@@ -98,6 +129,7 @@ void SettingsPage::buildUi() {
     m_categorySubtitleLabel->setObjectName(QStringLiteral("settingsCategorySubtitle"));
     m_columnLayout->addWidget(m_categorySubtitleLabel);
     m_columnLayout->addSpacing(20);
+    updateCategoryHeaders(m_category);
 
     // Global page notification InfoBar
     m_pageInfoBar = new fluent::status_info::InfoBar(m_columnContainer);
@@ -105,11 +137,9 @@ void SettingsPage::buildUi() {
     m_pageInfoBar->setIsOpen(false);
     m_columnLayout->addWidget(m_pageInfoBar);
 
-    // Category views stack
-    m_categoryStack = new QStackedWidget(m_columnContainer);
-    m_categoryStack->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
-    buildCategoryViews();
-    m_columnLayout->addWidget(m_categoryStack);
+    // Each settings route owns one category page so StackContentHost can animate route changes.
+    m_categoryView = buildCategoryView(m_category);
+    m_columnLayout->addWidget(m_categoryView);
 
     m_columnLayout->addStretch(1);
 
@@ -122,6 +152,8 @@ void SettingsPage::buildUi() {
 
     m_restoreDefaultsButton = new fluent::basicinput::Button(tr("恢复默认"), m_actionBar);
     m_restoreDefaultsButton->setObjectName(QStringLiteral("settingsRestoreDefaultsButton"));
+    m_restoreDefaultsButton->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
+    m_restoreDefaultsButton->setFixedSize(120, 36);
     m_restoreDefaultsButton->setToolTip(tr("恢复所有设置项为默认值"));
     m_restoreDefaultsButton->setAccessibleName(tr("恢复默认设置"));
     connect(m_restoreDefaultsButton, &fluent::basicinput::Button::clicked, this, [this]() {
@@ -129,6 +161,7 @@ void SettingsPage::buildUi() {
             m_viewModel->restoreDefaults();
         }
     });
+    actionLayout->addStretch(1);
     actionLayout->addWidget(m_restoreDefaultsButton);
 
     m_columnLayout->addWidget(m_actionBar);
@@ -137,16 +170,18 @@ void SettingsPage::buildUi() {
     m_scrollView->setContentWidget(m_scrollContent, fluent::WidgetOwnership::Owned);
 }
 
-void SettingsPage::buildCategoryViews() {
-    m_generalView = buildGeneralView();
-    m_ocrView = buildOcrView();
-    m_aiTranslationView = buildAiTranslationView();
-    m_appearanceView = buildAppearanceView();
-
-    m_categoryStack->addWidget(m_generalView);       // index 0
-    m_categoryStack->addWidget(m_ocrView);           // index 1
-    m_categoryStack->addWidget(m_aiTranslationView); // index 2
-    m_categoryStack->addWidget(m_appearanceView);    // index 3
+QWidget* SettingsPage::buildCategoryView(SettingsCategory category) {
+    switch (category) {
+        case SettingsCategory::General:
+            return buildGeneralView();
+        case SettingsCategory::Ocr:
+            return buildOcrView();
+        case SettingsCategory::AiTranslation:
+            return buildAiTranslationView();
+        case SettingsCategory::Appearance:
+            return buildAppearanceView();
+    }
+    return new QWidget(m_columnContainer);
 }
 
 QWidget* SettingsPage::buildGeneralView() {
@@ -535,26 +570,7 @@ QWidget* SettingsPage::buildAppearanceView() {
 void SettingsPage::render(const SettingsState& state) {
     m_isUpdatingFromState = true;
 
-    // Handle category switch & scroll position restoration
-    if (m_currentCategory != state.currentCategory) {
-        if (m_viewModel && m_scrollView->verticalScrollBar()) {
-            m_viewModel->setScrollPosition(m_currentCategory, m_scrollView->verticalScrollBar()->value());
-        }
-        m_currentCategory = state.currentCategory;
-
-        const int targetIndex = static_cast<int>(m_currentCategory);
-        m_categoryStack->setCurrentIndex(targetIndex);
-        updateCategoryHeaders(m_currentCategory);
-
-        const int restoredScroll = state.scrollPositions.value(m_currentCategory, 0);
-        if (m_scrollView->verticalScrollBar()) {
-            m_scrollView->verticalScrollBar()->setValue(restoredScroll);
-        }
-    } else {
-        updateCategoryHeaders(m_currentCategory);
-    }
-
-    // Update General category inputs (always created)
+    // Update controls owned by this category page.
     if (m_restoreLastProjectSwitch) {
         m_restoreLastProjectSwitch->setIsOn(state.persisted.restoreLastProject);
     }
@@ -562,7 +578,7 @@ void SettingsPage::render(const SettingsState& state) {
         m_recentProjectLimitBox->setValue(state.persisted.recentProjectLimit);
     }
 
-    // Update OCR category inputs (lazy loaded)
+    // Update OCR category inputs.
     if (m_ocrModelDirEdit && m_ocrModelDirEdit->text() != state.persisted.ocrModelDirectory) {
         m_ocrModelDirEdit->setText(state.persisted.ocrModelDirectory);
     }
@@ -573,7 +589,7 @@ void SettingsPage::render(const SettingsState& state) {
         }
     }
 
-    // Update OCR Status InfoBar (lazy loaded)
+    // Update OCR status InfoBar.
     if (m_ocrStatusInfoBar) {
         if (state.persisted.ocrModelDirectory.trimmed().isEmpty()) {
             m_ocrStatusInfoBar->setIsOpen(false);
@@ -594,7 +610,7 @@ void SettingsPage::render(const SettingsState& state) {
         }
     }
 
-    // Update AI Translation category inputs (lazy loaded)
+    // Update AI Translation category inputs.
     if (m_providerIdCombo) {
         const int provIdx = m_providerIdCombo->findData(state.persisted.providerId);
         if (provIdx >= 0 && m_providerIdCombo->currentIndex() != provIdx) {
@@ -614,7 +630,7 @@ void SettingsPage::render(const SettingsState& state) {
         m_retryCountBox->setValue(state.persisted.retryCount);
     }
 
-    // Update Credential Status & Widget visibility (lazy loaded)
+    // Update credential status and widget visibility.
     if (m_credentialConfiguredWidget && m_credentialInputWidget && m_credentialCancelButton) {
         if (state.credentialStatus == application::CredentialState::Configured && !m_isCredentialEditMode) {
             m_credentialConfiguredWidget->setVisible(true);
@@ -627,7 +643,7 @@ void SettingsPage::render(const SettingsState& state) {
         }
     }
 
-    // Update Appearance category inputs (lazy loaded)
+    // Update Appearance category inputs.
     if (m_themeCombo) {
         const int themeIdx = m_themeCombo->findData(static_cast<int>(state.persisted.theme));
         if (themeIdx >= 0 && m_themeCombo->currentIndex() != themeIdx) {
@@ -735,15 +751,21 @@ fluent::basicinput::Button* SettingsPage::restoreDefaultsButtonForTest() const {
 void SettingsPage::updateResponsiveLayout(int availableWidth) {
     BasePage::updateResponsiveLayout(availableWidth);
 
-    // ForgeAI SettingsNavigationModule responsive margins
-    const bool narrow = availableWidth < kBreakpointWide;
+    const int viewportWidth =
+        m_scrollView && m_scrollView->viewport() ? m_scrollView->viewport()->width() : availableWidth;
+    if (m_scrollContent) {
+        m_scrollContent->setMinimumWidth(qMax(0, viewportWidth));
+    }
+
+    // Match ForgeAI's full-width scroll content with a centered, max-width column.
+    const bool narrow = viewportWidth < kBreakpointWide;
     const int marginH = narrow ? kMarginNarrow : kMarginWide;
     const int marginV = narrow ? kMarginTopNarrow : kMarginTopWide;
     const int marginB = narrow ? kMarginBottomNarrow : kMarginBottomWide;
 
     m_scrollContentLayout->setContentsMargins(marginH, marginV, marginH, marginB);
 
-    const int contentWidth = qMin(availableWidth - marginH * 2, kMaxContentWidth);
+    const int contentWidth = qMin(qMax(0, viewportWidth - marginH * 2), kMaxContentWidth);
     for (auto* group : m_allGroups) {
         if (group) {
             group->updateResponsiveLayout(contentWidth);

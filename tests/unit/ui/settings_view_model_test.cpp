@@ -66,7 +66,6 @@ class SettingsViewModelTest : public QObject {
     Q_OBJECT
 private Q_SLOTS:
     void testInitialObserveReplay();
-    void testCategoryNavigationAndScrollPositions();
     void testGeneralEditingPersistsImmediately();
     void testOcrEditingPersistsImmediatelyAndValidates();
     void testAiTranslationEditingPersistsImmediatelyAndCredentials();
@@ -91,28 +90,8 @@ void SettingsViewModelTest::testInitialObserveReplay() {
     });
 
     QVERIFY(observed);
-    QCOMPARE(receivedState.currentCategory, SettingsCategory::General);
     QVERIFY(!receivedState.hasFieldErrors());
     QCOMPARE(receivedState.persisted, ::manga::application::AppSettingsSnapshot{});
-}
-
-void SettingsViewModelTest::testCategoryNavigationAndScrollPositions() {
-    FakeAppSettingsStore store;
-    ::manga::application::test::FakeCredentialStore credStore;
-    FakeOcrModelValidator validator;
-
-    ::manga::application::CredentialOperations credentialOperations(&credStore);
-    SettingsViewModel vm(&store, &credentialOperations, &validator);
-
-    vm.setCurrentCategory(SettingsCategory::Ocr);
-    QCOMPARE(vm.state().currentCategory, SettingsCategory::Ocr);
-
-    vm.setScrollPosition(SettingsCategory::Ocr, 150);
-    QCOMPARE(vm.state().scrollPositions.value(SettingsCategory::Ocr), 150);
-
-    vm.setCurrentCategory(SettingsCategory::AiTranslation);
-    QCOMPARE(vm.state().currentCategory, SettingsCategory::AiTranslation);
-    QCOMPARE(vm.state().scrollPositions.value(SettingsCategory::Ocr), 150);
 }
 
 void SettingsViewModelTest::testGeneralEditingPersistsImmediately() {

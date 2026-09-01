@@ -8,7 +8,6 @@
 #include <QString>
 
 #include <optional>
-#include <type_traits>
 
 namespace manga::ui::screen::settings {
 
@@ -24,10 +23,6 @@ enum class SettingsCategory {
     AiTranslation,
     Appearance
 };
-
-inline size_t qHash(SettingsCategory key, size_t seed = 0) noexcept {
-    return ::qHash(static_cast<std::underlying_type_t<SettingsCategory>>(key), seed);
-}
 
 inline QString settingsCategoryToString(SettingsCategory category) {
     switch (category) {
@@ -80,8 +75,6 @@ struct SettingsState {
     QHash<QString, QString> fieldErrors;
     CredentialState credentialStatus{CredentialState::Missing};
     OcrModelStatus modelStatus;
-    SettingsCategory currentCategory{SettingsCategory::General};
-    QHash<SettingsCategory, int> scrollPositions;
 
     [[nodiscard]] bool hasFieldErrors() const {
         return !fieldErrors.isEmpty();

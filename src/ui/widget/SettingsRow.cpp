@@ -18,7 +18,6 @@ constexpr int kHorizontalSpacing = 16;
 constexpr int kVerticalSpacing = 8;
 constexpr int kEditorMaxWidth = 320;
 constexpr int kMinimumHeight = 64;
-constexpr int kStackedMinimumHeight = 96;
 } // namespace
 
 SettingsRow::SettingsRow(QWidget* parent) : QWidget(parent) {
@@ -34,7 +33,7 @@ SettingsRow::SettingsRow(const QString& title, const QString& description, QWidg
 void SettingsRow::setupUi() {
     setAttribute(Qt::WA_StyledBackground, false);
     setAutoFillBackground(false);
-    setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+    setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
     setMinimumHeight(kMinimumHeight);
 
     m_mainLayout = new QBoxLayout(QBoxLayout::LeftToRight, this);
@@ -176,17 +175,24 @@ void SettingsRow::applyMode(bool horizontal) {
         m_editorLayout->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
         m_editorContainer->setMaximumWidth(kEditorMaxWidth);
         m_editorContainer->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Preferred);
+        if (m_editorWidget) {
+            m_editorWidget->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Preferred);
+        }
         setMinimumHeight(kMinimumHeight);
     } else {
         m_mainLayout->setDirection(QBoxLayout::TopToBottom);
         m_mainLayout->setSpacing(kVerticalSpacing);
         m_mainLayout->setAlignment(m_textContainer, Qt::AlignLeft | Qt::AlignTop);
         m_mainLayout->setAlignment(m_editorContainer, Qt::AlignLeft | Qt::AlignTop);
-        m_editorLayout->setAlignment(Qt::AlignLeft | Qt::AlignTop);
+        m_editorLayout->setAlignment(m_fillWidthInVertical ? Qt::Alignment() : Qt::AlignLeft | Qt::AlignTop);
         m_editorContainer->setMaximumWidth(QWIDGETSIZE_MAX);
         m_editorContainer->setSizePolicy(m_fillWidthInVertical ? QSizePolicy::Expanding : QSizePolicy::Preferred,
                                          QSizePolicy::Preferred);
-        setMinimumHeight(kStackedMinimumHeight);
+        if (m_editorWidget) {
+            m_editorWidget->setSizePolicy(m_fillWidthInVertical ? QSizePolicy::Expanding : QSizePolicy::Preferred,
+                                          QSizePolicy::Preferred);
+        }
+        setMinimumHeight(0);
     }
     updateGeometry();
 }

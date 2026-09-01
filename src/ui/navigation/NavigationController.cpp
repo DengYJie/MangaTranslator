@@ -18,7 +18,7 @@ void NavigationController::navigate(const QString& routeKey) {
         return;
     }
     m_navigating = true;
-    const bool presented = m_presenter->presentRoute(routeKey, NavigationDirection::None);
+    const bool presented = m_presenter->presentRoute(routeKey, NavigationDirection::Forward);
     m_navigating = false;
     if (!presented) {
         return;

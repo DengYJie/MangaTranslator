@@ -9,6 +9,7 @@ namespace {
 class FakePresenter final : public manga::ui::navigation::INavigationPresenter {
 public:
     QVector<QString> presented;
+    QVector<manga::ui::navigation::NavigationDirection> directions;
     QVector<QString> knownRoutes{QStringLiteral("home"), QStringLiteral("settings.general")};
     bool failNextPresent{false};
     manga::ui::navigation::NavigationController* reentrancyProbe{nullptr};
@@ -17,12 +18,13 @@ public:
     bool canPresentRoute(const QString& routeKey) const override {
         return knownRoutes.contains(routeKey);
     }
-    bool presentRoute(const QString& routeKey, manga::ui::navigation::NavigationDirection) override {
+    bool presentRoute(const QString& routeKey, manga::ui::navigation::NavigationDirection direction) override {
         if (failNextPresent) {
             failNextPresent = false;
             return false;
         }
         presented.append(routeKey);
+        directions.append(direction);
         if (reentrancyProbe && !reentrantRoute.isEmpty()) {
             auto route = reentrantRoute;
             reentrantRoute.clear();
@@ -46,6 +48,9 @@ private slots:
         controller.navigate(QStringLiteral("home"));
         controller.navigate(QStringLiteral("settings.general"));
         QCOMPARE(presenter.presented.size(), 2);
+        QCOMPARE(presenter.directions.size(), 2);
+        QCOMPARE(presenter.directions.at(0), manga::ui::navigation::NavigationDirection::Forward);
+        QCOMPARE(presenter.directions.at(1), manga::ui::navigation::NavigationDirection::Forward);
         QCOMPARE(routeSpy.size(), 2);
         QVERIFY(controller.canGoBack());
         QCOMPARE(backSpy.size(), 1); // false->true flips only once

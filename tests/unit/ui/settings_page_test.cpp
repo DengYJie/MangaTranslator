@@ -56,7 +56,6 @@ class SettingsPageTest : public QObject {
     Q_OBJECT
 private Q_SLOTS:
     void testInitialRendering();
-    void testCategorySwitching();
     void testResponsiveModePreservesWidgetAndFocus();
     void testRowErrorDisplayExpandsContent();
     void testImmediatePersistenceAndRestoreDefaults();
@@ -79,28 +78,6 @@ void SettingsPageTest::testInitialRendering() {
     QVERIFY(limitRow != nullptr);
     QVERIFY(!limitRow->hasError());
     QVERIFY(page.findChild<fluent::basicinput::Button*>(QStringLiteral("settingsSaveButton")) == nullptr);
-}
-
-void SettingsPageTest::testCategorySwitching() {
-    FakeAppSettingsStore store;
-    ::manga::application::test::FakeCredentialStore credStore;
-    FakeOcrModelValidator validator;
-
-    ::manga::application::CredentialOperations credentialOperations(&credStore);
-    SettingsViewModel vm(&store, &credentialOperations, &validator);
-    SettingsPage page(&vm);
-    page.resize(800, 600);
-
-    vm.setCurrentCategory(SettingsCategory::AiTranslation);
-    QCOMPARE(page.currentCategory(), SettingsCategory::AiTranslation);
-
-    auto* endpointRow = page.rowForField(QStringLiteral("endpoint"));
-    QVERIFY(endpointRow != nullptr);
-
-    vm.setCurrentCategory(SettingsCategory::Appearance);
-    QCOMPARE(page.currentCategory(), SettingsCategory::Appearance);
-    auto* themeRow = page.rowForField(QStringLiteral("theme"));
-    QVERIFY(themeRow != nullptr);
 }
 
 void SettingsPageTest::testResponsiveModePreservesWidgetAndFocus() {

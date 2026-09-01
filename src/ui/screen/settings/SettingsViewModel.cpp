@@ -58,14 +58,6 @@ void SettingsViewModel::loadSettings() {
     m_lastPersistedSnapshot = m_state.persisted;
 }
 
-void SettingsViewModel::setCurrentCategory(SettingsCategory category) {
-    updateState([category](SettingsState& state) { state.currentCategory = category; });
-}
-
-void SettingsViewModel::setScrollPosition(SettingsCategory category, int scrollY) {
-    updateState([category, scrollY](SettingsState& state) { state.scrollPositions[category] = scrollY; });
-}
-
 void SettingsViewModel::setRestoreLastProject(bool enabled) {
     updateState([enabled](SettingsState& state) { state.persisted.restoreLastProject = enabled; });
     persistSettings();

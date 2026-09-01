@@ -8,8 +8,6 @@
 #include <QList>
 #include <QPointer>
 
-class QStackedWidget;
-
 namespace fluent::basicinput {
 class Button;
 class ComboBox;
@@ -40,18 +38,21 @@ namespace manga::ui::screen::settings {
 
 class SettingsViewModel;
 
-/// Settings surface page presenting categories (General, OCR, AI Translation, Appearance)
-/// within a single scrollable and responsive view area.
+/// Settings surface page presenting one category within a scrollable and responsive view area.
 class SettingsPage : public base::BasePage {
     Q_OBJECT
 public:
-    explicit SettingsPage(SettingsViewModel* viewModel, QWidget* parent = nullptr);
+    explicit SettingsPage(SettingsViewModel* viewModel,
+                          SettingsCategory category = SettingsCategory::General,
+                          QWidget* parent = nullptr);
     ~SettingsPage() override = default;
+
+    static QWidget* createLazyPage(SettingsViewModel* viewModel, SettingsCategory category, QWidget* parent = nullptr);
 
     void onThemeUpdated() override;
 
     [[nodiscard]] SettingsCategory currentCategory() const {
-        return m_currentCategory;
+        return m_category;
     }
     [[nodiscard]] widget::SettingsRow* rowForField(const QString& fieldName) const;
     [[nodiscard]] fluent::basicinput::Button* restoreDefaultsButtonForTest() const;
@@ -61,7 +62,7 @@ protected:
 
 private:
     void buildUi();
-    void buildCategoryViews();
+    QWidget* buildCategoryView(SettingsCategory category);
     QWidget* buildGeneralView();
     QWidget* buildOcrView();
     QWidget* buildAiTranslationView();
@@ -73,7 +74,7 @@ private:
     void showCredentialRemovalDialog();
 
     SettingsViewModel* m_viewModel; // non-owning
-    SettingsCategory m_currentCategory{SettingsCategory::General};
+    SettingsCategory m_category{SettingsCategory::General};
     bool m_isUpdatingFromState{false};
     bool m_isCredentialEditMode{false};
 
@@ -88,11 +89,7 @@ private:
     fluent::textfields::Label* m_categorySubtitleLabel{nullptr};
     fluent::status_info::InfoBar* m_pageInfoBar{nullptr};
 
-    QStackedWidget* m_categoryStack{nullptr};
-    QWidget* m_generalView{nullptr};
-    QWidget* m_ocrView{nullptr};
-    QWidget* m_aiTranslationView{nullptr};
-    QWidget* m_appearanceView{nullptr};
+    QWidget* m_categoryView{nullptr};
 
     // Bottom action bar
     QWidget* m_actionBar{nullptr};

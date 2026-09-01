@@ -48,6 +48,7 @@ class SettingsLifetimeTest : public QObject {
     Q_OBJECT
 private Q_SLOTS:
     void testViewModelPageDestructionCleanliness();
+    void testLazyPageBuildsOnce();
     void testThemePersistenceAndPreview();
     void testCredentialOperationsDestructionSafety();
 };
@@ -83,6 +84,30 @@ void SettingsLifetimeTest::testThemePersistenceAndPreview() {
     QCOMPARE(themeSpy.at(0).at(0).value<::manga::application::AppTheme>(), ::manga::application::AppTheme::Dark);
     QCOMPARE(vm.state().persisted.theme, ::manga::application::AppTheme::Dark);
     QCOMPARE(store.m_values.value(QStringLiteral("appearance/theme")).toString(), QStringLiteral("dark"));
+}
+
+void SettingsLifetimeTest::testLazyPageBuildsOnce() {
+    FakeAppSettingsStore store;
+    ::manga::application::test::FakeCredentialStore credStore;
+    ::manga::application::CredentialOperations credentialOperations(&credStore);
+    FakeOcrModelValidator validator;
+    SettingsViewModel vm(&store, &credentialOperations, &validator);
+
+    auto* lazyPage = SettingsPage::createLazyPage(&vm, SettingsCategory::General);
+    QCOMPARE(lazyPage->findChildren<SettingsPage*>().size(), 0);
+    lazyPage->resize(800, 600);
+    lazyPage->show();
+    QTest::qWait(20);
+
+    const auto pages = lazyPage->findChildren<SettingsPage*>();
+    QCOMPARE(pages.size(), 1);
+    auto* page = pages.constFirst();
+    lazyPage->hide();
+    lazyPage->show();
+    QTest::qWait(20);
+    QCOMPARE(lazyPage->findChildren<SettingsPage*>().constFirst(), page);
+
+    delete lazyPage;
 }
 
 void SettingsLifetimeTest::testCredentialOperationsDestructionSafety() {
