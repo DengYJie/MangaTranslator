@@ -9,6 +9,8 @@
 
 namespace manga::ui::canvas {
 
+namespace domain = ::manga::domain;
+
 /// Canvas interaction tool state.
 enum class Tool {
     Select,
