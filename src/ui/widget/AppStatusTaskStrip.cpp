@@ -6,6 +6,8 @@
 #include <FluentQt/Design.h>
 #include <FluentQt/DialogsFlyouts.h>
 #include <FluentQt/Foundation.h>
+#include <FluentQt/Windowing.h>
+#include <QEvent>
 #include <QLabel>
 #include <QListView>
 #include <QMouseEvent>
@@ -16,8 +18,10 @@
 namespace manga::ui::widget {
 
 namespace {
-constexpr int kIdleHeight = 24;
-constexpr int kActiveHeight = 32;
+constexpr int kIdleHeight = 20;
+constexpr int kActiveHeight = 28;
+constexpr int kMaxHeight = 48;
+constexpr int kTextPadding = 4;
 constexpr int kHorizontalPadding = 12;
 constexpr int kSectionSpacing = 16;
 constexpr int kIconSize = 16;
@@ -28,6 +32,8 @@ AppStatusTaskStrip::AppStatusTaskStrip(QWidget* parent)
     : QWidget(parent), m_operationModel(new model::OperationListModel(this)) {
     setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
     setMinimumHeight(kIdleHeight);
+    // foundations.md assigns Caption to status bars.
+    setFont(themeFont(Typography::FontRole::Caption).toQFont());
     setAccessibleName(tr("应用状态与后台任务栏"));
     setToolTip(tr("显示文档保存状态与后台处理任务"));
 
@@ -46,9 +52,9 @@ AppStatusTaskStrip::~AppStatusTaskStrip() {
 }
 
 QSize AppStatusTaskStrip::sizeHint() const {
-    const int fontHeight = fontMetrics().height();
     const int contentHeight = hasVisibleStatusContent() ? kActiveHeight : kIdleHeight;
-    return {800, qMax(contentHeight, fontHeight + 10)};
+    const int textHeight = fontMetrics().height() + kTextPadding;
+    return {800, qMin(kMaxHeight, qMax(contentHeight, textHeight))};
 }
 
 QSize AppStatusTaskStrip::minimumSizeHint() const {
@@ -56,6 +62,8 @@ QSize AppStatusTaskStrip::minimumSizeHint() const {
 }
 
 void AppStatusTaskStrip::onThemeUpdated() {
+    setFont(themeFont(Typography::FontRole::Caption).toQFont());
+    updateGeometry();
     update();
 }
 
@@ -277,7 +285,7 @@ void AppStatusTaskStrip::updateResponsiveLayout() {
     const int w = width();
     const int h = height();
     const int menuX = w - kHorizontalPadding - kMenuBtnWidth;
-    m_menuBtnHotspot = QRect(menuX, (h - kIconSize) / 2 - 4, kMenuBtnWidth, kIconSize + 8);
+    m_menuBtnHotspot = QRect(menuX, 0, kMenuBtnWidth, h);
 
     if (w >= 1008) {
         // Wide: 3 full sections
@@ -309,6 +317,13 @@ void AppStatusTaskStrip::updateResponsiveLayout() {
     }
 }
 
+bool AppStatusTaskStrip::event(QEvent* event) {
+    if (event->type() == QEvent::WindowActivate || event->type() == QEvent::WindowDeactivate) {
+        update(); // the chrome backdrop fill tracks window focus
+    }
+    return QWidget::event(event);
+}
+
 void AppStatusTaskStrip::paintEvent(QPaintEvent* event) {
     Q_UNUSED(event);
     QPainter painter(this);
@@ -316,8 +331,24 @@ void AppStatusTaskStrip::paintEvent(QPaintEvent* event) {
 
     const fluent::FluentElement::Colors tokens = themeColorsRef();
 
-    // Background & top border
-    painter.fillRect(rect(), tokens.bgLayerAlt);
+    // Same window-chrome backdrop contract as the title bar and NavigationView: never cover
+    // an OS-composited or app-painted material with a second, independently aligned fill.
+    const bool paintedMaterial = fluent::windowing::windowBackdropUsesPaintedMaterial(window());
+    const QColor backdrop =
+        paintedMaterial ? QColor() : fluent::windowing::windowChromeBackdropFill(*this, window(), isActiveWindow());
+
+    if (paintedMaterial) {
+        // The window owns the continuous software material; filling here would show a seam.
+    } else if (backdrop.isValid()) {
+        painter.fillRect(rect(), backdrop);
+    } else if (fluent::windowing::windowBackdropRequiresTransparentClear(window())) {
+        painter.setCompositionMode(QPainter::CompositionMode_Source);
+        painter.fillRect(rect(), Qt::transparent);
+        painter.setCompositionMode(QPainter::CompositionMode_SourceOver);
+    } else {
+        painter.fillRect(rect(), tokens.bgLayerAlt);
+    }
+
     painter.setPen(tokens.strokeCard);
     painter.drawLine(0, 0, width(), 0);
 

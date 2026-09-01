@@ -5,6 +5,8 @@
 
 #include <FluentQt/Design.h>
 #include <FluentQt/Foundation.h>
+#include <FluentQt/Windowing.h>
+#include <QEvent>
 #include <QPointer>
 #include <QWidget>
 
@@ -112,6 +114,7 @@ Q_SIGNALS:
     void saveFailureDetailsRequested();
 
 protected:
+    bool event(QEvent* event) override;
     void paintEvent(QPaintEvent* event) override;
     void resizeEvent(QResizeEvent* event) override;
     void mousePressEvent(QMouseEvent* event) override;

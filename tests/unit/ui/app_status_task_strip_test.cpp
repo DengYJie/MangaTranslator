@@ -32,7 +32,7 @@ private:
 private Q_SLOTS:
     void initialLayoutAndMetrics() {
         AppStatusTaskStrip strip;
-        QCOMPARE(strip.sizeHint().height(), 24);
+        QCOMPARE(strip.sizeHint().height(), 20);
         QCOMPARE(strip.documentStatus().status, DocumentSaveStatus::NoDocument);
         QCOMPARE(strip.environmentStatus().condition, EnvironmentCondition::Normal);
         QVERIFY(!strip.isFlyoutOpen());
@@ -43,7 +43,7 @@ private Q_SLOTS:
         DocumentStatusSnapshot savedStatus;
         savedStatus.status = DocumentSaveStatus::Saved;
         strip.setDocumentStatus(savedStatus);
-        QCOMPARE(strip.sizeHint().height(), 32);
+        QCOMPARE(strip.sizeHint().height(), 28);
     }
 
     void documentStatusChanges() {

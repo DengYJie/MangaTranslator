@@ -14,7 +14,7 @@
 
 1. 32 px `TitleBar`。
 2. 主体：导航 Surface + 共享内容宿主。
-3. 32 px `AppStatusTaskStrip`。
+3. 28 px `AppStatusTaskStrip`。
 
 标题栏从左到右严格为：
 
