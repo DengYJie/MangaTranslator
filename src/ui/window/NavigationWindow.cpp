@@ -58,6 +58,7 @@ void NavigationWindow::initNavigation() {
     if (titleBar()) {
         titleBar()->setBackButtonVisible(false);
         titleBar()->setBackButtonEnabled(true);
+        titleBar()->setPaneToggleButtonVisible(false);
 
         connect(titleBar(), &TitleBar::backButtonClicked, this, [this]() {
             if (m_navigationView) {
@@ -308,10 +309,6 @@ void NavigationWindow::syncActivePanelState() {
     if (auto* host = m_navigationView->contentHost()) {
         host->setTransitionEffect(top ? StackContentHost::TransitionEffect::SlideFromLeft
                                       : StackContentHost::TransitionEffect::SlideFromBottom);
-    }
-
-    if (titleBar()) {
-        titleBar()->setPaneToggleButtonVisible(!top);
     }
 }
 

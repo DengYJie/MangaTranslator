@@ -181,6 +181,38 @@ private Q_SLOTS:
         QVERIFY(!translateBtn->isEnabled());
         QVERIFY(translateBtn->toolTip().contains(QStringLiteral("无文本区域")) ||
                 translateBtn->toolTip().contains(QStringLiteral("区域")));
+
+        ui::screen::editor::EditorProcessingState processing;
+        processing.activePageId = pageAt(session, 0);
+        processing.isRunning = true;
+        viewModel.updateProcessingState(processing);
+        QCOMPARE(translateBtn->text(), QStringLiteral("取消"));
+    }
+
+    void commandBarUsesCompactLabeledPrimaryActions() {
+        test::FakeThumbnailStore thumbnails;
+        test::FakePageImageLoader images;
+        application::OperationRegistry registry;
+        ui::screen::editor::EditorViewModel viewModel(&thumbnails, &images, &registry);
+        ui::screen::editor::EditorPage page(&viewModel);
+        page.resize(1200, 800);
+        page.show();
+        QCoreApplication::processEvents();
+
+        auto* commandBar = page.findChild<QWidget*>(QStringLiteral("editorCommandBar"));
+        auto* undoButton = commandBar->findChild<fluent::basicinput::Button*>(QStringLiteral("undoButton"));
+        auto* translateButton =
+            commandBar->findChild<fluent::basicinput::Button*>(QStringLiteral("smartTranslateButton"));
+        auto* saveButton = commandBar->findChild<fluent::basicinput::Button*>(QStringLiteral("saveButton"));
+
+        QCOMPARE(commandBar->height(), 40);
+        QCOMPARE(undoButton->height(), 32);
+        QCOMPARE(undoButton->fluentLayout(), fluent::basicinput::Button::IconBefore);
+        QCOMPARE(undoButton->text(), QStringLiteral("撤销"));
+        QCOMPARE(translateButton->fluentLayout(), fluent::basicinput::Button::IconBefore);
+        QCOMPARE(translateButton->text(), QStringLiteral("智能翻译"));
+        QCOMPARE(saveButton->fluentLayout(), fluent::basicinput::Button::IconBefore);
+        QCOMPARE(saveButton->text(), QStringLiteral("保存"));
     }
 
     void inspectorActionButtonsExist() {

@@ -60,6 +60,8 @@ private:
     void render(const screen::editor::EditorState& state);
     void setupShortcuts();
     fluent::basicinput::Button* createIconButton(const QString& glyph, const QString& tooltip, const QString& name);
+    fluent::basicinput::Button*
+    createLabeledButton(const QString& glyph, const QString& text, const QString& tooltip, const QString& name);
     bool shouldIgnoreShortcut() const;
 
     screen::editor::EditorViewModel* m_viewModel;

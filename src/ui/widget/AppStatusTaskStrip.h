@@ -117,6 +117,7 @@ protected:
     void mousePressEvent(QMouseEvent* event) override;
 
 private:
+    bool hasVisibleStatusContent() const;
     void updateResponsiveLayout();
     void checkTaskCompletionTransitions(const QVector<application::OperationSnapshot>& newOperations);
     void updateActiveTaskProjection();

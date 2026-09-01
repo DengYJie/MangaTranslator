@@ -16,7 +16,8 @@
 namespace manga::ui::widget {
 
 namespace {
-constexpr int kBaseHeight = 32;
+constexpr int kIdleHeight = 24;
+constexpr int kActiveHeight = 32;
 constexpr int kHorizontalPadding = 12;
 constexpr int kSectionSpacing = 16;
 constexpr int kIconSize = 16;
@@ -26,7 +27,7 @@ constexpr int kMenuBtnWidth = 28;
 AppStatusTaskStrip::AppStatusTaskStrip(QWidget* parent)
     : QWidget(parent), m_operationModel(new model::OperationListModel(this)) {
     setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
-    setMinimumHeight(kBaseHeight);
+    setMinimumHeight(kIdleHeight);
     setAccessibleName(tr("应用状态与后台任务栏"));
     setToolTip(tr("显示文档保存状态与后台处理任务"));
 
@@ -46,11 +47,12 @@ AppStatusTaskStrip::~AppStatusTaskStrip() {
 
 QSize AppStatusTaskStrip::sizeHint() const {
     const int fontHeight = fontMetrics().height();
-    return {800, qMax(kBaseHeight, fontHeight + 10)};
+    const int contentHeight = hasVisibleStatusContent() ? kActiveHeight : kIdleHeight;
+    return {800, qMax(contentHeight, fontHeight + 10)};
 }
 
 QSize AppStatusTaskStrip::minimumSizeHint() const {
-    return {100, kBaseHeight};
+    return {100, kIdleHeight};
 }
 
 void AppStatusTaskStrip::onThemeUpdated() {
@@ -61,6 +63,7 @@ void AppStatusTaskStrip::setOperations(const QVector<application::OperationSnaps
     checkTaskCompletionTransitions(operations);
     m_operationModel->setOperations(operations);
     updateActiveTaskProjection();
+    updateGeometry();
     updateResponsiveLayout();
     update();
 }
@@ -70,6 +73,7 @@ void AppStatusTaskStrip::setDocumentStatus(const DocumentStatusSnapshot& docStat
         return;
     }
     m_docStatus = docStatus;
+    updateGeometry();
     updateResponsiveLayout();
     update();
 }
@@ -79,6 +83,7 @@ void AppStatusTaskStrip::setEnvironmentStatus(const EnvironmentStatusSnapshot& e
         return;
     }
     m_envStatus = envStatus;
+    updateGeometry();
     updateResponsiveLayout();
     update();
 }
@@ -178,8 +183,14 @@ void AppStatusTaskStrip::settleCompletionSummaryForTest() {
     }
     m_hasCompletionSummary = false;
     m_completionText.clear();
+    updateGeometry();
     updateResponsiveLayout();
     update();
+}
+
+bool AppStatusTaskStrip::hasVisibleStatusContent() const {
+    return m_docStatus.status != DocumentSaveStatus::NoDocument || m_activeTaskCount > 0 || m_hasCompletionSummary ||
+           m_envStatus.condition != EnvironmentCondition::Normal;
 }
 
 void AppStatusTaskStrip::triggerActiveTaskClickForTest() {

@@ -1,6 +1,7 @@
 #include "ui/navigation/INavigationRegistrar.h"
 #include "ui/navigation/NavigationPanel.h"
 #include "ui/window/NavigationWindow.h"
+#include "ui/window/TitleBar.h"
 
 #include <QtTest>
 
@@ -13,6 +14,8 @@ private slots:
         window::NavigationWindow window;
         QVERIFY(window.mainNavigationPanel() != nullptr);
         QCOMPARE(window.activeNavigationSurfaceId(), QStringLiteral("main"));
+        QVERIFY(window.titleBar() != nullptr);
+        QVERIFY(!window.titleBar()->isPaneToggleButtonVisible());
     }
 
     void presentRouteSwitchesPageAndSurface() {

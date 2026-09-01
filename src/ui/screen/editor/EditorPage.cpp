@@ -225,6 +225,7 @@ void EditorPage::buildUi() {
     m_commandBarScrollArea->setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
     m_commandBarScrollArea->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     m_commandBarScrollArea->setWidgetResizable(false);
+    m_commandBarScrollArea->setFixedHeight(40);
     m_commandBarScrollArea->setWidget(m_commandBar);
     canvasPaneLayout->addWidget(m_commandBarScrollArea);
 

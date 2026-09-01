@@ -17,6 +17,8 @@ namespace manga::ui::widget {
 
 EditorCommandBar::EditorCommandBar(EditorViewModel* viewModel, QWidget* parent)
     : QWidget(parent), m_viewModel(viewModel) {
+    setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Fixed);
+    setFixedHeight(40);
     buildUi();
     setupShortcuts();
 
@@ -34,48 +36,65 @@ bool EditorCommandBar::shouldIgnoreShortcut() const {
 
 void EditorCommandBar::buildUi() {
     auto* layout = new QHBoxLayout(this);
-    layout->setContentsMargins(0, 0, 0, 0);
+    layout->setContentsMargins(4, 4, 4, 4);
     layout->setSpacing(4);
 
-    m_undoButton = createIconButton(QStringLiteral("\uE7A7"), tr("撤销 (Ctrl+Z)"), QStringLiteral("undoButton"));
-    m_redoButton = createIconButton(QStringLiteral("\uE7A6"), tr("重做 (Ctrl+Y)"), QStringLiteral("redoButton"));
+    m_undoButton =
+        createLabeledButton(Typography::Icons::Undo, tr("撤销"), tr("撤销 (Ctrl+Z)"), QStringLiteral("undoButton"));
+    m_redoButton =
+        createLabeledButton(Typography::Icons::Redo, tr("重做"), tr("重做 (Ctrl+Y)"), QStringLiteral("redoButton"));
 
-    m_zoomOutButton = createIconButton(QStringLiteral("\uE71F"), tr("缩小 (-)"), QStringLiteral("zoomOutButton"));
+    m_zoomOutButton = createIconButton(Typography::Icons::ZoomOut, tr("缩小 (-)"), QStringLiteral("zoomOutButton"));
     m_zoomValueLabel = new fluent::textfields::Label(this);
     m_zoomValueLabel->setObjectName(QStringLiteral("zoomValueLabel"));
     m_zoomValueLabel->setFluentTypography(Typography::FontRole::Caption);
     m_zoomValueLabel->setMinimumWidth(44);
     m_zoomValueLabel->setAlignment(Qt::AlignCenter);
-    m_zoomInButton = createIconButton(QStringLiteral("\uE8A3"), tr("放大 (+)"), QStringLiteral("zoomInButton"));
+    m_zoomInButton = createIconButton(Typography::Icons::ZoomIn, tr("放大 (+)"), QStringLiteral("zoomInButton"));
     m_fitToPageButton =
-        createIconButton(QStringLiteral("\uE9A1"), tr("适应页面 (0)"), QStringLiteral("fitToPageButton"));
+        createIconButton(Typography::Icons::Zoom, tr("适应页面 (0)"), QStringLiteral("fitToPageButton"));
     m_actualSizeButton =
-        createIconButton(QStringLiteral("\uE9A2"), tr("实际大小 (1)"), QStringLiteral("actualSizeButton"));
+        createIconButton(Typography::Icons::glyph(QStringLiteral("ic_fluent_text_font_size_20_regular")),
+                         tr("实际大小 (1)"),
+                         QStringLiteral("actualSizeButton"));
 
-    m_selectButton = createIconButton(QStringLiteral("\uE8B0"), tr("选择工具 (V)"), QStringLiteral("selectButton"));
+    m_selectButton = createIconButton(Typography::Icons::glyph(QStringLiteral("ic_fluent_cursor_20_regular")),
+                                      tr("选择工具 (V)"),
+                                      QStringLiteral("selectButton"));
     m_selectButton->setCheckable(true);
-    m_panButton = createIconButton(QStringLiteral("\uE756"), tr("平移工具 (H)"), QStringLiteral("panButton"));
+    m_panButton = createIconButton(Typography::Icons::glyph(QStringLiteral("ic_fluent_hand_left_20_regular")),
+                                   tr("平移工具 (H)"),
+                                   QStringLiteral("panButton"));
     m_panButton->setCheckable(true);
-    m_createRegionButton =
-        createIconButton(QStringLiteral("\uE710"), tr("创建文本区域 (R)"), QStringLiteral("createRegionButton"));
+    m_createRegionButton = createIconButton(Typography::Icons::glyph(QStringLiteral("ic_fluent_scan_text_20_regular")),
+                                            tr("创建文本区域 (R)"),
+                                            QStringLiteral("createRegionButton"));
     m_createRegionButton->setCheckable(true);
     m_previewSelectorButton = createIconButton(
-        QStringLiteral("\uE890"), tr("切换原图/译文预览 (Space)"), QStringLiteral("previewSelectorButton"));
+        Typography::Icons::View, tr("切换原图/译文预览 (Space)"), QStringLiteral("previewSelectorButton"));
     m_smartTranslateButton =
-        createIconButton(QStringLiteral("\uE774"), tr("智能翻译 (Ctrl+T)"), QStringLiteral("smartTranslateButton"));
+        createLabeledButton(Typography::Icons::glyph(QStringLiteral("ic_fluent_translate_20_regular")),
+                            tr("智能翻译"),
+                            tr("智能翻译 (Ctrl+T)"),
+                            QStringLiteral("smartTranslateButton"));
     m_smartTranslateButton->setFluentStyle(fluent::basicinput::Button::Accent);
-    m_adoptButton = createIconButton(QStringLiteral("\uE73E"), tr("采纳建议"), QStringLiteral("adoptButton"));
+    m_adoptButton = createIconButton(Typography::Icons::CheckMark, tr("采纳建议"), QStringLiteral("adoptButton"));
     m_adoptButton->setFluentStyle(fluent::basicinput::Button::Accent);
     m_adoptButton->setVisible(false);
-    m_rejectButton = createIconButton(QStringLiteral("\uE711"), tr("拒绝建议"), QStringLiteral("rejectButton"));
+    m_rejectButton = createIconButton(Typography::Icons::Cancel, tr("拒绝建议"), QStringLiteral("rejectButton"));
     m_rejectButton->setVisible(false);
     m_pagePaneToggleButton =
-        createIconButton(QStringLiteral("\uE8A0"), tr("页面列表"), QStringLiteral("pagePaneToggleButton"));
+        createIconButton(Typography::Icons::glyph(QStringLiteral("ic_fluent_panel_left_text_20_regular")),
+                         tr("页面列表"),
+                         QStringLiteral("pagePaneToggleButton"));
     m_pagePaneToggleButton->setCheckable(true);
     m_inspectorPaneToggleButton =
-        createIconButton(QStringLiteral("\uE8A7"), tr("属性面板"), QStringLiteral("inspectorPaneToggleButton"));
+        createIconButton(Typography::Icons::glyph(QStringLiteral("ic_fluent_panel_right_20_regular")),
+                         tr("属性面板"),
+                         QStringLiteral("inspectorPaneToggleButton"));
     m_inspectorPaneToggleButton->setCheckable(true);
-    m_saveButton = createIconButton(QStringLiteral("\uE74E"), tr("保存项目 (Ctrl+S)"), QStringLiteral("saveButton"));
+    m_saveButton =
+        createLabeledButton(Typography::Icons::Save, tr("保存"), tr("保存项目 (Ctrl+S)"), QStringLiteral("saveButton"));
 
     layout->addWidget(m_undoButton);
     layout->addWidget(m_redoButton);
@@ -153,10 +172,22 @@ EditorCommandBar::createIconButton(const QString& glyph, const QString& tooltip,
     auto* btn = new fluent::basicinput::Button(this);
     btn->setObjectName(name);
     btn->setFluentStyle(fluent::basicinput::Button::Subtle);
+    btn->setFluentSize(fluent::basicinput::Button::StandardSize);
     btn->setFluentLayout(fluent::basicinput::Button::IconOnly);
-    btn->setIconGlyph(glyph);
+    btn->setFixedHeight(32);
+    btn->setIconGlyph(glyph, Typography::IconSize::Standard);
     btn->setToolTip(tooltip);
     btn->setAccessibleName(tooltip);
+    return btn;
+}
+
+fluent::basicinput::Button* EditorCommandBar::createLabeledButton(const QString& glyph,
+                                                                  const QString& text,
+                                                                  const QString& tooltip,
+                                                                  const QString& name) {
+    auto* btn = createIconButton(glyph, tooltip, name);
+    btn->setText(text);
+    btn->setFluentLayout(fluent::basicinput::Button::IconBefore);
     return btn;
 }
 
@@ -185,17 +216,22 @@ void EditorCommandBar::render(const EditorState& state) {
 
     if (state.processing.isRunning) {
         m_smartTranslateButton->setEnabled(true);
-        m_smartTranslateButton->setIconGlyph(QStringLiteral("\uE711"));
+        m_smartTranslateButton->setText(tr("取消"));
+        m_smartTranslateButton->setIconGlyph(Typography::Icons::Cancel, Typography::IconSize::Standard);
         m_smartTranslateButton->setToolTip(tr("取消处理"));
         m_smartTranslateButton->setAccessibleName(tr("取消处理"));
     } else if (hasPage && !hasRegions) {
         m_smartTranslateButton->setEnabled(false);
-        m_smartTranslateButton->setIconGlyph(QStringLiteral("\uE774"));
+        m_smartTranslateButton->setText(tr("智能翻译"));
+        m_smartTranslateButton->setIconGlyph(Typography::Icons::glyph(QStringLiteral("ic_fluent_translate_20_regular")),
+                                             Typography::IconSize::Standard);
         m_smartTranslateButton->setToolTip(tr("当前页无文本区域，请先创建或检测区域"));
         m_smartTranslateButton->setAccessibleName(tr("智能翻译 (当前页无文本区域)"));
     } else {
         m_smartTranslateButton->setEnabled(hasPage && hasRegions);
-        m_smartTranslateButton->setIconGlyph(QStringLiteral("\uE774"));
+        m_smartTranslateButton->setText(tr("智能翻译"));
+        m_smartTranslateButton->setIconGlyph(Typography::Icons::glyph(QStringLiteral("ic_fluent_translate_20_regular")),
+                                             Typography::IconSize::Standard);
         m_smartTranslateButton->setToolTip(tr("智能翻译 (Ctrl+T)"));
         m_smartTranslateButton->setAccessibleName(tr("智能翻译"));
     }
