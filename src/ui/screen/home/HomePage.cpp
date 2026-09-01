@@ -29,7 +29,7 @@ HomePage::HomePage(HomeViewModel* viewModel, QWidget* parent) : base::BasePage(p
     connect(m_viewModel, &HomeViewModel::openProjectDialogRequested, this, [this]() {
         const QString dir = QFileDialog::getExistingDirectory(this, tr("打开 MangaTranslator 项目"));
         if (!dir.isEmpty()) {
-            m_viewModel->openProjectPath(dir);
+            m_viewModel->requestOpenProjectPath(dir);
         }
     });
 
@@ -87,7 +87,7 @@ void HomePage::buildUi() {
     connect(m_retryButton, &fluent::basicinput::Button::clicked, this, [this]() {
         if (m_currentNoticeAction == application::RecoveryAction::Retry) {
             if (!m_currentRetryPath.isEmpty()) {
-                m_viewModel->openProjectPath(m_currentRetryPath);
+                m_viewModel->requestOpenProjectPath(m_currentRetryPath);
             }
         } else if (m_currentNoticeAction == application::RecoveryAction::ChoosePath) {
             m_viewModel->requestOpenProjectDialog();
@@ -135,7 +135,7 @@ void HomePage::buildUi() {
         if (index.isValid()) {
             const QString path = index.data(RecentProjectsModel::PathRole).toString();
             if (!path.isEmpty()) {
-                m_viewModel->openProjectPath(path);
+                m_viewModel->requestOpenProjectPath(path);
             }
         }
     };
@@ -232,7 +232,7 @@ void HomePage::showContextMenu(const QPoint& pos) {
     auto* removeAction = menu.addAction(tr("从最近列表中移除"));
     const QAction* selected = menu.exec(m_gridView->viewport()->mapToGlobal(pos));
     if (selected == openAction) {
-        m_viewModel->openProjectPath(path);
+        m_viewModel->requestOpenProjectPath(path);
     } else if (selected == showInFolderAction) {
         QDesktopServices::openUrl(QUrl::fromLocalFile(path));
     } else if (selected == removeAction) {

@@ -24,8 +24,11 @@
 #include <FluentQt/DialogsFlyouts.h>
 #include <FluentQt/FluentQt.h>
 #include <QApplication>
+#include <QDir>
+#include <QFileInfo>
 #include <QGuiApplication>
 #include <QLabel>
+#include <QMetaObject>
 #include <QStyleHints>
 #include <QTimer>
 
@@ -209,13 +212,30 @@ int Application::run() {
 
     // --- Close/Navigation Interception Workflow ---
     auto pendingAction = std::make_shared<QString>(); // "" means window close, otherwise target route
+    auto pendingProjectPath = std::make_shared<QString>();
 
-    auto handleProjectClose = [mainWindow, controller, pendingAction]() {
-        if (pendingAction->isEmpty()) {
-            mainWindow->forceClose();
-        } else {
-            mainWindow->forceNavigate(*pendingAction);
+    auto handleProjectClose = [homeViewModel, mainWindow, controller, pendingAction, pendingProjectPath]() {
+        const QString projectPath = *pendingProjectPath;
+        if (!projectPath.isEmpty()) {
+            pendingProjectPath->clear();
+            QMetaObject::invokeMethod(
+                mainWindow,
+                [homeViewModel, projectPath]() { homeViewModel->openProjectPath(projectPath); },
+                Qt::QueuedConnection);
+            return;
         }
+
+        const QString action = *pendingAction;
+        QMetaObject::invokeMethod(
+            mainWindow,
+            [mainWindow, controller, action]() {
+                if (action.isEmpty()) {
+                    mainWindow->forceClose();
+                } else {
+                    mainWindow->forceNavigate(action);
+                }
+            },
+            Qt::QueuedConnection);
     };
 
     QObject::connect(mainWindow,
@@ -230,28 +250,47 @@ int Application::run() {
                          editorViewModel->requestCloseProject();
                      });
 
-    QObject::connect(
-        mainWindow,
-        &ui::window::MainWindow::navigationInterceptRequested,
-        mainWindow,
-        [editorViewModel, settingsViewModel, pendingAction, controller, mainWindow](const QString& routeKey) {
-            *pendingAction = routeKey;
-            if (routeKey.startsWith(QLatin1String("settings"))) {
-                if (editorViewModel->hasSession() && editorViewModel->state().saveState.isDirty) {
-                    editorViewModel->requestCloseProject();
-                } else {
-                    controller->navigate(routeKey);
-                }
-                return;
-            }
+    QObject::connect(homeViewModel,
+                     &ui::screen::home::HomeViewModel::projectOpenRequested,
+                     mainWindow,
+                     [homeViewModel, editorViewModel, pendingProjectPath](const QString& path) {
+                         const auto normalizePath = [](const QString& value) {
+                             const QFileInfo info(value);
+                             const QString canonical = info.canonicalFilePath();
+                             return QDir::cleanPath(canonical.isEmpty() ? info.absoluteFilePath() : canonical);
+                         };
+                         if (editorViewModel->hasSession() &&
+                             normalizePath(path).compare(normalizePath(editorViewModel->projectRootPath()),
+                                                         Qt::CaseInsensitive) == 0) {
+                             return;
+                         }
 
-            if (mainWindow->activeNavigationSurfaceId() == QLatin1String("settings") &&
-                settingsViewModel->state().fieldErrors.contains(QStringLiteral("persist"))) {
-                return;
-            }
+                         *pendingProjectPath = path;
+                         if (editorViewModel->hasSession() && editorViewModel->state().saveState.isDirty) {
+                             editorViewModel->requestCloseProject();
+                         } else {
+                             pendingProjectPath->clear();
+                             homeViewModel->openProjectPath(path);
+                         }
+                     });
 
-            editorViewModel->requestCloseProject();
-        });
+    QObject::connect(mainWindow,
+                     &ui::window::MainWindow::navigationInterceptRequested,
+                     mainWindow,
+                     [settingsViewModel, pendingAction, controller, mainWindow](const QString& routeKey) {
+                         *pendingAction = routeKey;
+                         if (routeKey.startsWith(QLatin1String("settings"))) {
+                             controller->navigate(routeKey);
+                             return;
+                         }
+
+                         if (mainWindow->activeNavigationSurfaceId() == QLatin1String("settings") &&
+                             settingsViewModel->state().fieldErrors.contains(QStringLiteral("persist"))) {
+                             return;
+                         }
+
+                         controller->navigate(routeKey);
+                     });
 
     QObject::connect(
         editorViewModel, &ui::screen::editor::EditorViewModel::projectClosed, mainWindow, handleProjectClose);
@@ -259,7 +298,7 @@ int Application::run() {
     QObject::connect(editorViewModel,
                      &ui::screen::editor::EditorViewModel::closeDecisionRequested,
                      mainWindow,
-                     [editorViewModel, mainWindow, handleProjectClose](
+                     [editorViewModel, mainWindow, handleProjectClose, pendingProjectPath](
                          const manga::ui::screen::editor::ProjectCloseSummary& summary) {
                          auto* dialog = new fluent::dialogs_flyouts::ContentDialog(mainWindow);
                          dialog->setTitle(summary.projectName);
@@ -306,7 +345,10 @@ int Application::run() {
                          QObject::connect(dialog,
                                           &fluent::dialogs_flyouts::ContentDialog::closeButtonClicked,
                                           editorViewModel,
-                                          &ui::screen::editor::EditorViewModel::cancelClose);
+                                          [editorViewModel, pendingProjectPath]() {
+                                              pendingProjectPath->clear();
+                                              editorViewModel->cancelClose();
+                                          });
 
                          dialog->show();
                      });

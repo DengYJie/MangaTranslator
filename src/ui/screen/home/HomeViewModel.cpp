@@ -22,6 +22,14 @@ void HomeViewModel::refresh() {
     updateState([this](HomeState& state) { state.recentProjects = m_recentStore->loadRecentProjects(); });
 }
 
+void HomeViewModel::requestOpenProjectPath(const QString& path) {
+    const QString trimmed = path.trimmed();
+    if (m_state.isOpeningProject || trimmed.isEmpty()) {
+        return;
+    }
+    Q_EMIT projectOpenRequested(trimmed);
+}
+
 void HomeViewModel::openProjectPath(const QString& path) {
     const QString trimmed = path.trimmed();
     if (m_state.isOpeningProject || trimmed.isEmpty()) {

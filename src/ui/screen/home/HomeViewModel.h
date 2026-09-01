@@ -26,6 +26,7 @@ public:
                   QObject* parent = nullptr);
 
     void refresh();
+    void requestOpenProjectPath(const QString& path);
     void openProjectPath(const QString& path);
     void removeRecent(const QString& path);
     void dismissNotice();
@@ -37,6 +38,7 @@ Q_SIGNALS:
     void stateChanged(const HomeState& state);
     void toastRequested(const QString& message, bool isError);
     void openProjectDialogRequested();
+    void projectOpenRequested(const QString& path);
     void projectOpened(const application::OpenedProjectSession& session);
 
 protected:
