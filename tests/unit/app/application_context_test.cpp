@@ -21,26 +21,15 @@
 #include "domain/model/TextRegion.h"
 #include "network/translation/OpenAiCompatibleTranslator.h"
 #include "network/translation/ProviderConfig.h"
+#include "ui/screen/editor/EditorPage.h"
+#include "ui/screen/editor/EditorViewModel.h"
+#include "ui/window/MainWindow.h"
 
 #include <QCoreApplication>
 #include <QSettings>
 #include <QTemporaryDir>
 #include <QTimer>
 #include <QtTest>
-// FluentQt compatibility under QT_NO_KEYWORDS
-#ifndef slots
-#define slots Q_SLOTS
-#endif
-#ifndef signals
-#define signals Q_SIGNALS
-#endif
-#ifndef emit
-#define emit Q_EMIT
-#endif
-
-#include "ui/screen/editor/EditorPage.h"
-#include "ui/screen/editor/EditorViewModel.h"
-#include "ui/window/MainWindow.h"
 
 namespace {
 

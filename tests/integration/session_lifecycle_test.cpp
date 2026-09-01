@@ -2,6 +2,8 @@
 #include "FakeOcrEngine.h"
 #include "FakeTranslator.h"
 #include "IntegrationHarness.h"
+#include "app/Application.h"
+#include "app/ApplicationContext.h"
 #include "application/dto/ProjectDto.h"
 #include "application/usecase/import/ImportUseCases.h"
 #include "application/usecase/project/ProjectUseCases.h"
@@ -10,6 +12,10 @@
 #include "domain/model/ComicProject.h"
 #include "domain/model/LanguageCode.h"
 #include "services/ocr/OcrModelValidator.h"
+#include "ui/screen/editor/EditorProcessingController.h"
+#include "ui/screen/editor/EditorState.h"
+#include "ui/screen/editor/EditorViewModel.h"
+#include "ui/window/MainWindow.h"
 
 #include <QCoreApplication>
 #include <QDir>
@@ -22,24 +28,6 @@
 #include <QTemporaryDir>
 #include <QTimer>
 #include <QtTest>
-
-// FluentQt compatibility under QT_NO_KEYWORDS
-#ifndef slots
-#define slots Q_SLOTS
-#endif
-#ifndef signals
-#define signals Q_SIGNALS
-#endif
-#ifndef emit
-#define emit Q_EMIT
-#endif
-
-#include "app/Application.h"
-#include "app/ApplicationContext.h"
-#include "ui/screen/editor/EditorProcessingController.h"
-#include "ui/screen/editor/EditorState.h"
-#include "ui/screen/editor/EditorViewModel.h"
-#include "ui/window/MainWindow.h"
 
 #include <memory>
 

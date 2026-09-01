@@ -746,11 +746,6 @@ qt_add_executable(manga_tests_ui_export_snapshot_builder
 manga_apply_project_options(manga_tests_ui_export_snapshot_builder)
 set_target_properties(manga_tests_ui_export_snapshot_builder PROPERTIES AUTOMOC ON)
 
-target_compile_definitions(manga_tests_ui_export_snapshot_builder
-    PRIVATE
-        QT_NO_KEYWORDS
-)
-
 target_include_directories(manga_tests_ui_export_snapshot_builder
     PRIVATE
         "${PROJECT_SOURCE_DIR}/tests/unit/application"
@@ -781,11 +776,6 @@ qt_add_executable(manga_tests_ui_editor_export
 )
 manga_apply_project_options(manga_tests_ui_editor_export)
 set_target_properties(manga_tests_ui_editor_export PROPERTIES AUTOMOC ON)
-
-target_compile_definitions(manga_tests_ui_editor_export
-    PRIVATE
-        QT_NO_KEYWORDS
-)
 
 target_include_directories(manga_tests_ui_editor_export
     PRIVATE

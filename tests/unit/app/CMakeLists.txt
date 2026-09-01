@@ -1,7 +1,6 @@
 qt_add_executable(manga_tests_app application_context_test.cpp)
 manga_apply_project_options(manga_tests_app)
 set_target_properties(manga_tests_app PROPERTIES AUTOMOC ON)
-target_compile_definitions(manga_tests_app PRIVATE QT_NO_KEYWORDS)
 
 target_include_directories(manga_tests_app
     PRIVATE

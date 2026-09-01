@@ -22,6 +22,12 @@
 #include "network/translation/ProviderConfig.h"
 #include "network/translation/RetryPolicy.h"
 #include "services/ocr/OcrFactory.h"
+#include "ui/error/RecoveryPresenter.h"
+#include "ui/manga/MangaCanvas.h"
+#include "ui/screen/editor/EditorPage.h"
+#include "ui/screen/editor/EditorProcessingController.h"
+#include "ui/screen/editor/EditorState.h"
+#include "ui/screen/editor/EditorViewModel.h"
 
 #include <QApplication>
 #include <QCoreApplication>
@@ -33,24 +39,6 @@
 #include <QImage>
 #include <QSignalSpy>
 #include <QtTest>
-
-// FluentQt compatibility under QT_NO_KEYWORDS
-#ifndef slots
-#define slots Q_SLOTS
-#endif
-#ifndef signals
-#define signals Q_SIGNALS
-#endif
-#ifndef emit
-#define emit Q_EMIT
-#endif
-
-#include "ui/error/RecoveryPresenter.h"
-#include "ui/manga/MangaCanvas.h"
-#include "ui/screen/editor/EditorPage.h"
-#include "ui/screen/editor/EditorProcessingController.h"
-#include "ui/screen/editor/EditorState.h"
-#include "ui/screen/editor/EditorViewModel.h"
 
 #include <memory>
 

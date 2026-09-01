@@ -6,7 +6,6 @@ set_target_properties(manga_tests_integration_e01_manual_offline PROPERTIES AUTO
 
 target_compile_definitions(manga_tests_integration_e01_manual_offline
     PRIVATE
-        QT_NO_KEYWORDS
         MANGA_TEST_FIXTURES_DIR="${PROJECT_SOURCE_DIR}/tests/fixtures"
 )
 
@@ -45,7 +44,6 @@ set_target_properties(manga_tests_integration_e02_ocr PROPERTIES AUTOMOC ON)
 
 target_compile_definitions(manga_tests_integration_e02_ocr
     PRIVATE
-        QT_NO_KEYWORDS
         MANGA_TEST_FIXTURES_DIR="${PROJECT_SOURCE_DIR}/tests/fixtures"
 )
 
@@ -84,7 +82,6 @@ set_target_properties(manga_tests_integration_e03_translation PROPERTIES AUTOMOC
 
 target_compile_definitions(manga_tests_integration_e03_translation
     PRIVATE
-        QT_NO_KEYWORDS
         MANGA_TEST_FIXTURES_DIR="${PROJECT_SOURCE_DIR}/tests/fixtures"
 )
 
@@ -125,7 +122,6 @@ set_target_properties(manga_tests_integration_e04_processing PROPERTIES AUTOMOC 
 
 target_compile_definitions(manga_tests_integration_e04_processing
     PRIVATE
-        QT_NO_KEYWORDS
         MANGA_TEST_FIXTURES_DIR="${PROJECT_SOURCE_DIR}/tests/fixtures"
 )
 
@@ -164,7 +160,6 @@ set_target_properties(manga_tests_integration_e05_export PROPERTIES AUTOMOC ON)
 
 target_compile_definitions(manga_tests_integration_e05_export
     PRIVATE
-        QT_NO_KEYWORDS
         MANGA_TEST_FIXTURES_DIR="${PROJECT_SOURCE_DIR}/tests/fixtures"
 )
 
@@ -203,7 +198,6 @@ set_target_properties(manga_tests_integration_persistence PROPERTIES AUTOMOC ON)
 
 target_compile_definitions(manga_tests_integration_persistence
     PRIVATE
-        QT_NO_KEYWORDS
         MANGA_TEST_FIXTURES_DIR="${PROJECT_SOURCE_DIR}/tests/fixtures"
 )
 
@@ -242,7 +236,6 @@ set_target_properties(manga_tests_integration_session PROPERTIES AUTOMOC ON)
 
 target_compile_definitions(manga_tests_integration_session
     PRIVATE
-        QT_NO_KEYWORDS
         MANGA_TEST_FIXTURES_DIR="${PROJECT_SOURCE_DIR}/tests/fixtures"
 )
 
@@ -284,7 +277,6 @@ set_target_properties(manga_tests_integration_recovery PROPERTIES AUTOMOC ON)
 
 target_compile_definitions(manga_tests_integration_recovery
     PRIVATE
-        QT_NO_KEYWORDS
         MANGA_TEST_FIXTURES_DIR="${PROJECT_SOURCE_DIR}/tests/fixtures"
 )
 
