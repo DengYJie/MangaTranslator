@@ -264,17 +264,19 @@ struct OpenAiCompatibleTranslator::Job : public std::enable_shared_from_this<Job
                 job->settle(std::unexpected(cancelledError()));
                 return;
             }
-            const auto failure =
-                classifyTransportFailure(static_cast<int>(received.networkError), received.requestBodySent);
-            const auto decision =
-                job->retryPolicy.decide(failure, job->attempt, received.retryAfter, job->remainingDeadlineMs());
-            if (decision.shouldRetry) {
-                ++job->attempt;
-                retryAfter(job, decision.delayMs);
+            if (received.httpStatus == 0) {
+                const auto failure =
+                    classifyTransportFailure(static_cast<int>(received.networkError), received.requestBodySent);
+                const auto decision =
+                    job->retryPolicy.decide(failure, job->attempt, received.retryAfter, job->remainingDeadlineMs());
+                if (decision.shouldRetry) {
+                    ++job->attempt;
+                    retryAfter(job, decision.delayMs);
+                    return;
+                }
+                job->settle(std::unexpected(failure.error));
                 return;
             }
-            job->settle(std::unexpected(failure.error));
-            return;
         }
 
         if (received.httpStatus < 200 || received.httpStatus >= 300) {
