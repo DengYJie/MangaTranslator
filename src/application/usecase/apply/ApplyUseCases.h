@@ -149,26 +149,32 @@ public:
                     promise->finish();
                     return;
                 }
-                if ((*current).size() != request.pageSize || (*current).format() != QImage::Format_RGBA8888) {
+                if ((*current).size() != request.pageSize) {
                     promise->addResult(std::unexpected(detail::applyError(
                         ErrorCategory::Input, "clear.layer_read_failed", "The stored clear layer is not usable")));
                     promise->finish();
                     return;
                 }
+                // The PNG round-trip decodes to ARGB32_Premultiplied; normalize so the commit
+                // stores the same straight-alpha format that export consumes.
+                QImage baseLayer = *current;
+                if (baseLayer.format() != QImage::Format_RGBA8888) {
+                    baseLayer = baseLayer.convertToFormat(QImage::Format_RGBA8888);
+                }
                 const int left = qFloor(request.result.affectedBounds.x);
                 const int top = qFloor(request.result.affectedBounds.y);
-                QPainter painter(&*current);
+                QPainter painter(&baseLayer);
                 painter.setCompositionMode(QPainter::CompositionMode_SourceOver);
                 painter.drawImage(QPoint(left, top), request.result.patch);
                 painter.end();
-                (*current).setColorSpace(QColorSpace(QColorSpace::SRgb));
+                baseLayer.setColorSpace(QColorSpace(QColorSpace::SRgb));
 
                 CommitDerivedLayerRequest commitRequest;
                 commitRequest.projectId = request.projectId;
                 commitRequest.projectRoot = request.projectRoot;
                 commitRequest.pageId = request.pageId;
                 commitRequest.layerKind = DerivedLayerKind::Clear;
-                commitRequest.layer = *current;
+                commitRequest.layer = baseLayer;
                 store->commitDerivedLayer(std::move(commitRequest), request.context)
                     .then([request, promise, relativePath, beforeState](Result<CommitDerivedLayerResponse> committed) {
                         if (!committed) {
