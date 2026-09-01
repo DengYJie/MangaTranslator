@@ -23,8 +23,17 @@ using manga::ui::manga::MangaCanvas;
 class MangaCanvasTest : public QObject {
     Q_OBJECT
 private Q_SLOTS:
-    void canvasKeepsDocumentWorkspaceDark() {
+    void cleanup() {
+        fluent::FluentElement::setTheme(fluent::FluentElement::Light);
+    }
+
+    void canvasBackgroundFollowsTheme() {
+        fluent::FluentElement::setTheme(fluent::FluentElement::Light);
         MangaCanvas canvas;
+
+        QCOMPARE(canvas.backgroundBrush().color(), QColor(QStringLiteral("#F3F3F3")));
+
+        fluent::FluentElement::setTheme(fluent::FluentElement::Dark);
         QCOMPARE(canvas.backgroundBrush().color(), QColor(QStringLiteral("#202124")));
     }
 

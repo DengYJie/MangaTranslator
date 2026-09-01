@@ -27,8 +27,7 @@ using ::manga::domain::RegionId;
 
 namespace {
 constexpr double kZoomLevels[] = {0.05, 0.10, 0.25, 0.50, 0.75, 1.0, 1.5, 2.0, 4.0, 8.0, 16.0};
-const QColor kDefaultCanvasForeground(QStringLiteral("#F3F3F3"));
-const QColor kDocumentWorkspaceBackground(QStringLiteral("#202124"));
+const QColor kDarkDocumentWorkspaceBackground(QStringLiteral("#202124"));
 
 canvas::HandlePosition arrowToPrimaryHandle(int key) noexcept {
     switch (key) {
@@ -91,8 +90,9 @@ MangaCanvas::MangaCanvas(QWidget* parent) : QGraphicsView(parent) {
     m_placeholderCard->hide();
     connect(m_placeholderAction, &fluent::basicinput::Button::clicked, this, &MangaCanvas::placeholderActionActivated);
 
-    m_backgroundColor = kDocumentWorkspaceBackground;
-    m_placeholderTextColor = kDefaultCanvasForeground;
+    const auto& colors = themeColorsRef();
+    m_backgroundColor = effectiveTheme() == Dark ? kDarkDocumentWorkspaceBackground : colors.bgCanvas;
+    m_placeholderTextColor = colors.textPrimary;
     setBackgroundBrush(m_backgroundColor);
 
     m_creationBox = new QGraphicsRectItem();
@@ -112,8 +112,9 @@ MangaCanvas::MangaCanvas(QWidget* parent) : QGraphicsView(parent) {
 MangaCanvas::~MangaCanvas() = default;
 
 void MangaCanvas::onThemeUpdated() {
-    m_backgroundColor = kDocumentWorkspaceBackground;
-    m_placeholderTextColor = kDefaultCanvasForeground;
+    const auto& colors = themeColorsRef();
+    m_backgroundColor = effectiveTheme() == Dark ? kDarkDocumentWorkspaceBackground : colors.bgCanvas;
+    m_placeholderTextColor = colors.textPrimary;
     setBackgroundBrush(m_backgroundColor);
     applyThemeColorsToItems();
     if (viewport()) {
