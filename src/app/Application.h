@@ -21,6 +21,7 @@ namespace manga::app {
 class Application {
 public:
     Application(int& argc, char** argv);
+    Application(int& argc, char** argv, std::unique_ptr<ApplicationContext> injectedContext);
     ~Application();
 
     Application(const Application&) = delete;
@@ -28,6 +29,13 @@ public:
 
     /// Returns the process exit code.
     int run();
+
+    [[nodiscard]] ApplicationContext* context() const noexcept {
+        return m_context.get();
+    }
+    [[nodiscard]] ui::window::MainWindow* mainWindow() const noexcept {
+        return m_mainWindow.get();
+    }
 
 private:
     void applyThemeFromSettings();

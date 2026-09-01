@@ -50,6 +50,9 @@ public:
     void cyclePaneFocus(bool forward = true);
 
     /// Test-only observation hooks.
+    [[nodiscard]] EditorViewModel* viewModelForTest() const noexcept {
+        return m_viewModel;
+    }
     [[nodiscard]] ui::manga::MangaCanvas* canvasForTest() const {
         return m_canvas;
     }

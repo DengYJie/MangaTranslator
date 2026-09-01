@@ -1,4 +1,6 @@
+#include "FakeOcrEngine.h"
 #include "FakeTransport.h"
+#include "app/Application.h"
 #include "app/ApplicationContext.h"
 #include "application/operation/AsyncResult.h"
 #include "application/ports/IAppSettingsStore.h"
@@ -14,19 +16,62 @@
 #include "application/ports/IRecentProjectsStore.h"
 #include "application/ports/ITextLayouter.h"
 #include "application/ports/IThumbnailStore.h"
+#include "domain/model/ComicProject.h"
 #include "domain/model/LanguageCode.h"
 #include "domain/model/TextRegion.h"
 #include "network/translation/OpenAiCompatibleTranslator.h"
 #include "network/translation/ProviderConfig.h"
+#include "ui/screen/editor/EditorPage.h"
+#include "ui/screen/editor/EditorViewModel.h"
+#include "ui/window/MainWindow.h"
 
 #include <QCoreApplication>
 #include <QSettings>
 #include <QTemporaryDir>
+#include <QTimer>
 #include <QtTest>
+
+#include <fstream>
 
 namespace {
 
 using namespace manga::application;
+
+class DestructionTrackingOcrEngine final : public IOcrEngine {
+public:
+    DestructionTrackingOcrEngine(bool* destroyedFlag, bool* completedBeforeDestruction)
+        : m_destroyedFlag(destroyedFlag), m_completedBeforeDestruction(completedBeforeDestruction) {}
+
+    ~DestructionTrackingOcrEngine() override {
+        if (m_destroyedFlag) {
+            *m_destroyedFlag = true;
+        }
+    }
+
+    QFuture<Result<OcrResponse>> recognize(OcrRequest, OperationContext context) override {
+        m_promise = std::make_unique<QPromise<Result<OcrResponse>>>();
+        m_promise->start();
+        auto future = m_promise->future();
+
+        m_stopCallback = std::make_unique<std::stop_callback<std::function<void()>>>(context.stopToken, [this]() {
+            if (m_completedBeforeDestruction && m_destroyedFlag) {
+                *m_completedBeforeDestruction = !(*m_destroyedFlag);
+            }
+            if (m_promise) {
+                m_promise->addResult(std::unexpected(makeApplicationError(
+                    ErrorCategory::Cancelled, QStringLiteral("cancelled.shutdown"), QStringLiteral("Shutdown"))));
+                m_promise->finish();
+            }
+        });
+        return future;
+    }
+
+private:
+    bool* m_destroyedFlag{nullptr};
+    bool* m_completedBeforeDestruction{nullptr};
+    std::unique_ptr<QPromise<Result<OcrResponse>>> m_promise;
+    std::unique_ptr<std::stop_callback<std::function<void()>>> m_stopCallback;
+};
 
 class StubProjectRepository final : public IProjectRepository {
 public:
@@ -336,7 +381,155 @@ private Q_SLOTS:
         QCOMPARE(rawTransport->requests.at(1).url(),
                  QUrl(QStringLiteral("https://api.updated.com/v1/chat/completions")));
     }
+
+    void shutdownIsIdempotentAndRunsFullTeardown() {
+        auto repository = std::make_unique<StubProjectRepository>();
+        auto recents = std::make_unique<StubRecentProjectsStore>();
+        auto settings = std::make_unique<StubAppSettingsStore>();
+        auto ocr = std::make_unique<manga::application::test::FakeOcrEngine>();
+        ocr->deferred = true;
+
+        manga::app::ApplicationContext context(std::move(repository),
+                                               std::move(recents),
+                                               std::move(settings),
+                                               nullptr,
+                                               nullptr,
+                                               nullptr,
+                                               std::move(ocr),
+                                               nullptr,
+                                               nullptr,
+                                               nullptr,
+                                               nullptr,
+                                               nullptr,
+                                               nullptr);
+
+        auto opContext = context.operationRegistry()->createOperation(0, 0);
+        manga::application::OcrRequest request;
+        request.regionId = manga::domain::RegionId::generate();
+        auto future = context.ocrEngine()->recognize(request, opContext);
+
+        QCOMPARE(context.operationRegistry()->inFlightCount(), 1);
+
+        context.shutdown();
+        context.shutdown();
+
+        QVERIFY(opContext.stopToken.stop_requested());
+    }
+
+    void shutdownCancelsInFlightOperationsBeforeAdapterTeardown() {
+        bool adapterDestroyed = false;
+        bool completedBeforeDestruction = false;
+
+        auto repository = std::make_unique<StubProjectRepository>();
+        auto recents = std::make_unique<StubRecentProjectsStore>();
+        auto settings = std::make_unique<StubAppSettingsStore>();
+        auto trackingOcr =
+            std::make_unique<DestructionTrackingOcrEngine>(&adapterDestroyed, &completedBeforeDestruction);
+
+        auto context = std::make_unique<manga::app::ApplicationContext>(std::move(repository),
+                                                                        std::move(recents),
+                                                                        std::move(settings),
+                                                                        nullptr,
+                                                                        nullptr,
+                                                                        nullptr,
+                                                                        std::move(trackingOcr),
+                                                                        nullptr,
+                                                                        nullptr,
+                                                                        nullptr,
+                                                                        nullptr,
+                                                                        nullptr,
+                                                                        nullptr);
+
+        auto opContext = context->operationRegistry()->createOperation(0, 0);
+        manga::application::OcrRequest request;
+        request.regionId = manga::domain::RegionId::generate();
+        auto future = context->ocrEngine()->recognize(request, opContext);
+
+        QVERIFY(!future.isFinished());
+
+        context.reset();
+
+        QVERIFY(adapterDestroyed);
+        QVERIFY(completedBeforeDestruction);
+        QVERIFY(future.isFinished());
+        QVERIFY(!future.result().has_value());
+        QCOMPARE(future.result().error().category, manga::application::ErrorCategory::Cancelled);
+    }
+
+    void windowCloseCancelKeepsContextAndSessionAlive() {
+        auto repository = std::make_unique<StubProjectRepository>();
+        auto recents = std::make_unique<StubRecentProjectsStore>();
+        auto settings = std::make_unique<StubAppSettingsStore>();
+        auto thumbnails = std::make_unique<StubThumbnailStore>();
+        auto loader = std::make_unique<StubPageImageLoader>();
+        auto importer = std::make_unique<StubComicImporter>();
+        auto credentials = std::make_unique<StubCredentialStore>();
+        auto validator = std::make_unique<StubOcrModelValidator>();
+
+        auto context = std::make_unique<manga::app::ApplicationContext>(std::move(repository),
+                                                                        std::move(recents),
+                                                                        std::move(settings),
+                                                                        std::move(thumbnails),
+                                                                        std::move(loader),
+                                                                        std::move(importer),
+                                                                        nullptr,
+                                                                        nullptr,
+                                                                        nullptr,
+                                                                        nullptr,
+                                                                        nullptr,
+                                                                        std::move(credentials),
+                                                                        std::move(validator));
+
+        int argc = 1;
+        char arg0[] = "manga_tests_app";
+        char* argv[] = {arg0, nullptr};
+
+        manga::app::Application app(argc, argv, std::move(context));
+
+        bool timerExecuted = false;
+        QTimer::singleShot(20, [&]() {
+            timerExecuted = true;
+            auto* mainWindow = app.mainWindow();
+            QVERIFY(mainWindow != nullptr);
+
+            auto* editorPage = mainWindow->findChild<manga::ui::screen::editor::EditorPage*>();
+            QVERIFY(editorPage != nullptr);
+
+            auto* editorViewModel = editorPage->viewModelForTest();
+            QVERIFY(editorViewModel != nullptr);
+
+            manga::domain::ComicProject project("Test Project");
+            auto pageId = manga::domain::PageId::generate();
+            project.addPage(manga::domain::ComicPage(pageId, "page_001.png", manga::domain::ImageSize(800, 1200)));
+            manga::application::OpenedProjectSession session{
+                .project = std::move(project),
+                .projectRootPath = QStringLiteral("/fake/path"),
+            };
+            editorViewModel->openProjectSession(std::move(session));
+            QVERIFY(editorViewModel->hasSession());
+
+            editorViewModel->createRegion(manga::domain::RectGeometry(10, 10, 100, 100));
+            QVERIFY(editorViewModel->state().saveState.isDirty);
+
+            Q_EMIT mainWindow->closeRequested();
+
+            editorViewModel->cancelClose();
+
+            QVERIFY(editorViewModel->hasSession());
+            QVERIFY(editorViewModel->state().saveState.isDirty);
+            QVERIFY(mainWindow->isVisible());
+
+            editorViewModel->createRegion(manga::domain::RectGeometry(200, 200, 50, 50));
+            QCOMPARE(editorViewModel->state().regions.size(), 2);
+
+            editorViewModel->confirmDiscardAndClose();
+        });
+
+        const int exitCode = app.run();
+        QVERIFY(timerExecuted);
+        QCOMPARE(exitCode, 0);
+    }
 };
 
-QTEST_GUILESS_MAIN(ApplicationContextTest)
+QTEST_MAIN(ApplicationContextTest)
 #include "application_context_test.moc"

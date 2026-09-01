@@ -26,6 +26,7 @@
 #include "network/credentials/WindowsCredentialStore.h"
 #include "network/translation/OpenAiCompatibleTranslator.h"
 #include "network/translation/ProviderConfig.h"
+#include "network/translation/QtHttpTransport.h"
 #include "services/execution/BoundedTaskExecutor.h"
 #include "services/inpaint/SolidColorInpainter.h"
 #include "services/layout/QtTextLayouter.h"
@@ -40,6 +41,7 @@ struct ApplicationContext::ProductionAdapters {
     std::unique_ptr<data::ProjectIoCoordinator> ioCoordinator;
     services::UniqueOrtEnv ocrEnv;
     std::unique_ptr<services::BoundedTaskExecutor> executor;
+    network::QtHttpTransport* httpTransport{nullptr};
 };
 
 ApplicationContext::ApplicationContext()
@@ -75,10 +77,12 @@ ApplicationContext::ApplicationContext()
     provider.timeoutMs = settings.timeoutSeconds * 1000;
     auto providerSnapshot = std::make_shared<const network::ProviderConfig>(std::move(provider));
     m_providerConfig.store(providerSnapshot);
+    auto transport = std::make_unique<network::QtHttpTransport>();
+    m_production->httpTransport = transport.get();
     m_translator = std::make_unique<network::OpenAiCompatibleTranslator>(
         providerSnapshot,
         m_credentialStore.get(),
-        nullptr,
+        std::move(transport),
         network::RetryPolicy(nullptr, nullptr, settings.retryCount));
 }
 
@@ -144,16 +148,27 @@ void ApplicationContext::shutdown() {
     }
     m_shutdown = true;
 
+    // Session teardown (gate, Dirty decision, watcher/UndoStack/lease) has already run in the
+    // Application layer before this point. Process-tier teardown:
+    // 1. Stop intake and request cancellation of every remaining operation.
     if (m_operationRegistry) {
         m_operationRegistry->cancelAll();
     }
 
-    QThreadPool::globalInstance()->waitForDone(5000);
+    // 2. Bounded executor shutdown: queued tasks complete as cancelled, running tasks stop
+    //    cooperatively; a single uninterruptible ONNX inference may finish but its result is
+    //    discarded by the stale generation check (P7 measures its worst-case exit latency).
+    if (m_production && m_production->executor) {
+        m_production->executor->shutdown();
+    }
 
-    // Future executors and active I/O threads should be stopped here before destroying the pointers.
-    // Destruction order below is the teardown order.
-    // m_production (holding ProjectIoCoordinator) is declared first and destroyed last,
-    // ensuring adapters referencing it are destroyed beforehand.
+    // 3. Stop the network thread; replies are aborted and destroyed on their owning thread.
+    if (m_production && m_production->httpTransport) {
+        m_production->httpTransport->shutdown();
+    }
+
+    // 4. Member destruction after this point is the reverse of declaration order:
+    //    adapters/stores first, ProjectIoCoordinator (declared first) last.
 }
 
 } // namespace manga::app

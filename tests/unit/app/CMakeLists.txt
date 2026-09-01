@@ -5,11 +5,7 @@ set_target_properties(manga_tests_app PROPERTIES AUTOMOC ON)
 target_include_directories(manga_tests_app
     PRIVATE
         "${PROJECT_SOURCE_DIR}/tests/unit/network"
-)
-
-target_compile_definitions(manga_tests_app
-    PRIVATE
-        QT_NO_KEYWORDS
+        "${PROJECT_SOURCE_DIR}/tests/unit/application"
 )
 
 target_link_libraries(manga_tests_app
@@ -17,6 +13,7 @@ target_link_libraries(manga_tests_app
         manga_app
         manga_application
         manga_domain
+        manga_ui
         Qt6::Test
 )
 
