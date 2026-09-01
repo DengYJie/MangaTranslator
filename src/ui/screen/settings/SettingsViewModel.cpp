@@ -33,9 +33,11 @@ SettingsViewModel::SettingsViewModel(application::IAppSettingsStore* settingsSto
                                      application::CredentialOperations* credentialOperations,
                                      application::IOcrModelValidator* ocrModelValidator,
                                      application::IInpaintModelValidator* inpaintModelValidator,
+                                     application::IDetectionModelValidator* detectionModelValidator,
                                      QObject* parent)
     : BaseViewModel(parent), m_settingsStore(settingsStore), m_credentialOperations(credentialOperations),
-      m_ocrModelValidator(ocrModelValidator), m_inpaintModelValidator(inpaintModelValidator) {
+      m_ocrModelValidator(ocrModelValidator), m_inpaintModelValidator(inpaintModelValidator),
+      m_detectionModelValidator(detectionModelValidator) {
     loadSettings();
 }
 
@@ -55,6 +57,7 @@ void SettingsViewModel::loadSettings() {
 
         refreshCredentialStatus(state);
         validateOcrModelDirectory(state);
+        validateDetectionModelDirectory(state);
         validateInpaintModelDirectory(state);
     });
     m_lastPersistedSnapshot = m_state.persisted;
@@ -83,6 +86,14 @@ void SettingsViewModel::setOcrModelDirectory(const QString& directory) {
     updateState([this, directory](SettingsState& state) {
         state.persisted.ocrModelDirectory = directory;
         validateOcrModelDirectory(state);
+    });
+    persistSettings();
+}
+
+void SettingsViewModel::setDetectionModelDirectory(const QString& directory) {
+    updateState([this, directory](SettingsState& state) {
+        state.persisted.detectionModelDirectory = directory;
+        validateDetectionModelDirectory(state);
     });
     persistSettings();
 }
@@ -224,6 +235,7 @@ void SettingsViewModel::restoreDefaults() {
         state.persisted = defaults;
         state.fieldErrors.clear();
         validateOcrModelDirectory(state);
+        validateDetectionModelDirectory(state);
         validateInpaintModelDirectory(state);
     });
     persistSettings();
@@ -245,6 +257,9 @@ void SettingsViewModel::persistSettings() {
     }
     if (hasValidationError(QStringLiteral("ocrLanguage"))) {
         snapshot.ocrLanguage = m_lastPersistedSnapshot.ocrLanguage;
+    }
+    if (hasValidationError(QStringLiteral("detectionModelDirectory"))) {
+        snapshot.detectionModelDirectory = m_lastPersistedSnapshot.detectionModelDirectory;
     }
     if (hasValidationError(QStringLiteral("inpaintModelDirectory"))) {
         snapshot.inpaintModelDirectory = m_lastPersistedSnapshot.inpaintModelDirectory;
@@ -271,6 +286,7 @@ void SettingsViewModel::persistSettings() {
     if (!result) {
         if (!m_state.fieldErrors.contains(QStringLiteral("recentProjectLimit")) &&
             !m_state.fieldErrors.contains(QStringLiteral("ocrLanguage")) &&
+            !m_state.fieldErrors.contains(QStringLiteral("detectionModelDirectory")) &&
             !m_state.fieldErrors.contains(QStringLiteral("inpaintModelDirectory")) &&
             !m_state.fieldErrors.contains(QStringLiteral("providerId")) &&
             !m_state.fieldErrors.contains(QStringLiteral("endpoint")) &&
@@ -314,6 +330,24 @@ void SettingsViewModel::validateOcrModelDirectory(SettingsState& state) {
     } else {
         state.modelStatus = application::OcrModelStatus{.isValid = false, .modelDirectory = dir};
         state.fieldErrors.insert(QStringLiteral("ocrModelDirectory"),
+                                 ui::error::RecoveryPresenter::localizedSafeMessage(result.error()));
+    }
+}
+
+void SettingsViewModel::validateDetectionModelDirectory(SettingsState& state) {
+    const QString dir = state.persisted.detectionModelDirectory.trimmed();
+    if (dir.isEmpty() || m_detectionModelValidator == nullptr) {
+        state.detectionModelStatus = application::DetectionModelStatus{};
+        state.fieldErrors.remove(QStringLiteral("detectionModelDirectory"));
+        return;
+    }
+    const auto result = m_detectionModelValidator->validate(dir);
+    if (result) {
+        state.detectionModelStatus = *result;
+        state.fieldErrors.remove(QStringLiteral("detectionModelDirectory"));
+    } else {
+        state.detectionModelStatus = application::DetectionModelStatus{.isValid = false, .modelDirectory = dir};
+        state.fieldErrors.insert(QStringLiteral("detectionModelDirectory"),
                                  ui::error::RecoveryPresenter::localizedSafeMessage(result.error()));
     }
 }

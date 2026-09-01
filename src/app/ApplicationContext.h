@@ -5,12 +5,16 @@
 #include "application/ports/IComicImporter.h"
 #include "application/ports/ICredentialStore.h"
 #include "application/ports/IDerivedAssetStore.h"
+#include "application/ports/IDetectionModelValidator.h"
+#include "application/ports/IInpaintModelValidator.h"
 #include "application/ports/IInpainter.h"
 #include "application/ports/IOcrEngine.h"
 #include "application/ports/IOcrModelValidator.h"
 #include "application/ports/IPageImageLoader.h"
+#include "application/ports/IPageInpainter.h"
 #include "application/ports/IProjectRepository.h"
 #include "application/ports/IRecentProjectsStore.h"
+#include "application/ports/ITextDetector.h"
 #include "application/ports/ITextLayouter.h"
 #include "application/ports/IThumbnailStore.h"
 #include "application/ports/ITranslator.h"
@@ -56,7 +60,9 @@ public:
                        std::unique_ptr<application::IDerivedAssetStore> derivedAssetStore,
                        std::unique_ptr<application::ICredentialStore> credentialStore,
                        std::unique_ptr<application::IOcrModelValidator> ocrModelValidator,
-                       std::unique_ptr<application::IComicExporter> comicExporter = nullptr);
+                       std::unique_ptr<application::IComicExporter> comicExporter = nullptr,
+                       std::unique_ptr<application::IInpaintModelValidator> inpaintModelValidator = nullptr,
+                       std::unique_ptr<application::IPageInpainter> pageInpainter = nullptr);
     ~ApplicationContext();
 
     ApplicationContext(const ApplicationContext&) = delete;
@@ -111,6 +117,30 @@ public:
     [[nodiscard]] application::IOcrModelValidator* ocrModelValidator() const {
         return m_ocrModelValidator.get();
     }
+    [[nodiscard]] application::ITextDetector* textDetector() const {
+        return m_textDetector.get();
+    }
+    [[nodiscard]] application::IDetectionModelValidator* detectionModelValidator() const {
+        return m_detectionModelValidator.get();
+    }
+    [[nodiscard]] bool isDetectionModelAvailable() const noexcept {
+        return m_textDetector != nullptr && !m_detectionModelError.has_value();
+    }
+    [[nodiscard]] QString detectionModelUnavailableReason() const {
+        return m_detectionModelError ? m_detectionModelError->safeMessage : QString();
+    }
+    [[nodiscard]] application::IPageInpainter* pageInpainter() const {
+        return m_pageInpainter.get();
+    }
+    [[nodiscard]] application::IInpaintModelValidator* inpaintModelValidator() const {
+        return m_inpaintModelValidator.get();
+    }
+    [[nodiscard]] bool isInpaintModelAvailable() const noexcept {
+        return m_pageInpainter != nullptr && !m_inpaintModelError.has_value();
+    }
+    [[nodiscard]] QString inpaintModelUnavailableReason() const {
+        return m_inpaintModelError ? m_inpaintModelError->safeMessage : QString();
+    }
     [[nodiscard]] bool isOcrModelAvailable() const noexcept {
         return !m_ocrModelError.has_value();
     }
@@ -146,6 +176,12 @@ private:
     std::unique_ptr<application::ICredentialStore> m_credentialStore;
     std::unique_ptr<application::IOcrModelValidator> m_ocrModelValidator;
     std::optional<application::ApplicationError> m_ocrModelError;
+    std::unique_ptr<application::IDetectionModelValidator> m_detectionModelValidator;
+    std::unique_ptr<application::ITextDetector> m_textDetector;
+    std::optional<application::ApplicationError> m_detectionModelError;
+    std::unique_ptr<application::IInpaintModelValidator> m_inpaintModelValidator;
+    std::unique_ptr<application::IPageInpainter> m_pageInpainter;
+    std::optional<application::ApplicationError> m_inpaintModelError;
     std::atomic<std::shared_ptr<const network::ProviderConfig>> m_providerConfig;
     bool m_shutdown{false};
 };

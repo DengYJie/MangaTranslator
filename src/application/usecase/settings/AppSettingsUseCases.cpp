@@ -15,6 +15,7 @@ namespace {
 constexpr auto kKeyRestoreLastProject = "general/restoreLastProject";
 constexpr auto kKeyRecentProjectLimit = "general/recentProjectLimit";
 constexpr auto kKeyOcrModelDirectory = "ocr/modelDirectory";
+constexpr auto kKeyDetectionModelDirectory = "detection/modelDirectory";
 constexpr auto kKeyInpaintModelDirectory = "inpaint/modelDirectory";
 constexpr auto kKeyOcrLanguage = "ocr/language";
 constexpr auto kKeyProviderId = "translation/providerId";
@@ -147,6 +148,9 @@ AppSettingsSnapshot LoadAppSettingsUseCase::execute() const {
     if (const auto value = m_store->readSetting(QString::fromLatin1(kKeyOcrModelDirectory)); value.has_value()) {
         snapshot.ocrModelDirectory = toStringSetting(*value);
     }
+    if (const auto value = m_store->readSetting(QString::fromLatin1(kKeyDetectionModelDirectory)); value.has_value()) {
+        snapshot.detectionModelDirectory = toStringSetting(*value);
+    }
     if (const auto value = m_store->readSetting(QString::fromLatin1(kKeyInpaintModelDirectory)); value.has_value()) {
         snapshot.inpaintModelDirectory = toStringSetting(*value);
     }
@@ -236,6 +240,7 @@ Result<void> SaveAppSettingsUseCase::execute(const AppSettingsSnapshot& snapshot
     m_store->writeSetting(QString::fromLatin1(kKeyRestoreLastProject), snapshot.restoreLastProject);
     m_store->writeSetting(QString::fromLatin1(kKeyRecentProjectLimit), snapshot.recentProjectLimit);
     m_store->writeSetting(QString::fromLatin1(kKeyOcrModelDirectory), snapshot.ocrModelDirectory.trimmed());
+    m_store->writeSetting(QString::fromLatin1(kKeyDetectionModelDirectory), snapshot.detectionModelDirectory.trimmed());
     m_store->writeSetting(QString::fromLatin1(kKeyInpaintModelDirectory), snapshot.inpaintModelDirectory.trimmed());
     m_store->writeSetting(QString::fromLatin1(kKeyOcrLanguage), snapshot.ocrLanguage.trimmed());
     m_store->writeSetting(QString::fromLatin1(kKeyProviderId), snapshot.providerId.trimmed());

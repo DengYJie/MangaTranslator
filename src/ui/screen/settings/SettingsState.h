@@ -1,6 +1,7 @@
 #pragma once
 
 #include "application/dto/AppSettingsDto.h"
+#include "application/ports/IDetectionModelValidator.h"
 #include "application/ports/IInpaintModelValidator.h"
 #include "application/ports/IOcrModelValidator.h"
 #include "application/usecase/credential/CredentialUseCases.h"
@@ -17,6 +18,7 @@ using AppTheme = ::manga::application::AppTheme;
 using InterfaceDensity = ::manga::application::InterfaceDensity;
 using CredentialState = ::manga::application::CredentialState;
 using OcrModelStatus = ::manga::application::OcrModelStatus;
+using DetectionModelStatus = ::manga::application::DetectionModelStatus;
 using InpaintModelStatus = ::manga::application::InpaintModelStatus;
 
 enum class SettingsCategory {
@@ -77,6 +79,7 @@ struct SettingsState {
     QHash<QString, QString> fieldErrors;
     CredentialState credentialStatus{CredentialState::Missing};
     OcrModelStatus modelStatus;
+    DetectionModelStatus detectionModelStatus;
     InpaintModelStatus inpaintModelStatus;
 
     [[nodiscard]] bool hasFieldErrors() const {

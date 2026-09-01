@@ -19,6 +19,7 @@ struct AppSettingsSnapshot {
     bool restoreLastProject{true};
     int recentProjectLimit{8};
     QString ocrModelDirectory;
+    QString detectionModelDirectory;
     QString inpaintModelDirectory;
     QString ocrLanguage{QStringLiteral("ja")};
     QString providerId{QStringLiteral("openai-compatible")};

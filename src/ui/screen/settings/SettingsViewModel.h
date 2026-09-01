@@ -13,6 +13,7 @@ namespace manga::ui::screen::settings {
 
 using IAppSettingsStore = ::manga::application::IAppSettingsStore;
 using IOcrModelValidator = ::manga::application::IOcrModelValidator;
+using IDetectionModelValidator = ::manga::application::IDetectionModelValidator;
 using IInpaintModelValidator = ::manga::application::IInpaintModelValidator;
 using SecretBytes = ::manga::application::SecretBytes;
 
@@ -24,6 +25,7 @@ public:
                                application::CredentialOperations* credentialOperations,
                                IOcrModelValidator* ocrModelValidator,
                                IInpaintModelValidator* inpaintModelValidator = nullptr,
+                               IDetectionModelValidator* detectionModelValidator = nullptr,
                                QObject* parent = nullptr);
     ~SettingsViewModel() override = default;
 
@@ -36,6 +38,7 @@ public:
 
     // --- OCR Category Intents ---
     void setOcrModelDirectory(const QString& directory);
+    void setDetectionModelDirectory(const QString& directory);
     void setInpaintModelDirectory(const QString& directory);
     void setOcrLanguage(const QString& language);
 
@@ -69,12 +72,14 @@ private:
     void persistSettings();
     void refreshCredentialStatus(SettingsState& state);
     void validateOcrModelDirectory(SettingsState& state);
+    void validateDetectionModelDirectory(SettingsState& state);
     void validateInpaintModelDirectory(SettingsState& state);
 
     IAppSettingsStore* m_settingsStore;                        // non-owning
     application::CredentialOperations* m_credentialOperations; // non-owning
     IOcrModelValidator* m_ocrModelValidator;                   // non-owning
     IInpaintModelValidator* m_inpaintModelValidator;           // non-owning
+    IDetectionModelValidator* m_detectionModelValidator;       // non-owning
     application::AppSettingsSnapshot m_lastPersistedSnapshot;
 };
 

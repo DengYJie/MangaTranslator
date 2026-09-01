@@ -276,6 +276,40 @@ QWidget* SettingsPage::buildOcrView() {
     m_ocrStatusInfoBar->setIsOpen(false);
     layout->addWidget(m_ocrStatusInfoBar);
 
+    auto* detectionGroup = new widget::SettingsGroup(
+        tr("版面/文字检测"), tr("配置用于漫画文字框与版面检测的 ONNX 模型 (Koharu Layout)"), container);
+    m_allGroups.append(detectionGroup);
+    m_detectionModelDirRow =
+        new widget::SettingsRow(tr("检测模型目录"), tr("包含 manifest.json 的版面检测模型文件夹路径"), detectionGroup);
+    auto* detectionEditor = new QWidget(m_detectionModelDirRow);
+    auto* detectionLayout = new QHBoxLayout(detectionEditor);
+    detectionLayout->setContentsMargins(0, 0, 0, 0);
+    detectionLayout->setSpacing(8);
+    m_detectionModelDirEdit = new fluent::textfields::LineEdit(detectionEditor);
+    m_detectionModelDirEdit->setObjectName(QStringLiteral("detectionModelDirEdit"));
+    m_detectionModelDirEdit->setPlaceholderText(tr("选择或输入检测模型目录路径"));
+    connect(m_detectionModelDirEdit, &fluent::textfields::LineEdit::textChanged, this, [this](const QString& text) {
+        if (!m_isUpdatingFromState && m_viewModel)
+            m_viewModel->setDetectionModelDirectory(text.trimmed());
+    });
+    detectionLayout->addWidget(m_detectionModelDirEdit, 1);
+    m_detectionBrowseButton = new fluent::basicinput::Button(tr("浏览..."), detectionEditor);
+    m_detectionBrowseButton->setObjectName(QStringLiteral("detectionBrowseButton"));
+    m_detectionBrowseButton->setAccessibleName(tr("选择版面检测模型目录"));
+    connect(m_detectionBrowseButton, &fluent::basicinput::Button::clicked, this, [this]() {
+        const QString dir = QFileDialog::getExistingDirectory(this, tr("选择版面检测模型目录"));
+        if (!dir.isEmpty() && m_viewModel)
+            m_viewModel->setDetectionModelDirectory(dir);
+    });
+    detectionLayout->addWidget(m_detectionBrowseButton, 0);
+    m_detectionModelDirRow->setEditorWidget(detectionEditor, true);
+    detectionGroup->addRow(m_detectionModelDirRow);
+    m_fieldRowMap.insert(QStringLiteral("detectionModelDirectory"), m_detectionModelDirRow);
+    m_detectionStatusInfoBar = new fluent::status_info::InfoBar(container);
+    m_detectionStatusInfoBar->setIsClosable(false);
+    m_detectionStatusInfoBar->setIsOpen(false);
+    layout->addWidget(m_detectionStatusInfoBar);
+
     auto* inpaintGroup = new widget::SettingsGroup(
         tr("Remove 图像修复"), tr("配置用于 Remove 工具的 dynamic spatial ONNX 模型"), container);
     m_allGroups.append(inpaintGroup);
@@ -613,6 +647,26 @@ void SettingsPage::render(const SettingsState& state) {
         const int langIdx = m_ocrLanguageCombo->findData(state.persisted.ocrLanguage);
         if (langIdx >= 0 && m_ocrLanguageCombo->currentIndex() != langIdx) {
             m_ocrLanguageCombo->setCurrentIndex(langIdx);
+        }
+    }
+
+    if (m_detectionModelDirEdit && m_detectionModelDirEdit->text() != state.persisted.detectionModelDirectory)
+        m_detectionModelDirEdit->setText(state.persisted.detectionModelDirectory);
+    if (m_detectionStatusInfoBar) {
+        if (state.persisted.detectionModelDirectory.trimmed().isEmpty()) {
+            m_detectionStatusInfoBar->setIsOpen(false);
+        } else if (state.detectionModelStatus.isValid) {
+            m_detectionStatusInfoBar->setSeverity(fluent::status_info::InfoBar::Success);
+            m_detectionStatusInfoBar->setTitle(tr("版面检测模型有效"));
+            m_detectionStatusInfoBar->setMessage(
+                tr("模型: %1 (版本: %2)").arg(state.detectionModelStatus.id, state.detectionModelStatus.version));
+            m_detectionStatusInfoBar->setIsOpen(true);
+        } else {
+            m_detectionStatusInfoBar->setSeverity(fluent::status_info::InfoBar::Error);
+            m_detectionStatusInfoBar->setTitle(tr("版面检测模型校验失败"));
+            m_detectionStatusInfoBar->setMessage(
+                state.fieldErrors.value(QStringLiteral("detectionModelDirectory"), tr("未找到有效的版面检测模型文件")));
+            m_detectionStatusInfoBar->setIsOpen(true);
         }
     }
 

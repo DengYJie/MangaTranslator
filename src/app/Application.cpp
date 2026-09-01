@@ -135,6 +135,8 @@ int Application::run() {
                                                                     m_context->projectRepository(),
                                                                     mainWindow);
     editorViewModel->setOcrAvailability(m_context->isOcrModelAvailable(), m_context->ocrModelUnavailableReason());
+    editorViewModel->setInpaintAvailability(m_context->isInpaintModelAvailable(),
+                                            m_context->inpaintModelUnavailableReason());
     editorViewModel->setExportDependencies(m_context->comicExporter(), m_context->derivedAssetStore());
     auto* editorPage = new ui::screen::editor::EditorPage(editorViewModel, mainWindow);
     QObject::connect(editorPage,
@@ -156,10 +158,14 @@ int Application::run() {
                                                                          m_context->ocrEngine(),
                                                                          m_context->translator(),
                                                                          m_context->inpainter(),
+                                                                         m_context->pageInpainter(),
                                                                          m_context->textLayouter(),
                                                                          m_context->derivedAssetStore(),
                                                                          m_context->operationRegistry(),
+                                                                         m_context->textDetector(),
                                                                          nullptr);
+    editorViewModel->setDetectionAvailability(m_context->isDetectionModelAvailable(),
+                                              m_context->detectionModelUnavailableReason());
 
     ui::navigation::NavigationItemDescriptor editorItem;
     editorItem.routeKey = QStringLiteral("editor");
@@ -171,7 +177,8 @@ int Application::run() {
     auto* settingsViewModel = new ui::screen::settings::SettingsViewModel(m_context->appSettingsStore(),
                                                                           m_context->credentialOperations(),
                                                                           m_context->ocrModelValidator(),
-                                                                          nullptr,
+                                                                          m_context->inpaintModelValidator(),
+                                                                          m_context->detectionModelValidator(),
                                                                           mainWindow);
     settingsViewModel->observe(mainWindow, [this, editorViewModel](const ui::screen::settings::SettingsState& state) {
         network::ProviderConfig provider;

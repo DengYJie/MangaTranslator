@@ -107,6 +107,10 @@ private:
     fluent::textfields::LineEdit* m_ocrModelDirEdit{nullptr};
     fluent::basicinput::Button* m_ocrBrowseButton{nullptr};
     fluent::status_info::InfoBar* m_ocrStatusInfoBar{nullptr};
+    widget::SettingsRow* m_detectionModelDirRow{nullptr};
+    fluent::textfields::LineEdit* m_detectionModelDirEdit{nullptr};
+    fluent::basicinput::Button* m_detectionBrowseButton{nullptr};
+    fluent::status_info::InfoBar* m_detectionStatusInfoBar{nullptr};
     widget::SettingsRow* m_inpaintModelDirRow{nullptr};
     fluent::textfields::LineEdit* m_inpaintModelDirEdit{nullptr};
     fluent::basicinput::Button* m_inpaintBrowseButton{nullptr};

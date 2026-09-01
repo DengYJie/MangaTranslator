@@ -27,7 +27,13 @@
 #include "network/translation/OpenAiCompatibleTranslator.h"
 #include "network/translation/ProviderConfig.h"
 #include "network/translation/QtHttpTransport.h"
+#include "services/detection/DetectionModelValidator.h"
+#include "services/detection/KoharuLayoutManifest.h"
+#include "services/detection/OnnxKoharuLayoutDetector.h"
 #include "services/execution/BoundedTaskExecutor.h"
+#include "services/inpaint/InpaintManifest.h"
+#include "services/inpaint/InpaintModelValidator.h"
+#include "services/inpaint/OnnxLamaPageInpainter.h"
 #include "services/inpaint/SolidColorInpainter.h"
 #include "services/layout/QtTextLayouter.h"
 #include "services/ocr/OcrFactory.h"
@@ -61,6 +67,8 @@ ApplicationContext::ApplicationContext()
     m_credentialStore = std::make_unique<network::WindowsCredentialStore>();
     m_credentialOperations = std::make_unique<application::CredentialOperations>(m_credentialStore.get());
     m_ocrModelValidator = std::make_unique<services::OcrModelValidator>();
+    m_inpaintModelValidator = std::make_unique<services::InpaintModelValidator>();
+    m_detectionModelValidator = std::make_unique<services::DetectionModelValidator>();
     m_production->ocrEnv = services::createOcrEnv();
     m_production->executor = std::make_unique<services::BoundedTaskExecutor>();
 
@@ -68,6 +76,29 @@ ApplicationContext::ApplicationContext()
     const auto ocrModelStatus = m_ocrModelValidator->validate(settings.ocrModelDirectory);
     if (!ocrModelStatus.has_value()) {
         m_ocrModelError = ocrModelStatus.error();
+    }
+
+    const auto detectionManifest = services::loadAndValidateDetectionManifest(settings.detectionModelDirectory);
+    if (!detectionManifest.has_value()) {
+        m_detectionModelError = detectionManifest.error();
+        if (m_detectionModelError->safeMessage.trimmed().isEmpty()) {
+            m_detectionModelError->safeMessage =
+                QStringLiteral("请在设置中选择包含 manifest.json 的版面检测模型目录。");
+        }
+    } else {
+        m_textDetector = std::make_unique<services::OnnxKoharuLayoutDetector>(
+            m_production->ocrEnv.get(), m_production->executor.get(), settings.detectionModelDirectory);
+    }
+
+    const auto inpaintManifest = services::loadAndValidateManifest(settings.inpaintModelDirectory);
+    if (!inpaintManifest.has_value()) {
+        m_inpaintModelError = inpaintManifest.error();
+        if (m_inpaintModelError->safeMessage.trimmed().isEmpty()) {
+            m_inpaintModelError->safeMessage = QStringLiteral("请在设置中选择包含 manifest.json 的 Inpaint 模型目录。");
+        }
+    } else {
+        m_pageInpainter = std::make_unique<services::OnnxLamaPageInpainter>(
+            m_production->ocrEnv.get(), m_production->executor.get(), inpaintManifest.value());
     }
     m_inpainter = std::make_unique<services::SolidColorInpainter>(m_production->executor.get());
     m_textLayouter = std::make_unique<services::QtTextLayouter>(m_production->executor.get());
@@ -106,6 +137,7 @@ ApplicationContext::ApplicationContext(std::unique_ptr<application::IProjectRepo
                          nullptr,
                          nullptr,
                          nullptr,
+                         nullptr,
                          nullptr) {}
 
 ApplicationContext::ApplicationContext(std::unique_ptr<application::IProjectRepository> projectRepository,
@@ -121,7 +153,9 @@ ApplicationContext::ApplicationContext(std::unique_ptr<application::IProjectRepo
                                        std::unique_ptr<application::IDerivedAssetStore> derivedAssetStore,
                                        std::unique_ptr<application::ICredentialStore> credentialStore,
                                        std::unique_ptr<application::IOcrModelValidator> ocrModelValidator,
-                                       std::unique_ptr<application::IComicExporter> comicExporter)
+                                       std::unique_ptr<application::IComicExporter> comicExporter,
+                                       std::unique_ptr<application::IInpaintModelValidator> inpaintModelValidator,
+                                       std::unique_ptr<application::IPageInpainter> pageInpainter)
     : m_projectRepository(std::move(projectRepository)), m_recentProjectsStore(std::move(recentProjectsStore)),
       m_appSettingsStore(std::move(appSettingsStore)),
       m_operationRegistry(std::make_unique<application::OperationRegistry>()),
@@ -129,7 +163,8 @@ ApplicationContext::ApplicationContext(std::unique_ptr<application::IProjectRepo
       m_comicImporter(std::move(comicImporter)), m_comicExporter(std::move(comicExporter)),
       m_ocrEngine(std::move(ocrEngine)), m_translator(std::move(translator)), m_inpainter(std::move(inpainter)),
       m_textLayouter(std::move(textLayouter)), m_derivedAssetStore(std::move(derivedAssetStore)),
-      m_credentialStore(std::move(credentialStore)), m_ocrModelValidator(std::move(ocrModelValidator)) {}
+      m_credentialStore(std::move(credentialStore)), m_ocrModelValidator(std::move(ocrModelValidator)),
+      m_inpaintModelValidator(std::move(inpaintModelValidator)), m_pageInpainter(std::move(pageInpainter)) {}
 
 ApplicationContext::~ApplicationContext() {
     shutdown();
