@@ -1,4 +1,4 @@
-#include "ui/widget/EditorCommandBar.h"
+﻿#include "ui/widget/EditorCommandBar.h"
 
 #include "ui/screen/editor/EditorProcessingController.h"
 #include "ui/screen/editor/EditorViewModel.h"
@@ -81,16 +81,20 @@ void EditorCommandBar::buildUi() {
     toolGroup->addButton(m_selectButton);
     toolGroup->addButton(m_panButton);
     toolGroup->addButton(m_createRegionButton);
-    m_previewSelectorButton = createIconButton(
-        Typography::Icons::View, tr("切换原图/译文预览 (Space)"), QStringLiteral("previewSelectorButton"));
+    m_previewSelectorButton =
+        createIconButton(Typography::Icons::View, tr("预览模式"), QStringLiteral("previewSelectorButton"));
+    m_previewSelectorButton->setFluentLayout(fluent::basicinput::Button::IconAfter);
+    m_previewSelectorButton->setFixedWidth(84);
     m_ocrButton = createIconButton(Typography::Icons::glyph(QStringLiteral("ic_fluent_scan_text_20_regular")),
                                    tr("重新 OCR"),
                                    QStringLiteral("ocrButton"));
     m_smartTranslateButton =
         createIconButton(Typography::Icons::glyph(QStringLiteral("ic_fluent_translate_20_regular")),
-                         tr("智能翻译 (Ctrl+T)"),
+                         tr("运行智能翻译 (Ctrl+T)"),
                          QStringLiteral("smartTranslateButton"));
     m_smartTranslateButton->setFluentStyle(fluent::basicinput::Button::Accent);
+    m_smartTranslateButton->setFluentLayout(fluent::basicinput::Button::IconBefore);
+    m_smartTranslateButton->setMinimumWidth(112);
     m_adoptButton = createIconButton(Typography::Icons::CheckMark, tr("采纳建议"), QStringLiteral("adoptButton"));
     m_adoptButton->setFluentStyle(fluent::basicinput::Button::Accent);
     m_adoptButton->setVisible(false);
@@ -158,8 +162,6 @@ void EditorCommandBar::buildUi() {
     };
 
     addGroup({m_undoButton, m_redoButton});
-    addGroup({m_zoomOutButton, m_zoomValueLabel, m_zoomInButton, m_fitToPageButton, m_actualSizeButton});
-    addGroup({m_selectButton, m_panButton, m_createRegionButton});
     addGroup({m_previewSelectorButton});
     addGroup({m_ocrButton, m_smartTranslateButton, m_adoptButton, m_rejectButton});
     layout->addStretch();
@@ -203,7 +205,11 @@ void EditorCommandBar::buildUi() {
             if (state.processing.isRunning) {
                 ctrl->cancelPageOperations(state.currentPageId);
             } else if (state.currentPageId.isValid()) {
-                ctrl->smartTranslatePage(state.currentPageId);
+                if (state.selectedRegionIds.isEmpty()) {
+                    ctrl->smartTranslatePage(state.currentPageId);
+                } else {
+                    ctrl->smartTranslateRegions(state.currentPageId, state.selectedRegionIds);
+                }
             }
         }
     });
@@ -264,12 +270,8 @@ void EditorCommandBar::updateResponsiveLayout() {
     m_overflowActive = overflowActive;
 
     const bool narrow = width() < 720;
-    m_zoomOutButton->setVisible(!narrow);
-    m_zoomValueLabel->setVisible(!narrow);
-    m_zoomInButton->setVisible(!narrow);
-    m_fitToPageButton->setVisible(!overflowActive);
-    m_actualSizeButton->setVisible(!overflowActive);
-    m_previewSelectorButton->setVisible(!overflowActive);
+    Q_UNUSED(narrow);
+    m_previewSelectorButton->setVisible(true);
     m_adoptButton->setVisible(m_hasProposal);
     m_rejectButton->setVisible(m_hasProposal);
     m_overflowButton->setVisible(overflowActive);
@@ -279,8 +281,18 @@ void EditorCommandBar::updateResponsiveLayout() {
     m_fitToPageOverflowAction->setVisible(overflowActive);
     m_actualSizeOverflowAction->setVisible(overflowActive);
     m_previewOverflowAction->setVisible(overflowActive);
-    m_adoptOverflowAction->setVisible(overflowActive && !m_hasProposal);
-    m_rejectOverflowAction->setVisible(overflowActive && !m_hasProposal);
+    m_adoptOverflowAction->setVisible(overflowActive && m_hasProposal);
+    m_rejectOverflowAction->setVisible(overflowActive && m_hasProposal);
+
+    // Zoom and tool controls live on the canvas surfaces, not in this row.
+    m_zoomOutButton->hide();
+    m_zoomValueLabel->hide();
+    m_zoomInButton->hide();
+    m_fitToPageButton->hide();
+    m_actualSizeButton->hide();
+    m_selectButton->hide();
+    m_panButton->hide();
+    m_createRegionButton->hide();
 
     bool previousGroupVisible = false;
     for (int i = 0; i < m_commandGroups.size(); ++i) {
@@ -307,6 +319,13 @@ void EditorCommandBar::render(const EditorState& state) {
 
     m_zoomValueLabel->setText(QStringLiteral("%1%").arg(qRound(state.zoomFactor * 100.0)));
 
+    const QString previewText = state.previewMode == PreviewMode::Original
+                                    ? tr("原图")
+                                    : (state.previewMode == PreviewMode::Translated ? tr("翻译") : tr("对比"));
+    m_previewSelectorButton->setText(previewText);
+    m_previewSelectorButton->setToolTip(tr("预览模式：%1（点击切换）").arg(previewText));
+    m_previewSelectorButton->setAccessibleName(tr("预览模式：%1").arg(previewText));
+
     m_selectButton->setChecked(state.activeTool == CanvasTool::Select);
     m_panButton->setChecked(state.activeTool == CanvasTool::Pan);
     m_createRegionButton->setChecked(state.activeTool == CanvasTool::CreateRegion);
@@ -331,23 +350,27 @@ void EditorCommandBar::render(const EditorState& state) {
 
     if (state.processing.isRunning) {
         m_smartTranslateButton->setEnabled(true);
+        m_smartTranslateButton->setText(tr("停止"));
         m_smartTranslateButton->setIconGlyph(Typography::Icons::Cancel, Typography::IconSize::Standard);
         m_smartTranslateButton->setToolTip(tr("取消处理"));
         m_smartTranslateButton->setAccessibleName(tr("取消处理"));
     } else if (!state.isTranslationAvailable) {
         m_smartTranslateButton->setEnabled(false);
+        m_smartTranslateButton->setText(tr("运行翻译"));
         m_smartTranslateButton->setIconGlyph(Typography::Icons::glyph(QStringLiteral("ic_fluent_translate_20_regular")),
                                              Typography::IconSize::Standard);
         m_smartTranslateButton->setToolTip(state.translationUnavailableReason);
         m_smartTranslateButton->setAccessibleName(tr("智能翻译（未配置）"));
     } else if (hasPage && !hasRegions) {
         m_smartTranslateButton->setEnabled(false);
+        m_smartTranslateButton->setText(tr("运行翻译"));
         m_smartTranslateButton->setIconGlyph(Typography::Icons::glyph(QStringLiteral("ic_fluent_translate_20_regular")),
                                              Typography::IconSize::Standard);
         m_smartTranslateButton->setToolTip(tr("当前页无文本区域，请先创建或检测区域"));
         m_smartTranslateButton->setAccessibleName(tr("智能翻译 (当前页无文本区域)"));
     } else {
         m_smartTranslateButton->setEnabled(hasPage && hasRegions);
+        m_smartTranslateButton->setText(state.selectedRegionIds.isEmpty() ? tr("运行当前页") : tr("运行所选区域"));
         m_smartTranslateButton->setIconGlyph(Typography::Icons::glyph(QStringLiteral("ic_fluent_translate_20_regular")),
                                              Typography::IconSize::Standard);
         m_smartTranslateButton->setToolTip(tr("智能翻译 (Ctrl+T)"));
@@ -372,13 +395,7 @@ void EditorCommandBar::setupShortcuts() {
     makeGlobal(QStringLiteral("V"), [this]() { m_viewModel->setActiveTool(CanvasTool::Select); });
     makeGlobal(QStringLiteral("R"), [this]() { m_viewModel->setActiveTool(CanvasTool::CreateRegion); });
     makeGlobal(QStringLiteral("H"), [this]() { m_viewModel->setActiveTool(CanvasTool::Pan); });
-    makeGlobal(QStringLiteral("Space"), [this]() {
-        const auto current = m_viewModel->state().previewMode;
-        const auto mode = current == PreviewMode::Original
-                              ? PreviewMode::Translated
-                              : (current == PreviewMode::Translated ? PreviewMode::Compare : PreviewMode::Original);
-        m_viewModel->setPreviewMode(mode);
-    });
+
     makeGlobal(QStringLiteral("+"), [this]() { Q_EMIT zoomInRequested(); });
     makeGlobal(QStringLiteral("="), [this]() { Q_EMIT zoomInRequested(); });
     makeGlobal(QStringLiteral("-"), [this]() { Q_EMIT zoomOutRequested(); });
@@ -392,7 +409,11 @@ void EditorCommandBar::setupShortcuts() {
             const auto& state = m_viewModel->state();
             if (state.isTranslationAvailable && !state.processing.isRunning && state.currentPageId.isValid() &&
                 !state.regions.isEmpty()) {
-                ctrl->smartTranslatePage(state.currentPageId);
+                if (state.selectedRegionIds.isEmpty()) {
+                    ctrl->smartTranslatePage(state.currentPageId);
+                } else {
+                    ctrl->smartTranslateRegions(state.currentPageId, state.selectedRegionIds);
+                }
             }
         }
     });

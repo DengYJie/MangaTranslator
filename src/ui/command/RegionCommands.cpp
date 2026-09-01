@@ -103,4 +103,34 @@ void RegionGeometryCommand::redo() {
     }
 }
 
+RegionGeometryBatchCommand::RegionGeometryBatchCommand(EditorCommandContext* context,
+                                                       domain::PageId pageId,
+                                                       QVector<Entry> entries,
+                                                       canvas::EditKind kind)
+    : RegionCommand(kind == canvas::EditKind::Move ? QStringLiteral("Move Regions") : QStringLiteral("Resize Regions")),
+      m_context(context), m_pageId(pageId), m_entries(std::move(entries)), m_kind(kind) {}
+
+void RegionGeometryBatchCommand::undo() {
+    apply(false);
+}
+
+void RegionGeometryBatchCommand::redo() {
+    apply(true);
+}
+
+void RegionGeometryBatchCommand::apply(bool redo) {
+    std::vector<domain::PageRegionEdit> edits;
+    edits.reserve(static_cast<std::size_t>(m_entries.size()));
+    for (const auto& entry : std::as_const(m_entries)) {
+        domain::PageRegionEdit edit;
+        edit.regionId = entry.regionId;
+        edit.geometry = redo ? entry.after : entry.before;
+        edits.push_back(edit);
+    }
+    const auto result = m_context->applySnapshots(m_pageId, edits);
+    if (!result.has_value()) {
+        markFaulted();
+    }
+}
+
 } // namespace manga::ui::command

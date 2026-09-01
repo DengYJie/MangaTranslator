@@ -5,7 +5,6 @@
 
 class QPaintEvent;
 class QSplitter;
-class QScrollArea;
 
 namespace manga::ui::manga {
 class MangaCanvas;
@@ -16,6 +15,9 @@ class PageThumbnailList;
 class EditorCommandBar;
 class PaneSplitter;
 } // namespace manga::ui::widget
+namespace fluent::textfields {
+class Label;
+}
 
 namespace manga::ui::screen::editor {
 
@@ -97,11 +99,14 @@ private:
 
     EditorViewModel* m_viewModel; // non-owning
     ui::widget::EditorCommandBar* m_commandBar{nullptr};
-    QScrollArea* m_commandBarScrollArea{nullptr};
     widget::PaneSplitter* m_splitter{nullptr};
     QWidget* m_pagePaneCard{nullptr};
     ui::widget::PageThumbnailList* m_pageList{nullptr};
     ui::manga::MangaCanvas* m_canvas{nullptr};
+    QWidget* m_canvasToolRail{nullptr};
+    QWidget* m_canvasStatusBar{nullptr};
+    fluent::textfields::Label* m_canvasZoomValueLabel{nullptr};
+    fluent::textfields::Label* m_canvasPageSizeLabel{nullptr};
     QWidget* m_inspectorCard{nullptr};
     ui::widget::InspectorPanel* m_inspector{nullptr};
     ui::manga::MangaCanvas::ContentState m_lastPlaceholder{ui::manga::MangaCanvas::ContentState::NoProject};

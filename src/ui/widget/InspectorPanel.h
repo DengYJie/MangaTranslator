@@ -50,6 +50,7 @@ public:
     void setOcrAvailability(bool available, const QString& unavailableReason);
     void setTranslationAvailability(bool available, const QString& unavailableReason);
     void setProcessingState(const screen::editor::EditorProcessingState& processingState);
+    void focusTranslationEditor();
 
     /// Mode of the currently visible host.
     [[nodiscard]] screen::editor::InspectorMode modeForTest() const noexcept {

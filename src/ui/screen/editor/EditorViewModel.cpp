@@ -1218,6 +1218,40 @@ void EditorViewModel::commitRegionGeometry(const domain::RegionId& regionId,
     refreshUndoState();
 }
 
+void EditorViewModel::commitRegionGeometries(const QVector<domain::RegionId>& regionIds,
+                                             const QVector<domain::RectGeometry>& newGeometries,
+                                             canvas::EditKind kind) {
+    if (!m_hasSession || !m_undoStack || !m_commandContext || !m_state.currentPageId.isValid() || regionIds.isEmpty() ||
+        regionIds.size() != newGeometries.size()) {
+        return;
+    }
+
+    const auto pageSize = m_commandContext->pageSize(m_state.currentPageId);
+    QVector<command::RegionGeometryBatchCommand::Entry> entries;
+    entries.reserve(regionIds.size());
+    for (int i = 0; i < regionIds.size(); ++i) {
+        const auto before = m_commandContext->regionGeometry(m_state.currentPageId, regionIds.at(i));
+        if (!before.has_value() || !newGeometries.at(i).isValid() || !newGeometries.at(i).isWithinBounds(pageSize)) {
+            return;
+        }
+        if (*before != newGeometries.at(i)) {
+            entries.append({regionIds.at(i), *before, newGeometries.at(i)});
+        }
+    }
+    if (entries.isEmpty()) {
+        return;
+    }
+
+    sealActiveTextSession();
+    auto* cmd = new command::RegionGeometryBatchCommand(m_commandContext.get(), m_state.currentPageId, entries, kind);
+    m_undoStack->push(cmd);
+    if (cmd->hasFaulted()) {
+        m_undoHistoryFaulted = true;
+    }
+    rebuildCurrentPageProjection();
+    refreshUndoState();
+}
+
 void EditorViewModel::sealActiveTextSession() {
     if (m_textEditSession) {
         m_textEditSession->seal();

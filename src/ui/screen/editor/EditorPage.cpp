@@ -11,14 +11,19 @@
 #include "ui/widget/PaneCard.h"
 #include "ui/widget/PaneSplitter.h"
 
+#include <FluentQt/BasicInput.h>
 #include <FluentQt/FluentQt.h>
+#include <FluentQt/Layout.h>
+#include <FluentQt/TextFields.h>
 #include <QApplication>
+#include <QButtonGroup>
 #include <QDebug>
+#include <QGridLayout>
+#include <QHBoxLayout>
 #include <QKeyEvent>
 #include <QPaintEvent>
 #include <QPainter>
 #include <QResizeEvent>
-#include <QScrollArea>
 #include <QShortcut>
 #include <QVBoxLayout>
 
@@ -104,10 +109,39 @@ EditorPage::EditorPage(EditorViewModel* viewModel, QWidget* parent) : base::Base
             [this](const domain::RegionId& regionId,
                    const domain::RectGeometry& geometry,
                    ui::manga::CanvasEditKind kind) { m_viewModel->commitRegionGeometry(regionId, geometry, kind); });
+    connect(
+        m_canvas,
+        &ui::manga::MangaCanvas::regionsGeometryCommitted,
+        m_viewModel,
+        [this](const QVector<domain::RegionId>& regionIds,
+               const QVector<domain::RectGeometry>& geometries,
+               ui::manga::CanvasEditKind kind) { m_viewModel->commitRegionGeometries(regionIds, geometries, kind); });
     connect(m_canvas,
             &ui::manga::MangaCanvas::regionDeleteRequested,
             m_viewModel,
             [this](const domain::RegionId& regionId) { m_viewModel->deleteRegions({regionId}); });
+    connect(m_canvas, &ui::manga::MangaCanvas::regionTextEditRequested, this, [this](const domain::RegionId& regionId) {
+        m_viewModel->selectRegion(regionId, RegionSelectionMode::Replace);
+        QMetaObject::invokeMethod(
+            m_inspector, [this]() { m_inspector->focusTranslationEditor(); }, Qt::QueuedConnection);
+    });
+    connect(m_canvas,
+            &ui::manga::MangaCanvas::regionContextActionRequested,
+            this,
+            [this](const domain::RegionId& regionId, const QString& action) {
+                m_viewModel->selectRegion(regionId, RegionSelectionMode::Replace);
+                const auto pageId = m_viewModel->state().currentPageId;
+                if (auto* ctrl = m_viewModel->processingController()) {
+                    if (action == QStringLiteral("ocr")) {
+                        ctrl->recognizeRegion(pageId, regionId);
+                    } else if (action == QStringLiteral("translate")) {
+                        ctrl->smartTranslateRegions(pageId, {regionId});
+                    }
+                }
+                if (action == QStringLiteral("delete")) {
+                    m_viewModel->deleteRegions({regionId});
+                }
+            });
 
     connect(m_viewModel, &EditorViewModel::pageImageReady, this, &EditorPage::handlePageImageReady);
     connect(m_viewModel, &EditorViewModel::previewImageReady, this, [this](const PageImageDelivery& delivery) {
@@ -150,9 +184,13 @@ EditorPage::EditorPage(EditorViewModel* viewModel, QWidget* parent) : base::Base
     connect(m_inspector,
             &widget::InspectorPanel::translateRequested,
             this,
-            [this](const domain::PageId& pageId, const QVector<domain::RegionId>& /*regionIds*/) {
+            [this](const domain::PageId& pageId, const QVector<domain::RegionId>& regionIds) {
                 if (auto* ctrl = m_viewModel->processingController()) {
-                    ctrl->smartTranslatePage(pageId);
+                    if (regionIds.isEmpty()) {
+                        ctrl->smartTranslatePage(pageId);
+                    } else {
+                        ctrl->smartTranslateRegions(pageId, regionIds);
+                    }
                 }
             });
     connect(m_inspector, &widget::InspectorPanel::translationSettingsRequested, this, [this]() {
@@ -248,21 +286,101 @@ void EditorPage::buildUi() {
 
     m_commandBar = new widget::EditorCommandBar(m_viewModel, canvasPaneCard);
     m_commandBar->setObjectName(QStringLiteral("editorCommandBar"));
-    m_commandBarScrollArea = new QScrollArea(canvasPaneCard);
-    m_commandBarScrollArea->setObjectName(QStringLiteral("editorCommandBarScrollArea"));
-    m_commandBarScrollArea->setFrameShape(QFrame::NoFrame);
-    // Keep the command bar transparent so it reads as part of the pane
-    // surface instead of a contrasting viewport rectangle.
-    m_commandBarScrollArea->viewport()->setAutoFillBackground(false);
-    m_commandBarScrollArea->setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
-    m_commandBarScrollArea->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
-    m_commandBarScrollArea->setWidgetResizable(true);
-    m_commandBarScrollArea->setFixedHeight(40);
-    m_commandBarScrollArea->setWidget(m_commandBar);
-    canvasPaneLayout->addWidget(m_commandBarScrollArea);
+    canvasPaneLayout->addWidget(m_commandBar);
 
-    m_canvas = new ui::manga::MangaCanvas(canvasPaneCard);
-    canvasPaneLayout->addWidget(m_canvas, 1);
+    auto* canvasHost = new QWidget(canvasPaneCard);
+    canvasHost->setObjectName(QStringLiteral("editorCanvasHost"));
+    auto* canvasHostLayout = new QGridLayout(canvasHost);
+    canvasHostLayout->setContentsMargins(0, 0, 0, 0);
+    canvasHostLayout->setSpacing(0);
+
+    m_canvas = new ui::manga::MangaCanvas(canvasHost);
+    canvasHostLayout->addWidget(m_canvas, 0, 0);
+
+    auto* toolRail = new fluent::layout::Card(canvasHost);
+    m_canvasToolRail = toolRail;
+    toolRail->setObjectName(QStringLiteral("editorCanvasToolRail"));
+    toolRail->setAppearance(fluent::layout::Card::Layer);
+    toolRail->raise();
+    auto* toolLayout = new QVBoxLayout(toolRail);
+    toolLayout->setContentsMargins(8, 8, 8, 8);
+    toolLayout->setSpacing(6);
+    toolLayout->setSizeConstraint(QLayout::SetFixedSize);
+
+    auto* toolGroup = new QButtonGroup(toolRail);
+    toolGroup->setExclusive(true);
+    const auto addCanvasTool = [this, toolLayout, toolGroup](const QString& objectName,
+                                                             const QString& glyph,
+                                                             const QString& label,
+                                                             CanvasTool tool) {
+        auto* button = new fluent::basicinput::Button(toolLayout->parentWidget());
+        button->setObjectName(objectName);
+        button->setIconGlyph(glyph, Typography::IconSize::Standard);
+        button->setAccessibleName(label);
+        button->setToolTip(label);
+        button->setFluentStyle(fluent::basicinput::Button::Subtle);
+        button->setFluentLayout(fluent::basicinput::Button::IconOnly);
+        button->setCheckable(true);
+        button->setFixedSize(44, 36);
+        toolGroup->addButton(button);
+        toolLayout->addWidget(button);
+        connect(
+            button, &fluent::basicinput::Button::clicked, this, [this, tool]() { m_viewModel->setActiveTool(tool); });
+        return button;
+    };
+    addCanvasTool(QStringLiteral("canvasSelectButton"),
+                  Typography::Icons::glyph(QStringLiteral("ic_fluent_cursor_20_regular")),
+                  tr("选择区域"),
+                  CanvasTool::Select);
+    addCanvasTool(QStringLiteral("canvasPanButton"),
+                  Typography::Icons::glyph(QStringLiteral("ic_fluent_hand_left_20_regular")),
+                  tr("平移画布"),
+                  CanvasTool::Pan);
+    addCanvasTool(QStringLiteral("canvasCreateRegionButton"),
+                  Typography::Icons::glyph(QStringLiteral("ic_fluent_scan_text_20_regular")),
+                  tr("创建文本区域"),
+                  CanvasTool::CreateRegion);
+    toolRail->move(12, 12);
+
+    m_canvasStatusBar = new QWidget(canvasPaneCard);
+    m_canvasStatusBar->setObjectName(QStringLiteral("editorCanvasStatusBar"));
+    m_canvasStatusBar->setFixedHeight(36);
+    auto* statusLayout = new QHBoxLayout(m_canvasStatusBar);
+    statusLayout->setContentsMargins(8, 2, 8, 2);
+    statusLayout->setSpacing(4);
+    const auto addStatusButton =
+        [this, statusLayout](const QString& objectName, const QString& glyph, const QString& label, auto callback) {
+            auto* button = new fluent::basicinput::Button(statusLayout->parentWidget());
+            button->setObjectName(objectName);
+            button->setIconGlyph(glyph, Typography::IconSize::Standard);
+            button->setAccessibleName(label);
+            button->setToolTip(label);
+            button->setFluentStyle(fluent::basicinput::Button::Subtle);
+            button->setFluentLayout(fluent::basicinput::Button::IconOnly);
+            button->setFixedSize(32, 32);
+            statusLayout->addWidget(button);
+            connect(button, &fluent::basicinput::Button::clicked, this, callback);
+        };
+    addStatusButton(QStringLiteral("canvasZoomOutButton"), Typography::Icons::ZoomOut, tr("缩小"), [this]() {
+        m_canvas->zoomOut();
+    });
+    m_canvasZoomValueLabel = new fluent::textfields::Label(m_canvasStatusBar);
+    m_canvasZoomValueLabel->setObjectName(QStringLiteral("canvasZoomValueLabel"));
+    m_canvasZoomValueLabel->setMinimumWidth(48);
+    m_canvasZoomValueLabel->setAlignment(Qt::AlignCenter);
+    statusLayout->addWidget(m_canvasZoomValueLabel);
+    addStatusButton(
+        QStringLiteral("canvasZoomInButton"), Typography::Icons::ZoomIn, tr("放大"), [this]() { m_canvas->zoomIn(); });
+    addStatusButton(QStringLiteral("canvasFitButton"), Typography::Icons::Zoom, tr("适合页面"), [this]() {
+        m_canvas->fitToPage();
+    });
+    statusLayout->addStretch(1);
+    m_canvasPageSizeLabel = new fluent::textfields::Label(m_canvasStatusBar);
+    m_canvasPageSizeLabel->setObjectName(QStringLiteral("canvasPageSizeLabel"));
+    m_canvasPageSizeLabel->setTextColorRole(fluent::textfields::Label::TextColorRole::Secondary);
+    statusLayout->addWidget(m_canvasPageSizeLabel);
+    canvasPaneLayout->addWidget(canvasHost, 1);
+    canvasPaneLayout->addWidget(m_canvasStatusBar);
     m_splitter->addWidget(canvasPaneCard);
 
     auto* inspectorCard = new widget::PaneCard(m_splitter);
@@ -541,6 +659,20 @@ void EditorPage::render(const EditorState& state) {
             break;
     }
     m_canvas->setTool(canvasTool);
+    if (m_canvasToolRail != nullptr) {
+        if (auto* button =
+                m_canvasToolRail->findChild<fluent::basicinput::Button*>(QStringLiteral("canvasSelectButton"))) {
+            button->setChecked(state.activeTool == CanvasTool::Select);
+        }
+        if (auto* button =
+                m_canvasToolRail->findChild<fluent::basicinput::Button*>(QStringLiteral("canvasPanButton"))) {
+            button->setChecked(state.activeTool == CanvasTool::Pan);
+        }
+        if (auto* button =
+                m_canvasToolRail->findChild<fluent::basicinput::Button*>(QStringLiteral("canvasCreateRegionButton"))) {
+            button->setChecked(state.activeTool == CanvasTool::CreateRegion);
+        }
+    }
 
     QVector<ui::manga::CanvasRegionDisplay> displayRegions;
     displayRegions.reserve(state.regions.size());
@@ -558,8 +690,14 @@ void EditorPage::render(const EditorState& state) {
     for (const auto& p : state.pages) {
         if (p.id == state.currentPageId) {
             m_canvas->setPageBounds(p.imageSize);
+            if (m_canvasPageSizeLabel != nullptr) {
+                m_canvasPageSizeLabel->setText(tr("%1 × %2 px").arg(p.imageSize.width).arg(p.imageSize.height));
+            }
             break;
         }
+    }
+    if (m_canvasZoomValueLabel != nullptr) {
+        m_canvasZoomValueLabel->setText(QStringLiteral("%1%").arg(qRound(state.zoomFactor * 100.0)));
     }
 
     if (!state.projectId.isValid()) {

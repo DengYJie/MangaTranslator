@@ -10,6 +10,7 @@
 
 #include <QCoreApplication>
 #include <QDebug>
+#include <QSet>
 
 namespace manga::ui::screen::editor {
 
@@ -91,6 +92,19 @@ void EditorProcessingController::cancelMatchingTask(const WatcherKey& key) {
 }
 
 void EditorProcessingController::smartTranslatePage(const domain::PageId& pageId) {
+    smartTranslate(pageId, {});
+}
+
+void EditorProcessingController::smartTranslateRegions(const domain::PageId& pageId,
+                                                       const QVector<domain::RegionId>& regionIds) {
+    if (regionIds.isEmpty()) {
+        return;
+    }
+    smartTranslate(pageId, regionIds);
+}
+
+void EditorProcessingController::smartTranslate(const domain::PageId& pageId,
+                                                const QVector<domain::RegionId>& regionIds) {
     if (m_viewModel == nullptr || !m_viewModel->hasSession() || !pageId.isValid() || m_smartWorkflow == nullptr ||
         m_registry == nullptr) {
         return;
@@ -134,7 +148,11 @@ void EditorProcessingController::smartTranslatePage(const domain::PageId& pageId
     QHash<domain::RegionId, quint64> expectedRevisions;
     QVector<domain::RegionId> targetRegionIds;
 
+    const QSet<domain::RegionId> requested(regionIds.cbegin(), regionIds.cend());
     for (const auto& region : page->regions()) {
+        if (!requested.isEmpty() && !requested.contains(region.id())) {
+            continue;
+        }
         application::RegionProcessingTarget target;
         target.regionId = region.id();
         target.geometry = region.geometry();
@@ -146,6 +164,10 @@ void EditorProcessingController::smartTranslatePage(const domain::PageId& pageId
 
         expectedRevisions.insert(region.id(), region.contentRevision());
         targetRegionIds.append(region.id());
+    }
+
+    if (targets.isEmpty()) {
+        return;
     }
 
     const QString sourceLang = QStringLiteral("ja");

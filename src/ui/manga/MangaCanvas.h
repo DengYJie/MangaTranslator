@@ -16,6 +16,8 @@ class QResizeEvent;
 class QWheelEvent;
 class QKeyEvent;
 class QMouseEvent;
+class QContextMenuEvent;
+class QFocusEvent;
 
 namespace fluent::basicinput {
 class Button;
@@ -122,6 +124,8 @@ Q_SIGNALS:
 
     /// Emitted when a move or resize gesture completes with changed geometry.
     void regionGeometryCommitted(SourceRegionId id, SourceRectGeometry geometry, CanvasEditKind kind);
+    void
+    regionsGeometryCommitted(QVector<SourceRegionId> ids, QVector<SourceRectGeometry> geometries, CanvasEditKind kind);
 
     /// Emitted when an in-progress gesture is cancelled (Escape key).
     void gestureCancelled();
@@ -129,9 +133,17 @@ Q_SIGNALS:
     /// Emitted when Delete is pressed with a selected region.
     void regionDeleteRequested(SourceRegionId id);
 
+    /// Emitted when the user requests inline editing from the canvas.
+    void regionTextEditRequested(SourceRegionId id);
+
+    /// Emitted after a region context menu action is chosen.
+    void regionContextActionRequested(SourceRegionId id, QString action);
+
 protected:
     void wheelEvent(QWheelEvent* event) override;
     void keyPressEvent(QKeyEvent* event) override;
+    void keyReleaseEvent(QKeyEvent* event) override;
+    void focusOutEvent(QFocusEvent* event) override;
     void resizeEvent(QResizeEvent* event) override;
     void showEvent(QShowEvent* event) override;
     void drawForeground(QPainter* painter, const QRectF& rect) override;
@@ -139,9 +151,14 @@ protected:
     void mousePressEvent(QMouseEvent* event) override;
     void mouseMoveEvent(QMouseEvent* event) override;
     void mouseReleaseEvent(QMouseEvent* event) override;
+    void mouseDoubleClickEvent(QMouseEvent* event) override;
+    void contextMenuEvent(QContextMenuEvent* event) override;
+    void leaveEvent(QEvent* event) override;
 
 private:
     void applyZoom(double factor);
+    [[nodiscard]] QRectF contentSceneRect() const;
+    void updateNavigationSceneRect();
     void emitViewTransform();
     void layoutPlaceholderButton();
     void updateAccessibleDescription();
@@ -183,14 +200,20 @@ private:
 
     /// Gesture tracking state for move/resize/create drags.
     struct GestureState {
+        struct Target {
+            SourceRegionId id;
+            SourceRectGeometry startGeometry;
+        };
+
         bool active{false};
         bool dragging{false};
         QPointF pressDevicePx;
-        SourceRectGeometry startGeometry;
-        SourceRegionId targetRegionId{};
+        QVector<Target> targets;
         std::optional<CanvasHandlePosition> activeHandle;
     };
     GestureState m_gesture;
+    bool m_spaceHeld{false};
+    SourceRegionId m_hoveredRegionId{};
 };
 
 } // namespace manga::ui::manga

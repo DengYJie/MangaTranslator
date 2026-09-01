@@ -1003,6 +1003,12 @@ QWidget* InspectorPanel::buildMultiHost() {
     return host;
 }
 
+void InspectorPanel::focusTranslationEditor() {
+    if (m_translationEdit != nullptr && m_translationEdit->isVisible()) {
+        m_translationEdit->setFocus(Qt::OtherFocusReason);
+    }
+}
+
 void InspectorPanel::setInspectorState(const screen::editor::InspectorState& state) {
     m_updating = true;
 

@@ -27,6 +27,13 @@ public:
         return m_selected;
     }
 
+    [[nodiscard]] bool isHovered() const noexcept {
+        return m_hovered;
+    }
+
+    /// Updates the transient hover presentation without changing selection.
+    void setHovered(bool hovered);
+
     /// Updates position, size, and handle visibility from a display projection.
     void updateFromDisplay(const canvas::RegionDisplay& display);
 
@@ -53,6 +60,7 @@ private:
 
     ::manga::domain::RegionId m_id;
     bool m_selected{false};
+    bool m_hovered{false};
     int m_order{0};
     QColor m_selectedStroke{0, 120, 215};
     QColor m_unselectedStroke{180, 180, 180, 160};

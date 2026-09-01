@@ -114,4 +114,33 @@ private:
     canvas::EditKind m_kind;
 };
 
+class RegionGeometryBatchCommand : public RegionCommand {
+public:
+    struct Entry {
+        domain::RegionId regionId;
+        domain::RectGeometry before;
+        domain::RectGeometry after;
+    };
+
+    RegionGeometryBatchCommand(EditorCommandContext* context,
+                               domain::PageId pageId,
+                               QVector<Entry> entries,
+                               canvas::EditKind kind);
+
+    void undo() override;
+    void redo() override;
+
+    [[nodiscard]] domain::PageId pageId() const noexcept override {
+        return m_pageId;
+    }
+
+private:
+    void apply(bool redo);
+
+    EditorCommandContext* m_context;
+    domain::PageId m_pageId;
+    QVector<Entry> m_entries;
+    canvas::EditKind m_kind;
+};
+
 } // namespace manga::ui::command

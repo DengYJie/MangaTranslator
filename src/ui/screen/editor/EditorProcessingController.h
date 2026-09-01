@@ -68,6 +68,7 @@ public:
 
     // Commands / User Intents
     void smartTranslatePage(const domain::PageId& pageId);
+    void smartTranslateRegions(const domain::PageId& pageId, const QVector<domain::RegionId>& regionIds);
     void recognizeSelectedRegions();
     void recognizeRegion(const domain::PageId& pageId, const domain::RegionId& regionId);
     void translatePage(const domain::PageId& pageId);
@@ -140,6 +141,7 @@ private:
     };
 
     void cancelMatchingTask(const WatcherKey& key);
+    void smartTranslate(const domain::PageId& pageId, const QVector<domain::RegionId>& regionIds);
     void updateProcessingStateForCurrentPage();
     void handleSmartTranslateFinished(const WatcherKey& key,
                                       application::OperationId operationId,

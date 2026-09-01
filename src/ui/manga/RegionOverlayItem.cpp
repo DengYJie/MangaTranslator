@@ -54,7 +54,9 @@ QRectF RegionOverlayItem::boundingRect() const {
 
 void RegionOverlayItem::paint(QPainter* painter, const QStyleOptionGraphicsItem*, QWidget*) {
     painter->save();
-    painter->setBrush(Qt::NoBrush);
+    QColor fill = m_selectedStroke;
+    fill.setAlpha(m_selected ? 22 : (m_hovered ? 14 : 0));
+    painter->setBrush(fill.alpha() > 0 ? QBrush(fill) : Qt::NoBrush);
 
     QPen halo(QColor(0, 0, 0, 220), 3.0);
     halo.setCosmetic(true);
@@ -62,13 +64,21 @@ void RegionOverlayItem::paint(QPainter* painter, const QStyleOptionGraphicsItem*
     painter->setPen(halo);
     painter->drawRect(rect());
 
-    const QColor foreground = m_selected ? m_selectedStroke : QColor(Qt::white);
-    QPen outline(foreground, 1.0);
+    const QColor foreground = m_selected ? m_selectedStroke : (m_hovered ? m_selectedStroke : QColor(Qt::white));
+    QPen outline(foreground, m_hovered && !m_selected ? 1.5 : 1.0);
     outline.setCosmetic(true);
     outline.setJoinStyle(Qt::MiterJoin);
     painter->setPen(outline);
     painter->drawRect(rect());
     painter->restore();
+}
+
+void RegionOverlayItem::setHovered(bool hovered) {
+    if (m_hovered == hovered) {
+        return;
+    }
+    m_hovered = hovered;
+    update();
 }
 
 void RegionOverlayItem::layoutHandles() {
