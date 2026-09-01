@@ -215,6 +215,35 @@ private Q_SLOTS:
         QCOMPARE(saveButton->text(), QStringLiteral("保存"));
     }
 
+    void commandBarFollowsDesignGroupOrder() {
+        test::FakeThumbnailStore thumbnails;
+        test::FakePageImageLoader images;
+        application::OperationRegistry registry;
+        ui::screen::editor::EditorViewModel viewModel(&thumbnails, &images, &registry);
+        ui::screen::editor::EditorPage page(&viewModel);
+        page.resize(1200, 800);
+        page.show();
+        QCoreApplication::processEvents();
+
+        auto* commandBar = page.findChild<QWidget*>(QStringLiteral("editorCommandBar"));
+        auto* previewButton =
+            commandBar->findChild<fluent::basicinput::Button*>(QStringLiteral("previewSelectorButton"));
+        auto* selectButton = commandBar->findChild<fluent::basicinput::Button*>(QStringLiteral("selectButton"));
+        auto* translateButton =
+            commandBar->findChild<fluent::basicinput::Button*>(QStringLiteral("smartTranslateButton"));
+        auto* saveButton = commandBar->findChild<fluent::basicinput::Button*>(QStringLiteral("saveButton"));
+        auto* pagePaneButton =
+            commandBar->findChild<fluent::basicinput::Button*>(QStringLiteral("pagePaneToggleButton"));
+        auto* inspectorButton =
+            commandBar->findChild<fluent::basicinput::Button*>(QStringLiteral("inspectorPaneToggleButton"));
+
+        QVERIFY(previewButton->x() < selectButton->x());
+        QVERIFY(selectButton->x() < translateButton->x());
+        QVERIFY(translateButton->x() < saveButton->x());
+        QVERIFY(!pagePaneButton->isVisible());
+        QVERIFY(!inspectorButton->isVisible());
+    }
+
     void inspectorActionButtonsExist() {
         test::FakeThumbnailStore thumbnails;
         test::FakePageImageLoader images;

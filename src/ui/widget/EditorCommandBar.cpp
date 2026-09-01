@@ -88,11 +88,13 @@ void EditorCommandBar::buildUi() {
                          tr("页面列表"),
                          QStringLiteral("pagePaneToggleButton"));
     m_pagePaneToggleButton->setCheckable(true);
+    m_pagePaneToggleButton->setVisible(false);
     m_inspectorPaneToggleButton =
         createIconButton(Typography::Icons::glyph(QStringLiteral("ic_fluent_panel_right_20_regular")),
                          tr("属性面板"),
                          QStringLiteral("inspectorPaneToggleButton"));
     m_inspectorPaneToggleButton->setCheckable(true);
+    m_inspectorPaneToggleButton->setVisible(false);
     m_saveButton =
         createLabeledButton(Typography::Icons::Save, tr("保存"), tr("保存项目 (Ctrl+S)"), QStringLiteral("saveButton"));
 
@@ -105,11 +107,12 @@ void EditorCommandBar::buildUi() {
     layout->addWidget(m_fitToPageButton);
     layout->addWidget(m_actualSizeButton);
     layout->addSpacing(8);
+    layout->addWidget(m_previewSelectorButton);
+    layout->addSpacing(8);
     layout->addWidget(m_selectButton);
     layout->addWidget(m_panButton);
     layout->addWidget(m_createRegionButton);
     layout->addSpacing(8);
-    layout->addWidget(m_previewSelectorButton);
     layout->addWidget(m_smartTranslateButton);
     layout->addWidget(m_adoptButton);
     layout->addWidget(m_rejectButton);
