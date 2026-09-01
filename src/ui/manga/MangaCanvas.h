@@ -20,6 +20,12 @@ class QMouseEvent;
 namespace fluent::basicinput {
 class Button;
 }
+namespace fluent::layout {
+class Card;
+}
+namespace fluent::textfields {
+class Label;
+}
 
 namespace manga::ui::manga {
 
@@ -151,6 +157,10 @@ private:
 
     QGraphicsScene* m_scene{nullptr};         // owned via QGraphicsView::setScene
     QGraphicsPixmapItem* m_pageItem{nullptr}; // scene-owned
+    fluent::layout::Card* m_placeholderCard{nullptr};
+    fluent::textfields::Label* m_placeholderIcon{nullptr};
+    fluent::textfields::Label* m_placeholderTitle{nullptr};
+    fluent::textfields::Label* m_placeholderDescription{nullptr};
     fluent::basicinput::Button* m_placeholderAction{nullptr};
     QPixmap m_pagePixmap;
     ContentState m_contentState{ContentState::NoProject};

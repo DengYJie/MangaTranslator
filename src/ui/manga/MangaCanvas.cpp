@@ -3,6 +3,8 @@
 #include "ui/manga/RegionOverlayItem.h"
 
 #include <FluentQt/BasicInput.h>
+#include <FluentQt/Layout.h>
+#include <FluentQt/TextFields.h>
 #include <QCoreApplication>
 #include <QGraphicsPixmapItem>
 #include <QGraphicsRectItem>
@@ -53,8 +55,39 @@ MangaCanvas::MangaCanvas(QWidget* parent) : QGraphicsView(parent) {
     setAccessibleName(tr("漫画画布"));
     setFocusPolicy(Qt::StrongFocus);
 
-    m_placeholderAction = new fluent::basicinput::Button(viewport());
-    m_placeholderAction->hide();
+    m_placeholderCard = new fluent::layout::Card(viewport());
+    m_placeholderCard->setObjectName(QStringLiteral("canvasEmptyStateCard"));
+    m_placeholderCard->setAppearance(fluent::layout::Card::LayerAlt);
+    m_placeholderCard->setBorderVisible(false);
+    m_placeholderCard->setFixedWidth(280);
+    auto* placeholderLayout = new QVBoxLayout(m_placeholderCard);
+    placeholderLayout->setContentsMargins(24, 20, 24, 20);
+    placeholderLayout->setSpacing(8);
+
+    m_placeholderIcon = new fluent::textfields::Label(m_placeholderCard);
+    m_placeholderIcon->setFont(QFont(Typography::FontFamily::FluentIcons, 32));
+    m_placeholderIcon->setText(Typography::Icons::Folder);
+    m_placeholderIcon->setAlignment(Qt::AlignCenter);
+    placeholderLayout->addWidget(m_placeholderIcon);
+
+    m_placeholderTitle = new fluent::textfields::Label(tr("尚未打开项目"), m_placeholderCard);
+    m_placeholderTitle->setFluentTypography(Typography::FontRole::Subtitle);
+    m_placeholderTitle->setAlignment(Qt::AlignCenter);
+    placeholderLayout->addWidget(m_placeholderTitle);
+
+    m_placeholderDescription = new fluent::textfields::Label(m_placeholderCard);
+    m_placeholderDescription->setFluentTypography(Typography::FontRole::Body);
+    m_placeholderDescription->setTextColorRole(fluent::textfields::Label::TextColorRole::Secondary);
+    m_placeholderDescription->setWordWrap(true);
+    m_placeholderDescription->setAlignment(Qt::AlignCenter);
+    placeholderLayout->addWidget(m_placeholderDescription);
+
+    m_placeholderAction = new fluent::basicinput::Button(tr("打开项目"), m_placeholderCard);
+    m_placeholderAction->setFluentStyle(fluent::basicinput::Button::Accent);
+    m_placeholderAction->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Fixed);
+    m_placeholderAction->setAccessibleName(tr("打开项目"));
+    placeholderLayout->addWidget(m_placeholderAction, 0, Qt::AlignHCenter);
+    m_placeholderCard->hide();
     connect(m_placeholderAction, &fluent::basicinput::Button::clicked, this, &MangaCanvas::placeholderActionActivated);
 
     m_backgroundColor = themeColorsRef().bgCanvas;
@@ -120,17 +153,21 @@ void MangaCanvas::setContentStateInternal(ContentState state,
         clearPageImage();
     }
 
-    if (state == ContentState::NoProject || state == ContentState::NoPage || state == ContentState::Error) {
-        if (!actionText.isEmpty()) {
-            m_placeholderAction->setText(actionText);
-            m_placeholderAction->setAccessibleName(actionText);
-            m_placeholderAction->show();
-            m_placeholderAction->raise();
-        } else {
-            m_placeholderAction->hide();
-        }
+    if (!actionText.isEmpty()) {
+        const QString title = state == ContentState::NoProject ? tr("尚未打开项目")
+                              : state == ContentState::Error   ? tr("页面加载失败")
+                                                               : tr("没有可显示的页面");
+        m_placeholderIcon->setText(state == ContentState::Error
+                                       ? Typography::Icons::glyph(QStringLiteral("ic_fluent_error_circle_20_filled"))
+                                       : Typography::Icons::Folder);
+        m_placeholderTitle->setText(title);
+        m_placeholderDescription->setText(m_placeholderMessage);
+        m_placeholderAction->setText(actionText);
+        m_placeholderAction->setAccessibleName(actionText);
+        m_placeholderCard->show();
+        m_placeholderCard->raise();
     } else {
-        m_placeholderAction->hide();
+        m_placeholderCard->hide();
     }
 
     layoutPlaceholderButton();
@@ -649,6 +686,9 @@ void MangaCanvas::drawForeground(QPainter* painter, const QRectF& rect) {
     if (m_contentState == ContentState::Image) {
         return;
     }
+    if (m_placeholderCard && m_placeholderCard->isVisible()) {
+        return;
+    }
 
     painter->save();
     painter->setPen(m_placeholderTextColor);
@@ -690,19 +730,14 @@ void MangaCanvas::emitViewTransform() {
 }
 
 void MangaCanvas::layoutPlaceholderButton() {
-    if (m_placeholderAction->isHidden() || !viewport()) {
+    if (!m_placeholderCard || m_placeholderCard->isHidden() || !viewport()) {
         return;
     }
 
-    m_placeholderAction->adjustSize();
-    int x = (viewport()->width() - m_placeholderAction->width()) / 2;
-    int y = (viewport()->height() - m_placeholderAction->height()) / 2;
-
-    if (!m_placeholderMessage.isEmpty()) {
-        y += 40;
-    }
-
-    m_placeholderAction->move(x, y);
+    m_placeholderCard->adjustSize();
+    const int x = (viewport()->width() - m_placeholderCard->width()) / 2;
+    const int y = (viewport()->height() - m_placeholderCard->height()) / 2;
+    m_placeholderCard->move(x, y);
 }
 
 void MangaCanvas::updateAccessibleDescription() {

@@ -56,6 +56,7 @@
 ## 4. 视口背景与页面
 
 - Workspace 与 viewport 背景使用 FluentQt `bgCanvas` 主题色，不使用硬编码颜色或纯黑。外层 pane 使用 `Card::Canvas`，由画布控件统一绘制视口背景。
+- `NoProject` 状态在画布中心显示轻量状态卡，包含文件夹图标、标题、说明和打开项目按钮；`Loading`、`NoPage` 与 `Error` 保留各自的状态信息和动作，不使用全屏遮罩。
 - 可选 24 source px 细网格只用于空间感；缩放低于 25% 时固定隐藏，减少视觉干扰时也隐藏。
 - 页面周围最少 24 px 空间；适应页面时考虑 CommandBar 和 Overlay 安全区。
 - 页面阴影为低至中等 Elevation，不能污染页面实际像素。
