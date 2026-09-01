@@ -98,10 +98,12 @@ void EditorRegionWorkflowTest::testWorkflow() {
 
     // Close intercept
     QSignalSpy closeSpy(&vm, &EditorViewModel::closeDecisionRequested);
+    QSignalSpy projectClosedSpy(&vm, &EditorViewModel::projectClosed);
     vm.requestCloseProject();
     QCOMPARE(closeSpy.count(), 1);
 
     vm.confirmDiscardAndClose();
+    QVERIFY(projectClosedSpy.wait(1000));
     QCOMPARE(repo.closeCallCount, 1);
     QVERIFY(!vm.state().currentPageId.isValid());
 }

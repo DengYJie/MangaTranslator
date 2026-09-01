@@ -833,10 +833,6 @@ void RecoveryMatrixTest::projectSwitchRejectsLateResults() {
     auto saveP1Fut = SaveProjectUseCase(stack.repository.get()).execute(saveP1Req, OperationContext{});
     QVERIFY(awaitFuture(saveP1Fut) && saveP1Fut.result().has_value());
     QVERIFY(p1.markCleanIfRevision(saveP1Fut.result().value().savedRevision));
-    CloseProjectRequest closeP1Req{.projectId = p1.id()};
-    auto closeP1Fut = CloseProjectUseCase(stack.repository.get()).execute(closeP1Req, OperationContext{});
-    QVERIFY(awaitFuture(closeP1Fut) && closeP1Fut.result().has_value());
-
     // Create P2
     const QString p2Root = stack.projectRoot(QStringLiteral("project_p2_recovery"));
     CreateProjectRequest createP2Req{

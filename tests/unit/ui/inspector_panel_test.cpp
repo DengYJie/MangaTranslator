@@ -9,6 +9,8 @@
 #include <QTextEdit>
 #include <QtTest>
 
+#include <algorithm>
+
 using namespace manga;
 using manga::ui::screen::editor::InspectorField;
 using manga::ui::screen::editor::InspectorMode;
@@ -84,11 +86,20 @@ private Q_SLOTS:
         auto* summary = panel.findChild<fluent::textfields::Label*>(QStringLiteral("inspectorPageSummary"));
         QVERIFY(summary != nullptr);
         QVERIFY(summary->text().contains(QStringLiteral("2 / 5")));
-        QVERIFY(summary->text().contains(QStringLiteral("1200 × 1800")));
-        QVERIFY(summary->text().contains(QString::number(4)));
-        auto* guidance = panel.findChild<fluent::textfields::Label*>(QStringLiteral("inspectorPageGuidance"));
-        QVERIFY(guidance != nullptr);
-        QVERIFY(!guidance->text().isEmpty());
+        auto* meta = panel.findChild<fluent::textfields::Label*>(QStringLiteral("inspectorPageMeta"));
+        QVERIFY(meta != nullptr);
+        QVERIFY(meta->text().contains(QStringLiteral("1200 × 1800")));
+        QVERIFY(meta->text().contains(QStringLiteral("从右到左")));
+
+        const auto statValues = panel.findChildren<fluent::textfields::Label*>();
+        auto hasStatValue = [&statValues](const QString& value) {
+            return std::any_of(statValues.cbegin(), statValues.cend(), [&value](const auto* label) {
+                return label->text() == value || label->text().startsWith(value + QStringLiteral(" / "));
+            });
+        };
+        QVERIFY(hasStatValue(QStringLiteral("4")));
+        QVERIFY(hasStatValue(QStringLiteral("3")));
+        QVERIFY(hasStatValue(QStringLiteral("2")));
     }
 
     void singleStatePopulatesAllFields() {

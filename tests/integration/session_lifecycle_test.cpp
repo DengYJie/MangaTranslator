@@ -449,10 +449,6 @@ void SessionLifecycleTest::projectSwitchRejectsLateCompletions() {
     auto saveP1Fut = SaveProjectUseCase(stack.repository.get()).execute(saveP1Req, OperationContext{});
     QVERIFY(awaitFuture(saveP1Fut) && saveP1Fut.result().has_value());
     QVERIFY(p1.markCleanIfRevision(saveP1Fut.result().value().savedRevision));
-    CloseProjectRequest closeP1Req{.projectId = p1.id()};
-    auto closeP1Fut = CloseProjectUseCase(stack.repository.get()).execute(closeP1Req, OperationContext{});
-    QVERIFY(awaitFuture(closeP1Fut) && closeP1Fut.result().has_value());
-
     // Create P2
     const QString p2Root = stack.projectRoot(QStringLiteral("project_p2"));
     CreateProjectRequest createP2Req{
@@ -483,10 +479,6 @@ void SessionLifecycleTest::projectSwitchRejectsLateCompletions() {
     auto saveP2Fut = SaveProjectUseCase(stack.repository.get()).execute(saveP2Req, OperationContext{});
     QVERIFY(awaitFuture(saveP2Fut) && saveP2Fut.result().has_value());
     QVERIFY(p2.markCleanIfRevision(saveP2Fut.result().value().savedRevision));
-    CloseProjectRequest closeP2Req{.projectId = p2.id()};
-    auto closeP2Fut = CloseProjectUseCase(stack.repository.get()).execute(closeP2Req, OperationContext{});
-    QVERIFY(awaitFuture(closeP2Fut) && closeP2Fut.result().has_value());
-
     auto ocrEngine = std::make_unique<manga::application::test::FakeOcrEngine>();
     auto viewModel = std::make_unique<EditorViewModel>(
         stack.thumbnailStore.get(), stack.pageImageLoader.get(), &stack.operationRegistry, stack.repository.get());
