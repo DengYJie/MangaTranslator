@@ -92,6 +92,9 @@ public:
     /// Center of the viewport in scene (source pixel) coordinates.
     [[nodiscard]] QPointF viewCenterOnPage() const;
     void centerOnPage(const QPointF& scenePos);
+    /// Centers scenePoint using the same integer viewport metric as viewCenterOnPage, so a
+    /// save-center/restore-center round trip does not shift the scroll bars.
+    void centerScenePointOnViewport(const QPointF& scenePoint);
 
     /// Sets the active canvas tool. Pan keeps ScrollHandDrag; Select switches to
     /// NoDrag for item interaction; Text enables text creation gesture.

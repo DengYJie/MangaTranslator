@@ -3,6 +3,7 @@
 #include "ui/screen/editor/EditorProcessingController.h"
 #include "ui/screen/editor/EditorViewModel.h"
 
+#include <FluentQt/DialogsFlyouts.h>
 #include <FluentQt/FluentQt.h>
 #include <FluentQt/TextFields.h>
 #include <QApplication>
@@ -192,7 +193,33 @@ void EditorCommandBar::buildUi() {
         if (auto* ctrl = m_viewModel->processingController()) {
             const auto& state = m_viewModel->state();
             if (!state.processing.isRunning && state.currentPageId.isValid()) {
-                ctrl->detectRegions(state.currentPageId);
+                if (!state.regions.isEmpty()) {
+                    auto* dialog = new fluent::dialogs_flyouts::ContentDialog(window());
+                    dialog->setObjectName(QStringLiteral("detectConfirmDialog"));
+                    dialog->setTitle(tr("重新检测区域"));
+                    auto* message = new fluent::textfields::Label(
+                        tr("当前页面已有文本区域。重新检测将清除这些区域。\n此操作可以撤销。是否继续？"));
+                    message->setFluentTypography(Typography::FontRole::Body);
+                    message->setWordWrap(true);
+                    message->setTextColorRole(fluent::textfields::Label::TextColorRole::Primary);
+                    dialog->setContent(message);
+                    dialog->setPrimaryButtonText(tr("重新检测"));
+                    dialog->setCloseButtonText(tr("取消"));
+                    dialog->setDefaultButton(fluent::dialogs_flyouts::ContentDialog::Primary);
+                    dialog->setWindowModality(Qt::WindowModal);
+
+                    connect(
+                        dialog, &fluent::dialogs_flyouts::ContentDialog::primaryButtonClicked, this, [this, ctrl]() {
+                            const auto& s = m_viewModel->state();
+                            if (!s.processing.isRunning && s.currentPageId.isValid()) {
+                                ctrl->detectRegions(s.currentPageId, true);
+                            }
+                        });
+                    connect(dialog, &QDialog::finished, dialog, &QObject::deleteLater);
+                    dialog->open();
+                } else {
+                    ctrl->detectRegions(state.currentPageId, true);
+                }
             }
         }
     });

@@ -1254,19 +1254,60 @@ void EditorViewModel::detectRegionsOnCurrentPage() {
         return;
     }
     if (m_processingController != nullptr) {
-        m_processingController->detectRegions(m_state.currentPageId);
+        // Currently hardcoded to true since this is the global re-detection entry point.
+        // If a dialog is needed here, it should be lifted to the view layer.
+        m_processingController->detectRegions(m_state.currentPageId, true);
     }
 }
 
 void EditorViewModel::applyDetectedRegions(const domain::PageId& pageId,
-                                           const QVector<application::DetectedRegionItem>& detected) {
+                                           const QVector<application::DetectedRegionItem>& detected,
+                                           bool clearExisting) {
     if (!m_hasSession || !m_undoStack || !m_commandContext || pageId != m_state.currentPageId || detected.isEmpty()) {
         return;
     }
 
-    const auto pageSize = m_commandContext->pageSize(pageId);
     const auto* page = m_openedSession->project.findPage(pageId);
-    const int startOrderIndex = page ? static_cast<int>(page->regions().size()) : 0;
+    if (page == nullptr) {
+        return;
+    }
+
+    sealActiveTextSession();
+
+    // When clearExisting is requested, group the delete-all and the batch-create into one
+    // macro command so a single Undo reverts the entire re-detection in one step.
+    const bool hasMacro = clearExisting && !page->regions().empty();
+    if (hasMacro) {
+        m_undoStack->beginMacro(tr("重新检测区域"));
+
+        // Build delete entries for all existing regions on this page.
+        QVector<command::DeleteRegionsCommand::RegionEntry> deleteEntries;
+        deleteEntries.reserve(static_cast<int>(page->regions().size()));
+        for (const auto& region : page->regions()) {
+            command::DeleteRegionsCommand::RegionEntry entry;
+            entry.region = region;
+            entry.orderIndex = region.orderIndex();
+            deleteEntries.append(entry);
+        }
+        std::sort(deleteEntries.begin(), deleteEntries.end(), [](const auto& a, const auto& b) {
+            return a.orderIndex < b.orderIndex;
+        });
+
+        auto* deleteCmd = new command::DeleteRegionsCommand(m_commandContext.get(), pageId, deleteEntries);
+        m_undoStack->push(deleteCmd);
+        if (deleteCmd->hasFaulted()) {
+            m_undoHistoryFaulted = true;
+            m_undoStack->endMacro();
+            rebuildCurrentPageProjection();
+            refreshUndoState();
+            return;
+        }
+    }
+
+    // Re-read the page after the potential delete so orderIndex starts from the new size.
+    const auto* freshPage = m_openedSession->project.findPage(pageId);
+    const int startOrderIndex = freshPage ? static_cast<int>(freshPage->regions().size()) : 0;
+    const auto pageSize = m_commandContext->pageSize(pageId);
 
     QVector<command::CreateRegionsBatchCommand::Entry> entries;
     QVector<domain::RegionId> newRegionIds;
@@ -1291,14 +1332,22 @@ void EditorViewModel::applyDetectedRegions(const domain::PageId& pageId,
     }
 
     if (entries.isEmpty()) {
+        if (hasMacro) {
+            m_undoStack->endMacro();
+        }
+        rebuildCurrentPageProjection();
+        refreshUndoState();
         return;
     }
 
-    sealActiveTextSession();
     auto* cmd = new command::CreateRegionsBatchCommand(m_commandContext.get(), pageId, std::move(entries));
     m_undoStack->push(cmd);
     if (cmd->hasFaulted()) {
         m_undoHistoryFaulted = true;
+    }
+
+    if (hasMacro) {
+        m_undoStack->endMacro();
     }
 
     updateState([&newRegionIds](EditorState& s) {

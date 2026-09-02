@@ -174,7 +174,7 @@ void EditorProcessingController::smartTranslatePage(const domain::PageId& pageId
     smartTranslate(pageId, {});
 }
 
-void EditorProcessingController::detectRegions(const domain::PageId& pageId) {
+void EditorProcessingController::detectRegions(const domain::PageId& pageId, bool clearExisting) {
     if (m_viewModel == nullptr || !m_viewModel->hasSession() || m_textDetector == nullptr) {
         return;
     }
@@ -218,11 +218,12 @@ void EditorProcessingController::detectRegions(const domain::PageId& pageId) {
     req.minConfidence = 0.35;
 
     qInfo().noquote() << "[Detect] start page=" << QString::fromStdString(pageId.toString())
-                      << "opId=" << QString::fromStdString(opId.toString()) << "imgSize=" << image.size();
+                      << "opId=" << QString::fromStdString(opId.toString()) << "imgSize=" << image.size()
+                      << "clearExisting=" << clearExisting;
 
     auto future = m_textDetector->detect(std::move(req), operation);
     auto* watcher = new QFutureWatcher<application::Result<application::TextDetectionResponse>>(this);
-    connect(watcher, &QFutureWatcherBase::finished, this, [this, watcher, key, opId, sessionGen]() {
+    connect(watcher, &QFutureWatcherBase::finished, this, [this, watcher, key, opId, sessionGen, clearExisting]() {
         if (m_activeTasks.contains(key) && m_activeTasks[key].operationId == opId) {
             m_activeTasks.remove(key);
         }
@@ -237,7 +238,7 @@ void EditorProcessingController::detectRegions(const domain::PageId& pageId) {
                 qInfo().noquote() << "[Detect] success page=" << QString::fromStdString(key.pageId.toString())
                                   << "detected=" << result->detectedRegions.size()
                                   << "panels=" << result->panels.size();
-                m_viewModel->applyDetectedRegions(key.pageId, result->detectedRegions);
+                m_viewModel->applyDetectedRegions(key.pageId, result->detectedRegions, clearExisting);
                 Q_EMIT processingFinished(key.pageId, true);
             } else {
                 qWarning().noquote() << "[Detect] failed page=" << QString::fromStdString(key.pageId.toString())

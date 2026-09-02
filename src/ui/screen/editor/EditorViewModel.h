@@ -124,7 +124,9 @@ public:
     /// Triggers automatic layout and text detection on the current page.
     void detectRegionsOnCurrentPage();
     /// Pushes a batch of detected text regions into undo history and selects them.
-    void applyDetectedRegions(const domain::PageId& pageId, const QVector<application::DetectedRegionItem>& detected);
+    void applyDetectedRegions(const domain::PageId& pageId,
+                              const QVector<application::DetectedRegionItem>& detected,
+                              bool clearExisting = false);
 
     /// Creates point text anchored at a page coordinate.
     void createPointText(QPointF anchor);

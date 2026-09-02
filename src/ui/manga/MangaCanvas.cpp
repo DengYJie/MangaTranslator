@@ -18,6 +18,7 @@
 #include <QMouseEvent>
 #include <QPainter>
 #include <QResizeEvent>
+#include <QScrollBar>
 #include <QSet>
 #include <QShowEvent>
 #include <QWheelEvent>
@@ -337,7 +338,7 @@ void MangaCanvas::updateNavigationSceneRect() {
         return;
     }
     m_scene->setSceneRect(navigationRect);
-    centerOn(preservedCenter);
+    centerScenePointOnViewport(preservedCenter);
 }
 
 void MangaCanvas::zoomIn() {
@@ -384,6 +385,17 @@ void MangaCanvas::actualSize() {
 
 QPointF MangaCanvas::viewCenterOnPage() const {
     return mapToScene(viewport()->rect().center());
+}
+
+void MangaCanvas::centerScenePointOnViewport(const QPointF& scenePoint) {
+    // viewCenterOnPage measures through the integer QRect::center. QGraphicsView::centerOn
+    // instead anchors to qreal half extents, so alternating measure/centerOn shifts the scroll
+    // bars by one pixel each resize. Centering here uses the same integer metric as the
+    // read-back, making save-center/restore-center round trips exact.
+    const QPointF viewPoint = transform().map(scenePoint);
+    const QPointF target = viewport()->rect().center();
+    horizontalScrollBar()->setValue(qRound(viewPoint.x() - target.x()));
+    verticalScrollBar()->setValue(qRound(viewPoint.y() - target.y()));
 }
 
 void MangaCanvas::centerOnPage(const QPointF& scenePos) {
@@ -1315,7 +1327,7 @@ void MangaCanvas::resizeEvent(QResizeEvent* event) {
     layoutPlaceholderButton();
     if (m_contentState == ContentState::Image) {
         updateNavigationSceneRect();
-        centerOn(oldCenter);
+        centerScenePointOnViewport(oldCenter);
         emitViewTransform();
     }
 }

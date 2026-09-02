@@ -76,7 +76,7 @@ public:
     // Commands / User Intents
     void smartTranslatePage(const domain::PageId& pageId);
     void smartTranslateRegions(const domain::PageId& pageId, const QVector<domain::RegionId>& regionIds);
-    void detectRegions(const domain::PageId& pageId);
+    void detectRegions(const domain::PageId& pageId, bool clearExisting = false);
     void recognizePage(const domain::PageId& pageId);
     void recognizeSelectedRegions();
     void recognizeRegion(const domain::PageId& pageId, const domain::RegionId& regionId);
