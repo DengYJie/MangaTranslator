@@ -20,7 +20,6 @@ constexpr QRect retryHotspotRect(const QRect& optionRect) {
 // the near-white pane background where neutral control fills would not contrast.
 constexpr int kSelectedFillAlpha = 26;
 constexpr int kPressedFillAlpha = 42;
-constexpr int kCurrentIndicatorWidth = 3;
 } // namespace
 
 PageThumbnailDelegate::PageThumbnailDelegate(PageThumbnailList* list, QObject* parent)
@@ -61,13 +60,6 @@ void PageThumbnailDelegate::paint(QPainter* painter,
     }
     if (rowFill.isValid() && rowFill.alpha() > 0) {
         painter->fillRect(option.rect, rowFill);
-    }
-
-    // The active page keeps a leading accent bar so it stays distinguishable among a
-    // multi-selection that shares the same wash.
-    if (m_list->isCurrentRow(index.row())) {
-        painter->fillRect(QRect(option.rect.left(), option.rect.top(), kCurrentIndicatorWidth, option.rect.height()),
-                          colors.accentDefault);
     }
 
     QRect thumbRect(option.rect.left() + 16, option.rect.top() + (88 - 72) / 2, 56, 72);
