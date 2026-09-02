@@ -535,17 +535,6 @@ void EditorProcessingController::handleSmartTranslateFinished(
     prepareAdoptionAsync(key, prepReq, sessionGen);
 }
 
-void EditorProcessingController::recognizeSelectedRegions() {
-    if (m_viewModel == nullptr || !m_viewModel->hasSession()) {
-        return;
-    }
-    const auto pageId = m_viewModel->state().currentPageId;
-    const auto selected = m_viewModel->state().selectedRegionIds;
-    for (const auto& rId : selected) {
-        recognizeRegion(pageId, rId);
-    }
-}
-
 void EditorProcessingController::recognizeRegion(const domain::PageId& pageId, const domain::RegionId& regionId) {
     if (m_viewModel == nullptr || !m_viewModel->hasSession() || !pageId.isValid() || !regionId.isValid() ||
         m_ocrUseCase == nullptr || m_registry == nullptr) {
@@ -681,11 +670,197 @@ void EditorProcessingController::recognizePage(const domain::PageId& pageId) {
     if (page == nullptr) {
         return;
     }
+    QVector<domain::RegionId> targetIds;
     for (const auto& r : page->regions()) {
         if (r.isEnabled()) {
-            recognizeRegion(pageId, r.id());
+            targetIds.append(r.id());
         }
     }
+    recognizeRegions(pageId, targetIds);
+}
+
+void EditorProcessingController::recognizeSelectedRegions() {
+    if (m_viewModel == nullptr || !m_viewModel->hasSession()) {
+        return;
+    }
+    const auto pageId = m_viewModel->state().currentPageId;
+    const auto selected = m_viewModel->state().selectedRegionIds;
+    recognizeRegions(pageId, selected);
+}
+
+void EditorProcessingController::recognizeRegions(const domain::PageId& pageId,
+                                                  const QVector<domain::RegionId>& regionIds) {
+    if (m_viewModel == nullptr || !m_viewModel->hasSession() || !pageId.isValid() || regionIds.isEmpty() ||
+        m_ocrUseCase == nullptr || m_registry == nullptr) {
+        return;
+    }
+
+    if (regionIds.size() == 1) {
+        recognizeRegion(pageId, regionIds[0]);
+        return;
+    }
+
+    auto* project = m_viewModel->projectAggregate();
+    if (project == nullptr) {
+        return;
+    }
+    const auto* page = project->findPage(pageId);
+    if (page == nullptr) {
+        return;
+    }
+
+    QVector<const domain::TextRegion*> validRegions;
+    for (const auto& rId : regionIds) {
+        const auto* r = page->findRegion(rId);
+        if (r != nullptr && r->isEnabled()) {
+            validRegions.append(r);
+        }
+    }
+    if (validRegions.isEmpty()) {
+        return;
+    }
+
+    const auto projectId = project->id();
+    const WatcherKey key{projectId, pageId, std::nullopt, application::OperationStage::Ocr};
+    cancelMatchingTask(key);
+
+    const QImage pageImage = m_viewModel->currentPageImage();
+    if (pageImage.isNull()) {
+        qWarning().noquote() << "[OCR] rejected: current page image unavailable page="
+                             << QString::fromStdString(pageId.toString());
+        return;
+    }
+
+    application::OperationDescriptor rootDesc{
+        .stage = application::OperationStage::Ocr,
+        .projectId = projectId,
+        .pageId = pageId,
+        .regionId = std::nullopt,
+        .displayTarget = tr("批量文字识别"),
+        .cancellable = true,
+    };
+
+    const quint64 sessionGen = m_viewModel->projectSessionGeneration();
+    auto rootContext = m_registry->createOperation(std::move(rootDesc), sessionGen, m_viewModel->viewGeneration());
+    const auto rootOpId = rootContext.operationId;
+
+    if (rootContext.progressReporter) {
+        rootContext.progressReporter->setRange(validRegions.size());
+        rootContext.progressReporter->setValue(0);
+        rootContext.progressReporter->setStatusText(tr("正在识别 (0/%1)").arg(validRegions.size()));
+        rootContext.progressReporter->markRunning();
+    }
+
+    QVector<domain::RegionId> targetRegionIds;
+    QHash<domain::RegionId, quint64> expectedRevisions;
+    for (const auto* r : validRegions) {
+        targetRegionIds.append(r->id());
+        expectedRevisions.insert(r->id(), r->contentRevision());
+    }
+
+    ActiveTask activeTask;
+    activeTask.operationId = rootOpId;
+    activeTask.sessionGeneration = sessionGen;
+    activeTask.key = key;
+    activeTask.targetRegionIds = targetRegionIds;
+    activeTask.expectedRevisions = expectedRevisions;
+    m_activeTasks.insert(key, activeTask);
+
+    struct BatchState {
+        int total{0};
+        int completed{0};
+        QVector<application::OcrResponse> responses;
+        QVector<domain::RegionId> failedRegions;
+        application::ApplicationError lastError;
+    };
+    auto batchState = std::make_shared<BatchState>();
+    batchState->total = validRegions.size();
+
+    for (const auto* region : validRegions) {
+        const auto rId = region->id();
+        application::OcrRequest request;
+        request.pageId = pageId;
+        request.regionId = rId;
+        request.rect = region->geometry();
+        request.image = pageImage;
+        if (project) {
+            request.language = project->sourceLanguage();
+        }
+
+        auto future = m_ocrUseCase->execute(request, rootContext);
+        auto* watcher = new QFutureWatcher<application::Result<application::OcrResponse>>(this);
+        connect(watcher,
+                &QFutureWatcherBase::finished,
+                this,
+                [this, watcher, key, rootOpId, rootContext, sessionGen, rId, batchState, expectedRevisions]() mutable {
+                    auto res = watcher->result();
+                    batchState->completed++;
+                    if (rootContext.progressReporter) {
+                        rootContext.progressReporter->setValue(batchState->completed);
+                        rootContext.progressReporter->setStatusText(
+                            tr("正在识别 (%1/%2)").arg(batchState->completed).arg(batchState->total));
+                    }
+
+                    if (res.has_value()) {
+                        batchState->responses.append(res.value());
+                    } else {
+                        batchState->failedRegions.append(rId);
+                        batchState->lastError = res.error();
+                    }
+
+                    if (batchState->completed >= batchState->total) {
+                        if (m_viewModel != nullptr && m_viewModel->hasSession() &&
+                            sessionGen == m_viewModel->projectSessionGeneration() && m_activeTasks.contains(key) &&
+                            m_activeTasks.value(key).operationId == rootOpId) {
+                            m_activeTasks.remove(key);
+
+                            if (!batchState->responses.isEmpty()) {
+                                if (rootContext.progressReporter) {
+                                    rootContext.progressReporter->setValue(batchState->total);
+                                    rootContext.progressReporter->setStatusText(tr("正在应用识别结果..."));
+                                }
+                                application::PageProcessingProposal prop;
+                                prop.projectId = key.projectId;
+                                prop.pageId = key.pageId;
+                                prop.rootOperationId = rootOpId;
+                                prop.ocr = batchState->responses;
+                                m_pageProposals[key.pageId] = prop;
+
+                                application::PrepareProcessingAdoptionRequest prepReq;
+                                prepReq.projectId = key.projectId;
+                                prepReq.pageId = key.pageId;
+                                prepReq.stage = application::OperationStage::Ocr;
+                                prepReq.sessionGeneration = sessionGen;
+                                prepReq.currentSessionGeneration = m_viewModel->projectSessionGeneration();
+                                prepReq.ocr = batchState->responses;
+                                prepReq.expectedRevisions = expectedRevisions;
+                                prepReq.projectRoot = m_viewModel->projectRootPath();
+                                prepReq.replaceManualPolicy = application::ReplaceManualPolicy::Keep;
+
+                                prepareAdoptionAsync(key, prepReq, sessionGen, rootContext);
+                            } else if (!batchState->failedRegions.isEmpty()) {
+                                if (rootContext.progressReporter) {
+                                    rootContext.progressReporter->markFinished(batchState->lastError);
+                                }
+                                if (batchState->lastError.category != application::ErrorCategory::Cancelled) {
+                                    m_pageFailedRegions[key.pageId] = batchState->failedRegions;
+                                    m_pageSafeMessages[key.pageId] = batchState->lastError.safeMessage;
+                                    if (key.pageId == m_viewModel->state().currentPageId) {
+                                        updateProcessingStateForCurrentPage();
+                                    }
+                                    Q_EMIT processingFinished(key.pageId, false);
+                                }
+                            }
+                        }
+                    }
+                    m_idleOcrTimer.start(60000);
+                    watcher->deleteLater();
+                });
+        watcher->setFuture(future);
+    }
+
+    updateProcessingStateForCurrentPage();
+    Q_EMIT processingStarted(pageId, rootOpId);
 }
 
 void EditorProcessingController::translatePage(const domain::PageId& pageId) {

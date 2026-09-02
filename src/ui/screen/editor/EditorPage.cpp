@@ -279,9 +279,7 @@ EditorPage::EditorPage(EditorViewModel* viewModel, QWidget* parent) : base::Base
                                   << "regions=" << regionIds.size()
                                   << "controller=" << (m_viewModel->processingController() != nullptr);
                 if (auto* ctrl = m_viewModel->processingController()) {
-                    for (const auto& rId : regionIds) {
-                        ctrl->recognizeRegion(pageId, rId);
-                    }
+                    ctrl->recognizeRegions(pageId, regionIds);
                 }
             });
     connect(m_inspector,

@@ -79,6 +79,7 @@ public:
     void detectRegions(const domain::PageId& pageId, bool clearExisting = false);
     void recognizePage(const domain::PageId& pageId);
     void recognizeSelectedRegions();
+    void recognizeRegions(const domain::PageId& pageId, const QVector<domain::RegionId>& regionIds);
     void recognizeRegion(const domain::PageId& pageId, const domain::RegionId& regionId);
     void translatePage(const domain::PageId& pageId);
     void translateRegions(const domain::PageId& pageId, const QVector<domain::RegionId>& regionIds);
