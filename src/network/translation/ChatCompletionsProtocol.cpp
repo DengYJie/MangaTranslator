@@ -2,10 +2,12 @@
 
 #include "network/translation/RetryPolicy.h"
 
+#include <QDebug>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QNetworkReply>
+#include <QRegularExpression>
 #include <QSet>
 #include <QStringList>
 
@@ -134,14 +136,9 @@ QByteArray buildChatCompletionsRequest(const application::TranslationRequest& re
         responseFormat.insert(QStringLiteral("type"), QStringLiteral("json_object"));
     }
 
-    // OpenAI Native uses max_completion_tokens. The OpenAI-compatible subset (DeepSeek, Ollama,
-    // LM Studio, local servers) documents max_tokens.
-    const QString tokenKey = native ? QStringLiteral("max_completion_tokens") : QStringLiteral("max_tokens");
-
     const QJsonObject body{
         {QStringLiteral("model"), config.model},
         {QStringLiteral("temperature"), config.temperature},
-        {tokenKey, config.maxCompletionTokens},
         {QStringLiteral("stream"), false},
         {QStringLiteral("response_format"), responseFormat},
         {QStringLiteral("messages"),
@@ -167,6 +164,9 @@ application::Result<application::TranslationResponse> parseChatCompletionsRespon
     QJsonParseError parseError{};
     const QJsonDocument document = QJsonDocument::fromJson(body, &parseError);
     if (parseError.error != QJsonParseError::NoError || !document.isObject()) {
+        qWarning().noquote() << "[ChatCompletionsProtocol] Failed to parse HTTP response as JSON:"
+                             << parseError.errorString() << "offset=" << parseError.offset
+                             << "raw body:" << QString::fromUtf8(body).left(800);
         return std::unexpected(
             protocolError(QStringLiteral("protocol.invalid_json"), QStringLiteral("The response was not valid JSON")));
     }
@@ -176,12 +176,13 @@ application::Result<application::TranslationResponse> parseChatCompletionsRespon
     };
 
     const auto choicesValue = root.value(QStringLiteral("choices"));
-    if (!choicesValue.isArray() || choicesValue.toArray().size() != 1) {
-        return schemaError(QStringLiteral("Exactly one choice is required"));
+    if (!choicesValue.isArray() || choicesValue.toArray().isEmpty()) {
+        return schemaError(QStringLiteral("At least one choice is required"));
     }
     const QJsonObject choice = choicesValue.toArray().at(0).toObject();
-    const QString finishReason = choice.value(QStringLiteral("finish_reason")).toString();
+    const QString finishReason = choice.value(QStringLiteral("finish_reason")).toString().toLower();
     if (finishReason == QStringLiteral("length")) {
+        qWarning().noquote() << "[ChatCompletionsProtocol] Model response hit token length limit";
         return std::unexpected(protocolError(QStringLiteral("protocol.incomplete_response"),
                                              QStringLiteral("The response was truncated before it completed")));
     }
@@ -189,8 +190,9 @@ application::Result<application::TranslationResponse> parseChatCompletionsRespon
         return std::unexpected(protocolError(QStringLiteral("protocol.content_filtered"),
                                              QStringLiteral("The response was blocked by a content filter")));
     }
-    if (finishReason != QStringLiteral("stop")) {
-        return schemaError(QStringLiteral("The response did not finish normally"));
+    if (!finishReason.isEmpty() && finishReason != QStringLiteral("stop") &&
+        finishReason != QStringLiteral("eos_token") && finishReason != QStringLiteral("eos")) {
+        qWarning().noquote() << "[ChatCompletionsProtocol] Non-standard finish_reason:" << finishReason;
     }
 
     const QJsonObject message = choice.value(QStringLiteral("message")).toObject();
@@ -204,9 +206,28 @@ application::Result<application::TranslationResponse> parseChatCompletionsRespon
             protocolError(QStringLiteral("protocol.missing_content"), QStringLiteral("The response had no content")));
     }
 
+    QString rawContent = contentValue.toString().trimmed();
+    static const QRegularExpression thinkRegex(QStringLiteral(R"(<think>[\s\S]*?</think>)"));
+    rawContent.remove(thinkRegex);
+    rawContent = rawContent.trimmed();
+
+    static const QRegularExpression codeFenceRegex(QStringLiteral(R"(^```(?:json)?\s*([\s\S]*?)\s*```$)"));
+    auto match = codeFenceRegex.match(rawContent);
+    if (match.hasMatch()) {
+        rawContent = match.captured(1).trimmed();
+    } else {
+        const int firstBrace = rawContent.indexOf(u'{');
+        const int lastBrace = rawContent.lastIndexOf(u'}');
+        if (firstBrace != -1 && lastBrace != -1 && lastBrace > firstBrace) {
+            rawContent = rawContent.mid(firstBrace, lastBrace - firstBrace + 1);
+        }
+    }
+
     QJsonParseError contentError{};
-    const QJsonDocument contentDocument = QJsonDocument::fromJson(contentValue.toString().toUtf8(), &contentError);
+    const QJsonDocument contentDocument = QJsonDocument::fromJson(rawContent.toUtf8(), &contentError);
     if (contentError.error != QJsonParseError::NoError || !contentDocument.isObject()) {
+        qWarning().noquote() << "[ChatCompletionsProtocol] Failed to parse message content as JSON:"
+                             << contentError.errorString() << "content snippet:" << rawContent.left(800);
         return std::unexpected(protocolError(QStringLiteral("protocol.invalid_json"),
                                              QStringLiteral("The response content was not JSON")));
     }

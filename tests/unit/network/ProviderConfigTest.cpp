@@ -73,10 +73,7 @@ void ProviderConfigTest::rejectsOutOfRangeValues() {
     QCOMPARE(network::validateProviderConfig(longTimeout, EndpointPolicy::HttpsOnly).error().code,
              QStringLiteral("input.invalid_timeout"));
 
-    auto tokens = validConfig();
-    tokens.maxCompletionTokens = 0;
-    QCOMPARE(network::validateProviderConfig(tokens, EndpointPolicy::HttpsOnly).error().code,
-             QStringLiteral("input.invalid_token_limit"));
+    // TODO: maxCompletionTokens was removed so providers use their natural model limits
 
     auto temperature = validConfig();
     temperature.temperature = 3.0;

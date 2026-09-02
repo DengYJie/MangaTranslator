@@ -11,6 +11,7 @@
 #include <FluentQt/TextFields.h>
 #include <QAbstractButton>
 #include <QButtonGroup>
+#include <QCoreApplication>
 #include <QHBoxLayout>
 #include <QListWidget>
 #include <QPainter>
@@ -309,6 +310,7 @@ QWidget* InspectorPanel::buildContentHost() {
         if (!m_updating && !m_inImePreedit) {
             emitFieldEdit(InspectorField::SourceText, m_sourceEdit->toPlainText());
         }
+        refreshExpanderLayout(m_translationExpander);
     });
 
     auto* translationField = new Field();
@@ -324,6 +326,7 @@ QWidget* InspectorPanel::buildContentHost() {
         if (!m_updating && !m_inImePreedit) {
             emitFieldEdit(InspectorField::ManualTranslation, m_translationEdit->toPlainText());
         }
+        refreshExpanderLayout(m_translationExpander);
     });
 
     for (auto* edit : {m_sourceEdit, m_translationEdit}) {
@@ -353,6 +356,22 @@ QWidget* InspectorPanel::buildContentHost() {
     candidatesLayout->addWidget(m_adoptCandidateButton);
     m_candidatesExpander->setContentWidget(candidatesContent, fluent::WidgetOwnership::Owned);
     translationLayout->addWidget(m_candidatesExpander);
+
+    connect(m_translationInfoBar, &fluent::status_info::InfoBar::isOpenChanged, this, [this]() {
+        refreshExpanderLayout(m_translationExpander);
+    });
+    connect(m_candidatesExpander, &Expander::layoutHeightChanged, this, [this]() {
+        refreshExpanderLayout(m_translationExpander);
+    });
+    connect(m_candidatesExpander, &Expander::expandedChanged, this, [this]() {
+        refreshExpanderLayout(m_translationExpander);
+    });
+    connect(m_candidatesExpander, &Expander::expansionTransitionFinished, this, [this]() {
+        refreshExpanderLayout(m_translationExpander);
+    });
+
+    translationContent->installEventFilter(this);
+    candidatesContent->installEventFilter(this);
 
     connect(m_candidatesList, &QListWidget::currentRowChanged, this, [this](int row) {
         m_adoptCandidateButton->setEnabled(row >= 0);
@@ -685,6 +704,8 @@ QWidget* InspectorPanel::buildContentHost() {
     m_marginTopBox->setObjectName(QStringLiteral("inspectorMarginTop"));
     typesetLayout->addWidget(marginsRow);
 
+    typesetContent->installEventFilter(this);
+
     m_typesettingExpander->setContentWidget(typesetContent, fluent::WidgetOwnership::Owned);
     m_typesettingExpander->setExpanded(true);
     layout->addWidget(m_typesettingExpander);
@@ -719,6 +740,8 @@ void InspectorPanel::setInspectorState(const screen::editor::InspectorState& sta
     }
 
     m_updating = false;
+    refreshExpanderLayout(m_translationExpander);
+    refreshExpanderLayout(m_typesettingExpander);
 }
 
 void InspectorPanel::populateNone() {
@@ -1036,6 +1059,26 @@ bool InspectorPanel::eventFilter(QObject* watched, QEvent* event) {
         return QWidget::eventFilter(watched, event);
     }
 
+    if (!m_refreshingExpander) {
+        if (m_translationExpander != nullptr && watched == m_translationExpander->contentWidget()) {
+            if (event->type() == QEvent::LayoutRequest || event->type() == QEvent::Resize ||
+                event->type() == QEvent::Show || event->type() == QEvent::Hide) {
+                refreshExpanderLayout(m_translationExpander);
+            }
+        } else if (m_typesettingExpander != nullptr && watched == m_typesettingExpander->contentWidget()) {
+            if (event->type() == QEvent::LayoutRequest || event->type() == QEvent::Resize ||
+                event->type() == QEvent::Show || event->type() == QEvent::Hide) {
+                refreshExpanderLayout(m_typesettingExpander);
+            }
+        } else if (m_candidatesExpander != nullptr && watched == m_candidatesExpander->contentWidget()) {
+            if (event->type() == QEvent::LayoutRequest || event->type() == QEvent::Resize ||
+                event->type() == QEvent::Show || event->type() == QEvent::Hide) {
+                refreshExpanderLayout(m_candidatesExpander);
+                refreshExpanderLayout(m_translationExpander);
+            }
+        }
+    }
+
     if (event->type() == QEvent::FocusOut) {
         Q_EMIT textEditingSessionFinished();
     } else if (event->type() == QEvent::InputMethod) {
@@ -1043,6 +1086,24 @@ bool InspectorPanel::eventFilter(QObject* watched, QEvent* event) {
         m_inImePreedit = !imeEvent->preeditString().isEmpty();
     }
     return QWidget::eventFilter(watched, event);
+}
+
+void InspectorPanel::refreshExpanderLayout(fluent::layout::Expander* expander) {
+    if (expander == nullptr || expander->contentWidget() == nullptr || !expander->isExpanded() ||
+        m_refreshingExpander) {
+        return;
+    }
+    m_refreshingExpander = true;
+    const QSize sz = expander->size();
+    QResizeEvent ev(sz, QSize(sz.width() == 0 ? 1 : sz.width() - 1, sz.height()));
+    QCoreApplication::sendEvent(expander, &ev);
+    if (auto* parent = expander->parentWidget()) {
+        if (auto* layout = parent->layout()) {
+            layout->invalidate();
+            layout->activate();
+        }
+    }
+    m_refreshingExpander = false;
 }
 
 void InspectorPanel::handleNumericCommit(fluent::layout::Field* field,

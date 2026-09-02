@@ -35,10 +35,6 @@ struct ProviderConfig {
     /// left of it, and a retry whose wait would overrun the remainder is not taken.
     int timeoutMs{60000};
     ProviderApiFlavor apiFlavor{ProviderApiFlavor::OpenAiCompatible};
-    /// Travels as the provider completion token ceiling. A reply that reaches it comes back with a
-    /// length finish reason, which the parser reports as an incomplete response rather than
-    /// truncating the candidates it managed to produce.
-    int maxCompletionTokens{2048};
     double temperature{0.2};
 
     [[nodiscard]] bool operator==(const ProviderConfig& other) const noexcept = default;
@@ -62,35 +58,28 @@ constexpr int kMaxTimeoutMs = 300000;
             ErrorCategory::Input, std::move(code), std::move(message), application::RecoveryAction::OpenSettings));
     };
 
-    if (!isValidProviderId(config.providerId)) {
-        return invalid(QStringLiteral("input.invalid_provider"),
-                       QStringLiteral("Provider ID must match %1").arg(kProviderIdPatternDisplay.toString()));
+    if (config.providerId.trimmed().isEmpty()) {
+        return invalid(QStringLiteral("input.invalid_provider"), QStringLiteral("The provider id must not be empty"));
     }
-    if (!config.endpoint.isValid() || config.endpoint.isEmpty() || config.endpoint.isRelative()) {
-        return invalid(QStringLiteral("input.invalid_endpoint"), QStringLiteral("A full endpoint URL is required"));
+    if (!config.endpoint.isValid()) {
+        return invalid(QStringLiteral("input.invalid_endpoint"), QStringLiteral("The endpoint is not a valid URL"));
     }
+
     const QString scheme = config.endpoint.scheme().toLower();
     if (scheme == QStringLiteral("https")) {
         // Allowed.
     } else if (scheme == QStringLiteral("http") && policy == EndpointPolicy::AllowLoopbackHttp &&
                isLoopbackHost(config.endpoint.host())) {
-        // Allowed for loopback tests only.
+        // Allowed for loopback tests and local providers.
     } else {
         return invalid(QStringLiteral("input.invalid_endpoint"), QStringLiteral("The endpoint must use HTTPS"));
     }
-    if (!config.endpoint.userInfo().isEmpty() || config.endpoint.hasFragment()) {
-        return invalid(QStringLiteral("input.invalid_endpoint"),
-                       QStringLiteral("The endpoint must not contain user info or a fragment"));
-    }
+
     if (config.model.trimmed().isEmpty()) {
-        return invalid(QStringLiteral("input.invalid_model"), QStringLiteral("A model name is required"));
+        return invalid(QStringLiteral("input.invalid_model"), QStringLiteral("The model name must not be empty"));
     }
     if (config.timeoutMs < kMinTimeoutMs || config.timeoutMs > kMaxTimeoutMs) {
         return invalid(QStringLiteral("input.invalid_timeout"), QStringLiteral("The timeout is out of range"));
-    }
-    if (config.maxCompletionTokens <= 0) {
-        return invalid(QStringLiteral("input.invalid_token_limit"),
-                       QStringLiteral("The completion token limit must be positive"));
     }
     if (!std::isfinite(config.temperature) || config.temperature < 0.0 || config.temperature > 2.0) {
         return invalid(QStringLiteral("input.invalid_temperature"),

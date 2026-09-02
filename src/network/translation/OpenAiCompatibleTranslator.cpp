@@ -3,6 +3,7 @@
 #include "network/translation/ChatCompletionsProtocol.h"
 #include "network/translation/QtHttpTransport.h"
 
+#include <QDebug>
 #include <QElapsedTimer>
 #include <QNetworkRequest>
 #include <QTimer>
@@ -166,6 +167,12 @@ struct OpenAiCompatibleTranslator::Job : public std::enable_shared_from_this<Job
 
         job->httpRequest.setTransferTimeout(remaining);
 
+        qInfo().noquote() << "[Translator] Sending translation request:"
+                          << "endpoint=" << job->config.endpoint.toString() << "model=" << job->config.model
+                          << "flavor="
+                          << (job->config.apiFlavor == ProviderApiFlavor::OpenAiNative ? "native" : "compatible")
+                          << "regions=" << job->request.regions.size() << "bodyBytes=" << job->body.size();
+
         auto responsePromise = std::make_shared<HttpResponsePromise>();
         responsePromise->start();
 
@@ -254,10 +261,15 @@ struct OpenAiCompatibleTranslator::Job : public std::enable_shared_from_this<Job
         }
 
         if (!response) {
+            qWarning().noquote() << "[Translator] Transport failure:" << response.error().safeMessage;
             job->settle(std::unexpected(response.error()));
             return;
         }
         const HttpResponse& received = *response;
+
+        qInfo().noquote() << "[Translator] Received response:"
+                          << "HTTP" << received.httpStatus << "bodyBytes=" << received.body.size()
+                          << "elapsed=" << job->timer.elapsed() << "ms";
 
         if (received.networkError != QNetworkReply::NoError) {
             if (job->context.stopToken.stop_requested() ||
@@ -268,6 +280,7 @@ struct OpenAiCompatibleTranslator::Job : public std::enable_shared_from_this<Job
             if (received.httpStatus == 0) {
                 const auto failure =
                     classifyTransportFailure(static_cast<int>(received.networkError), received.requestBodySent);
+                qWarning().noquote() << "[Translator] Network error:" << failure.error.safeMessage;
                 const auto decision =
                     job->retryPolicy.decide(failure, job->attempt, received.retryAfter, job->remainingDeadlineMs());
                 if (decision.shouldRetry) {
@@ -282,6 +295,8 @@ struct OpenAiCompatibleTranslator::Job : public std::enable_shared_from_this<Job
 
         if (received.httpStatus < 200 || received.httpStatus >= 300) {
             const auto failure = classifyHttpStatus(received.httpStatus);
+            qWarning().noquote() << "[Translator] HTTP error" << received.httpStatus
+                                 << "response body:" << QString::fromUtf8(received.body).left(1000);
             const auto decision =
                 job->retryPolicy.decide(failure, job->attempt, received.retryAfter, job->remainingDeadlineMs());
             if (decision.shouldRetry) {
@@ -295,9 +310,12 @@ struct OpenAiCompatibleTranslator::Job : public std::enable_shared_from_this<Job
 
         auto parsed = parseChatCompletionsResponse(received.body, job->request, job->config.providerId);
         if (!parsed) {
+            qWarning().noquote() << "[Translator] Parse error:" << parsed.error().safeMessage
+                                 << "raw response body snippet:" << QString::fromUtf8(received.body).left(1000);
             job->settle(std::unexpected(parsed.error()));
             return;
         }
+        qInfo().noquote() << "[Translator] Success. Parsed" << parsed.value().items.size() << "translated regions.";
         job->settle(*parsed);
     }
 };

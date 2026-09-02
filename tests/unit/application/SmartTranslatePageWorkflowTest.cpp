@@ -287,12 +287,16 @@ void SmartTranslatePageWorkflowTest::testSessionGenerationChangeYieldsStale() {
     SmartTranslatePageWorkflow workflow(&ocr, &tr, &cl, &la, registry.get());
 
     QVector<RegionProcessingTarget> targets;
-    targets.append({manga::domain::RegionId::generate(),
-                    manga::domain::RectGeometry{0, 0, 10, 10},
-                    QStringLiteral(""),
-                    QStringLiteral(""),
-                    0,
-                    false});
+    targets.append(RegionProcessingTarget{
+        .regionId = manga::domain::RegionId::generate(),
+        .geometry = manga::domain::RectGeometry{0, 0, 10, 10},
+        .bubbleGeometry = std::nullopt,
+        .bubblePolygon = std::nullopt,
+        .sourceText = QStringLiteral(""),
+        .effectiveTranslation = QStringLiteral(""),
+        .contentRevision = 0,
+        .hasManualTranslation = false,
+    });
 
     OperationId opId;
     fakeOcr.nextError =

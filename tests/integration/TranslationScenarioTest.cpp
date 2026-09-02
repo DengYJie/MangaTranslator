@@ -178,8 +178,8 @@ struct TranslationScenarioFixture {
             .endpoint = server.endpoint(),
             .model = QStringLiteral("gpt-4o-mini"),
             .timeoutMs = 15000,
-            .structuredOutputMode = network::StructuredOutputMode::JsonSchemaStrict,
-            .maxCompletionTokens = 2048,
+            .apiFlavor = network::ProviderApiFlavor::OpenAiNative,
+            // TODO: maxCompletionTokens was removed so providers use their natural model limits
             .temperature = 0.2,
         };
 

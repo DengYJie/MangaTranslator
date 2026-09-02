@@ -121,8 +121,10 @@ private:
 
     void setLockedEditing(bool locked);
     void updateTranslationInfoBar();
+    void refreshExpanderLayout(fluent::layout::Expander* expander);
     bool m_updating{false};
     bool m_inImePreedit{false};
+    bool m_refreshingExpander{false};
     screen::editor::InspectorMode m_mode{screen::editor::InspectorMode::None};
     /// Identity of the rendered projection, used to build intent signals.
     domain::PageId m_currentPageId;

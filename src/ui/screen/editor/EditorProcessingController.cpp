@@ -1434,8 +1434,9 @@ void EditorProcessingController::clearRegions(const domain::PageId& pageId,
         }
         request.pageImage = currentImg;
         request.contentRevision = region->contentRevision();
-
-        auto future = m_clearUseCase ? m_clearUseCase->execute(request, rootContext)
+        auto childContext = rootContext;
+        childContext.progressReporter.reset();
+        auto future = m_clearUseCase ? m_clearUseCase->execute(request, childContext)
                                      : application::makeFailedFuture<application::ClearResponse>(
                                            application::makeApplicationError(application::ErrorCategory::Internal,
                                                                              QStringLiteral("clear.unavailable"),
