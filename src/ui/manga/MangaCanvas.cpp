@@ -631,9 +631,17 @@ void MangaCanvas::setRemoveDiameter(double diameter) {
     if (qFuzzyCompare(m_removeDiameter, clamped)) {
         return;
     }
+    const double oldRadius = m_removeDiameter * 0.5;
     m_removeDiameter = clamped;
+    const double newRadius = m_removeDiameter * 0.5;
+    const double maxRadius = std::max(oldRadius, newRadius);
+    const double margin = 4.0 / std::max(0.01, m_zoomFactor);
     updateRemoveCursor();
-    viewport()->update();
+    const QRectF cursorRect(m_currentMouseScenePos.x() - maxRadius - margin,
+                            m_currentMouseScenePos.y() - maxRadius - margin,
+                            (maxRadius + margin) * 2.0,
+                            (maxRadius + margin) * 2.0);
+    viewport()->update(mapFromScene(cursorRect).boundingRect());
     Q_EMIT removeDiameterChanged(m_removeDiameter);
 }
 
@@ -918,7 +926,13 @@ void MangaCanvas::mousePressEvent(QMouseEvent* event) {
         m_removeStroke.clear();
         m_removeStroke.append(clampedPt);
         m_removeStrokeActive = true;
-        viewport()->update();
+        const double radius = m_removeDiameter * 0.5;
+        const double margin = 4.0 / std::max(0.01, m_zoomFactor);
+        const QRectF dotRect(clampedPt.x() - radius - margin,
+                             clampedPt.y() - radius - margin,
+                             (radius + margin) * 2.0,
+                             (radius + margin) * 2.0);
+        viewport()->update(mapFromScene(dotRect).boundingRect());
         event->accept();
         return;
     }
@@ -1015,7 +1029,7 @@ void MangaCanvas::mousePressEvent(QMouseEvent* event) {
 }
 
 void MangaCanvas::mouseMoveEvent(QMouseEvent* event) {
-    m_mouseInsideCanvas = true;
+    const QPointF prevMouseScenePos = m_currentMouseScenePos;
     m_currentMouseScenePos = mapToScene(event->position().toPoint());
 
     if ((m_tool == canvas::Tool::Remove || m_tool == canvas::Tool::Brush || m_tool == canvas::Tool::Eraser) &&
@@ -1035,6 +1049,16 @@ void MangaCanvas::mouseMoveEvent(QMouseEvent* event) {
                 event->accept();
                 return;
             }
+            m_removeStroke.append(clampedPt);
+            const double radius = m_removeDiameter * 0.5;
+            const double margin = 4.0 / std::max(0.01, m_zoomFactor);
+            const QRectF segmentRect =
+                QRectF(prev, clampedPt)
+                    .normalized()
+                    .adjusted(-radius - margin, -radius - margin, radius + margin, radius + margin);
+            viewport()->update(mapFromScene(segmentRect).boundingRect());
+            event->accept();
+            return;
         }
         m_removeStroke.append(clampedPt);
         viewport()->update();
@@ -1044,7 +1068,17 @@ void MangaCanvas::mouseMoveEvent(QMouseEvent* event) {
 
     if (!m_removeStrokeActive &&
         (m_tool == canvas::Tool::Remove || m_tool == canvas::Tool::Brush || m_tool == canvas::Tool::Eraser)) {
-        viewport()->update();
+        const double radius = m_removeDiameter * 0.5;
+        const double margin = 4.0 / std::max(0.01, m_zoomFactor);
+        const QRectF oldRect(prevMouseScenePos.x() - radius - margin,
+                             prevMouseScenePos.y() - radius - margin,
+                             (radius + margin) * 2.0,
+                             (radius + margin) * 2.0);
+        const QRectF newRect(m_currentMouseScenePos.x() - radius - margin,
+                             m_currentMouseScenePos.y() - radius - margin,
+                             (radius + margin) * 2.0,
+                             (radius + margin) * 2.0);
+        viewport()->update(mapFromScene(oldRect | newRect).boundingRect());
     }
 
     if (!m_gesture.active) {
@@ -1304,7 +1338,13 @@ void MangaCanvas::enterEvent(QEnterEvent* event) {
     m_mouseInsideCanvas = true;
     m_currentMouseScenePos = mapToScene(event->position().toPoint());
     if (m_tool == canvas::Tool::Remove || m_tool == canvas::Tool::Brush || m_tool == canvas::Tool::Eraser) {
-        viewport()->update();
+        const double radius = m_removeDiameter * 0.5;
+        const double margin = 4.0 / std::max(0.01, m_zoomFactor);
+        const QRectF cursorRect(m_currentMouseScenePos.x() - radius - margin,
+                                m_currentMouseScenePos.y() - radius - margin,
+                                (radius + margin) * 2.0,
+                                (radius + margin) * 2.0);
+        viewport()->update(mapFromScene(cursorRect).boundingRect());
     }
     QGraphicsView::enterEvent(event);
 }
@@ -1316,7 +1356,13 @@ void MangaCanvas::leaveEvent(QEvent* event) {
     m_hoveredRegionId = {};
     m_mouseInsideCanvas = false;
     if (m_tool == canvas::Tool::Remove || m_tool == canvas::Tool::Brush || m_tool == canvas::Tool::Eraser) {
-        viewport()->update();
+        const double radius = m_removeDiameter * 0.5;
+        const double margin = 4.0 / std::max(0.01, m_zoomFactor);
+        const QRectF cursorRect(m_currentMouseScenePos.x() - radius - margin,
+                                m_currentMouseScenePos.y() - radius - margin,
+                                (radius + margin) * 2.0,
+                                (radius + margin) * 2.0);
+        viewport()->update(mapFromScene(cursorRect).boundingRect());
     } else {
         viewport()->setCursor(Qt::ArrowCursor);
     }
