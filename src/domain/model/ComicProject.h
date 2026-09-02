@@ -182,6 +182,10 @@ public:
     [[nodiscard]] std::expected<void, ProjectEditError> setClearLayerAssetOnPage(const PageId& pageId,
                                                                                  std::optional<std::string> layerPath);
 
+    /// Atomically replaces the page-level manual override (paint/erase) reference and marks dirty.
+    [[nodiscard]] std::expected<void, ProjectEditError>
+    setManualOverrideLayerAssetOnPage(const PageId& pageId, std::optional<std::string> layerPath);
+
     // Glossary
 
     bool addGlossaryEntry(GlossaryEntry entry);

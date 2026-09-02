@@ -295,6 +295,18 @@ std::expected<void, ProjectEditError> ComicProject::setClearLayerAssetOnPage(con
     return {};
 }
 
+std::expected<void, ProjectEditError>
+ComicProject::setManualOverrideLayerAssetOnPage(const PageId& pageId, std::optional<std::string> layerPath) {
+    ComicPage* page = findPageMutable(pageId);
+    if (!page) {
+        return std::unexpected(ProjectEditError{
+            .code = ProjectErrorCode::EditNotFound, .message = "Page not found", .entityId = pageId.toString()});
+    }
+    page->setManualOverrideLayerAsset(std::move(layerPath));
+    markDirty();
+    return {};
+}
+
 bool ComicProject::addGlossaryEntry(GlossaryEntry entry) {
     if (!entry.isValid()) {
         return false;
