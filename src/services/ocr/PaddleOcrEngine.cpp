@@ -1,5 +1,6 @@
 #include "PaddleOcrEngine.h"
 
+#include "PaddleVlOcrEngine.h"
 #include "application/operation/TaskProgress.h"
 #include "services/execution/BoundedTaskExecutor.h"
 
@@ -30,6 +31,7 @@ struct PaddleOcrEngine::Impl {
     BoundedTaskExecutor* executor{nullptr};
     QString modelDir;
 
+    std::unique_ptr<PaddleVlOcrEngine> vlEngine;
     std::unique_ptr<Ort::Session> session;
     QStringList keys;
 
@@ -45,6 +47,7 @@ PaddleOcrEngine::PaddleOcrEngine(Ort::Env* env, BoundedTaskExecutor* executor, Q
     m_impl->env = env;
     m_impl->executor = executor;
     m_impl->modelDir = std::move(modelDir);
+    m_impl->vlEngine = std::make_unique<PaddleVlOcrEngine>(m_impl->env, m_impl->executor, m_impl->modelDir);
 }
 
 PaddleOcrEngine::PaddleOcrEngine(std::unique_ptr<Ort::Env> env, BoundedTaskExecutor* executor, QString modelDir)
@@ -53,11 +56,15 @@ PaddleOcrEngine::PaddleOcrEngine(std::unique_ptr<Ort::Env> env, BoundedTaskExecu
     m_impl->env = m_impl->ownedEnv.get();
     m_impl->executor = executor;
     m_impl->modelDir = std::move(modelDir);
+    m_impl->vlEngine = std::make_unique<PaddleVlOcrEngine>(m_impl->env, m_impl->executor, m_impl->modelDir);
 }
 
 PaddleOcrEngine::~PaddleOcrEngine() = default;
 
 void PaddleOcrEngine::release() {
+    if (m_impl->vlEngine) {
+        m_impl->vlEngine->release();
+    }
     QMutexLocker locker(&m_impl->loadMutex);
     if (m_impl->activeInferences == 0 && m_impl->loaded) {
         m_impl->session.reset();
@@ -67,6 +74,9 @@ void PaddleOcrEngine::release() {
 }
 
 bool PaddleOcrEngine::isAvailable() const {
+    if (m_impl->vlEngine && m_impl->vlEngine->isAvailable()) {
+        return true;
+    }
     if (m_impl->modelDir.trimmed().isEmpty()) {
         return false;
     }
@@ -111,6 +121,7 @@ application::Result<void> PaddleOcrEngine::ensureLoaded() {
     }
 
     if (modelPath.isEmpty()) {
+        qWarning().noquote() << "[PaddleOcrEngine] model file not found in directory:" << dir.absolutePath();
         return std::unexpected(
             application::makeApplicationError(application::ErrorCategory::Model,
                                               QStringLiteral("model.missing"),
@@ -139,7 +150,12 @@ application::Result<void> PaddleOcrEngine::ensureLoaded() {
                 QString line = stream.readLine();
                 m_impl->keys.append(line);
             }
+            qInfo().noquote() << "[PaddleOcrEngine] loaded dictionary:" << dictPath << "size:" << m_impl->keys.size();
+        } else {
+            qWarning().noquote() << "[PaddleOcrEngine] failed to open dictionary file:" << dictPath;
         }
+    } else {
+        qWarning().noquote() << "[PaddleOcrEngine] dictionary file not found in directory:" << dir.absolutePath();
     }
 
     Ort::SessionOptions options;
@@ -169,7 +185,12 @@ application::Result<void> PaddleOcrEngine::ensureLoaded() {
 
 QFuture<application::Result<application::OcrResponse>>
 PaddleOcrEngine::recognize(application::OcrRequest request, application::OperationContext context) {
+    if (m_impl->vlEngine && m_impl->vlEngine->isAvailable()) {
+        return m_impl->vlEngine->recognize(std::move(request), std::move(context));
+    }
+
     if (m_impl->executor == nullptr) {
+        qWarning().noquote() << "[PaddleOcrEngine] executor is null in recognize";
         QPromise<application::Result<application::OcrResponse>> promise;
         promise.start();
         promise.addResult(std::unexpected(application::makeApplicationError(application::ErrorCategory::Inference,
@@ -189,6 +210,7 @@ PaddleOcrEngine::recognize(application::OcrRequest request, application::Operati
         });
 
     if (!submitRes.has_value()) {
+        qWarning().noquote() << "[PaddleOcrEngine] executor->submit failed:" << submitRes.error().safeMessage;
         QPromise<application::Result<application::OcrResponse>> promise;
         promise.start();
         promise.addResult(std::unexpected(submitRes.error()));
@@ -207,15 +229,17 @@ PaddleOcrEngine::runInference(const application::OcrRequest& request,
     progress.setValue(0);
     progress.setText(QStringLiteral("Loading PaddleOCR model..."));
 
-    auto loadRes = ensureLoaded();
-    if (!loadRes.has_value()) {
-        return std::unexpected(loadRes.error());
+    QMutexLocker locker(&m_impl->loadMutex);
+    while (!m_impl->loaded) {
+        locker.unlock();
+        auto loadRes = ensureLoaded();
+        if (!loadRes.has_value()) {
+            return std::unexpected(loadRes.error());
+        }
+        locker.relock();
     }
+    ++m_impl->activeInferences;
 
-    {
-        QMutexLocker locker(&m_impl->loadMutex);
-        ++m_impl->activeInferences;
-    }
     struct InferenceGuard {
         PaddleOcrEngine::Impl* impl;
         ~InferenceGuard() {
@@ -234,6 +258,9 @@ PaddleOcrEngine::runInference(const application::OcrRequest& request,
     }
 
     if (request.image.isNull() || request.rect.width <= 0 || request.rect.height <= 0) {
+        qWarning().noquote() << "[PaddleOcrEngine] invalid image or region for inference. Image size:"
+                             << request.image.size() << "Rect:" << request.rect.x << request.rect.y
+                             << request.rect.width << request.rect.height;
         return std::unexpected(application::makeApplicationError(application::ErrorCategory::Input,
                                                                  QStringLiteral("input.invalid_image"),
                                                                  QStringLiteral("Invalid crop region")));
@@ -246,6 +273,7 @@ PaddleOcrEngine::runInference(const application::OcrRequest& request,
 
     QImage cropped = request.image.copy(cropRect).convertToFormat(QImage::Format_RGB888);
     if (cropped.isNull() || cropped.width() == 0 || cropped.height() == 0) {
+        qWarning().noquote() << "[PaddleOcrEngine] cropped image is empty for rect:" << cropRect;
         return std::unexpected(application::makeApplicationError(application::ErrorCategory::Input,
                                                                  QStringLiteral("input.crop_empty"),
                                                                  QStringLiteral("Cropped image is empty")));
@@ -293,6 +321,7 @@ PaddleOcrEngine::runInference(const application::OcrRequest& request,
     try {
         auto outputs = m_impl->session->Run(Ort::RunOptions{nullptr}, inputNames, &inputTensor, 1, outputNames, 1);
         if (outputs.empty()) {
+            qWarning().noquote() << "[PaddleOcrEngine] session->Run returned empty output vector.";
             return std::unexpected(
                 application::makeApplicationError(application::ErrorCategory::Inference,
                                                   QStringLiteral("inference.empty_output"),
@@ -304,6 +333,10 @@ PaddleOcrEngine::runInference(const application::OcrRequest& request,
         auto shape = typeInfo.GetShape();
 
         if (shape.size() < 3 || shape[0] < 1 || shape[1] < 1 || shape[2] < 1) {
+            QString shapeStr;
+            for (auto s : shape)
+                shapeStr += QString::number(s) + " ";
+            qWarning().noquote() << "[PaddleOcrEngine] invalid logits output shape:" << shapeStr;
             return std::unexpected(application::makeApplicationError(application::ErrorCategory::Inference,
                                                                      QStringLiteral("inference.bad_shape"),
                                                                      QStringLiteral("Invalid logits output shape")));
