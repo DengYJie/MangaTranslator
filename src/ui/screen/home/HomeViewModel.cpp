@@ -23,7 +23,52 @@ void HomeViewModel::refresh() {
     if (m_recentStore == nullptr) {
         return;
     }
-    updateState([this](HomeState& state) { state.recentProjects = m_recentStore->loadRecentProjects(); });
+    m_coverStopSource.request_stop();
+    m_coverStopSource = std::stop_source{};
+    const auto generation = ++m_coverGeneration;
+    const auto projects = m_recentStore->loadRecentProjects();
+    updateState([&](HomeState& state) {
+        state.recentProjects = projects;
+        QHash<QString, QImage> covers;
+        for (const auto& project : projects) {
+            const auto existing = state.projectCovers.constFind(project.path);
+            if (existing != state.projectCovers.cend()) {
+                covers.insert(project.path, *existing);
+            }
+        }
+        state.projectCovers = std::move(covers);
+    });
+    loadNextCover(0, generation);
+}
+
+HomeViewModel::~HomeViewModel() {
+    m_coverStopSource.request_stop();
+}
+
+void HomeViewModel::loadNextCover(qsizetype index, quint64 generation) {
+    if (generation != m_coverGeneration || index >= m_state.recentProjects.size()) {
+        return;
+    }
+    const QString path = m_state.recentProjects.at(index).path;
+    application::OperationContext context;
+    context.stopToken = m_coverStopSource.get_token();
+    auto* watcher = new QFutureWatcher<application::Result<QImage>>(this);
+    connect(watcher, &QFutureWatcherBase::finished, this, [this, watcher, path, index, generation] {
+        watcher->deleteLater();
+        if (generation != m_coverGeneration) {
+            return;
+        }
+        const auto result = watcher->result();
+        updateState([&](HomeState& state) {
+            if (result && !result->isNull()) {
+                state.projectCovers.insert(path, *result);
+            } else {
+                state.projectCovers.remove(path);
+            }
+        });
+        loadNextCover(index + 1, generation);
+    });
+    watcher->setFuture(m_recentStore->loadProjectCover(path, context));
 }
 
 void HomeViewModel::requestOpenProjectPath(const QString& path) {

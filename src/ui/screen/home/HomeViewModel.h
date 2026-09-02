@@ -8,6 +8,8 @@
 
 #include <QFutureWatcher>
 
+#include <stop_token>
+
 namespace manga::application {
 class IProjectRepository;
 class IRecentProjectsStore;
@@ -24,6 +26,7 @@ public:
                   application::IProjectRepository* projectRepository,
                   application::OperationRegistry* operationRegistry,
                   QObject* parent = nullptr);
+    ~HomeViewModel() override;
 
     void refresh();
     void requestOpenProjectPath(const QString& path);
@@ -48,6 +51,7 @@ protected:
 
 private:
     void handleOpenFinished();
+    void loadNextCover(qsizetype index, quint64 generation);
 
     application::IRecentProjectsStore* m_recentStore;     // non-owning
     application::IProjectRepository* m_projectRepository; // non-owning
@@ -56,6 +60,8 @@ private:
     QFutureWatcher<application::Result<application::OpenProjectResult>> m_openWatcher;
     quint64 m_openToken{0};
     QString m_pendingOpenPath;
+    std::stop_source m_coverStopSource;
+    quint64 m_coverGeneration{0};
 };
 
 } // namespace manga::ui::screen::home

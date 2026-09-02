@@ -3,6 +3,8 @@
 #include "application/error/ApplicationError.h"
 #include "application/ports/IRecentProjectsStore.h"
 
+#include <QHash>
+#include <QImage>
 #include <QString>
 #include <QVector>
 
@@ -28,12 +30,13 @@ struct HomeNotice {
 
 struct HomeState {
     QVector<application::RecentProject> recentProjects;
+    QHash<QString, QImage> projectCovers;
     bool isOpeningProject{false};
     std::optional<HomeNotice> notice;
 
     bool operator==(const HomeState& other) const {
         if (isOpeningProject != other.isOpeningProject || notice != other.notice ||
-            recentProjects.size() != other.recentProjects.size()) {
+            projectCovers != other.projectCovers || recentProjects.size() != other.recentProjects.size()) {
             return false;
         }
         for (qsizetype i = 0; i < recentProjects.size(); ++i) {

@@ -13,6 +13,8 @@ public:
     QSettingsRecentProjectsStore() = default;
 
     [[nodiscard]] QVector<application::RecentProject> loadRecentProjects() const override;
+    [[nodiscard]] QFuture<application::Result<QImage>> loadProjectCover(QString path,
+                                                                        application::OperationContext context) override;
     void addRecentProject(const application::RecentProject& project) override;
     void removeRecentProject(const QString& path) override;
     void clearRecentProjects() override;

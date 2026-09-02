@@ -8,8 +8,8 @@ class FluentElement;
 
 namespace manga::ui::screen::home {
 
-/// Paints one recent-project card: placeholder cover (16:10), name, and relative time.
-/// Real cover thumbnails arrive with the thumbnail pipeline in P5-B.
+/// Paints a recent-project card with a first-page preview, name, and relative time.
+/// Unavailable covers use a neutral document placeholder in the same 16:10 area.
 class RecentProjectCardDelegate : public QStyledItemDelegate {
     Q_OBJECT
 public:

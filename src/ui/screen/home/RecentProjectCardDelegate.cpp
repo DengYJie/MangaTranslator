@@ -49,7 +49,7 @@ void RecentProjectCardDelegate::paint(QPainter* painter,
     painter->setPen(QPen(selected ? tokens.accentDefault : tokens.strokeCard, selected ? 2 : 1));
     painter->drawPath(cardPath);
 
-    // Placeholder cover: neutral surface with a document glyph, 16:10 across the card width.
+    // Keep the cover area stable while asynchronous previews arrive.
     const QRect coverRect(cardRect.left() + kTextPadding,
                           cardRect.top() + kTextPadding,
                           cardRect.width() - 2 * kTextPadding,
@@ -57,11 +57,27 @@ void RecentProjectCardDelegate::paint(QPainter* painter,
     painter->setPen(Qt::NoPen);
     painter->setBrush(tokens.bgLayerAlt);
     painter->drawRoundedRect(coverRect, 6, 6);
-    QFont glyphFont(Typography::FontFamily::FluentIcons);
-    glyphFont.setPixelSize(kCoverGlyphSize);
-    painter->setFont(glyphFont);
-    painter->setPen(tokens.textTertiary);
-    painter->drawText(coverRect, Qt::AlignCenter, Typography::Icons::Document);
+    const auto cover = index.data(RecentProjectsModel::CoverRole).value<QImage>();
+    if (!cover.isNull()) {
+        painter->save();
+        QPainterPath clip;
+        clip.addRoundedRect(coverRect, 6, 6);
+        painter->setClipPath(clip);
+        painter->setRenderHint(QPainter::SmoothPixmapTransform);
+        const QSize imageSize = cover.size().scaled(coverRect.size(), Qt::KeepAspectRatio);
+        const QRect imageRect(coverRect.x() + (coverRect.width() - imageSize.width()) / 2,
+                              coverRect.y() + (coverRect.height() - imageSize.height()) / 2,
+                              imageSize.width(),
+                              imageSize.height());
+        painter->drawImage(imageRect, cover);
+        painter->restore();
+    } else {
+        QFont glyphFont(Typography::FontFamily::FluentIcons);
+        glyphFont.setPixelSize(kCoverGlyphSize);
+        painter->setFont(glyphFont);
+        painter->setPen(tokens.textTertiary);
+        painter->drawText(coverRect, Qt::AlignCenter, Typography::Icons::Document);
+    }
 
     // Name and relative time under the cover.
     const QRect textRect(cardRect.left() + kTextPadding,

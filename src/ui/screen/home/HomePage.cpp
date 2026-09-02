@@ -146,6 +146,7 @@ void HomePage::buildUi() {
 
 void HomePage::render(const HomeState& state) {
     m_model->setProjects(state.recentProjects);
+    m_model->setCovers(state.projectCovers);
     m_stack->setCurrentWidget(state.recentProjects.isEmpty() ? m_emptyState : m_gridView);
     m_openButton->setEnabled(!state.isOpeningProject);
 

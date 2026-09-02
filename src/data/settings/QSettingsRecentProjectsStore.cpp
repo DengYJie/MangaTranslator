@@ -1,8 +1,17 @@
 #include "QSettingsRecentProjectsStore.h"
 
+#include "data/DataAsync.h"
+#include "data/image/ImageNormalization.h"
+#include "data/project/PathSafety.h"
+#include "data/project/ProjectLayout.h"
+#include "data/project/ProjectSerializer.h"
+
+#include <QFile>
 #include <QSettings>
+#include <QStringList>
 
 #include <algorithm>
+#include <utility>
 
 namespace manga::data {
 
@@ -88,6 +97,66 @@ void QSettingsRecentProjectsStore::removeRecentProject(const QString& path) {
 void QSettingsRecentProjectsStore::clearRecentProjects() {
     QSettings settings;
     settings.remove(kRecentProjectsKey);
+}
+
+QFuture<application::Result<QImage>>
+QSettingsRecentProjectsStore::loadProjectCover(QString path, application::OperationContext context) {
+    return runDataOperation<QImage>([path = std::move(path),
+                                     context = std::move(context)]() -> application::Result<QImage> {
+        const auto cancelled = [] {
+            return std::unexpected(application::makeApplicationError(application::ErrorCategory::Cancelled,
+                                                                     QStringLiteral("cancelled.user_requested"),
+                                                                     QStringLiteral("Cover loading was cancelled")));
+        };
+        if (context.stopToken.stop_requested()) {
+            return cancelled();
+        }
+        const QString root = canonicalDirectoryPath(path);
+        if (root.isEmpty()) {
+            return QImage{};
+        }
+        QFile projectFile(resolveInsideCanonicalRoot(root, QString(kProjectFileName)));
+        constexpr qint64 kMaxProjectBytes = 64 * 1024 * 1024;
+        if (!projectFile.open(QIODevice::ReadOnly) || projectFile.size() > kMaxProjectBytes) {
+            return QImage{};
+        }
+        const auto bytes = projectFile.read(kMaxProjectBytes + 1);
+        if (bytes.size() > kMaxProjectBytes) {
+            return QImage{};
+        }
+        const auto project = ProjectSerializer::deserialize(bytes);
+        if (!project || project->pages().empty()) {
+            return QImage{};
+        }
+        const auto first =
+            std::min_element(project->pages().cbegin(), project->pages().cend(), [](const auto& a, const auto& b) {
+                return a.orderIndex() < b.orderIndex();
+            });
+        const QString thumbnail =
+            QStringLiteral("assets/derived/%1/thumbnail/v1.png").arg(QString::fromStdString(first->id().toString()));
+        const QStringList candidates{thumbnail, QString::fromStdString(first->originalAssetPath())};
+        for (const auto& relativePath : candidates) {
+            if (context.stopToken.stop_requested()) {
+                return cancelled();
+            }
+            const auto imagePath = resolveInsideCanonicalRoot(root, relativePath);
+            if (imagePath.isEmpty()) {
+                continue;
+            }
+            auto decoded = loadNormalizedImage(imagePath, context.stopToken);
+            if (context.stopToken.stop_requested()) {
+                return cancelled();
+            }
+            if (decoded && !decoded->image.isNull()) {
+                auto cover = decoded->image.scaled(480, 480, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+                if (context.stopToken.stop_requested()) {
+                    return cancelled();
+                }
+                return cover;
+            }
+        }
+        return QImage{};
+    });
 }
 
 } // namespace manga::data
