@@ -7,6 +7,7 @@ repo = "builtin"
 
 [[repos.hooks]]
 id = "check-added-large-files"
+args = ["--maxkb=50000"]
 
 [[repos.hooks]]
 id = "check-illegal-windows-names"

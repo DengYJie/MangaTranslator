@@ -5,6 +5,7 @@
 #include "application/usecase/settings/AppSettingsUseCases.h"
 #include "application/workflow/OperationRegistry.h"
 #include "network/translation/ProviderConfig.h"
+#include "rendering/FontRegistry.h"
 #include "ui/navigation/NavigationController.h"
 #include "ui/navigation/NavigationPanel.h"
 #include "ui/navigation/NavigationTypes.h"
@@ -32,6 +33,7 @@
 #include <QDir>
 #include <QFileDialog>
 #include <QFileInfo>
+#include <QFontDatabase>
 #include <QGuiApplication>
 #include <QHBoxLayout>
 #include <QLabel>
@@ -78,6 +80,10 @@ Application::Application(int& argc, char** argv, std::unique_ptr<ApplicationCont
         m_initFailed = true;
         return;
     }
+
+    // Register and discover bundled fonts (NotoSansCJK-VF, etc.)
+    rendering::FontRegistry::bundledFontFamilies();
+
     if (m_app) {
         m_app->setFont(Typography::fontStyle(Typography::FontRole::Body).toQFont());
         m_smokeTest = m_app->arguments().contains(QStringLiteral("--smoke-test"));
@@ -166,6 +172,24 @@ int Application::run() {
                                                                          nullptr);
     editorViewModel->setDetectionAvailability(m_context->isDetectionModelAvailable(),
                                               m_context->detectionModelUnavailableReason());
+
+    editorViewModel->observe(mainWindow, [mainWindow](const ui::screen::editor::EditorState& state) {
+        if (!state.projectId.isValid() || state.projectName.isEmpty()) {
+            mainWindow->clearProjectTitleInfo();
+            return;
+        }
+        int totalPages = state.pages.size();
+        int currentPage = 0;
+        if (state.currentPageId.isValid()) {
+            for (int i = 0; i < state.pages.size(); ++i) {
+                if (state.pages.at(i).id == state.currentPageId) {
+                    currentPage = i + 1;
+                    break;
+                }
+            }
+        }
+        mainWindow->setProjectTitleInfo(state.projectName, currentPage, totalPages, state.saveState.isDirty);
+    });
 
     ui::navigation::NavigationItemDescriptor editorItem;
     editorItem.routeKey = QStringLiteral("editor");
@@ -293,6 +317,7 @@ int Application::run() {
     auto pendingProjectPath = std::make_shared<QString>();
 
     auto handleProjectClose = [this, homeViewModel, mainWindow, controller, pendingAction, pendingProjectPath]() {
+        mainWindow->clearProjectTitleInfo();
         const QString projectPath = *pendingProjectPath;
         if (!projectPath.isEmpty()) {
             pendingProjectPath->clear();
@@ -486,6 +511,14 @@ int Application::run() {
                      &ui::screen::editor::EditorPage::settingsRequested,
                      controller,
                      [controller](const QString& routeKey) { controller->navigate(routeKey); });
+    QObject::connect(m_context->operationRegistry(),
+                     &application::OperationRegistry::operationsChanged,
+                     editorPage,
+                     &ui::screen::editor::EditorPage::setOperations);
+    QObject::connect(editorPage,
+                     &ui::screen::editor::EditorPage::cancelOperationRequested,
+                     m_context->operationRegistry(),
+                     &application::OperationRegistry::cancelOperation);
 
     auto* importViewModel = new ui::screen::import_::ImportViewModel(
         m_context->projectRepository(), m_context->comicImporter(), m_context->operationRegistry(), mainWindow);

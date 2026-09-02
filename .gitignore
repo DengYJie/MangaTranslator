@@ -1,4 +1,4 @@
-﻿# Build and generated output
+# Build and generated output
 /build/
 /out/
 /dist/
@@ -63,3 +63,5 @@
 # Superpowers agent workspace
 .superpowers/
 .worktrees/
+.codegraph/
+tools/_cse/
