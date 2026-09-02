@@ -4,6 +4,8 @@
 #include "application/workflow/OperationRegistry.h"
 
 #include <QCoreApplication>
+#include <QDebug>
+#include <QElapsedTimer>
 #include <QPromise>
 #include <QSet>
 #include <QSharedPointer>
@@ -30,6 +32,7 @@ public:
                                                                 QImage pageImage,
                                                                 quint64 sessionGeneration,
                                                                 OperationId& outOperationId) {
+        m_workflowTimer.start();
         m_projectId = projectId;
         m_pageId = pageId;
         m_targets = std::move(targets);
@@ -79,6 +82,11 @@ public:
 
 private:
     void finish(const Result<PageProcessingProposal>& result) {
+        qInfo() << "[SmartTranslatePageWorkflow] Workflow finished for page=" << m_pageId.toString()
+                << "total elapsed ms=" << m_workflowTimer.elapsed()
+                << "success count=" << m_targets.size() - m_proposal.issues.size()
+                << "issue count=" << m_proposal.issues.size();
+
         m_promise->addResult(result);
         m_promise->finish();
         if (m_rootContext.progressReporter) {
@@ -105,6 +113,8 @@ private:
 
     void runOcrStep(int index) {
         if (m_rootContext.stopToken.stop_requested()) {
+            qWarning() << "[SmartTranslatePageWorkflow] Workflow cancelled at start of OCR step for page="
+                       << m_pageId.toString();
             m_proposal.issues.append({std::nullopt,
                                       QStringLiteral("Project"),
                                       makeApplicationError(ErrorCategory::Cancelled,
@@ -140,9 +150,14 @@ private:
 
         auto future = m_ocrUseCase->execute(req, m_rootContext);
 
+        QElapsedTimer stepTimer;
+        stepTimer.start();
+
         auto self = shared_from_this();
-        future.then([this, self, index, target](Result<OcrResponse> res) {
+        future.then([this, self, index, target, stepTimer](Result<OcrResponse> res) {
             if (m_rootContext.stopToken.stop_requested()) {
+                qWarning() << "[SmartTranslatePageWorkflow] Workflow cancelled during OCR step for page="
+                           << m_pageId.toString();
                 m_proposal.issues.append({target.regionId,
                                           QStringLiteral("Ocr"),
                                           makeApplicationError(ErrorCategory::Cancelled,
@@ -152,9 +167,13 @@ private:
                 return;
             }
             if (res.has_value()) {
+                qInfo() << "[SmartTranslatePageWorkflow] OCR step region index=" << index
+                        << "elapsed ms=" << stepTimer.elapsed() << "confidence=" << res.value().confidence
+                        << "text preview=" << res.value().text.left(20);
                 m_proposal.ocr.append(res.value());
                 m_targets[index].sourceText = res.value().text;
             } else {
+                qWarning() << "[SmartTranslatePageWorkflow] OCR failed for index=" << index;
                 m_proposal.issues.append({target.regionId, QStringLiteral("Ocr"), res.error()});
             }
             QMetaObject::invokeMethod(qApp, [this, self, index]() { runOcrStep(index + 1); }, Qt::QueuedConnection);
@@ -163,6 +182,8 @@ private:
 
     void runTranslationStep() {
         if (m_rootContext.stopToken.stop_requested()) {
+            qWarning() << "[SmartTranslatePageWorkflow] Workflow cancelled at start of translation step for page="
+                       << m_pageId.toString();
             finishWithProposal();
             return;
         }
@@ -194,9 +215,24 @@ private:
 
         auto future = m_translateUseCase->execute(req, m_rootContext);
 
+        qInfo() << "[SmartTranslatePageWorkflow] Translation request sourceLanguage="
+                << QString::fromStdString(req.sourceLanguage.toString())
+                << "targetLanguage=" << QString::fromStdString(req.targetLanguage.toString())
+                << "region count=" << req.regions.size();
+
+        QElapsedTimer stepTimer;
+        stepTimer.start();
+
         auto self = shared_from_this();
-        future.then([this, self](Result<TranslationResponse> res) {
+        future.then([this, self, stepTimer](Result<TranslationResponse> res) {
+            if (m_rootContext.stopToken.stop_requested()) {
+                qWarning() << "[SmartTranslatePageWorkflow] Workflow cancelled during translation step for page="
+                           << m_pageId.toString();
+                finishWithProposal();
+                return;
+            }
             if (res.has_value()) {
+                qInfo() << "[SmartTranslatePageWorkflow] Translation completed in ms=" << stepTimer.elapsed();
                 m_proposal.translation = res.value();
                 for (const auto& tr : res.value().items) {
                     for (auto& t : m_targets) {
@@ -206,6 +242,7 @@ private:
                     }
                 }
             } else {
+                qWarning() << "[SmartTranslatePageWorkflow] Translation failed";
                 m_proposal.issues.append({std::nullopt, QStringLiteral("Translate"), res.error()});
                 finishWithProposal();
                 return;
@@ -216,6 +253,8 @@ private:
 
     void runClearStep(int index) {
         if (m_rootContext.stopToken.stop_requested()) {
+            qWarning() << "[SmartTranslatePageWorkflow] Workflow cancelled at start of clear step for page="
+                       << m_pageId.toString();
             finishWithProposal();
             return;
         }
@@ -249,11 +288,17 @@ private:
 
         auto future = m_clearUseCase->execute(req, m_rootContext);
 
+        QElapsedTimer stepTimer;
+        stepTimer.start();
+
         auto self = shared_from_this();
-        future.then([this, self, index, target](Result<ClearResponse> res) {
+        future.then([this, self, index, target, stepTimer](Result<ClearResponse> res) {
             if (res.has_value()) {
+                qInfo() << "[SmartTranslatePageWorkflow] Inpaint step completed for index=" << index
+                        << "elapsed ms=" << stepTimer.elapsed();
                 m_proposal.clear.append(res.value());
             } else {
+                qWarning() << "[SmartTranslatePageWorkflow] Inpaint failed for index=" << index;
                 m_proposal.issues.append({target.regionId, QStringLiteral("Clear"), res.error()});
                 m_clearFailedRegions.insert(target.regionId);
             }
@@ -263,6 +308,8 @@ private:
 
     void runLayoutStep(int index) {
         if (m_rootContext.stopToken.stop_requested()) {
+            qWarning() << "[SmartTranslatePageWorkflow] Workflow cancelled at start of layout step for page="
+                       << m_pageId.toString();
             finishWithProposal();
             return;
         }
@@ -307,11 +354,17 @@ private:
 
         auto future = m_layoutUseCase->execute(req, m_rootContext);
 
+        QElapsedTimer stepTimer;
+        stepTimer.start();
+
         auto self = shared_from_this();
-        future.then([this, self, index, target](Result<LayoutResponse> res) {
+        future.then([this, self, index, target, stepTimer](Result<LayoutResponse> res) {
             if (res.has_value()) {
+                qInfo() << "[SmartTranslatePageWorkflow] Layout step completed for index=" << index
+                        << "elapsed ms=" << stepTimer.elapsed();
                 m_proposal.layout.append(res.value());
             } else {
+                qWarning() << "[SmartTranslatePageWorkflow] Layout failed for index=" << index;
                 m_proposal.issues.append({target.regionId, QStringLiteral("Layout"), res.error()});
             }
             QMetaObject::invokeMethod(qApp, [this, self, index]() { runLayoutStep(index + 1); }, Qt::QueuedConnection);
@@ -336,6 +389,7 @@ private:
     std::shared_ptr<QPromise<Result<PageProcessingProposal>>> m_promise;
     PageProcessingProposal m_proposal;
     QSet<domain::RegionId> m_clearFailedRegions;
+    QElapsedTimer m_workflowTimer;
 };
 
 SmartTranslatePageWorkflow::SmartTranslatePageWorkflow(RecognizeRegionUseCase* ocrUseCase,
@@ -357,6 +411,9 @@ QFuture<Result<PageProcessingProposal>> SmartTranslatePageWorkflow::execute(doma
                                                                             QImage pageImage,
                                                                             quint64 sessionGeneration,
                                                                             OperationId& outOperationId) {
+    qInfo() << "[SmartTranslatePageWorkflow] Starting workflow for page=" << pageId.toString()
+            << "target_count=" << targets.size();
+
     auto orchestrator = std::make_shared<WorkflowOrchestrator>(
         m_ocrUseCase, m_translateUseCase, m_clearUseCase, m_layoutUseCase, m_registry);
 

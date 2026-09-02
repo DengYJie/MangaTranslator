@@ -14,6 +14,7 @@ target_include_directories(manga_app
 target_link_libraries(manga_app
     PUBLIC
         manga_application
+        manga_core
         manga_data
         manga_network
         manga_services

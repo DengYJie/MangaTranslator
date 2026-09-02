@@ -128,11 +128,23 @@ application::Result<void> PaddleVlOcrEngine::ensureLoaded() {
     }
     m_impl->vocab = std::move(vocabRes.value());
 
+    // Note on ONNX Runtime CPU Execution Provider compatibility:
+    // PaddleOCR-VL vision encoder models exported with dynamic quantization may contain a
+    // ConvInteger operator for the patch embedding layer. ONNX Runtime CPU Execution Provider
+    // does not provide a CPU kernel implementation for ConvInteger.
+    // Resolution strategies:
+    // 1. (Preferred/Fallback) Dequantize the patch_embedding Conv layer back to standard FP32 Conv
+    //    in the ONNX graph (quantize_dynamic with op_types_to_quantize=['MatMul']).
+    // 2. Enable DirectML or other GPU execution providers supporting ConvInteger kernels.
     Ort::SessionOptions options;
     options.SetGraphOptimizationLevel(GraphOptimizationLevel::ORT_ENABLE_ALL);
     options.SetIntraOpNumThreads(2);
     options.SetInterOpNumThreads(1);
     options.SetExecutionMode(ExecutionMode::ORT_SEQUENTIAL);
+
+    qInfo().noquote() << "[PaddleVlOcrEngine] loading model from directory:" << m_impl->modelDir
+                      << "intraOpThreads:" << 2 << "interOpThreads:" << 1
+                      << "executionMode: ORT_SEQUENTIAL, provider: CPUExecutionProvider (default)";
 
     try {
 #ifdef _WIN32
@@ -148,6 +160,12 @@ application::Result<void> PaddleVlOcrEngine::ensureLoaded() {
         qInfo().noquote() << "[PaddleVlOcrEngine] successfully loaded PaddleOCR-VL model from" << m_impl->modelDir;
     } catch (const Ort::Exception& e) {
         qWarning().noquote() << "[PaddleVlOcrEngine] ONNX session creation exception:" << e.what();
+        const std::string errStr = e.what();
+        if (errStr.find("ConvInteger") != std::string::npos) {
+            qWarning().noquote() << "[PaddleVlOcrEngine] Hint: The vision encoder contains a ConvInteger operator not "
+                                    "supported by CPUExecutionProvider. Please patch the patch_embedding Conv layer "
+                                    "to FP32 or configure DirectML.";
+        }
         return std::unexpected(application::makeApplicationError(
             application::ErrorCategory::Model, QStringLiteral("model.load_failed"), QString::fromStdString(e.what())));
     }
@@ -229,12 +247,20 @@ PaddleVlOcrEngine::runInference(const application::OcrRequest& request,
     progress.setValue(10);
     progress.setText(QStringLiteral("Preprocessing image for Vision-Language model..."));
 
+    qInfo().noquote() << "[PaddleVlOcrEngine] preprocessing image size:" << request.image.size()
+                      << "crop rect:" << request.rect.x << request.rect.y << request.rect.width << request.rect.height;
+
+    QElapsedTimer preTimer;
+    preTimer.start();
     auto preResult = PaddleVlPreprocessor::preprocess(request);
     if (!preResult.has_value()) {
         qWarning().noquote() << "[PaddleVlOcrEngine] preprocess failed:" << preResult.error().safeMessage;
         return std::unexpected(preResult.error());
     }
     auto& prepData = preResult.value();
+    qInfo().noquote() << "[PaddleVlOcrEngine] preprocessing took" << preTimer.elapsed()
+                      << "ms. Patches:" << prepData.numPatches << "grid_thw:" << prepData.gridThw[0]
+                      << prepData.gridThw[1] << prepData.gridThw[2];
 
     Ort::MemoryInfo memInfo = Ort::MemoryInfo::CreateCpu(OrtArenaAllocator, OrtMemTypeDefault);
 
@@ -257,7 +283,10 @@ PaddleVlOcrEngine::runInference(const application::OcrRequest& request,
 
     std::vector<Ort::Value> visOutputs;
     try {
+        QElapsedTimer visTimer;
+        visTimer.start();
         visOutputs = m_impl->visSession->Run(Ort::RunOptions{nullptr}, visInputNames, visInputs, 2, visOutputNames, 1);
+        qInfo().noquote() << "[PaddleVlOcrEngine] Vision encoder inference elapsed:" << visTimer.elapsed() << "ms";
     } catch (const Ort::Exception& e) {
         qWarning().noquote() << "[PaddleVlOcrEngine] Vision encoder exception:" << e.what();
         return std::unexpected(application::makeApplicationError(application::ErrorCategory::Inference,
@@ -401,12 +430,15 @@ PaddleVlOcrEngine::runInference(const application::OcrRequest& request,
 
     std::vector<Ort::Value> decoderOutputs;
     try {
+        QElapsedTimer prefillTimer;
+        prefillTimer.start();
         decoderOutputs = m_impl->decoderSession->Run(Ort::RunOptions{nullptr},
                                                      decoderInputNames.data(),
                                                      decoderInputs.data(),
                                                      decoderInputs.size(),
                                                      decoderOutputNames.data(),
                                                      decoderOutputNames.size());
+        qInfo().noquote() << "[PaddleVlOcrEngine] Decoder prefill elapsed:" << prefillTimer.elapsed() << "ms";
     } catch (const Ort::Exception& e) {
         qWarning().noquote() << "[PaddleVlOcrEngine] Decoder prefill exception:" << e.what();
         return std::unexpected(application::makeApplicationError(application::ErrorCategory::Inference,
@@ -434,6 +466,9 @@ PaddleVlOcrEngine::runInference(const application::OcrRequest& request,
     constexpr int maxNewTokens = 256;
     constexpr float repetitionPenalty = 1.2f;
     int64_t totalLen = seqLen;
+
+    QElapsedTimer genTimer;
+    genTimer.start();
 
     for (int step = 0; step < maxNewTokens; ++step) {
         if (context.stopToken.stop_requested()) {
@@ -518,15 +553,24 @@ PaddleVlOcrEngine::runInference(const application::OcrRequest& request,
         }
     }
 
-    QString decodedText = m_impl->vocab->decode(generatedTokens);
+    qint64 genElapsed = genTimer.elapsed();
+    int numTokens = generatedTokens.size();
+    double msPerToken = numTokens > 0 ? static_cast<double>(genElapsed) / numTokens : 0.0;
+    qInfo().noquote() << "[PaddleVlOcrEngine] Autoregressive decoding generated" << numTokens << "tokens in"
+                      << genElapsed << "ms (" << msPerToken << "ms/token)";
 
-    qInfo().noquote() << "[PaddleVlOcrEngine] complete region=" << QString::fromStdString(request.regionId.toString())
-                      << "text=\"" << decodedText << "\" elapsed=" << timer.elapsed() << "ms";
+    QString decodedText = m_impl->vocab->decode(generatedTokens);
 
     application::OcrResponse response;
     response.regionId = request.regionId;
     response.text = decodedText;
     response.confidence = 0.95;
+
+    qInfo().noquote() << "[PaddleVlOcrEngine] complete region=" << QString::fromStdString(request.regionId.toString())
+                      << "text=\"" << decodedText << "\" elapsed=" << timer.elapsed() << "ms";
+    qInfo().noquote() << "[PaddleVlOcrEngine] final decoded text length:" << decodedText.length()
+                      << "confidence:" << response.confidence
+                      << "snippet:" << (decodedText.length() > 20 ? decodedText.left(20) + "..." : decodedText);
 
     progress.setValue(100);
     progress.setText(QStringLiteral("PaddleOCR-VL complete"));

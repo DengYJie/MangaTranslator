@@ -353,10 +353,10 @@ OnnxLamaPageInpainter::inpaint(application::PageInpaintRequest request, applicat
                 const QRect corePage = tile.core.translated(offset);
                 const QRect cropPage = tile.crop.translated(offset);
                 const MaskStats tileMask = measureMask(mask.copy(cropPage));
-                qInfo().noquote() << "[InpaintEngine] tile" << int(tileIndex) << "labels=" << tile.labels.size()
-                                  << "core=" << corePage << "crop=" << cropPage << "cropMask=" << tileMask.set << '/'
-                                  << tileMask.total << "alpha[min/mean/max]=" << tileMask.minAlpha << tileMask.meanAlpha
-                                  << tileMask.maxAlpha;
+                qDebug().noquote() << "[InpaintEngine] tile" << int(tileIndex) << "labels=" << tile.labels.size()
+                                   << "core=" << corePage << "crop=" << cropPage << "cropMask=" << tileMask.set << '/'
+                                   << tileMask.total << "alpha[min/mean/max]=" << tileMask.minAlpha
+                                   << tileMask.meanAlpha << tileMask.maxAlpha;
                 if (tileIndex == 0) {
                     dumpDebugImage(QStringLiteral("tile0_source"), source.copy(cropPage));
                     dumpDebugImage(QStringLiteral("tile0_mask"), mask.copy(cropPage));
@@ -394,7 +394,11 @@ OnnxLamaPageInpainter::inpaint(application::PageInpaintRequest request, applicat
                 std::vector<Ort::Value> outputs;
                 try {
                     QMutexLocker lock(&impl->runMutex);
+                    QElapsedTimer onnxTimer;
+                    onnxTimer.start();
                     outputs = impl->session->Run(Ort::RunOptions{nullptr}, inputNames, tensors, 2, outputNames, 1);
+                    qDebug().noquote() << "[InpaintEngine] ONNX Run took" << onnxTimer.elapsed() << "ms for tile"
+                                       << tileIndex;
                 } catch (const Ort::Exception&) {
                     return std::unexpected(inferenceError(QStringLiteral("inference.failed"),
                                                           QStringLiteral("ONNX Runtime inference failed")));

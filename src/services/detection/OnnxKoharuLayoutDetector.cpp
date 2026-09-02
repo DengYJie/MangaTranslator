@@ -193,8 +193,18 @@ OnnxKoharuLayoutDetector::runInference(const application::TextDetectionRequest& 
 
     progress.setValue(30);
     progress.setText(QStringLiteral("Preprocessing page image..."));
+
+    QElapsedTimer preTimer;
+    preTimer.start();
+
     const auto preprocessed =
         KoharuLayoutPreprocessor::process(request.image, m_impl->manifest.inputWidth, m_impl->manifest.inputHeight);
+
+    qInfo().noquote() << "[DetectEngine] preprocessing elapsed:" << preTimer.elapsed()
+                      << "ms. Input dims:" << request.image.width() << "x" << request.image.height()
+                      << "Model dims:" << m_impl->manifest.inputWidth << "x" << m_impl->manifest.inputHeight
+                      << "Scale factor approx:"
+                      << static_cast<double>(m_impl->manifest.inputWidth) / request.image.width();
 
     if (context.stopToken.stop_requested()) {
         return std::unexpected(application::makeApplicationError(application::ErrorCategory::Cancelled,
@@ -245,6 +255,9 @@ OnnxKoharuLayoutDetector::runInference(const application::TextDetectionRequest& 
             inputTensors.push_back(std::move(targetSizesTensor));
         }
 
+        QElapsedTimer onnxTimer;
+        onnxTimer.start();
+
         auto outputTensors = m_impl->session->Run(Ort::RunOptions{nullptr},
                                                   inputNames.data(),
                                                   inputTensors.data(),
@@ -252,7 +265,7 @@ OnnxKoharuLayoutDetector::runInference(const application::TextDetectionRequest& 
                                                   outputNames.data(),
                                                   outputNames.size());
 
-        qInfo().noquote() << "[DetectEngine] ONNX model run completed in" << timer.elapsed() << "ms";
+        qInfo().noquote() << "[DetectEngine] ONNX inference elapsed:" << onnxTimer.elapsed() << "ms";
 
         if (context.stopToken.stop_requested()) {
             return std::unexpected(application::makeApplicationError(application::ErrorCategory::Cancelled,
@@ -262,6 +275,9 @@ OnnxKoharuLayoutDetector::runInference(const application::TextDetectionRequest& 
 
         progress.setValue(80);
         progress.setText(QStringLiteral("Postprocessing layout regions..."));
+
+        QElapsedTimer postTimer;
+        postTimer.start();
 
         KoharuLayoutPostprocessor::RawOutputs raw;
         for (size_t i = 0; i < outputCount; ++i) {
@@ -317,9 +333,10 @@ OnnxKoharuLayoutDetector::runInference(const application::TextDetectionRequest& 
         auto response = KoharuLayoutPostprocessor::process(
             request.pageId, raw, preprocessed, request.minConfidence, request.readingDirection);
 
+        qInfo().noquote() << "[DetectEngine] postprocessing elapsed:" << postTimer.elapsed() << "ms";
         qInfo().noquote() << "[DetectEngine] result page=" << QString::fromStdString(request.pageId.toString())
-                          << "regions=" << response.detectedRegions.size() << "panels=" << response.panels.size()
-                          << "totalElapsed=" << timer.elapsed() << "ms";
+                          << "detected text regions=" << response.detectedRegions.size()
+                          << "detected panels=" << response.panels.size() << "totalElapsed=" << timer.elapsed() << "ms";
 
         progress.setValue(100);
         progress.setText(QStringLiteral("Detection completed"));

@@ -266,6 +266,12 @@ PaddleOcrEngine::runInference(const application::OcrRequest& request,
                                                                  QStringLiteral("Invalid crop region")));
     }
 
+    QElapsedTimer timer;
+    timer.start();
+
+    QElapsedTimer preprocessTimer;
+    preprocessTimer.start();
+
     const QRect cropRect(std::clamp(qRound(request.rect.x), 0, request.image.width() - 1),
                          std::clamp(qRound(request.rect.y), 0, request.image.height() - 1),
                          std::clamp(qRound(request.rect.width), 1, request.image.width()),
@@ -315,11 +321,15 @@ PaddleOcrEngine::runInference(const application::OcrRequest& request,
     const char* inputNames[] = {inputName.get()};
     const char* outputNames[] = {outputName.get()};
 
-    QElapsedTimer timer;
-    timer.start();
+    qInfo().noquote() << "[PaddleOcrEngine] preprocessing took" << preprocessTimer.elapsed()
+                      << "ms for crop size:" << cropRect.size() << "scaled to:" << targetW << "x" << targetH;
 
     try {
+        QElapsedTimer onnxTimer;
+        onnxTimer.start();
         auto outputs = m_impl->session->Run(Ort::RunOptions{nullptr}, inputNames, &inputTensor, 1, outputNames, 1);
+        qInfo().noquote() << "[PaddleOcrEngine] ONNX run elapsed:" << onnxTimer.elapsed() << "ms";
+
         if (outputs.empty()) {
             qWarning().noquote() << "[PaddleOcrEngine] session->Run returned empty output vector.";
             return std::unexpected(
@@ -347,6 +357,9 @@ PaddleOcrEngine::runInference(const application::OcrRequest& request,
         const float* logits = logitsTensor.GetTensorData<float>();
 
         // CTC Greedy Decoding
+        QElapsedTimer decodeTimer;
+        decodeTimer.start();
+
         QString decodedText;
         int lastIndex = -1;
         double totalConfidence = 0.0;
@@ -375,6 +388,8 @@ PaddleOcrEngine::runInference(const application::OcrRequest& request,
             lastIndex = argmax;
         }
 
+        qInfo().noquote() << "[PaddleOcrEngine] CTC Greedy decoding elapsed:" << decodeTimer.elapsed() << "ms";
+
         application::OcrResponse response;
         response.regionId = request.regionId;
         response.text = decodedText;
@@ -383,6 +398,9 @@ PaddleOcrEngine::runInference(const application::OcrRequest& request,
         qInfo().noquote() << "[PaddleOcrEngine] recognized region="
                           << QString::fromStdString(request.regionId.toString()) << "text=\"" << decodedText
                           << "\" elapsed=" << timer.elapsed() << "ms";
+        qInfo().noquote() << "[PaddleOcrEngine] final decoded text length:" << decodedText.length()
+                          << "confidence:" << response.confidence
+                          << "snippet:" << (decodedText.length() > 20 ? decodedText.left(20) + "..." : decodedText);
         progress.setValue(1);
         progress.setText(QStringLiteral("PaddleOCR complete"));
         return response;

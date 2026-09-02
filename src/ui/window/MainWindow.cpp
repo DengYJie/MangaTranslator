@@ -8,6 +8,7 @@
 #include <FluentQt/MenusToolbars.h>
 #include <FluentQt/TextFields.h>
 #include <QCloseEvent>
+#include <QDebug>
 #include <QGuiApplication>
 #include <QKeySequence>
 #include <QMetaMethod>
@@ -31,7 +32,12 @@ public:
 
     QSize sizeHint() const override {
         const QSize s = FluentMenuBar::sizeHint();
-        return QSize(s.width() + 8, s.height());
+        // TitleBar sizes the bar from this hint, but the native QMenuBar layout
+        // still runs underneath with style-driven item metrics. When the widget
+        // ends up narrower than that native layout, QMenuBar hides trailing
+        // actions into its overflow extension button, and that invisible button
+        // then opens a fallback popup over the Fluent-painted items.
+        return QSize(qMax(s.width(), QMenuBar::sizeHint().width()) + 8, s.height());
     }
 
 protected:
@@ -136,31 +142,58 @@ MainWindow::MainWindow(application::IAppSettingsStore* settingsStore, QWidget* p
     auto* fileMenu = new fluent::menus_toolbars::FluentMenu(tr("文件"), m_editorMenuBar);
 
     auto* importMenu = new fluent::menus_toolbars::FluentMenu(tr("导入页面"), fileMenu);
-    importMenu->addAction(tr("文件..."));
-    importMenu->addAction(tr("文件夹..."));
+    connect(importMenu->addAction(tr("文件...")), &QAction::triggered, this, [this]() {
+        qInfo() << "[MainWindow] User action: Import Files requested";
+        Q_EMIT importFilesRequested();
+    });
+    connect(importMenu->addAction(tr("文件夹...")), &QAction::triggered, this, [this]() {
+        qInfo() << "[MainWindow] User action: Import Folder requested";
+        Q_EMIT importFolderRequested();
+    });
     fileMenu->addMenu(importMenu);
 
-    fileMenu->addAction(tr("导出..."));
+    connect(fileMenu->addAction(tr("导出...")), &QAction::triggered, this, [this]() {
+        qInfo() << "[MainWindow] User action: Export Project requested";
+        Q_EMIT exportProjectRequested();
+    });
 
     fileMenu->addSeparator();
 
-    fileMenu->addAction(tr("关闭项目"));
+    connect(fileMenu->addAction(tr("关闭项目")), &QAction::triggered, this, [this]() {
+        qInfo() << "[MainWindow] User action: Close Project requested";
+        Q_EMIT closeProjectRequested();
+    });
 
     m_editorMenuBar->addMenu(fileMenu);
 
     auto* processMenu = new fluent::menus_toolbars::FluentMenu(tr("处理"), m_editorMenuBar);
 
-    processMenu->addAction(tr("处理项目"));
+    connect(processMenu->addAction(tr("处理项目")), &QAction::triggered, this, [this]() {
+        qInfo() << "[MainWindow] User action: Process Project requested";
+        Q_EMIT processProjectRequested();
+    });
 
     processMenu->addSeparator();
 
-    processMenu->addAction(tr("运行文本检测"));
+    connect(processMenu->addAction(tr("运行文本检测")), &QAction::triggered, this, [this]() {
+        qInfo() << "[MainWindow] User action: Run Text Detection requested";
+        Q_EMIT runDetectionRequested();
+    });
 
-    processMenu->addAction(tr("运行文字识别"));
+    connect(processMenu->addAction(tr("运行文字识别")), &QAction::triggered, this, [this]() {
+        qInfo() << "[MainWindow] User action: Run OCR requested";
+        Q_EMIT runOcrRequested();
+    });
 
-    processMenu->addAction(tr("运行 AI 翻译"));
+    connect(processMenu->addAction(tr("运行 AI 翻译")), &QAction::triggered, this, [this]() {
+        qInfo() << "[MainWindow] User action: Run Translation requested";
+        Q_EMIT runTranslationRequested();
+    });
 
-    processMenu->addAction(tr("运行文字消除"));
+    connect(processMenu->addAction(tr("运行文字消除")), &QAction::triggered, this, [this]() {
+        qInfo() << "[MainWindow] User action: Run Text Clear requested";
+        Q_EMIT runTextClearRequested();
+    });
 
     m_editorMenuBar->addMenu(processMenu);
 
@@ -214,12 +247,8 @@ void MainWindow::setNavigationController(navigation::NavigationController* contr
             titleBar()->updateLayout();
         }
 
-        if (m_editorMenuBar) {
-            m_editorMenuBar->setVisible(isEditor);
-            if (titleBar()) {
-                titleBar()->updateLayout();
-            }
-        }
+        m_editorRouteActive = isEditor;
+        updateEditorMenuBarVisibility();
     });
 
     const auto cur = m_controller->currentRoute();
@@ -231,9 +260,8 @@ void MainWindow::setNavigationController(navigation::NavigationController* contr
     if (titleBar()) {
         titleBar()->setBackButtonVisible(isSettings);
     }
-    if (m_editorMenuBar) {
-        m_editorMenuBar->setVisible(isEditor);
-    }
+    m_editorRouteActive = isEditor;
+    updateEditorMenuBarVisibility();
 
     auto* backShortcut = new QShortcut(QKeySequence::Back, this);
     connect(backShortcut, &QShortcut::activated, this, [this]() {
@@ -324,12 +352,12 @@ void MainWindow::setProjectTitleInfo(const QString& projectName, int currentPage
     QString text;
     if (totalPages > 0 && currentPage > 0) {
         text = QStringLiteral("%1%2 · %3 / %4")
-                   .arg(projectName)
-                   .arg(isDirty ? QStringLiteral("*") : QString())
-                   .arg(currentPage)
-                   .arg(totalPages);
+                   .arg(projectName,
+                        isDirty ? QStringLiteral("*") : QString(),
+                        QString::number(currentPage),
+                        QString::number(totalPages));
     } else {
-        text = QStringLiteral("%1%2").arg(projectName).arg(isDirty ? QStringLiteral("*") : QString());
+        text = QStringLiteral("%1%2").arg(projectName, isDirty ? QStringLiteral("*") : QString());
     }
     m_projectTitleLabel->setText(text);
     m_projectTitleLabel->adjustSize();
@@ -345,6 +373,24 @@ void MainWindow::clearProjectTitleInfo() {
     }
     m_projectTitleLabel->clear();
     m_projectTitleLabel->hide();
+    if (titleBar()) {
+        titleBar()->updateLayout();
+    }
+}
+
+void MainWindow::setProjectSessionActive(bool active) {
+    if (m_projectSessionActive == active) {
+        return;
+    }
+    m_projectSessionActive = active;
+    updateEditorMenuBarVisibility();
+}
+
+void MainWindow::updateEditorMenuBarVisibility() {
+    if (!m_editorMenuBar) {
+        return;
+    }
+    m_editorMenuBar->setVisible(m_editorRouteActive && m_projectSessionActive);
     if (titleBar()) {
         titleBar()->updateLayout();
     }
