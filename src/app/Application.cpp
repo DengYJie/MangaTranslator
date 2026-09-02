@@ -244,6 +244,10 @@ int Application::run() {
         provider.endpoint = QUrl(state.persisted.endpoint);
         provider.model = state.persisted.modelName;
         provider.timeoutMs = state.persisted.timeoutSeconds * 1000;
+        const QString host = provider.endpoint.host().toLower();
+        provider.apiFlavor = (host == QStringLiteral("api.openai.com") || host.endsWith(QStringLiteral(".openai.com")))
+                                 ? network::ProviderApiFlavor::OpenAiNative
+                                 : network::ProviderApiFlavor::OpenAiCompatible;
         m_context->updateProviderConfig(std::make_shared<const network::ProviderConfig>(std::move(provider)));
 
         const bool configured = !state.persisted.endpoint.trimmed().isEmpty() &&

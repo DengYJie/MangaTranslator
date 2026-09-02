@@ -104,24 +104,27 @@ QByteArray buildChatCompletionsRequest(const application::TranslationRequest& re
         {QStringLiteral("glossary"), glossary},
     };
 
-    const QString modeName = config.structuredOutputMode == StructuredOutputMode::JsonSchemaStrict
-                                 ? QStringLiteral("json_schema")
-                                 : QStringLiteral("json_object");
-    QJsonObject responseFormat{{QStringLiteral("type"), modeName}};
-    if (config.structuredOutputMode == StructuredOutputMode::JsonSchemaStrict) {
-        // The schema name is wire data. A provider uses it to identify and may cache the grammar
-        // behind it, and responseSchema is the only body this name denotes, so label and body
-        // change as one unit.
+    const bool native = config.apiFlavor == ProviderApiFlavor::OpenAiNative;
+
+    QJsonObject responseFormat;
+    if (native) {
+        responseFormat.insert(QStringLiteral("type"), QStringLiteral("json_schema"));
         responseFormat.insert(QStringLiteral("json_schema"),
                               QJsonObject{{QStringLiteral("name"), QStringLiteral("manga_translation_response_v1")},
                                           {QStringLiteral("strict"), true},
                                           {QStringLiteral("schema"), responseSchema()}});
+    } else {
+        responseFormat.insert(QStringLiteral("type"), QStringLiteral("json_object"));
     }
+
+    // OpenAI Native uses max_completion_tokens. The OpenAI-compatible subset (DeepSeek, Ollama,
+    // LM Studio, local servers) documents max_tokens.
+    const QString tokenKey = native ? QStringLiteral("max_completion_tokens") : QStringLiteral("max_tokens");
 
     const QJsonObject body{
         {QStringLiteral("model"), config.model},
         {QStringLiteral("temperature"), config.temperature},
-        {QStringLiteral("max_completion_tokens"), config.maxCompletionTokens},
+        {tokenKey, config.maxCompletionTokens},
         {QStringLiteral("stream"), false},
         {QStringLiteral("response_format"), responseFormat},
         {QStringLiteral("messages"),

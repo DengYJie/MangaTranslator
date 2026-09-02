@@ -11,15 +11,15 @@
 
 namespace manga::network {
 
-enum class StructuredOutputMode {
-    /// Chat Completions response_format json_schema with strict:true.
-    JsonSchemaStrict,
-    /// Provider only supports JSON mode; the response is valid JSON but not schema checked.
-    JsonObject,
+enum class ProviderApiFlavor {
+    /// Standard OpenAI Chat Completions (api.openai.com).
+    /// Uses max_completion_tokens and response_format json_schema with strict:true.
+    OpenAiNative,
+    /// OpenAI-compatible API subset used by DeepSeek, Ollama, LM Studio, and other local servers.
+    /// Uses max_tokens and response_format json_object.
+    OpenAiCompatible,
 };
 
-/// Whether a plain HTTP endpoint is acceptable. Production configuration is HTTPS only;
-/// loopback HTTP is also allowed so local providers such as Ollama can be reached without TLS.
 enum class EndpointPolicy {
     HttpsOnly,
     AllowLoopbackHttp,
@@ -34,7 +34,7 @@ struct ProviderConfig {
     /// Whole operation budget in milliseconds, retries included. Each attempt is given what is
     /// left of it, and a retry whose wait would overrun the remainder is not taken.
     int timeoutMs{60000};
-    StructuredOutputMode structuredOutputMode{StructuredOutputMode::JsonSchemaStrict};
+    ProviderApiFlavor apiFlavor{ProviderApiFlavor::OpenAiCompatible};
     /// Travels as the provider completion token ceiling. A reply that reaches it comes back with a
     /// length finish reason, which the parser reports as an incomplete response rather than
     /// truncating the candidates it managed to produce.
