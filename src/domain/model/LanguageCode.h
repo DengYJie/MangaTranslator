@@ -14,7 +14,7 @@ enum class LanguageCodeError {
     InvalidStructure
 };
 
-/// Value type representing a normalized language code (e.g., "ja", "en", "zh-Hans").
+/// Value type representing a normalized language code such as "ja", "en", or "zh-Hans".
 class LanguageCode {
 public:
     constexpr LanguageCode() = default;

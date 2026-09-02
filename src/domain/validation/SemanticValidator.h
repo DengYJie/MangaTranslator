@@ -9,7 +9,8 @@
 
 namespace manga::domain {
 
-/// Domain semantic validator for enforcing all V0.1 business invariants.
+/// Checks the whole project aggregate and collects every violation it finds instead of stopping at the
+/// first one.
 class SemanticValidator {
 public:
     /// Validates the full ComicProject aggregate and returns any validation errors.

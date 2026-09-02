@@ -41,9 +41,9 @@ Uuid Uuid::generateV4() {
         bytes[i + 8] = static_cast<uint8_t>((part2 >> (i * 8)) & 0xFF);
     }
 
-    // Set RFC 4122 v4 version (0100 in bits 12-15 of time_hi_and_version, i.e., byte 6)
+    // Byte 6 carries the RFC 4122 version field in its high nibble, and version 4 sets it to 0100.
     bytes[6] = static_cast<uint8_t>((bytes[6] & 0x0F) | 0x40);
-    // Set RFC 4122 variant (10 in bits 6-7 of clock_seq_hi_and_reserved, i.e., byte 8)
+    // Byte 8 carries the RFC 4122 variant in its two high bits, and the DCE 1.1 variant sets them to 10.
     bytes[8] = static_cast<uint8_t>((bytes[8] & 0x3F) | 0x80);
 
     return Uuid{bytes};

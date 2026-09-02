@@ -53,7 +53,7 @@ bool ComicProject::loadPage(ComicPage page) {
         return false;
     }
     m_pages.push_back(std::move(page));
-    // loadPage does NOT mark dirty. it is a rehydration operation
+    // Rehydration is not an edit, so unlike addPage this leaves the dirty flag and the revision untouched.
     return true;
 }
 

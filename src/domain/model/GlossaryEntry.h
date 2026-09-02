@@ -15,6 +15,7 @@ struct GlossaryEntry {
     bool caseSensitive{false};
     bool enabled{true};
 
+    /// Requires a non-nil identifier and a non-empty source and target term.
     [[nodiscard]] bool isValid() const noexcept {
         return !id.value.isNil() && !source.empty() && !target.empty();
     }

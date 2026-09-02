@@ -8,8 +8,8 @@ namespace manga::domain {
 /// Configuration for region background text clearing / inpainting.
 struct ClearSettings {
     bool enabled{true};
-    std::string colorHex{"#FFFFFF"}; // Default solid white clear in V0.1
-    double opacity{1.0};             // Opacity in range [0.0, 1.0]
+    std::string colorHex{"#FFFFFF"};
+    double opacity{1.0}; // Opacity in range [0.0, 1.0]
 
     [[nodiscard]] bool isValid() const noexcept {
         return !std::isnan(opacity) && opacity >= 0.0 && opacity <= 1.0;

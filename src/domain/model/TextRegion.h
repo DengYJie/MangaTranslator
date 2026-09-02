@@ -126,7 +126,8 @@ public:
         ++m_contentRevision;
     }
 
-    /// Validates internal consistency of the region.
+    /// Requires a non-nil region identifier, a non-negative order index, and valid geometry, source text,
+    /// layout, and clear settings. Bubble outlines and the translation are not checked.
     [[nodiscard]] bool isValid() const noexcept;
 
     [[nodiscard]] bool operator==(const TextRegion& other) const noexcept;

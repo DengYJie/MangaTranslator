@@ -28,7 +28,7 @@ struct RectGeometry {
     double width{0.0};
     double height{0.0};
 
-    /// Checks if dimensions meet the 2x2 minimum size and non-negative constraints.
+    /// Checks that the coordinates are non-negative and finite and that both sides reach kMinDimension.
     [[nodiscard]] bool isValid() const noexcept;
 
     /// Checks if this rectangle is fully contained within the given image bounds.

@@ -48,7 +48,7 @@ struct TextLayout {
     TextOrientation orientation{TextOrientation::Horizontal};
     TextAlignment alignment{HorizontalAlignment::Center, VerticalAlignment::Middle};
 
-    double lineSpacing{1.2}; // Multiplier (e.g. 1.0, 1.2, 1.5)
+    double lineSpacing{1.2}; // Line advance as a multiple of the font pixel size.
     Margins margins{2.0, 2.0, 2.0, 2.0};
 
     bool wordWrap{true};
@@ -57,9 +57,12 @@ struct TextLayout {
     double minFontSizePt{6.0};
     double maxFontSizePt{72.0};
 
-    double rotationDeg{0.0}; // Always 0.0 in V0.1
+    double rotationDeg{0.0};
 
-    /// Validates all layout constraints.
+    /// Requires positive finite font, minimum font, and line spacing values, a maximum font size at least
+    /// the minimum, a font weight that is a multiple of one hundred within the supported range, bounded and
+    /// finite letter spacing and stroke width, text and stroke colors written as a hash and six hexadecimal
+    /// digits, a finite rotation, and non-negative margins.
     [[nodiscard]] bool isValid() const noexcept;
 
     [[nodiscard]] bool approxEquals(const TextLayout& other, double epsilon = 1e-5) const noexcept;

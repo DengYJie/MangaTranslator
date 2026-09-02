@@ -66,7 +66,8 @@ public:
     /// Formats as a 36-character lowercase hyphenated string: xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx.
     [[nodiscard]] std::string toString() const;
 
-    /// Strong ordering comparison.
+    /// Orders UUIDs by comparing their raw byte arrays element by element in index order.
+    /// The order is total because every byte pair is comparable.
     [[nodiscard]] constexpr auto operator<=>(const Uuid& other) const noexcept = default;
     [[nodiscard]] constexpr bool operator==(const Uuid& other) const noexcept = default;
 

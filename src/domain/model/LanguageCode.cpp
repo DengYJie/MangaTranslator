@@ -15,7 +15,7 @@ std::expected<LanguageCode, LanguageCodeError> LanguageCode::fromString(std::str
     std::string normalized;
     normalized.reserve(code.size());
 
-    bool prevHyphen = true; // prevent leading hyphen
+    bool prevHyphen = true; // Seeding the flag rejects a leading hyphen or underscore.
     for (size_t i = 0; i < code.size(); ++i) {
         const char c = code[i];
         if (c == '-' || c == '_') {
@@ -32,7 +32,7 @@ std::expected<LanguageCode, LanguageCodeError> LanguageCode::fromString(std::str
         }
     }
 
-    if (prevHyphen) { // trailing hyphen
+    if (prevHyphen) { // A set flag after the loop means the code ends with a hyphen or underscore.
         return std::unexpected(LanguageCodeError::InvalidStructure);
     }
 
