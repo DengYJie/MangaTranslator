@@ -1067,6 +1067,8 @@ void EditorPage::handlePlaceholderAction() {
 }
 
 void EditorPage::setOperations(const QVector<application::OperationSnapshot>& operations) {
+    qDebug() << "[EditorPage] setOperations - received count:" << operations.size()
+             << "activityCenter exists:" << (m_activityCenter != nullptr);
     if (m_activityCenter != nullptr) {
         m_activityCenter->setOperations(operations);
     }

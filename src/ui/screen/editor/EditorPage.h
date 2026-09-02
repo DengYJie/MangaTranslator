@@ -107,13 +107,13 @@ private:
     void applySplitterLayout();
 
     EditorViewModel* m_viewModel; // non-owning
-    ui::widget::EditorCommandBar* m_commandBar{nullptr};
+    widget::EditorCommandBar* m_commandBar{nullptr};
     widget::PaneSplitter* m_splitter{nullptr};
     QWidget* m_pagePaneCard{nullptr};
-    ui::widget::PageThumbnailList* m_pageList{nullptr};
-    ui::manga::MangaCanvas* m_canvas{nullptr};
+    widget::PageThumbnailList* m_pageList{nullptr};
+    manga::MangaCanvas* m_canvas{nullptr};
     QWidget* m_canvasToolRail{nullptr};
-    ui::widget::ActivityCenter* m_activityCenter{nullptr};
+    widget::ActivityCenter* m_activityCenter{nullptr};
     QFrame* m_removeBrushSeparator{nullptr};
     fluent::basicinput::Button* m_removeBrushSizeButton{nullptr};
     QAbstractButton* m_brushColorButton{nullptr};
@@ -121,8 +121,8 @@ private:
     fluent::textfields::Label* m_canvasZoomValueLabel{nullptr};
     fluent::textfields::Label* m_canvasPageSizeLabel{nullptr};
     QWidget* m_inspectorCard{nullptr};
-    ui::widget::InspectorPanel* m_inspector{nullptr};
-    ui::manga::MangaCanvas::ContentState m_lastPlaceholder{ui::manga::MangaCanvas::ContentState::NoProject};
+    widget::InspectorPanel* m_inspector{nullptr};
+    manga::MangaCanvas::ContentState m_lastPlaceholder{manga::MangaCanvas::ContentState::NoProject};
 
     BreakpointMode m_breakpointMode{BreakpointMode::Wide};
     bool m_pageDrawerOpen{false};

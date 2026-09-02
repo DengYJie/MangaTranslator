@@ -1104,7 +1104,15 @@ void EditorViewModel::startThumbnail(const domain::PageId& pageId) {
         return;
     }
 
-    auto context = m_operationRegistry->createOperation(m_state.projectSessionGeneration, m_state.viewGeneration);
+    application::OperationDescriptor descriptor{
+        .stage = application::OperationStage::LoadImage,
+        .projectId = m_session.projectId,
+        .pageId = pageId,
+        .displayTarget = tr("缩略图"),
+        .cancellable = true,
+    };
+    auto context = m_operationRegistry->createOperation(
+        std::move(descriptor), m_state.projectSessionGeneration, m_state.viewGeneration);
 
     ThumbnailTicket ticket;
     ticket.operationId = context.operationId;

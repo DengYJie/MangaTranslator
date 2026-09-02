@@ -84,6 +84,7 @@ public:
     void translateRegions(const domain::PageId& pageId, const QVector<domain::RegionId>& regionIds);
     void clearPage(const domain::PageId& pageId);
     void clearSelectedRegions();
+    void clearRegions(const domain::PageId& pageId, const QVector<domain::RegionId>& regionIds);
     void clearRegion(const domain::PageId& pageId, const domain::RegionId& regionId);
     void inpaintStroke(const domain::PageId& pageId, const QVector<QPointF>& points, double diameter);
     void paintStroke(const domain::PageId& pageId,
@@ -178,11 +179,13 @@ private:
                              const application::ApplicationError* error = nullptr);
     void prepareAdoptionAsync(const WatcherKey& key,
                               const application::PrepareProcessingAdoptionRequest& prepReq,
-                              quint64 sessionGen);
-    void handlePrepareAdoptionFinished(
-        const WatcherKey& key,
-        quint64 sessionGen,
-        QFutureWatcher<application::Result<application::PreparedProcessingAdoption>>* watcher);
+                              quint64 sessionGen,
+                              std::optional<application::OperationContext> context = std::nullopt);
+    void
+    handlePrepareAdoptionFinished(const WatcherKey& key,
+                                  quint64 sessionGen,
+                                  QFutureWatcher<application::Result<application::PreparedProcessingAdoption>>* watcher,
+                                  std::optional<application::OperationContext> context = std::nullopt);
 
     void releaseEngines();
 

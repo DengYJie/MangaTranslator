@@ -33,6 +33,8 @@ public:
         return m_visibleItemCount;
     }
 
+    [[nodiscard]] QSize sizeHint() const override;
+
 Q_SIGNALS:
     void cancelRequested(const application::OperationId& id);
     void operationActivated(const application::OperationId& id,
@@ -44,7 +46,8 @@ protected:
     void onThemeUpdated() override;
 
 private:
-    void rebuildItems(const QVector<application::OperationSnapshot>& operations);
+    void syncOperations(const QVector<application::OperationSnapshot>& operations);
+    void clearRows();
     void startShowAnimation();
     void startHideAnimation();
     void updateTargetPosition(const QSize& parentSize);
@@ -53,6 +56,12 @@ private:
     QGraphicsOpacityEffect* m_opacityEffect{nullptr};
     QPropertyAnimation* m_opacityAnim{nullptr};
     QTimer* m_hideTimer{nullptr};
+    QTimer* m_throttleTimer{nullptr};
+
+    QVector<application::OperationSnapshot> m_pendingOperations;
+    std::vector<QWidget*> m_jobRows;
+    std::vector<QWidget*> m_failureRows;
+    std::vector<QWidget*> m_separators;
 
     std::set<application::OperationId> m_dismissedFailedIds;
     int m_visibleItemCount{0};

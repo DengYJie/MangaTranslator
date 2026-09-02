@@ -140,6 +140,10 @@ void EditorProcessingController::setPageInpainter(application::IPageInpainter* p
         }
     }
     m_pageInpainter = pageInpainter;
+    if (auto* inpainter = dynamic_cast<application::IInpainter*>(pageInpainter)) {
+        m_ownedClearUseCase = std::make_unique<application::ClearRegionUseCase>(inpainter, m_registry);
+        m_clearUseCase = m_ownedClearUseCase.get();
+    }
     updateProcessingStateForCurrentPage();
 }
 
@@ -372,7 +376,8 @@ void EditorProcessingController::smartTranslate(const domain::PageId& pageId,
 
 void EditorProcessingController::prepareAdoptionAsync(const WatcherKey& key,
                                                       const application::PrepareProcessingAdoptionRequest& prepReq,
-                                                      quint64 sessionGen) {
+                                                      quint64 sessionGen,
+                                                      std::optional<application::OperationContext> context) {
     auto* project = m_viewModel ? m_viewModel->projectAggregate() : nullptr;
     if (project == nullptr) {
         return;
@@ -381,8 +386,8 @@ void EditorProcessingController::prepareAdoptionAsync(const WatcherKey& key,
     if (m_prepareAdoptionUseCase != nullptr) {
         auto prepFuture = m_prepareAdoptionUseCase->execute(prepReq);
         auto* prepWatcher = new QFutureWatcher<application::Result<application::PreparedProcessingAdoption>>(this);
-        connect(prepWatcher, &QFutureWatcherBase::finished, this, [this, prepWatcher, key, sessionGen]() {
-            handlePrepareAdoptionFinished(key, sessionGen, prepWatcher);
+        connect(prepWatcher, &QFutureWatcherBase::finished, this, [this, prepWatcher, key, sessionGen, context]() {
+            handlePrepareAdoptionFinished(key, sessionGen, prepWatcher, context);
             prepWatcher->deleteLater();
         });
         prepWatcher->setFuture(prepFuture);
@@ -396,8 +401,8 @@ void EditorProcessingController::prepareAdoptionAsync(const WatcherKey& key,
     connect(prepWatcher,
             &QFutureWatcherBase::finished,
             this,
-            [this, prepWatcher, key, sessionGen, clearUseCase, prepUseCase]() {
-                handlePrepareAdoptionFinished(key, sessionGen, prepWatcher);
+            [this, prepWatcher, key, sessionGen, clearUseCase, prepUseCase, context]() {
+                handlePrepareAdoptionFinished(key, sessionGen, prepWatcher, context);
                 prepWatcher->deleteLater();
             });
     prepWatcher->setFuture(prepFuture);
@@ -406,7 +411,8 @@ void EditorProcessingController::prepareAdoptionAsync(const WatcherKey& key,
 void EditorProcessingController::handlePrepareAdoptionFinished(
     const WatcherKey& key,
     quint64 sessionGen,
-    QFutureWatcher<application::Result<application::PreparedProcessingAdoption>>* watcher) {
+    QFutureWatcher<application::Result<application::PreparedProcessingAdoption>>* watcher,
+    std::optional<application::OperationContext> context) {
     if (m_viewModel == nullptr || !m_viewModel->hasSession() || watcher == nullptr) {
         return;
     }
@@ -420,10 +426,16 @@ void EditorProcessingController::handlePrepareAdoptionFinished(
         if (key.pageId == m_viewModel->state().currentPageId) {
             updateProcessingStateForCurrentPage();
         }
+        if (context.has_value() && context->progressReporter) {
+            context->progressReporter->markFinished();
+        }
         Q_EMIT proposalReady(key.pageId);
         Q_EMIT processingFinished(key.pageId, true);
     } else {
         const auto& err = res.error();
+        if (context.has_value() && context->progressReporter) {
+            context->progressReporter->markFinished(err);
+        }
         if (err.category != application::ErrorCategory::Cancelled) {
             m_pageFailedRegions[key.pageId] = {key.regionId.value_or(domain::RegionId{})};
             m_pageSafeMessages[key.pageId] = err.safeMessage;
@@ -838,11 +850,13 @@ void EditorProcessingController::clearPage(const domain::PageId& pageId) {
     if (page == nullptr) {
         return;
     }
+    QVector<domain::RegionId> targetIds;
     for (const auto& r : page->regions()) {
         if (r.isEnabled()) {
-            clearRegion(pageId, r.id());
+            targetIds.append(r.id());
         }
     }
+    clearRegions(pageId, targetIds);
 }
 
 void EditorProcessingController::clearSelectedRegions() {
@@ -851,9 +865,7 @@ void EditorProcessingController::clearSelectedRegions() {
     }
     const auto pageId = m_viewModel->state().currentPageId;
     const auto selected = m_viewModel->state().selectedRegionIds;
-    for (const auto& rId : selected) {
-        clearRegion(pageId, rId);
-    }
+    clearRegions(pageId, selected);
 }
 
 void EditorProcessingController::inpaintStroke(const domain::PageId& pageId,
@@ -1075,8 +1087,9 @@ void EditorProcessingController::paintStroke(const domain::PageId& pageId,
     Q_EMIT processingStarted(pageId, opId);
 }
 
-void EditorProcessingController::clearRegion(const domain::PageId& pageId, const domain::RegionId& regionId) {
-    if (m_viewModel == nullptr || !m_viewModel->hasSession() || !pageId.isValid() || !regionId.isValid() ||
+void EditorProcessingController::clearRegions(const domain::PageId& pageId,
+                                              const QVector<domain::RegionId>& regionIds) {
+    if (m_viewModel == nullptr || !m_viewModel->hasSession() || !pageId.isValid() || regionIds.isEmpty() ||
         m_clearUseCase == nullptr || m_registry == nullptr) {
         return;
     }
@@ -1089,106 +1102,181 @@ void EditorProcessingController::clearRegion(const domain::PageId& pageId, const
     if (page == nullptr) {
         return;
     }
-    const auto* region = page->findRegion(regionId);
-    if (region == nullptr) {
+
+    const auto projectId = project->id();
+    const quint64 sessionGen = m_viewModel->projectSessionGeneration();
+    const WatcherKey key{projectId, pageId, std::nullopt, application::OperationStage::Clear};
+    cancelMatchingTask(key);
+
+    QImage currentImg = m_viewModel->currentPageImage();
+    if (currentImg.isNull() || pageId != m_viewModel->state().currentPageId) {
+        const int pw = page->imageSize().width > 0 ? page->imageSize().width : 800;
+        const int ph = page->imageSize().height > 0 ? page->imageSize().height : 1200;
+        currentImg = QImage(pw, ph, QImage::Format_RGB32);
+        currentImg.fill(Qt::white);
+    }
+
+    QVector<domain::RegionId> validRegionIds;
+    QHash<domain::RegionId, quint64> expectedRevisions;
+    for (const auto& rId : regionIds) {
+        const auto* region = page->findRegion(rId);
+        if (region != nullptr && !region->isLocked()) {
+            validRegionIds.append(rId);
+            expectedRevisions.insert(rId, region->contentRevision());
+        }
+    }
+
+    if (validRegionIds.isEmpty()) {
         return;
     }
 
-    const auto projectId = project->id();
-    const WatcherKey key{projectId, pageId, regionId, application::OperationStage::Clear};
-    cancelMatchingTask(key);
+    struct BatchState {
+        int total{0};
+        int completed{0};
+        QVector<application::ClearResponse> responses;
+        QVector<domain::RegionId> failedRegions;
+        application::ApplicationError lastError;
+    };
+    auto batchState = std::make_shared<BatchState>();
+    batchState->total = validRegionIds.size();
 
-    application::ClearRequest request;
-    request.projectId = projectId;
-    request.pageId = pageId;
-    request.regionId = regionId;
-    request.region = region->geometry();
-    request.settings = region->clear();
-    if (!request.settings.enabled) {
-        request.settings.enabled = true;
+    application::OperationDescriptor rootDesc;
+    rootDesc.stage = application::OperationStage::Clear;
+    rootDesc.projectId = projectId;
+    rootDesc.pageId = pageId;
+    rootDesc.regionId = (validRegionIds.size() == 1 ? std::make_optional(validRegionIds.front()) : std::nullopt);
+    rootDesc.displayTarget = (validRegionIds.size() == 1 ? tr("当前区域") : tr("全页背景清除"));
+    rootDesc.cancellable = true;
+
+    auto rootContext = m_registry ? m_registry->createOperation(std::move(rootDesc),
+                                                                sessionGen,
+                                                                m_viewModel ? m_viewModel->viewGeneration() : 0)
+                                  : application::OperationContext{};
+    const application::OperationId rootOpId = rootContext.operationId;
+    if (rootContext.progressReporter) {
+        rootContext.progressReporter->setRange(batchState->total);
+        rootContext.progressReporter->setValue(0);
+        rootContext.progressReporter->setStatusText(tr("正在清除 (0/%1)").arg(batchState->total));
+        rootContext.progressReporter->markRunning();
     }
-    const QImage currentImg = m_viewModel->currentPageImage();
-    if (!currentImg.isNull() && pageId == m_viewModel->state().currentPageId) {
-        request.pageImage = currentImg;
-    } else {
-        const int pw = page->imageSize().width > 0 ? page->imageSize().width : 800;
-        const int ph = page->imageSize().height > 0 ? page->imageSize().height : 1200;
-        request.pageImage = QImage(pw, ph, QImage::Format_RGB32);
-        request.pageImage.fill(Qt::white);
-    }
-
-    application::OperationDescriptor desc;
-    desc.projectId = projectId;
-    desc.pageId = pageId;
-    desc.regionId = regionId;
-    desc.stage = application::OperationStage::Clear;
-
-    application::OperationId opId;
-    const quint64 sessionGen = m_viewModel->projectSessionGeneration();
-    auto future = m_clearUseCase->execute(request, desc, sessionGen, opId);
 
     ActiveTask activeTask;
-    activeTask.operationId = opId;
     activeTask.sessionGeneration = sessionGen;
     activeTask.key = key;
-    activeTask.targetRegionIds = {regionId};
-    activeTask.expectedRevisions.insert(regionId, region->contentRevision());
+    activeTask.operationId = rootOpId;
+    activeTask.targetRegionIds = validRegionIds;
+    activeTask.expectedRevisions = expectedRevisions;
     m_activeTasks.insert(key, activeTask);
 
-    auto* watcher = new QFutureWatcher<application::Result<application::ClearResponse>>(this);
-    connect(watcher,
-            &QFutureWatcherBase::finished,
-            this,
-            [this, watcher, key, opId, sessionGen, regionId, rev = region->contentRevision()]() {
-                if (m_viewModel != nullptr && m_viewModel->hasSession() &&
-                    sessionGen == m_viewModel->projectSessionGeneration() && m_activeTasks.contains(key) &&
-                    m_activeTasks.value(key).operationId == opId) {
-                    m_activeTasks.remove(key);
+    for (const auto& rId : validRegionIds) {
+        const auto* region = page->findRegion(rId);
+        if (region == nullptr) {
+            batchState->completed++;
+            continue;
+        }
+
+        application::ClearRequest request;
+        request.projectId = projectId;
+        request.pageId = pageId;
+        request.regionId = rId;
+        request.region = region->geometry();
+        request.polygon = region->bubblePolygon();
+        request.settings = region->clear();
+        if (!request.settings.enabled) {
+            request.settings.enabled = true;
+        }
+        request.pageImage = currentImg;
+        request.contentRevision = region->contentRevision();
+
+        auto future = m_clearUseCase ? m_clearUseCase->execute(request, rootContext)
+                                     : application::makeFailedFuture<application::ClearResponse>(
+                                           application::makeApplicationError(application::ErrorCategory::Internal,
+                                                                             QStringLiteral("clear.unavailable"),
+                                                                             QStringLiteral("Inpainter unavailable")));
+
+        auto* watcher = new QFutureWatcher<application::Result<application::ClearResponse>>(this);
+        connect(watcher,
+                &QFutureWatcherBase::finished,
+                this,
+                [this, watcher, key, rootOpId, rootContext, sessionGen, rId, batchState, expectedRevisions]() mutable {
                     auto res = watcher->result();
+                    batchState->completed++;
+                    if (rootContext.progressReporter) {
+                        rootContext.progressReporter->setValue(batchState->completed);
+                        rootContext.progressReporter->setStatusText(
+                            tr("正在清除 (%1/%2)").arg(batchState->completed).arg(batchState->total));
+                    }
+
                     if (res.has_value()) {
-                        auto clearResp = res.value();
-                        application::PageProcessingProposal prop;
-                        prop.projectId = key.projectId;
-                        prop.pageId = key.pageId;
-                        prop.rootOperationId = opId;
-                        prop.clear.append(clearResp);
-                        m_pageProposals[key.pageId] = prop;
-
-                        application::PrepareProcessingAdoptionRequest prepReq;
-                        prepReq.projectId = key.projectId;
-                        prepReq.pageId = key.pageId;
-                        prepReq.stage = application::OperationStage::Clear;
-                        prepReq.sessionGeneration = sessionGen;
-                        prepReq.currentSessionGeneration = m_viewModel->projectSessionGeneration();
-                        prepReq.clear.append(clearResp);
-                        prepReq.expectedRevisions.insert(regionId, rev);
-                        prepReq.projectRoot = m_viewModel->projectRootPath();
-                        auto* proj = m_viewModel->projectAggregate();
-                        const auto* pg = proj ? proj->findPage(key.pageId) : nullptr;
-                        if (pg != nullptr) {
-                            prepReq.pageSize = QSize(pg->imageSize().width, pg->imageSize().height);
-                        }
-                        prepReq.replaceManualPolicy = application::ReplaceManualPolicy::Keep;
-
-                        prepareAdoptionAsync(key, prepReq, sessionGen);
+                        batchState->responses.append(res.value());
                     } else {
-                        const auto& err = res.error();
-                        if (err.category != application::ErrorCategory::Cancelled) {
-                            m_pageFailedRegions[key.pageId] = {regionId};
-                            m_pageSafeMessages[key.pageId] = err.safeMessage;
-                            if (key.pageId == m_viewModel->state().currentPageId) {
-                                updateProcessingStateForCurrentPage();
+                        batchState->failedRegions.append(rId);
+                        batchState->lastError = res.error();
+                    }
+
+                    if (batchState->completed >= batchState->total) {
+                        if (m_viewModel != nullptr && m_viewModel->hasSession() &&
+                            sessionGen == m_viewModel->projectSessionGeneration() && m_activeTasks.contains(key) &&
+                            m_activeTasks.value(key).operationId == rootOpId) {
+                            m_activeTasks.remove(key);
+
+                            if (!batchState->responses.isEmpty()) {
+                                if (rootContext.progressReporter) {
+                                    rootContext.progressReporter->setValue(batchState->total);
+                                    rootContext.progressReporter->setStatusText(tr("正在应用并保存图层..."));
+                                }
+                                application::PageProcessingProposal prop;
+                                prop.projectId = key.projectId;
+                                prop.pageId = key.pageId;
+                                prop.rootOperationId = rootOpId;
+                                prop.clear = batchState->responses;
+                                m_pageProposals[key.pageId] = prop;
+
+                                application::PrepareProcessingAdoptionRequest prepReq;
+                                prepReq.projectId = key.projectId;
+                                prepReq.pageId = key.pageId;
+                                prepReq.stage = application::OperationStage::Clear;
+                                prepReq.sessionGeneration = sessionGen;
+                                prepReq.currentSessionGeneration = m_viewModel->projectSessionGeneration();
+                                prepReq.clear = batchState->responses;
+                                prepReq.expectedRevisions = expectedRevisions;
+                                prepReq.projectRoot = m_viewModel->projectRootPath();
+                                auto* proj = m_viewModel->projectAggregate();
+                                const auto* pg = proj ? proj->findPage(key.pageId) : nullptr;
+                                if (pg != nullptr) {
+                                    prepReq.pageSize = QSize(pg->imageSize().width, pg->imageSize().height);
+                                }
+                                prepReq.replaceManualPolicy = application::ReplaceManualPolicy::Keep;
+
+                                prepareAdoptionAsync(key, prepReq, sessionGen, rootContext);
+                            } else if (!batchState->failedRegions.isEmpty()) {
+                                if (rootContext.progressReporter) {
+                                    rootContext.progressReporter->markFinished(batchState->lastError);
+                                }
+                                if (batchState->lastError.category != application::ErrorCategory::Cancelled) {
+                                    m_pageFailedRegions[key.pageId] = batchState->failedRegions;
+                                    m_pageSafeMessages[key.pageId] = batchState->lastError.safeMessage;
+                                    if (key.pageId == m_viewModel->state().currentPageId) {
+                                        updateProcessingStateForCurrentPage();
+                                    }
+                                    Q_EMIT processingFinished(key.pageId, false);
+                                }
                             }
-                            Q_EMIT processingFinished(key.pageId, false);
                         }
                     }
-                }
-                watcher->deleteLater();
-            });
-    watcher->setFuture(future);
+                    watcher->deleteLater();
+                });
+        watcher->setFuture(future);
+    }
 
     updateProcessingStateForCurrentPage();
-    Q_EMIT processingStarted(pageId, opId);
+    if (rootOpId.isValid()) {
+        Q_EMIT processingStarted(pageId, rootOpId);
+    }
+}
+
+void EditorProcessingController::clearRegion(const domain::PageId& pageId, const domain::RegionId& regionId) {
+    clearRegions(pageId, {regionId});
 }
 
 void EditorProcessingController::layoutSelectedRegions() {
