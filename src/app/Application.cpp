@@ -4,6 +4,7 @@
 #include "application/ports/IAppSettingsStore.h"
 #include "application/usecase/settings/AppSettingsUseCases.h"
 #include "application/workflow/OperationRegistry.h"
+#include "domain/model/Uuid.h"
 #include "network/translation/ProviderConfig.h"
 #include "rendering/FontRegistry.h"
 #include "ui/navigation/NavigationController.h"
@@ -170,6 +171,24 @@ int Application::run() {
                                                                          m_context->operationRegistry(),
                                                                          m_context->textDetector(),
                                                                          nullptr);
+    // 默认同意：候选结果就绪后自动采用，不再需要手动点击“接受”。
+    // 若没有可应用的变更（例如区域为手动内容而被跳过），直接清除候选，
+    // 避免产生空的撤销条目。
+    auto* processingController = m_processingController.get();
+    QObject::connect(processingController,
+                     &ui::screen::editor::EditorProcessingController::proposalReady,
+                     processingController,
+                     [processingController](const domain::PageId& pageId) {
+                         const auto* prepared = processingController->preparedAdoption(pageId);
+                         if (prepared == nullptr) {
+                             return;
+                         }
+                         if (!prepared->changes.isEmpty() || prepared->clearAssetChange) {
+                             processingController->adoptProposal(pageId);
+                         } else {
+                             processingController->rejectProposal(pageId);
+                         }
+                     });
     editorViewModel->setDetectionAvailability(m_context->isDetectionModelAvailable(),
                                               m_context->detectionModelUnavailableReason());
 

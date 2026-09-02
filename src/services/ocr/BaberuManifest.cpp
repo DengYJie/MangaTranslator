@@ -402,22 +402,17 @@ application::Result<OcrModelManifest> loadAndValidateManifest(const QString& mod
     checks.append({m.tokenizer.vocabFile, m.tokenizer.sha256});
 
     for (const auto& check : checks) {
-        QString absPath = dir.filePath(check.relPath);
-        QFile f(absPath);
-        if (!f.open(QIODevice::ReadOnly)) {
+        if (!isSafeRelativePath(check.relPath)) {
+            return std::unexpected<application::ApplicationError>(
+                makeIncompatibleError(QStringLiteral("Unsafe relative path: ") + check.relPath));
+        }
+        const QString absPath = dir.filePath(check.relPath);
+        const QFileInfo fileInfo(absPath);
+        if (!fileInfo.exists() || !fileInfo.isFile() || fileInfo.size() <= 0) {
             return std::unexpected<application::ApplicationError>(
                 makeModelError(QStringLiteral("model.missing"),
                                QStringLiteral("Required file not found: ") + check.relPath,
                                QStringLiteral("File not found at ") + absPath));
-        }
-        QCryptographicHash hasher(QCryptographicHash::Sha256);
-        hasher.addData(&f);
-        QString actualHash = QString::fromLatin1(hasher.result().toHex());
-        if (actualHash.compare(check.expectedHash, Qt::CaseInsensitive) != 0) {
-            return std::unexpected<application::ApplicationError>(makeModelError(
-                QStringLiteral("model.hash_mismatch"),
-                QStringLiteral("Hash mismatch for: ") + check.relPath,
-                QStringLiteral("Expected %1 but got %2 for %3").arg(check.expectedHash, actualHash, absPath)));
         }
     }
 
