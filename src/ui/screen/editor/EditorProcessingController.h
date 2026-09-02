@@ -17,6 +17,7 @@
 #include <QHash>
 #include <QObject>
 #include <QPointer>
+#include <QTimer>
 #include <QVector>
 
 #include <memory>
@@ -183,11 +184,14 @@ private:
         quint64 sessionGen,
         QFutureWatcher<application::Result<application::PreparedProcessingAdoption>>* watcher);
 
+    void releaseEngines();
+
     EditorViewModel* m_viewModel{nullptr};                  // non-owning
     application::OperationRegistry* m_registry{nullptr};    // non-owning
     application::IDerivedAssetStore* m_assetStore{nullptr}; // non-owning
     application::IPageInpainter* m_pageInpainter{nullptr};  // non-owning
     application::ITextDetector* m_textDetector{nullptr};    // non-owning
+    application::IOcrEngine* m_ocrEngine{nullptr};          // non-owning
 
     // Owned UseCases when created from ports
     std::unique_ptr<application::RecognizeRegionUseCase> m_ownedOcrUseCase;
@@ -212,6 +216,10 @@ private:
     QHash<domain::PageId, QString> m_pageSafeMessages;
     QHash<domain::PageId, QVector<domain::RegionId>> m_pageConflictRegions;
     QHash<domain::PageId, QVector<domain::RegionId>> m_pageFailedRegions;
+
+    QTimer m_idleDetectorTimer;
+    QTimer m_idleInpaintTimer;
+    QTimer m_idleOcrTimer;
 };
 
 } // namespace manga::ui::screen::editor

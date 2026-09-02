@@ -28,7 +28,28 @@ EditorProcessingController::EditorProcessingController(EditorViewModel* viewMode
                                                        application::ITextDetector* textDetector,
                                                        QObject* parent)
     : QObject(parent), m_viewModel(viewModel), m_registry(registry), m_assetStore(assetStore),
-      m_pageInpainter(pageInpainter), m_textDetector(textDetector) {
+      m_pageInpainter(pageInpainter), m_textDetector(textDetector), m_ocrEngine(ocrEngine) {
+    m_idleDetectorTimer.setSingleShot(true);
+    connect(&m_idleDetectorTimer, &QTimer::timeout, this, [this]() {
+        if (m_textDetector) {
+            m_textDetector->release();
+        }
+    });
+
+    m_idleInpaintTimer.setSingleShot(true);
+    connect(&m_idleInpaintTimer, &QTimer::timeout, this, [this]() {
+        if (m_pageInpainter) {
+            m_pageInpainter->release();
+        }
+    });
+
+    m_idleOcrTimer.setSingleShot(true);
+    connect(&m_idleOcrTimer, &QTimer::timeout, this, [this]() {
+        if (m_ocrEngine) {
+            m_ocrEngine->release();
+        }
+    });
+
     if (m_registry != nullptr) {
         m_ownedOcrUseCase = std::make_unique<application::RecognizeRegionUseCase>(ocrEngine, m_registry);
         m_ownedTranslateUseCase = std::make_unique<application::TranslatePageUseCase>(translator, m_registry);
@@ -72,6 +93,7 @@ EditorProcessingController::EditorProcessingController(
 }
 
 EditorProcessingController::~EditorProcessingController() {
+    releaseEngines();
     for (auto it = m_activeTasks.begin(); it != m_activeTasks.end(); ++it) {
         if (m_registry != nullptr) {
             m_registry->cancelOperation(it.value().operationId);
@@ -85,6 +107,21 @@ EditorProcessingController::~EditorProcessingController() {
     m_pageFailedRegions.clear();
     if (m_viewModel && m_viewModel->processingController() == this) {
         m_viewModel->setProcessingController(nullptr);
+    }
+}
+
+void EditorProcessingController::releaseEngines() {
+    m_idleDetectorTimer.stop();
+    m_idleInpaintTimer.stop();
+    m_idleOcrTimer.stop();
+    if (m_textDetector) {
+        m_textDetector->release();
+    }
+    if (m_ocrEngine) {
+        m_ocrEngine->release();
+    }
+    if (m_pageInpainter) {
+        m_pageInpainter->release();
     }
 }
 
@@ -210,6 +247,7 @@ void EditorProcessingController::detectRegions(const domain::PageId& pageId) {
         }
         watcher->deleteLater();
         updateProcessingStateForCurrentPage();
+        m_idleDetectorTimer.start(60000);
     });
     watcher->setFuture(future);
 
@@ -607,6 +645,7 @@ void EditorProcessingController::recognizeRegion(const domain::PageId& pageId, c
                         }
                     }
                 }
+                m_idleOcrTimer.start(60000);
                 watcher->deleteLater();
             });
     watcher->setFuture(future);
@@ -657,10 +696,131 @@ void EditorProcessingController::translatePage(const domain::PageId& pageId) {
 
 void EditorProcessingController::translateRegions(const domain::PageId& pageId,
                                                   const QVector<domain::RegionId>& regionIds) {
-    if (regionIds.isEmpty()) {
+    if (m_viewModel == nullptr || !m_viewModel->hasSession() || !pageId.isValid() || regionIds.isEmpty() ||
+        m_translateUseCase == nullptr || m_registry == nullptr) {
         return;
     }
-    smartTranslate(pageId, regionIds);
+    auto* project = m_viewModel->projectAggregate();
+    if (project == nullptr) {
+        return;
+    }
+    const auto* page = project->findPage(pageId);
+    if (page == nullptr) {
+        return;
+    }
+
+    application::TranslationRequest req;
+    req.sourceLanguage =
+        project->sourceLanguage().empty() ? domain::LanguageCode::createUnchecked("ja") : project->sourceLanguage();
+    req.targetLanguage =
+        project->targetLanguage().empty() ? domain::LanguageCode::createUnchecked("zh-CN") : project->targetLanguage();
+    req.readingDirection = project->readingDirection();
+
+    QVector<domain::RegionId> validRegions;
+    QHash<domain::RegionId, quint64> expectedRevisions;
+
+    for (const auto& rId : regionIds) {
+        const auto* r = page->findRegion(rId);
+        if (r != nullptr && r->isEnabled()) {
+            const QString sourceStr = QString::fromStdString(r->source().text).trimmed();
+            const QString manualStr = r->translation().hasManualText()
+                                          ? QString::fromStdString(r->translation().manualText().value()).trimmed()
+                                          : QString();
+            const QString text = !sourceStr.isEmpty() ? sourceStr : manualStr;
+            if (!text.isEmpty()) {
+                req.regions.append({rId, text});
+                validRegions.append(rId);
+                expectedRevisions[rId] = r->contentRevision();
+            }
+        }
+    }
+
+    if (validRegions.isEmpty()) {
+        qInfo() << "[Translate] no non-empty text regions to translate on page"
+                << QString::fromStdString(pageId.toString());
+        return;
+    }
+
+    const auto projectId = project->id();
+    const WatcherKey key{projectId, pageId, std::nullopt, application::OperationStage::Translate};
+    cancelMatchingTask(key);
+
+    application::OperationDescriptor descriptor{
+        application::OperationStage::Translate, projectId, pageId, std::nullopt, QStringLiteral("Translate"), true};
+    const quint64 sessionGen = m_viewModel->projectSessionGeneration();
+    application::OperationId opId;
+    auto future = m_translateUseCase->execute(req, descriptor, sessionGen, opId);
+
+    ActiveTask activeTask;
+    activeTask.operationId = opId;
+    activeTask.sessionGeneration = sessionGen;
+    activeTask.key = key;
+    activeTask.targetRegionIds = validRegions;
+    m_activeTasks.insert(key, activeTask);
+
+    auto* watcher = new QFutureWatcher<application::Result<application::TranslationResponse>>(this);
+    connect(watcher,
+            &QFutureWatcherBase::finished,
+            this,
+            [this, watcher, key, sessionGen, validRegions, expectedRevisions, opId]() {
+                if (m_activeTasks.contains(key) && m_activeTasks[key].operationId == opId) {
+                    m_activeTasks.remove(key);
+                }
+                if (m_registry != nullptr) {
+                    m_registry->markFinished(opId);
+                }
+
+                if (m_viewModel == nullptr || !m_viewModel->hasSession() ||
+                    sessionGen != m_viewModel->projectSessionGeneration()) {
+                    watcher->deleteLater();
+                    return;
+                }
+
+                auto res = watcher->result();
+                if (res.has_value()) {
+                    application::PageProcessingProposal proposal;
+                    proposal.projectId = key.projectId;
+                    proposal.pageId = key.pageId;
+                    proposal.rootOperationId = opId;
+                    proposal.translation = res.value();
+
+                    m_pageProposals[key.pageId] = proposal;
+
+                    auto* curProject = m_viewModel->projectAggregate();
+                    const auto* curPage = curProject ? curProject->findPage(key.pageId) : nullptr;
+
+                    application::PrepareProcessingAdoptionRequest prepReq;
+                    prepReq.projectId = key.projectId;
+                    prepReq.pageId = key.pageId;
+                    prepReq.stage = application::OperationStage::Translate;
+                    prepReq.sessionGeneration = sessionGen;
+                    prepReq.currentSessionGeneration = m_viewModel->projectSessionGeneration();
+                    prepReq.translation = res.value();
+                    prepReq.expectedRevisions = expectedRevisions;
+                    prepReq.projectRoot = m_viewModel->projectRootPath();
+                    if (curPage != nullptr) {
+                        prepReq.pageSize = QSize(curPage->imageSize().width, curPage->imageSize().height);
+                    }
+                    prepReq.replaceManualPolicy = application::ReplaceManualPolicy::Keep;
+
+                    prepareAdoptionAsync(key, prepReq, sessionGen);
+                } else {
+                    const auto& err = res.error();
+                    if (err.category != application::ErrorCategory::Cancelled) {
+                        m_pageFailedRegions[key.pageId] = validRegions;
+                        m_pageSafeMessages[key.pageId] = err.safeMessage;
+                        if (key.pageId == m_viewModel->state().currentPageId) {
+                            updateProcessingStateForCurrentPage();
+                        }
+                        Q_EMIT processingFinished(key.pageId, false);
+                    }
+                }
+                watcher->deleteLater();
+            });
+    watcher->setFuture(future);
+
+    updateProcessingStateForCurrentPage();
+    Q_EMIT processingStarted(pageId, opId);
 }
 
 void EditorProcessingController::clearPage(const domain::PageId& pageId) {
@@ -793,6 +953,7 @@ void EditorProcessingController::inpaintStroke(const domain::PageId& pageId,
                                                       QStringLiteral("Clear layer changed before commit")));
             }
         }
+        self->m_idleInpaintTimer.start(60000);
         watcher->deleteLater();
     });
     watcher->setFuture(future);
@@ -1257,6 +1418,7 @@ void EditorProcessingController::handlePageSwitched(const domain::PageId& pageId
 
 void EditorProcessingController::reset() {
     cancelAll();
+    releaseEngines();
     m_pageProposals.clear();
     m_preparedAdoptions.clear();
     m_pageConflictRegions.clear();
