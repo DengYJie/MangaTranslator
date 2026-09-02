@@ -12,6 +12,8 @@ target_sources(manga_services
         execution/BoundedTaskExecutor.cpp
         inpaint/InpaintManifest.cpp
         inpaint/InpaintModelValidator.cpp
+        inpaint/LamaMaskBuilder.cpp
+        inpaint/LamaTilePlanner.cpp
         inpaint/OnnxLamaPageInpainter.cpp
         inpaint/OnnxLamaPageInpainter.h
         inpaint/SolidColorInpainter.cpp
