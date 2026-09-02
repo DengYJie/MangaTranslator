@@ -362,7 +362,6 @@ void ApplicationContext::shutdown() {
     //    adapters/stores first, ProjectIoCoordinator (declared first) last.
 }
 
-} // namespace manga::app
 
 bool ApplicationContext::reconfigureOcrModel(const QString& modelDirectory) {
     const QString normalizedDirectory = modelDirectory.trimmed();
@@ -408,3 +407,4 @@ bool ApplicationContext::reconfigureOcrModel(const QString& modelDirectory) {
     m_ocrModelError.reset();
     return true;
 }
+} // namespace manga::app

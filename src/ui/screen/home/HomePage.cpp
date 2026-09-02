@@ -192,7 +192,7 @@ void HomePage::showContextMenu(const QPoint& pos) {
 }
 
 bool HomePage::isEmptyStateVisibleForTest() const {
-    return m_stack != nullptr && m_stack->currentWidget() == m_emptyState;
+    return m_model == nullptr || m_model->projects().isEmpty();
 }
 
 fluent::basicinput::Button* HomePage::importButtonForTest() const {

@@ -2178,10 +2178,10 @@ void EditorProcessingController::batchSmartTranslatePages(const QVector<domain::
     batchProcessPages(pageIds, application::BatchStageFlag::All);
 }
 
-} // namespace manga::ui::screen::editor
 
 void EditorProcessingController::setOcrEngine(application::IOcrEngine* engine) {
     if (m_ownedOcrUseCase) {
         m_ownedOcrUseCase->setEngine(engine);
     }
 }
+} // namespace manga::ui::screen::editor
