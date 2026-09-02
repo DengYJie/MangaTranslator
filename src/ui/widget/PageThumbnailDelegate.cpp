@@ -5,6 +5,7 @@
 #include "ui/widget/PageThumbnailList.h"
 
 #include <FluentQt/Foundation.h>
+#include <QColor>
 #include <QEvent>
 #include <QMouseEvent>
 #include <QPainter>
@@ -40,8 +41,17 @@ void PageThumbnailDelegate::paint(QPainter* painter,
 
     const auto& colors = m_list->themeColorsRef();
 
-    if (option.state & QStyle::State_Selected) {
-        painter->fillRect(option.rect, colors.subtleSecondary);
+    const bool hovered = option.state.testFlag(QStyle::State_MouseOver);
+    const bool selected = option.state.testFlag(QStyle::State_Selected);
+    const bool pressed = hovered && option.state.testFlag(QStyle::State_Sunken);
+    QColor rowFill;
+    if (pressed) {
+        rowFill = colors.subtleTertiary;
+    } else if (selected || hovered) {
+        rowFill = colors.subtleSecondary;
+    }
+    if (rowFill.isValid() && rowFill.alpha() > 0) {
+        painter->fillRect(option.rect, rowFill);
     }
 
     QRect thumbRect(option.rect.left() + 16, option.rect.top() + (88 - 72) / 2, 56, 72);
