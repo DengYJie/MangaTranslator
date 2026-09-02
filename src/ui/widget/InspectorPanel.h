@@ -7,6 +7,7 @@
 #include <FluentQt/Foundation.h>
 #include <QWidget>
 
+class QButtonGroup;
 class QListWidget;
 class QResizeEvent;
 class QStackedWidget;
@@ -61,6 +62,15 @@ public:
     }
     [[nodiscard]] QWidget* singleHostForTest() const {
         return m_contentHost;
+    }
+    [[nodiscard]] fluent::basicinput::ComboBox* orientationComboForTest() const noexcept {
+        return m_orientationCombo;
+    }
+    [[nodiscard]] QButtonGroup* hAlignGroupForTest() const noexcept {
+        return m_hAlignGroup;
+    }
+    [[nodiscard]] fluent::basicinput::ComboBox* vAlignComboForTest() const noexcept {
+        return m_vAlignCombo;
     }
 
 Q_SIGNALS:
@@ -144,7 +154,7 @@ private:
     fluent::layout::Field* m_letterSpacingField{nullptr};
     fluent::textfields::NumberBox* m_letterSpacingBox{nullptr};
     fluent::basicinput::ComboBox* m_orientationCombo{nullptr};
-    fluent::basicinput::ComboBox* m_hAlignCombo{nullptr};
+    QButtonGroup* m_hAlignGroup{nullptr};
     fluent::basicinput::ComboBox* m_vAlignCombo{nullptr};
     fluent::layout::Field* m_lineSpacingField{nullptr};
     fluent::textfields::NumberBox* m_lineSpacingBox{nullptr};

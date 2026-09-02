@@ -4,6 +4,7 @@
 #include <FluentQt/Layout.h>
 #include <FluentQt/StatusInfo.h>
 #include <FluentQt/TextFields.h>
+#include <QButtonGroup>
 #include <QInputMethodEvent>
 #include <QListWidget>
 #include <QSignalSpy>
@@ -125,9 +126,8 @@ private Q_SLOTS:
         auto* orientation = panel.findChild<fluent::basicinput::ComboBox*>(QStringLiteral("inspectorOrientation"));
         QVERIFY(orientation != nullptr);
         QCOMPARE(orientation->currentIndex(), static_cast<int>(domain::TextOrientation::Vertical));
-        auto* hAlign = panel.findChild<fluent::basicinput::ComboBox*>(QStringLiteral("inspectorHAlign"));
-        QVERIFY(hAlign != nullptr);
-        QCOMPARE(hAlign->currentIndex(), static_cast<int>(domain::HorizontalAlignment::Left));
+        QVERIFY(panel.hAlignGroupForTest() != nullptr);
+        QCOMPARE(panel.hAlignGroupForTest()->checkedId(), static_cast<int>(domain::HorizontalAlignment::Left));
 
         auto* hexEdit = panel.findChild<fluent::textfields::LineEdit*>(QStringLiteral("inspectorTextColorHex"));
         QVERIFY(hexEdit != nullptr);

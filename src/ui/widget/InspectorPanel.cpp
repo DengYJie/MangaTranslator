@@ -9,6 +9,7 @@
 #include <FluentQt/StatusInfo.h>
 #include <FluentQt/TextFields.h>
 #include <QAbstractButton>
+#include <QButtonGroup>
 #include <QHBoxLayout>
 #include <QListWidget>
 #include <QPainter>
@@ -264,6 +265,7 @@ void clearFieldError(fluent::layout::Field* field) {
 QWidget* InspectorPanel::buildContentHost() {
     using fluent::basicinput::Button;
     using fluent::basicinput::ComboBox;
+    using fluent::basicinput::ToggleSwitch;
     using fluent::layout::Expander;
     using fluent::layout::Field;
     using fluent::textfields::Label;
@@ -407,12 +409,18 @@ QWidget* InspectorPanel::buildContentHost() {
     m_typesettingExpander->setHeaderText(tr("排版"));
     auto* typesetContent = new QWidget();
     auto* typesetLayout = new QVBoxLayout(typesetContent);
-    typesetLayout->setContentsMargins(12, 8, 12, 12);
-    typesetLayout->setSpacing(8);
+    typesetLayout->setContentsMargins(12, 6, 12, 8);
+    typesetLayout->setSpacing(6);
 
-    auto* fontFamilyField = new Field();
+    // Row 1: 字体 (Font Family) + 颜色 (Text Color)
+    auto* row1 = new QWidget(typesetContent);
+    auto* row1Layout = new QHBoxLayout(row1);
+    row1Layout->setContentsMargins(0, 0, 0, 0);
+    row1Layout->setSpacing(8);
+
+    auto* fontFamilyField = new Field(row1);
     fontFamilyField->setLabelText(tr("字体"));
-    m_fontFamilyCombo = new ComboBox();
+    m_fontFamilyCombo = new ComboBox(fontFamilyField);
     m_fontFamilyCombo->setObjectName(QStringLiteral("inspectorFontFamily"));
     m_fontFamilyCombo->setEditable(true);
     m_fontFamilyCombo->addItems({QStringLiteral("Sans-Serif"),
@@ -422,100 +430,251 @@ QWidget* InspectorPanel::buildContentHost() {
                                  QStringLiteral("SimSun"),
                                  QStringLiteral("KaiTi")});
     fontFamilyField->setEditor(m_fontFamilyCombo, fluent::WidgetOwnership::Owned);
-    typesetLayout->addWidget(fontFamilyField);
+    row1Layout->addWidget(fontFamilyField, 1);
+
+    m_textColorField = new Field(row1);
+    m_textColorField->setObjectName(QStringLiteral("inspectorTextColorField"));
+    m_textColorField->setLabelText(tr("颜色"));
+    m_textColorSwatch = new ColorSwatchButton(m_textColorField);
+    m_textColorSwatch->setObjectName(QStringLiteral("inspectorTextColorSwatch"));
+    m_textColorSwatch->setAccessibleName(tr("选择文字颜色"));
+    m_textColorSwatch->setFixedSize(32, 32);
+    m_textColorField->setEditor(m_textColorSwatch, fluent::WidgetOwnership::Owned);
+    row1Layout->addWidget(m_textColorField, 0);
+
+    m_textColorHexEdit = new LineEdit(this);
+    m_textColorHexEdit->setObjectName(QStringLiteral("inspectorTextColorHex"));
+    m_textColorHexEdit->setVisible(false);
+
+    typesetLayout->addWidget(row1);
+
     connect(m_fontFamilyCombo, &ComboBox::activated, this, [this](int) {
         if (!m_updating) {
             emitFieldEdit(InspectorField::FontFamily, m_fontFamilyCombo->currentText());
         }
     });
+    connect(m_textColorHexEdit, &LineEdit::editingFinished, this, [this]() {
+        if (!m_updating) {
+            handleHexCommit(m_textColorHexEdit, m_textColorField, m_textColorSwatch, InspectorField::TextColorHex);
+        }
+    });
+    connect(m_textColorSwatch, &ColorSwatchButton::clicked, this, [this]() {
+        openColorFlyout(m_textColorSwatch, m_textColorHexEdit, InspectorField::TextColorHex);
+    });
 
-    auto* fontWeightField = new Field();
+    // Row 2: 字号 (Font Size) + 字重 (Font Weight) + 样式 (Vertical Alignment)
+    auto* row2 = new QWidget(typesetContent);
+    auto* row2Layout = new QHBoxLayout(row2);
+    row2Layout->setContentsMargins(0, 0, 0, 0);
+    row2Layout->setSpacing(8);
+
+    m_fontSizeField = new Field(row2);
+    m_fontSizeField->setObjectName(QStringLiteral("inspectorFontSizeField"));
+    m_fontSizeField->setLabelText(tr("字号"));
+    m_fontSizeBox = new NumberBox(m_fontSizeField);
+    m_fontSizeBox->setObjectName(QStringLiteral("inspectorFontSize"));
+    m_fontSizeBox->setRange(6.0, 72.0);
+    m_fontSizeBox->setDisplayPrecision(1);
+    m_fontSizeBox->setSpinButtonPlacementMode(NumberBox::SpinButtonPlacementMode::Compact);
+    m_fontSizeField->setEditor(m_fontSizeBox, fluent::WidgetOwnership::Owned);
+    row2Layout->addWidget(m_fontSizeField, 4);
+
+    auto* fontWeightField = new Field(row2);
     fontWeightField->setLabelText(tr("字重"));
-    m_fontWeightCombo = new ComboBox();
+    m_fontWeightCombo = new ComboBox(fontWeightField);
     m_fontWeightCombo->setObjectName(QStringLiteral("inspectorFontWeight"));
     for (int weight = 100; weight <= 900; weight += 100) {
         m_fontWeightCombo->addItem(QString::number(weight));
     }
     fontWeightField->setEditor(m_fontWeightCombo, fluent::WidgetOwnership::Owned);
-    typesetLayout->addWidget(fontWeightField);
-    connect(m_fontWeightCombo, &ComboBox::activated, this, [this](int index) {
-        if (!m_updating) {
-            emitFieldEdit(InspectorField::FontWeight, (index + 1) * 100);
-        }
-    });
+    row2Layout->addWidget(fontWeightField, 3);
 
-    auto [fontSizeField, fontSizeBox] = makeNumericRow(tr("字号"), 6.0, 72.0, 1, typesetLayout);
-    m_fontSizeField = fontSizeField;
-    m_fontSizeBox = fontSizeBox;
-    m_fontSizeField->setObjectName(QStringLiteral("inspectorFontSizeField"));
-    m_fontSizeBox->setObjectName(QStringLiteral("inspectorFontSize"));
+    auto* vAlignField = new Field(row2);
+    vAlignField->setLabelText(tr("样式"));
+    m_vAlignCombo = new ComboBox(vAlignField);
+    m_vAlignCombo->setObjectName(QStringLiteral("inspectorVAlign"));
+    m_vAlignCombo->addItems({tr("常规 (顶部)"), tr("居中"), tr("底部")});
+    vAlignField->setEditor(m_vAlignCombo, fluent::WidgetOwnership::Owned);
+    row2Layout->addWidget(vAlignField, 3);
+
+    typesetLayout->addWidget(row2);
+
     connect(m_fontSizeBox, &NumberBox::valueChanged, this, [this](double value) {
         if (!m_updating) {
             handleNumericCommit(m_fontSizeField, InspectorField::FontSizePt, value);
         }
     });
-
-    auto [letterSpacingField, letterSpacingBox] = makeNumericRow(tr("字距 (em)"), -0.5, 2.0, 2, typesetLayout);
-    m_letterSpacingField = letterSpacingField;
-    m_letterSpacingBox = letterSpacingBox;
-    connect(m_letterSpacingBox, &NumberBox::valueChanged, this, [this](double value) {
+    connect(m_fontWeightCombo, &ComboBox::activated, this, [this](int index) {
         if (!m_updating) {
-            handleNumericCommit(m_letterSpacingField, InspectorField::LetterSpacingEm, value);
+            emitFieldEdit(InspectorField::FontWeight, (index + 1) * 100);
         }
     });
-
-    auto* orientationField = new Field();
-    orientationField->setLabelText(tr("方向"));
-    m_orientationCombo = new ComboBox();
-    m_orientationCombo->setObjectName(QStringLiteral("inspectorOrientation"));
-    m_orientationCombo->addItems({tr("横排"), tr("竖排")});
-    orientationField->setEditor(m_orientationCombo, fluent::WidgetOwnership::Owned);
-    typesetLayout->addWidget(orientationField);
-    connect(m_orientationCombo, &ComboBox::activated, this, [this](int index) {
-        if (!m_updating) {
-            emitFieldEdit(InspectorField::Orientation, index);
-        }
-    });
-
-    auto* hAlignField = new Field();
-    hAlignField->setLabelText(tr("水平对齐"));
-    m_hAlignCombo = new ComboBox();
-    m_hAlignCombo->setObjectName(QStringLiteral("inspectorHAlign"));
-    m_hAlignCombo->addItems({tr("左对齐"), tr("居中对齐"), tr("右对齐"), tr("两端对齐")});
-    hAlignField->setEditor(m_hAlignCombo, fluent::WidgetOwnership::Owned);
-    typesetLayout->addWidget(hAlignField);
-    connect(m_hAlignCombo, &ComboBox::activated, this, [this](int index) {
-        if (!m_updating) {
-            emitFieldEdit(InspectorField::HorizontalAlignment, index);
-        }
-    });
-
-    auto* vAlignField = new Field();
-    vAlignField->setLabelText(tr("垂直对齐"));
-    m_vAlignCombo = new ComboBox();
-    m_vAlignCombo->setObjectName(QStringLiteral("inspectorVAlign"));
-    m_vAlignCombo->addItems({tr("顶部对齐"), tr("垂直居中"), tr("底部对齐")});
-    vAlignField->setEditor(m_vAlignCombo, fluent::WidgetOwnership::Owned);
-    typesetLayout->addWidget(vAlignField);
     connect(m_vAlignCombo, &ComboBox::activated, this, [this](int index) {
         if (!m_updating) {
             emitFieldEdit(InspectorField::VerticalAlignment, index);
         }
     });
 
-    auto [lineSpacingField, lineSpacingBox] = makeNumericRow(tr("行距"), 0.5, 4.0, 2, typesetLayout);
-    m_lineSpacingField = lineSpacingField;
-    m_lineSpacingBox = lineSpacingBox;
+    // Row 3: 对齐 (Alignment) + 方向 (Direction)
+    auto* row3 = new QWidget(typesetContent);
+    auto* row3Layout = new QHBoxLayout(row3);
+    row3Layout->setContentsMargins(0, 0, 0, 0);
+    row3Layout->setSpacing(8);
+
+    // Alignment: 3-button segmented control (Left, Center, Right)
+    auto* hAlignField = new Field(row3);
+    hAlignField->setLabelText(tr("对齐"));
+    auto* hAlignWidget = new QWidget();
+    auto* hAlignLayout = new QHBoxLayout(hAlignWidget);
+    hAlignLayout->setContentsMargins(0, 0, 0, 0);
+    hAlignLayout->setSpacing(2);
+    m_hAlignGroup = new QButtonGroup(hAlignWidget);
+    m_hAlignGroup->setExclusive(true);
+    const struct {
+        QString glyph;
+        QString tooltip;
+        domain::HorizontalAlignment align;
+        QString objectName;
+    } hAlignButtons[] = {
+        {Typography::Icons::AlignLeft,
+         tr("左对齐"),
+         domain::HorizontalAlignment::Left,
+         QStringLiteral("inspectorHAlignLeft")},
+        {Typography::Icons::AlignCenter,
+         tr("居中对齐"),
+         domain::HorizontalAlignment::Center,
+         QStringLiteral("inspectorHAlignCenter")},
+        {Typography::Icons::AlignRight,
+         tr("右对齐"),
+         domain::HorizontalAlignment::Right,
+         QStringLiteral("inspectorHAlignRight")},
+    };
+    for (const auto& spec : hAlignButtons) {
+        auto* btn = new Button(hAlignWidget);
+        btn->setObjectName(spec.objectName);
+        btn->setIconGlyph(spec.glyph, Typography::IconSize::Compact);
+        btn->setToolTip(spec.tooltip);
+        btn->setAccessibleName(spec.tooltip);
+        btn->setCheckable(true);
+        btn->setFluentStyle(Button::Subtle);
+        btn->setFluentLayout(Button::IconOnly);
+        btn->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
+        btn->setFixedHeight(32);
+        m_hAlignGroup->addButton(btn, static_cast<int>(spec.align));
+        hAlignLayout->addWidget(btn);
+    }
+    hAlignField->setEditor(hAlignWidget, fluent::WidgetOwnership::Owned);
+    row3Layout->addWidget(hAlignField, 1);
+
+    // Direction ComboBox
+    auto* orientationField = new Field(row3);
+    orientationField->setLabelText(tr("方向"));
+    m_orientationCombo = new ComboBox(orientationField);
+    m_orientationCombo->setObjectName(QStringLiteral("inspectorOrientation"));
+    m_orientationCombo->addItems({tr("横排"), tr("竖排")});
+    orientationField->setEditor(m_orientationCombo, fluent::WidgetOwnership::Owned);
+    row3Layout->addWidget(orientationField, 1);
+
+    typesetLayout->addWidget(row3);
+
+    connect(m_hAlignGroup, &QButtonGroup::idClicked, this, [this](int id) {
+        if (!m_updating) {
+            emitFieldEdit(InspectorField::HorizontalAlignment, id);
+        }
+    });
+    connect(m_orientationCombo, &ComboBox::activated, this, [this](int index) {
+        if (!m_updating) {
+            emitFieldEdit(InspectorField::Orientation, index);
+        }
+    });
+
+    // Row 4: 描边 (Stroke Color) + 宽度 (Stroke Width)
+    auto* row4 = new QWidget(typesetContent);
+    auto* row4Layout = new QHBoxLayout(row4);
+    row4Layout->setContentsMargins(0, 0, 0, 0);
+    row4Layout->setSpacing(8);
+
+    m_strokeColorField = new Field(row4);
+    m_strokeColorField->setLabelText(tr("描边"));
+    m_strokeColorSwatch = new ColorSwatchButton(m_strokeColorField);
+    m_strokeColorSwatch->setObjectName(QStringLiteral("inspectorStrokeColorSwatch"));
+    m_strokeColorSwatch->setAccessibleName(tr("选择描边颜色"));
+    m_strokeColorSwatch->setFixedSize(32, 32);
+    m_strokeColorField->setEditor(m_strokeColorSwatch, fluent::WidgetOwnership::Owned);
+    row4Layout->addWidget(m_strokeColorField, 0);
+
+    m_strokeColorHexEdit = new LineEdit(this);
+    m_strokeColorHexEdit->setObjectName(QStringLiteral("inspectorStrokeColorHex"));
+    m_strokeColorHexEdit->setVisible(false);
+
+    m_strokeWidthField = new Field(row4);
+    m_strokeWidthField->setLabelText(tr("宽度"));
+    m_strokeWidthBox = new NumberBox(m_strokeWidthField);
+    m_strokeWidthBox->setRange(0.0, 32.0);
+    m_strokeWidthBox->setDisplayPrecision(1);
+    m_strokeWidthBox->setSpinButtonPlacementMode(NumberBox::SpinButtonPlacementMode::Compact);
+    m_strokeWidthField->setEditor(m_strokeWidthBox, fluent::WidgetOwnership::Owned);
+    row4Layout->addWidget(m_strokeWidthField, 1);
+
+    typesetLayout->addWidget(row4);
+
+    connect(m_strokeColorHexEdit, &LineEdit::editingFinished, this, [this]() {
+        if (!m_updating) {
+            handleHexCommit(
+                m_strokeColorHexEdit, m_strokeColorField, m_strokeColorSwatch, InspectorField::StrokeColorHex);
+        }
+    });
+    connect(m_strokeColorSwatch, &ColorSwatchButton::clicked, this, [this]() {
+        openColorFlyout(m_strokeColorSwatch, m_strokeColorHexEdit, InspectorField::StrokeColorHex);
+    });
+    connect(m_strokeWidthBox, &NumberBox::valueChanged, this, [this](double value) {
+        if (!m_updating) {
+            handleNumericCommit(m_strokeWidthField, InspectorField::StrokeWidthPx, value);
+        }
+    });
+
+    // Row 5: 行距 (Line Spacing) + 字距 (Letter Spacing)
+    auto* row5 = new QWidget(typesetContent);
+    auto* row5Layout = new QHBoxLayout(row5);
+    row5Layout->setContentsMargins(0, 0, 0, 0);
+    row5Layout->setSpacing(8);
+
+    m_lineSpacingField = new Field(row5);
+    m_lineSpacingField->setLabelText(tr("行距"));
+    m_lineSpacingBox = new NumberBox(m_lineSpacingField);
+    m_lineSpacingBox->setRange(0.5, 4.0);
+    m_lineSpacingBox->setDisplayPrecision(2);
+    m_lineSpacingBox->setSpinButtonPlacementMode(NumberBox::SpinButtonPlacementMode::Compact);
+    m_lineSpacingField->setEditor(m_lineSpacingBox, fluent::WidgetOwnership::Owned);
+    row5Layout->addWidget(m_lineSpacingField, 1);
+
+    m_letterSpacingField = new Field(row5);
+    m_letterSpacingField->setLabelText(tr("字距 (em)"));
+    m_letterSpacingBox = new NumberBox(m_letterSpacingField);
+    m_letterSpacingBox->setRange(-0.5, 2.0);
+    m_letterSpacingBox->setDisplayPrecision(2);
+    m_letterSpacingBox->setSpinButtonPlacementMode(NumberBox::SpinButtonPlacementMode::Compact);
+    m_letterSpacingField->setEditor(m_letterSpacingBox, fluent::WidgetOwnership::Owned);
+    row5Layout->addWidget(m_letterSpacingField, 1);
+
+    typesetLayout->addWidget(row5);
+
     connect(m_lineSpacingBox, &NumberBox::valueChanged, this, [this](double value) {
         if (!m_updating) {
             handleNumericCommit(m_lineSpacingField, InspectorField::LineSpacing, value);
         }
     });
+    connect(m_letterSpacingBox, &NumberBox::valueChanged, this, [this](double value) {
+        if (!m_updating) {
+            handleNumericCommit(m_letterSpacingField, InspectorField::LetterSpacingEm, value);
+        }
+    });
 
-    auto* marginsRow = new QWidget();
+    // Row 6: 边距 (Margins: 上 / 右 / 下 / 左)
+    auto* marginsRow = new QWidget(typesetContent);
     auto* marginsGrid = new QHBoxLayout(marginsRow);
     marginsGrid->setContentsMargins(0, 0, 0, 0);
-    marginsGrid->setSpacing(8);
+    marginsGrid->setSpacing(6);
     const std::pair<const char*, InspectorField> marginSpecs[4] = {
         {"上", InspectorField::MarginTop},
         {"右", InspectorField::MarginRight},
@@ -526,9 +685,9 @@ QWidget* InspectorPanel::buildContentHost() {
     fluent::textfields::NumberBox* marginBoxes[4] = {nullptr, nullptr, nullptr, nullptr};
     int marginIndex = 0;
     for (const auto& [labelKey, marginField] : marginSpecs) {
-        auto* field = new Field();
+        auto* field = new Field(marginsRow);
         field->setLabelText(tr("边距%1").arg(tr(labelKey)));
-        auto* box = new NumberBox();
+        auto* box = new NumberBox(field);
         box->setRange(0.0, 64.0);
         box->setDisplayPrecision(1);
         box->setSpinButtonPlacementMode(NumberBox::SpinButtonPlacementMode::Hidden);
@@ -554,69 +713,6 @@ QWidget* InspectorPanel::buildContentHost() {
     m_marginLeftBox = marginBoxes[3];
     m_marginTopBox->setObjectName(QStringLiteral("inspectorMarginTop"));
     typesetLayout->addWidget(marginsRow);
-
-    m_textColorField = new Field();
-    m_textColorField->setObjectName(QStringLiteral("inspectorTextColorField"));
-    m_textColorField->setLabelText(tr("文字颜色"));
-    auto* textColorRow = new QWidget();
-    auto* textColorLayout = new QHBoxLayout(textColorRow);
-    textColorLayout->setContentsMargins(0, 0, 0, 0);
-    textColorLayout->setSpacing(8);
-    m_textColorSwatch = new ColorSwatchButton();
-    m_textColorSwatch->setObjectName(QStringLiteral("inspectorTextColorSwatch"));
-    m_textColorSwatch->setAccessibleName(tr("选择文字颜色"));
-    m_textColorHexEdit = new LineEdit();
-    m_textColorHexEdit->setObjectName(QStringLiteral("inspectorTextColorHex"));
-    m_textColorHexEdit->setPlaceholderText(QStringLiteral("#RRGGBB"));
-    m_textColorHexEdit->setAccessibleName(tr("文字颜色十六进制值"));
-    textColorLayout->addWidget(m_textColorSwatch);
-    textColorLayout->addWidget(m_textColorHexEdit, 1);
-    m_textColorField->setEditor(textColorRow, fluent::WidgetOwnership::Owned);
-    typesetLayout->addWidget(m_textColorField);
-    connect(m_textColorHexEdit, &LineEdit::editingFinished, this, [this]() {
-        if (!m_updating) {
-            handleHexCommit(m_textColorHexEdit, m_textColorField, m_textColorSwatch, InspectorField::TextColorHex);
-        }
-    });
-    connect(m_textColorSwatch, &ColorSwatchButton::clicked, this, [this]() {
-        openColorFlyout(m_textColorSwatch, m_textColorHexEdit, InspectorField::TextColorHex);
-    });
-
-    m_strokeColorField = new Field();
-    m_strokeColorField->setLabelText(tr("描边颜色"));
-    auto* strokeColorRow = new QWidget();
-    auto* strokeColorLayout = new QHBoxLayout(strokeColorRow);
-    strokeColorLayout->setContentsMargins(0, 0, 0, 0);
-    strokeColorLayout->setSpacing(8);
-    m_strokeColorSwatch = new ColorSwatchButton();
-    m_strokeColorSwatch->setObjectName(QStringLiteral("inspectorStrokeColorSwatch"));
-    m_strokeColorSwatch->setAccessibleName(tr("选择描边颜色"));
-    m_strokeColorHexEdit = new LineEdit();
-    m_strokeColorHexEdit->setObjectName(QStringLiteral("inspectorStrokeColorHex"));
-    m_strokeColorHexEdit->setPlaceholderText(QStringLiteral("#RRGGBB"));
-    m_strokeColorHexEdit->setAccessibleName(tr("描边颜色十六进制值"));
-    strokeColorLayout->addWidget(m_strokeColorSwatch);
-    strokeColorLayout->addWidget(m_strokeColorHexEdit, 1);
-    m_strokeColorField->setEditor(strokeColorRow, fluent::WidgetOwnership::Owned);
-    typesetLayout->addWidget(m_strokeColorField);
-    connect(m_strokeColorHexEdit, &LineEdit::editingFinished, this, [this]() {
-        if (!m_updating) {
-            handleHexCommit(
-                m_strokeColorHexEdit, m_strokeColorField, m_strokeColorSwatch, InspectorField::StrokeColorHex);
-        }
-    });
-    connect(m_strokeColorSwatch, &ColorSwatchButton::clicked, this, [this]() {
-        openColorFlyout(m_strokeColorSwatch, m_strokeColorHexEdit, InspectorField::StrokeColorHex);
-    });
-
-    auto [strokeWidthField, strokeWidthBox] = makeNumericRow(tr("描边宽度 (px)"), 0.0, 32.0, 1, typesetLayout);
-    m_strokeWidthField = strokeWidthField;
-    m_strokeWidthBox = strokeWidthBox;
-    connect(m_strokeWidthBox, &NumberBox::valueChanged, this, [this](double value) {
-        if (!m_updating) {
-            handleNumericCommit(m_strokeWidthField, InspectorField::StrokeWidthPx, value);
-        }
-    });
 
     m_typesettingExpander->setContentWidget(typesetContent, fluent::WidgetOwnership::Owned);
     m_typesettingExpander->setExpanded(true);
@@ -696,10 +792,18 @@ void InspectorPanel::populateNone() {
     m_strokeColorHexEdit->clear();
     m_strokeColorSwatch->setSwatchColor(QColor());
     m_strokeColorSwatch->setToolTip(QString());
-    clearFieldError(m_strokeColorField);
-
     m_strokeWidthBox->setValue(0.0);
     clearFieldError(m_strokeWidthField);
+
+    m_orientationCombo->setCurrentIndex(-1);
+    if (m_hAlignGroup != nullptr) {
+        if (auto* btn = m_hAlignGroup->checkedButton()) {
+            m_hAlignGroup->setExclusive(false);
+            btn->setChecked(false);
+            m_hAlignGroup->setExclusive(true);
+        }
+    }
+    m_vAlignCombo->setCurrentIndex(-1);
 }
 
 void InspectorPanel::populateMulti(const screen::editor::MultiRegionInspectorState& state) {
@@ -753,21 +857,26 @@ void InspectorPanel::populateMulti(const screen::editor::MultiRegionInspectorSta
     }
     clearFieldError(m_letterSpacingField);
 
-    // Orientation
     if (state.orientation.has_value()) {
         m_orientationCombo->setCurrentIndex(static_cast<int>(*state.orientation));
     } else {
         m_orientationCombo->setCurrentIndex(-1);
     }
 
-    // Horizontal Alignment
     if (state.horizontalAlignment.has_value()) {
-        m_hAlignCombo->setCurrentIndex(static_cast<int>(*state.horizontalAlignment));
-    } else {
-        m_hAlignCombo->setCurrentIndex(-1);
+        if (m_hAlignGroup != nullptr) {
+            if (auto* btn = m_hAlignGroup->button(static_cast<int>(*state.horizontalAlignment))) {
+                btn->setChecked(true);
+            }
+        }
+    } else if (m_hAlignGroup != nullptr) {
+        if (auto* btn = m_hAlignGroup->checkedButton()) {
+            m_hAlignGroup->setExclusive(false);
+            btn->setChecked(false);
+            m_hAlignGroup->setExclusive(true);
+        }
     }
 
-    // Vertical Alignment
     if (state.verticalAlignment.has_value()) {
         m_vAlignCombo->setCurrentIndex(static_cast<int>(*state.verticalAlignment));
     } else {
@@ -905,7 +1014,11 @@ void InspectorPanel::populateSingle(const screen::editor::SingleRegionInspectorS
     m_letterSpacingBox->setValue(state.letterSpacingEm);
     clearFieldError(m_letterSpacingField);
     m_orientationCombo->setCurrentIndex(static_cast<int>(state.orientation));
-    m_hAlignCombo->setCurrentIndex(static_cast<int>(state.horizontalAlignment));
+    if (m_hAlignGroup != nullptr) {
+        if (auto* btn = m_hAlignGroup->button(static_cast<int>(state.horizontalAlignment))) {
+            btn->setChecked(true);
+        }
+    }
     m_vAlignCombo->setCurrentIndex(static_cast<int>(state.verticalAlignment));
     m_lineSpacingBox->setValue(state.lineSpacing);
     clearFieldError(m_lineSpacingField);
@@ -943,7 +1056,11 @@ void InspectorPanel::setLockedEditing(bool locked) {
     m_fontSizeBox->setEnabled(!locked);
     m_letterSpacingBox->setEnabled(!locked);
     m_orientationCombo->setEnabled(!locked);
-    m_hAlignCombo->setEnabled(!locked);
+    if (m_hAlignGroup != nullptr) {
+        for (auto* btn : m_hAlignGroup->buttons()) {
+            btn->setEnabled(!locked);
+        }
+    }
     m_vAlignCombo->setEnabled(!locked);
     m_lineSpacingBox->setEnabled(!locked);
     m_marginTopBox->setEnabled(!locked);

@@ -34,6 +34,7 @@ enum class InspectorField {
     TextColorHex,
     StrokeColorHex,
     StrokeWidthPx,
+    AutoFit,
     Cleared
 };
 
@@ -78,6 +79,7 @@ struct SingleRegionInspectorState {
     QString textColorHex;
     QString strokeColorHex;
     double strokeWidthPx{0.0};
+    bool autoFit{false};
 
     bool operator==(const SingleRegionInspectorState&) const = default;
 };
@@ -103,6 +105,7 @@ struct MultiRegionInspectorState {
     std::optional<QString> textColorHex;
     std::optional<QString> strokeColorHex;
     std::optional<double> strokeWidthPx;
+    std::optional<bool> autoFit;
 
     bool allLocked{false};
 
