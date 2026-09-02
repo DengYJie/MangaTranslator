@@ -36,6 +36,10 @@ namespace manga::network {
 struct ProviderConfig;
 }
 
+namespace manga::application {
+class BatchPagesProcessingWorkflow;
+}
+
 namespace manga::app {
 
 /// Composition root: the only place that constructs the production object graph.
@@ -93,6 +97,7 @@ public:
     [[nodiscard]] application::IComicExporter* comicExporter() const {
         return m_comicExporter.get();
     }
+    [[nodiscard]] application::BatchPagesProcessingWorkflow* batchPagesWorkflow() const;
 
     [[nodiscard]] application::IOcrEngine* ocrEngine() const {
         return m_ocrEngine.get();

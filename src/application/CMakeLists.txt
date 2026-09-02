@@ -1,4 +1,5 @@
 add_library(manga_application STATIC
+    dto/BatchProcessingDto.h
     dto/DetectionModelDto.h
     dto/ManualPaintDto.h
     dto/PageInpaintDto.h
@@ -12,6 +13,8 @@ add_library(manga_application STATIC
     ports/IInpaintModelValidator.h
     ports/IPageInpainter.h
     ports/ITextDetector.h
+    workflow/BatchPagesProcessingWorkflow.cpp
+    workflow/BatchPagesProcessingWorkflow.h
     workflow/OperationRegistry.cpp
     workflow/SmartTranslatePageWorkflow.cpp
     usecase/export/ExportUseCases.cpp

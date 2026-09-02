@@ -170,6 +170,7 @@ int Application::run() {
                                                                          m_context->derivedAssetStore(),
                                                                          m_context->operationRegistry(),
                                                                          m_context->textDetector(),
+                                                                         m_context->batchPagesWorkflow(),
                                                                          nullptr);
     // 默认同意：候选结果就绪后自动采用，不再需要手动点击“接受”。
     // 若没有可应用的变更（例如区域为手动内容而被跳过），直接清除候选，

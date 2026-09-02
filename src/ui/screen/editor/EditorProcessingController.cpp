@@ -4,6 +4,7 @@
 #include "application/usecase/apply/PrepareProcessingAdoptionUseCases.h"
 #include "application/usecase/processing/ManualPaintWorkflow.h"
 #include "application/usecase/processing/ProcessingUseCases.h"
+#include "application/workflow/BatchPagesProcessingWorkflow.h"
 #include "application/workflow/OperationRegistry.h"
 #include "application/workflow/SmartTranslatePageWorkflow.h"
 #include "domain/model/LanguageCode.h"
@@ -26,6 +27,7 @@ EditorProcessingController::EditorProcessingController(EditorViewModel* viewMode
                                                        application::IDerivedAssetStore* assetStore,
                                                        application::OperationRegistry* registry,
                                                        application::ITextDetector* textDetector,
+                                                       application::BatchPagesProcessingWorkflow* batchWorkflow,
                                                        QObject* parent)
     : QObject(parent), m_viewModel(viewModel), m_registry(registry), m_assetStore(assetStore),
       m_pageInpainter(pageInpainter), m_textDetector(textDetector), m_ocrEngine(ocrEngine) {
@@ -69,6 +71,8 @@ EditorProcessingController::EditorProcessingController(EditorViewModel* viewMode
         m_smartWorkflow = m_ownedSmartWorkflow.get();
     }
 
+    setBatchWorkflow(batchWorkflow);
+
     if (m_viewModel != nullptr) {
         m_viewModel->setProcessingController(this);
     }
@@ -83,10 +87,12 @@ EditorProcessingController::EditorProcessingController(
     application::SmartTranslatePageWorkflow* smartWorkflow,
     application::PrepareProcessingAdoptionUseCase* prepareAdoptionUseCase,
     application::OperationRegistry* registry,
+    application::BatchPagesProcessingWorkflow* batchWorkflow,
     QObject* parent)
     : QObject(parent), m_viewModel(viewModel), m_registry(registry), m_ocrUseCase(ocrUseCase),
       m_translateUseCase(translateUseCase), m_clearUseCase(clearUseCase), m_layoutUseCase(layoutUseCase),
       m_smartWorkflow(smartWorkflow), m_prepareAdoptionUseCase(prepareAdoptionUseCase) {
+    setBatchWorkflow(batchWorkflow);
     if (m_viewModel != nullptr) {
         m_viewModel->setProcessingController(this);
     }
@@ -163,6 +169,27 @@ void EditorProcessingController::setTextDetector(application::ITextDetector* tex
     }
     m_textDetector = textDetector;
     updateProcessingStateForCurrentPage();
+}
+
+void EditorProcessingController::setBatchWorkflow(application::BatchPagesProcessingWorkflow* batchWorkflow) {
+    if (m_batchWorkflow == batchWorkflow) {
+        return;
+    }
+    if (m_batchWorkflowConnection) {
+        disconnect(m_batchWorkflowConnection);
+    }
+    m_batchWorkflow = batchWorkflow;
+    if (m_batchWorkflow != nullptr) {
+        m_batchWorkflowConnection = connect(m_batchWorkflow,
+                                            &application::BatchPagesProcessingWorkflow::pageCommitted,
+                                            this,
+                                            [this](const domain::PageId& pageId) {
+                                                if (m_viewModel != nullptr && m_viewModel->hasSession() &&
+                                                    pageId == m_viewModel->state().currentPageId) {
+                                                    m_viewModel->selectPage(pageId);
+                                                }
+                                            });
+    }
 }
 
 void EditorProcessingController::cancelMatchingTask(const WatcherKey& key) {
@@ -1679,7 +1706,7 @@ void EditorProcessingController::rejectProposal(const domain::PageId& pageId) {
 
 void EditorProcessingController::handlePageSwitched(const domain::PageId& pageId) {
     for (auto it = m_activeTasks.begin(); it != m_activeTasks.end();) {
-        if (it.key().pageId != pageId) {
+        if (it.key().pageId != pageId && it.key().pageId.isValid()) {
             if (m_registry != nullptr)
                 m_registry->cancelOperation(it.value().operationId);
             it = m_activeTasks.erase(it);
@@ -1796,6 +1823,94 @@ void EditorProcessingController::updateProcessingStateForCurrentPage() {
     }
 
     m_viewModel->updateProcessingState(proc);
+}
+
+void EditorProcessingController::batchProcessPages(const QVector<domain::PageId>& pageIds,
+                                                   application::BatchStageFlags stages) {
+    if (pageIds.isEmpty() || m_batchWorkflow == nullptr || m_viewModel == nullptr || !m_viewModel->hasSession()) {
+        return;
+    }
+    auto* project = m_viewModel->projectAggregate();
+    if (project == nullptr) {
+        return;
+    }
+
+    const auto projectId = project->id();
+    const WatcherKey key{projectId, domain::PageId{}, std::nullopt, application::OperationStage::Project};
+    cancelMatchingTask(key);
+
+    application::OperationDescriptor descriptor{
+        .stage = application::OperationStage::Project,
+        .projectId = projectId,
+        .pageId = domain::PageId{},
+        .regionId = std::nullopt,
+        .displayTarget = tr("全书批量翻译 (共 %1 页)").arg(pageIds.size()),
+        .cancellable = true,
+    };
+    const quint64 sessionGen = m_viewModel->projectSessionGeneration();
+    auto context = m_registry != nullptr
+                       ? m_registry->createOperation(std::move(descriptor), sessionGen, m_viewModel->viewGeneration())
+                       : application::OperationContext{application::OperationId::generate(), sessionGen};
+    const auto opId = context.operationId;
+
+    ActiveTask task;
+    task.operationId = opId;
+    task.sessionGeneration = sessionGen;
+    task.key = key;
+    m_activeTasks[key] = task;
+
+    application::BatchProcessingRequest req;
+    req.projectId = projectId;
+    req.pageIds = pageIds;
+    req.stages = stages;
+    req.project = project;
+    req.sourceLanguage = QString::fromStdString(project->sourceLanguage().toString());
+    req.targetLanguage = QString::fromStdString(project->targetLanguage().toString());
+    req.readingDirection = project->readingDirection();
+    req.projectRoot = m_viewModel->projectRootPath();
+
+    auto future = m_batchWorkflow->execute(req, context, sessionGen);
+    auto* watcher = new QFutureWatcher<application::Result<application::BatchProcessingReport>>(this);
+    connect(watcher, &QFutureWatcherBase::finished, this, [this, watcher, key, opId, sessionGen]() {
+        if (m_activeTasks.contains(key) && m_activeTasks[key].operationId == opId) {
+            m_activeTasks.remove(key);
+        }
+        if (m_registry != nullptr) {
+            m_registry->markFinished(opId);
+        }
+        if (m_viewModel != nullptr && m_viewModel->hasSession() &&
+            sessionGen == m_viewModel->projectSessionGeneration()) {
+            auto result = watcher->result();
+            const bool success = result.has_value() && result->failedPages == 0;
+            Q_EMIT processingFinished(domain::PageId{}, success);
+        }
+        watcher->deleteLater();
+        updateProcessingStateForCurrentPage();
+    });
+    watcher->setFuture(future);
+
+    updateProcessingStateForCurrentPage();
+    Q_EMIT processingStarted(domain::PageId{}, opId);
+}
+
+void EditorProcessingController::batchDetectPages(const QVector<domain::PageId>& pageIds) {
+    batchProcessPages(pageIds, application::BatchStageFlag::Detect);
+}
+
+void EditorProcessingController::batchOcrPages(const QVector<domain::PageId>& pageIds) {
+    batchProcessPages(pageIds, application::BatchStageFlag::Ocr);
+}
+
+void EditorProcessingController::batchTranslatePages(const QVector<domain::PageId>& pageIds) {
+    batchProcessPages(pageIds, application::BatchStageFlag::Translate);
+}
+
+void EditorProcessingController::batchClearPages(const QVector<domain::PageId>& pageIds) {
+    batchProcessPages(pageIds, application::BatchStageFlag::Clear);
+}
+
+void EditorProcessingController::batchSmartTranslatePages(const QVector<domain::PageId>& pageIds) {
+    batchProcessPages(pageIds, application::BatchStageFlag::All);
 }
 
 } // namespace manga::ui::screen::editor

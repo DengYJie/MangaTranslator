@@ -12,7 +12,9 @@
 #include "application/ports/IThumbnailStore.h"
 #include "application/ports/ITranslator.h"
 #include "application/usecase/credential/CredentialUseCases.h"
+#include "application/usecase/processing/ProcessingUseCases.h"
 #include "application/usecase/settings/AppSettingsUseCases.h"
+#include "application/workflow/BatchPagesProcessingWorkflow.h"
 #include "application/workflow/OperationRegistry.h"
 #include "data/derived/FileSystemDerivedAssetStore.h"
 #include "data/derived/FileSystemThumbnailStore.h"
@@ -48,6 +50,11 @@ struct ApplicationContext::ProductionAdapters {
     services::UniqueOrtEnv ocrEnv;
     std::unique_ptr<services::BoundedTaskExecutor> executor;
     network::QtHttpTransport* httpTransport{nullptr};
+    std::unique_ptr<application::RecognizeRegionUseCase> ocrUseCase;
+    std::unique_ptr<application::TranslatePageUseCase> translateUseCase;
+    std::unique_ptr<application::ClearRegionUseCase> clearUseCase;
+    std::unique_ptr<application::LayoutRegionUseCase> layoutUseCase;
+    std::unique_ptr<application::BatchPagesProcessingWorkflow> batchPagesWorkflow;
 };
 
 ApplicationContext::ApplicationContext()
@@ -121,6 +128,26 @@ ApplicationContext::ApplicationContext()
         m_credentialStore.get(),
         std::move(transport),
         network::RetryPolicy(nullptr, nullptr, settings.retryCount));
+
+    m_production->ocrUseCase =
+        std::make_unique<application::RecognizeRegionUseCase>(m_ocrEngine.get(), m_operationRegistry.get());
+    m_production->translateUseCase =
+        std::make_unique<application::TranslatePageUseCase>(m_translator.get(), m_operationRegistry.get());
+    m_production->clearUseCase =
+        std::make_unique<application::ClearRegionUseCase>(m_inpainter.get(), m_operationRegistry.get());
+    m_production->layoutUseCase =
+        std::make_unique<application::LayoutRegionUseCase>(m_textLayouter.get(), m_operationRegistry.get());
+
+    m_production->batchPagesWorkflow =
+        std::make_unique<application::BatchPagesProcessingWorkflow>(m_production->ocrUseCase.get(),
+                                                                    m_production->translateUseCase.get(),
+                                                                    m_production->clearUseCase.get(),
+                                                                    m_production->layoutUseCase.get(),
+                                                                    m_textDetector.get(),
+                                                                    m_pageImageLoader.get(),
+                                                                    m_derivedAssetStore.get(),
+                                                                    m_projectRepository.get(),
+                                                                    m_operationRegistry.get());
 
     // Schedule derived-asset garbage collection after successful saves. Test constructor
     // paths never create a derived store, so the dynamic_cast simply skips there.
@@ -270,8 +297,15 @@ bool ApplicationContext::reconfigureDetectionModel(const QString& modelDirectory
         m_retiredTextDetectors.push_back(std::move(m_textDetector));
     }
     m_textDetector = std::move(replacement);
+    if (m_production && m_production->batchPagesWorkflow) {
+        m_production->batchPagesWorkflow->setTextDetector(m_textDetector.get());
+    }
     m_detectionModelError.reset();
     return true;
+}
+
+application::BatchPagesProcessingWorkflow* ApplicationContext::batchPagesWorkflow() const {
+    return m_production ? m_production->batchPagesWorkflow.get() : nullptr;
 }
 
 void ApplicationContext::shutdown() {

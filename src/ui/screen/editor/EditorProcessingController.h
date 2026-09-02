@@ -1,5 +1,6 @@
 #pragma once
 
+#include "application/dto/BatchProcessingDto.h"
 #include "application/dto/ClearDto.h"
 #include "application/dto/LayoutDto.h"
 #include "application/dto/ManualPaintDto.h"
@@ -24,6 +25,7 @@
 #include <optional>
 
 namespace manga::application {
+class BatchPagesProcessingWorkflow;
 class RecognizeRegionUseCase;
 class TranslatePageUseCase;
 class ClearRegionUseCase;
@@ -59,6 +61,7 @@ public:
                                application::IDerivedAssetStore* assetStore,
                                application::OperationRegistry* registry,
                                application::ITextDetector* textDetector = nullptr,
+                               application::BatchPagesProcessingWorkflow* batchWorkflow = nullptr,
                                QObject* parent = nullptr);
 
     EditorProcessingController(EditorViewModel* viewModel,
@@ -69,6 +72,7 @@ public:
                                application::SmartTranslatePageWorkflow* smartWorkflow,
                                application::PrepareProcessingAdoptionUseCase* prepareAdoptionUseCase,
                                application::OperationRegistry* registry,
+                               application::BatchPagesProcessingWorkflow* batchWorkflow = nullptr,
                                QObject* parent = nullptr);
 
     ~EditorProcessingController() override;
@@ -96,6 +100,14 @@ public:
     void layoutSelectedRegions();
     void layoutRegion(const domain::PageId& pageId, const domain::RegionId& regionId);
 
+    // Batch Commands
+    void batchProcessPages(const QVector<domain::PageId>& pageIds, application::BatchStageFlags stages);
+    void batchDetectPages(const QVector<domain::PageId>& pageIds);
+    void batchOcrPages(const QVector<domain::PageId>& pageIds);
+    void batchTranslatePages(const QVector<domain::PageId>& pageIds);
+    void batchClearPages(const QVector<domain::PageId>& pageIds);
+    void batchSmartTranslatePages(const QVector<domain::PageId>& pageIds);
+
     void cancelOperation(application::OperationId operationId);
     void cancelPageOperations(const domain::PageId& pageId);
     void cancelAll();
@@ -119,6 +131,11 @@ public:
     void setPageInpainter(application::IPageInpainter* pageInpainter);
     /// Replaces the text detector while preserving old adapters for active workflows.
     void setTextDetector(application::ITextDetector* textDetector);
+    /// Replaces the batch processing workflow.
+    void setBatchWorkflow(application::BatchPagesProcessingWorkflow* batchWorkflow);
+    [[nodiscard]] application::BatchPagesProcessingWorkflow* batchWorkflow() const {
+        return m_batchWorkflow;
+    }
 
     [[nodiscard]] bool hasActiveOperation(const domain::PageId& pageId) const;
     [[nodiscard]] bool hasProposal(const domain::PageId& pageId) const;
@@ -190,12 +207,14 @@ private:
 
     void releaseEngines();
 
-    EditorViewModel* m_viewModel{nullptr};                  // non-owning
-    application::OperationRegistry* m_registry{nullptr};    // non-owning
-    application::IDerivedAssetStore* m_assetStore{nullptr}; // non-owning
-    application::IPageInpainter* m_pageInpainter{nullptr};  // non-owning
-    application::ITextDetector* m_textDetector{nullptr};    // non-owning
-    application::IOcrEngine* m_ocrEngine{nullptr};          // non-owning
+    EditorViewModel* m_viewModel{nullptr};                               // non-owning
+    application::OperationRegistry* m_registry{nullptr};                 // non-owning
+    application::IDerivedAssetStore* m_assetStore{nullptr};              // non-owning
+    application::IPageInpainter* m_pageInpainter{nullptr};               // non-owning
+    application::ITextDetector* m_textDetector{nullptr};                 // non-owning
+    application::IOcrEngine* m_ocrEngine{nullptr};                       // non-owning
+    application::BatchPagesProcessingWorkflow* m_batchWorkflow{nullptr}; // non-owning
+    QMetaObject::Connection m_batchWorkflowConnection;
 
     // Owned UseCases when created from ports
     std::unique_ptr<application::RecognizeRegionUseCase> m_ownedOcrUseCase;
