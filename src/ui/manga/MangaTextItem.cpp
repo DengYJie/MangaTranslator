@@ -14,6 +14,9 @@ MangaTextItem::MangaTextItem(domain::RegionId id, QGraphicsItem* parent) : QGrap
     m_display.id = id;
     setAcceptedMouseButtons(Qt::NoButton);
     setZValue(canvas::kZTextLayer);
+    // Rasterization rebuilds a QTextLayout on every draw, so without a cache each pan repaints every
+    // visible region by re-running line breaking. The cache is regenerated on zoom and on display change.
+    setCacheMode(QGraphicsItem::DeviceCoordinateCache);
 }
 
 void MangaTextItem::setDisplay(const TextLayerDisplay& display) {

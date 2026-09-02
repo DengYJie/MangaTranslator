@@ -157,6 +157,7 @@ void EditorCommandBar::buildUi() {
         }
         layout->addWidget(group);
         m_commandGroups.append(group);
+        m_commandGroupWidgets.append(QVector<QWidget*>(widgets));
         m_commandSeparators.append(separator);
         hasGroup = true;
     };
@@ -327,7 +328,7 @@ void EditorCommandBar::updateResponsiveLayout() {
         if (m_commandSeparators.at(i) == nullptr) {
             previousGroupVisible = false;
         }
-        const auto children = m_commandGroups.at(i)->findChildren<QWidget*>(QString(), Qt::FindDirectChildrenOnly);
+        const auto& children = m_commandGroupWidgets.at(i);
         bool groupVisible = false;
         for (const auto* child : children) {
             if (!child->isHidden()) {

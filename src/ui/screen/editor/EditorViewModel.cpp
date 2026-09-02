@@ -21,6 +21,8 @@
 #include <QTimer>
 
 #include <algorithm>
+#include <string>
+#include <unordered_map>
 
 namespace manga::ui::screen::editor {
 
@@ -1225,11 +1227,24 @@ domain::PageId EditorViewModel::takeNextQueuedPageId() {
         }
     }
 
-    const int currentOrder = pageOrder(m_state.currentPageId);
+    // Resolving each queued page through pageOrder would scan the whole session once per queue entry.
+    // The index is local because the session page list is replaced wholesale in several places, and a
+    // stale member index would silently reorder thumbnail loading.
+    std::unordered_map<std::string, int> orderById;
+    orderById.reserve(static_cast<std::size_t>(m_session.pages.size()));
+    for (int i = 0; i < m_session.pages.size(); ++i) {
+        orderById.emplace(m_session.pages.at(i).id.toString(), i);
+    }
+    const auto orderOf = [&orderById](const domain::PageId& pageId) {
+        const auto found = orderById.find(pageId.toString());
+        return found == orderById.end() ? -1 : found->second;
+    };
+
+    const int currentOrder = orderOf(m_state.currentPageId);
     int bestIndex = 0;
     int bestDistance = -1;
     for (int i = 0; i < m_thumbnailQueue.size(); ++i) {
-        const int order = pageOrder(m_thumbnailQueue.at(i));
+        const int order = orderOf(m_thumbnailQueue.at(i));
         if (order < 0 || currentOrder < 0) {
             continue;
         }

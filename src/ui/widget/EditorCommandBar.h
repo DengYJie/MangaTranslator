@@ -126,6 +126,9 @@ private:
     QAction* m_actualSizeOverflowAction{nullptr};
     QAction* m_previewOverflowAction{nullptr};
     QVector<QWidget*> m_commandGroups;
+    // Members of each group in m_commandGroups. Recorded when the group is built because the
+    // responsive layout pass asks for them on every state update.
+    QVector<QVector<QWidget*>> m_commandGroupWidgets;
     QVector<QFrame*> m_commandSeparators;
     bool m_overflowActive{false};
     fluent::basicinput::Button* m_exportButton{nullptr};
