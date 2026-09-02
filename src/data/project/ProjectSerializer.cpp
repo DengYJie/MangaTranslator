@@ -17,6 +17,13 @@ namespace manga::data {
 
 namespace {
 
+// The JSON keys and enum literals in this file are the on-disk format of project.json.
+// serializeToJson writes them, the stringTo helpers read them back, and
+// ProjectSchemaValidator::validateFull accepts the same key set and the same enum
+// spellings, with no alias and no case-insensitive fallback. A rename on one side only
+// makes the next save produce a document that no longer loads, while files already
+// written keep the old spelling, so the corpus splits in two.
+
 std::string orientationToString(domain::TextOrientation orientation) {
     return orientation == domain::TextOrientation::Vertical ? "Vertical" : "Horizontal";
 }
@@ -124,7 +131,7 @@ QJsonObject ProjectSerializer::serializeToJson(const domain::ComicProject& proje
     root[QStringLiteral("formatVersion")] = project.formatVersion();
     root[QStringLiteral("id")] = QString::fromStdString(project.id().toString());
     root[QStringLiteral("name")] = QString::fromStdString(project.name());
-    // isDirty is a runtime-only field and is NOT persisted to disk.
+    // isDirty is runtime-only state, so this writer never emits a key for it.
     root[QStringLiteral("sourceLanguage")] = QString::fromStdString(project.sourceLanguage().toString());
     root[QStringLiteral("targetLanguage")] = QString::fromStdString(project.targetLanguage().toString());
     root[QStringLiteral("readingDirection")] =
@@ -398,8 +405,8 @@ ProjectSerializer::deserializeFromJson(const QJsonObject& rawObj) {
     project.setProjectVersion(root["projectVersion"].toString().toStdString());
     project.setSchemaVersion(root["schemaVersion"].toInt());
     project.setFormatVersion(root["formatVersion"].toInt());
-    // isDirty is runtime-only; setSourceLanguage/setTargetLanguage etc. will mark dirty,
-    // but we call markClean() once construction is complete.
+    // Each setter below marks the project dirty while a persisted field is applied, so a
+    // completed load clears the flag once construction finishes.
     project.setSourceLanguage(*srcLangRes);
     project.setTargetLanguage(*tgtLangRes);
     project.setReadingDirection(*readDirOpt);
@@ -677,7 +684,7 @@ ProjectSerializer::deserializeFromJson(const QJsonObject& rawObj) {
         return std::unexpected(semRes.error().front());
     }
 
-    // Step 6: Mark clean. isDirty is runtime-only. Successful load means clean state.
+    // Step 6: Mark clean, because a freshly loaded aggregate carries no unsaved edits.
     project.markClean();
 
     return project;

@@ -124,7 +124,7 @@ FileSystemComicExporter::exportPages(application::ExportRequest request, applica
                 continue;
             }
 
-            // 1. Composite layers: Original -> Clear -> Translation -> ManualOverride
+            // 1. Composite layers, painted back to front: original, clear, translation, manual override.
             QImage composite(page.sourceImage.size(), QImage::Format_RGBA8888_Premultiplied);
             composite.setColorSpace(QColorSpace(QColorSpace::SRgb));
             composite.fill(Qt::transparent);

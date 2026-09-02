@@ -26,17 +26,25 @@ enum class EndpointPolicy {
 };
 
 struct ProviderConfig {
+    /// Identifies both the endpoint configuration and the stored credential, whose target name
+    /// embeds it, so renaming an id detaches the key already saved under the old one.
     QString providerId;
     QUrl endpoint;
     QString model;
+    /// Whole operation budget in milliseconds, retries included. Each attempt is given what is
+    /// left of it, and a retry whose wait would overrun the remainder is not taken.
     int timeoutMs{60000};
     StructuredOutputMode structuredOutputMode{StructuredOutputMode::JsonSchemaStrict};
+    /// Travels as the provider completion token ceiling. A reply that reaches it comes back with a
+    /// length finish reason, which the parser reports as an incomplete response rather than
+    /// truncating the candidates it managed to produce.
     int maxCompletionTokens{2048};
     double temperature{0.2};
 
     [[nodiscard]] bool operator==(const ProviderConfig& other) const noexcept = default;
 };
 
+/// Admissible range, in milliseconds, for the operation budget held by ProviderConfig.
 constexpr int kMinTimeoutMs = 5000;
 constexpr int kMaxTimeoutMs = 300000;
 
@@ -54,6 +62,8 @@ constexpr int kMaxTimeoutMs = 300000;
             ErrorCategory::Input, std::move(code), std::move(message), application::RecoveryAction::OpenSettings));
     };
 
+    // The pattern belongs to isValidProviderId and this message quotes it a second time, so the
+    // two spellings have to move together.
     if (!isValidProviderId(config.providerId)) {
         return invalid(QStringLiteral("input.invalid_provider"),
                        QStringLiteral("Provider ID must match [a-z0-9][a-z0-9._-]{0,63}"));

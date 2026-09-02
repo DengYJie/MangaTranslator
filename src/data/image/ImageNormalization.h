@@ -31,8 +31,8 @@ struct NormalizedImage {
 /// Returns the canonical asset suffix ".png", ".jpg", or ".webp"; empty for unknown formats.
 [[nodiscard]] QString canonicalAssetSuffix(ImageFileFormat format);
 
-/// True when width and height fit the V0.1 decode limits (max 16384 px per side and the
-/// RGBA8 memory budget).
+/// True for a positive width and height that fit the decode limits: each side stays within
+/// kMaxSidePixels and the RGBA8 footprint stays within kMaxImageBytes, both owned by the loader.
 [[nodiscard]] bool imageDimensionsWithinLimits(int width, int height);
 
 /// Decodes an image file and normalizes it: magic-byte sniffing, header precheck, one EXIF

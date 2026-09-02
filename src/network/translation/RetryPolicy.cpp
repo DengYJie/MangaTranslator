@@ -6,6 +6,9 @@
 namespace manga::network {
 namespace {
 
+// Base of the doubling ceiling that jitterDelayMs samples uniformly under, capped by
+// kMaxBackoffMs. Every locally computed retry delay scales from here, so this is the whole
+// schedule's lever rather than only the first wait.
 constexpr int kBaseBackoffMs = 500;
 
 } // namespace

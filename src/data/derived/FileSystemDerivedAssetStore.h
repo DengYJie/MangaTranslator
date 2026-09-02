@@ -13,9 +13,11 @@
 namespace manga::data {
 
 /// Filesystem-backed derived asset store. Committed layers are content-addressed PNGs under
-/// assets/derived/<page-id>/<kind>/v1/<sha256>.png; identical content reuses the existing
-/// decodable file, different content never overwrites. Path building and containment reuse
-/// the P3 rules; the source image is never modified.
+/// assets/derived/<page-id>/<kind>/v1/<sha256>.png, where the kind segment is cleaning,
+/// translation or manual. Identical content reuses the existing decodable file, different content
+/// never overwrites, and the source image is never modified. Every path is built from the page id
+/// and kind carried by the request and then confined inside the canonical project root, so a
+/// caller cannot address a file outside its own page and kind directory.
 class FileSystemDerivedAssetStore final : public application::IDerivedAssetStore {
 public:
     /// Lease over project-relative derived layer paths. A live lease keeps its paths out of

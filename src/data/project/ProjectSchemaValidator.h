@@ -8,24 +8,20 @@
 
 namespace manga::data {
 
-/// Strict structural validator for project.json, implementing JSON Schema Draft 2020-12 rules.
+/// Strict structural validator for project.json implementing JSON Schema Draft 2020-12 rules.
 ///
-/// Two-phase design to support correct migration pipeline:
-///   1. validateEnvelope() . lightweight check: required version fields exist and are valid
-///                            integers; called BEFORE migration.
-///   2. validateFull()     . complete structural check: all fields, types, enums,
-///                            additionalProperties:false; called AFTER migration.
+/// The two entry points sit on either side of migration. A document written by an older schema is
+/// judged only by its version fields before ProjectMigrator rewrites it, and by every current rule
+/// afterwards.
 class ProjectSchemaValidator {
 public:
-    /// Phase 1. Pre-migration envelope check.
-    /// Only verifies that schemaVersion and formatVersion exist and are integers >= 1.
-    /// No other content checks are performed.
+    /// Confirms schemaVersion and formatVersion are present and hold positive integers.
+    /// Performs no content check, so an unmigrated document can still reach ProjectMigrator.
     [[nodiscard]] static std::expected<void, domain::ValidationError> validateEnvelope(const QJsonObject& rootObj);
 
-    /// Phase 2. Full structural validation (post-migration).
-    /// Validates the complete object against the current schema specification:
-    ///   - required fields, additionalProperties:false, type checks, enum values,
-    ///     UUID v4 format, numeric ranges.
+    /// Confirms the whole document against the current schema: required fields,
+    /// additionalProperties false, types, enum values, UUID v4 format and numeric ranges.
+    /// The enum values it accepts are the on-disk spellings produced by ProjectSerializer.
     [[nodiscard]] static std::expected<void, domain::ValidationError> validateFull(const QJsonObject& rootObj);
 };
 

@@ -16,8 +16,12 @@ namespace manga::network {
 constexpr qsizetype kMaxResponseBodyBytes = 2 * 1024 * 1024;
 /// Per-field limit for regionId, sourceText, translation and candidates.
 constexpr qsizetype kMaxFieldBytes = 64 * 1024;
+/// Alternates accepted for one response item. The request never asks for a count, so this bounds
+/// untrusted model output rather than describing the wire format.
 constexpr int kMaxCandidatesPerRegion = 5;
 
+/// Builds the Chat Completions request body for one translation batch. The surrounding key
+/// spellings are the provider wire vocabulary and are documented where they are written.
 [[nodiscard]] QByteArray buildChatCompletionsRequest(const application::TranslationRequest& request,
                                                      const ProviderConfig& config);
 
@@ -27,7 +31,8 @@ constexpr int kMaxCandidatesPerRegion = 5;
 [[nodiscard]] application::Result<application::TranslationResponse> parseChatCompletionsResponse(
     const QByteArray& body, const application::TranslationRequest& request, const QString& providerId);
 
-/// Retry-After in seconds, accepting integer seconds and HTTP-date, clamped to 0..60.
+/// Retry-After in seconds, accepting integer seconds and an HTTP-date, clamped to the ceiling the
+/// retry policy publishes as kMaxRetryAfterSeconds.
 [[nodiscard]] std::optional<int> parseRetryAfterSeconds(const QByteArray& headerValue, const QDateTime& now);
 
 struct HttpFailure {

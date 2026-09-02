@@ -19,7 +19,11 @@
 namespace manga::data {
 namespace {
 
-constexpr QLatin1String kDerivedRoot("assets/derived");
+// The stored name of a committed layer outlives the session: project.json records the relative
+// path verbatim, a read rejects any stored prefix these helpers no longer produce, and the prune
+// walk starts from this root. Renaming the root, a kind directory or the version segment strands
+// the assets of every existing project rather than migrating them.
+constexpr QLatin1String kDerivedRoot("assets/derived"); // Must stay identical to kAssetsDerived.
 constexpr QLatin1String kVersionSegment("v1");
 
 QString layerKindDirectory(application::DerivedLayerKind kind) {

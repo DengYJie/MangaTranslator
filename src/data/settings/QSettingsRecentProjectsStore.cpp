@@ -7,8 +7,13 @@
 namespace manga::data {
 
 namespace {
+
+// Persisted state. The list lives in the QSettings array group named recent_projects, written under
+// the application and organization names set at startup, and every stored entry carries the name,
+// path and lastOpenedTimeMs child keys used below. Renaming any of them orphans the values already
+// on disk instead of migrating them. An entry is identified by its path, not by its name.
 const QString kRecentProjectsKey = QStringLiteral("recent_projects");
-}
+} // namespace
 
 QVector<application::RecentProject> QSettingsRecentProjectsStore::loadRecentProjects() const {
     QSettings settings;
@@ -25,7 +30,8 @@ QVector<application::RecentProject> QSettingsRecentProjectsStore::loadRecentProj
     }
     settings.endArray();
 
-    // Sort by last opened time descending
+    // Newest first. addRecentProject truncates from the tail, so this sort is what makes the
+    // dropped entries the least recently opened ones.
     std::sort(projects.begin(), projects.end(), [](const auto& a, const auto& b) {
         return a.lastOpenedTimeMs > b.lastOpenedTimeMs;
     });
@@ -40,12 +46,13 @@ void QSettingsRecentProjectsStore::addRecentProject(const application::RecentPro
 
     if (it != projects.end()) {
         it->lastOpenedTimeMs = project.lastOpenedTimeMs;
-        it->name = project.name; // Update name in case it changed
+        it->name = project.name;
     } else {
         projects.prepend(project);
     }
 
-    // Keep max 20 projects
+    // One cap shared by the comparison and the resize, so the stored group never grows past it and
+    // both bounds have to move together.
     if (projects.size() > 20) {
         projects.resize(20);
     }

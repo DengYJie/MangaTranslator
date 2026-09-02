@@ -11,7 +11,11 @@ namespace manga::network {
 
 /// First attempt plus a configurable number of retries.
 constexpr int kMaxAttempts = 3;
+/// Ceiling, in seconds, on a provider Retry-After hint. The clamp itself lives in
+/// parseRetryAfterSeconds, which spells the same ceiling as a literal, so the two
+/// spellings have to move together.
 constexpr int kMaxRetryAfterSeconds = 60;
+/// Ceiling, in milliseconds, on the randomized wait the backoff schedule may draw.
 constexpr int kMaxBackoffMs = 8000;
 
 struct RetryDecision {

@@ -4,6 +4,10 @@
 
 namespace manga::data {
 
+/// QSettings implementation of the recent projects port. It holds no state between calls because
+/// every operation opens its own settings object, add and remove rewrite the whole stored group
+/// rather than patching one entry, and clear drops the group outright. The group and entry key
+/// names are persisted state and are documented where they are produced in the implementation file.
 class QSettingsRecentProjectsStore final : public application::IRecentProjectsStore {
 public:
     QSettingsRecentProjectsStore() = default;

@@ -88,6 +88,10 @@ QByteArray buildChatCompletionsRequest(const application::TranslationRequest& re
         });
     }
 
+    // This payload travels as the text of the user message. Its keys are the shape the system
+    // prompt above describes, so a rename has to reach that prompt and the response schema in the
+    // same step. schemaVersion numbers this payload shape and no reader checks it back; it exists
+    // so a provider can tell one revision of these keys from another.
     const QJsonObject userPayload{
         {QStringLiteral("schemaVersion"), 1},
         {QStringLiteral("sourceLanguage"), QString::fromStdString(request.sourceLanguage.toString())},
@@ -102,6 +106,9 @@ QByteArray buildChatCompletionsRequest(const application::TranslationRequest& re
                                  : QStringLiteral("json_object");
     QJsonObject responseFormat{{QStringLiteral("type"), modeName}};
     if (config.structuredOutputMode == StructuredOutputMode::JsonSchemaStrict) {
+        // The schema name is wire data. A provider uses it to identify and may cache the grammar
+        // behind it, and responseSchema is the only body this name denotes, so label and body
+        // change as one unit.
         responseFormat.insert(QStringLiteral("json_schema"),
                               QJsonObject{{QStringLiteral("name"), QStringLiteral("manga_translation_response_v1")},
                                           {QStringLiteral("strict"), true},
@@ -184,6 +191,10 @@ application::Result<application::TranslationResponse> parseChatCompletionsRespon
         return schemaError(QStringLiteral("The response content must contain an items array"));
     }
     const QJsonArray items = payload.value(QStringLiteral("items")).toArray();
+    // Amplification bound rather than a format rule. A correct reply carries one item per
+    // requested region, so a reply well past that is a confused or hostile provider and is
+    // rejected before the per-item work below. The body is already capped by
+    // kMaxResponseBodyBytes, and a repeated identity is caught by the region id check later.
     if (items.size() > request.regions.size() * 2) {
         return schemaError(QStringLiteral("The response contained more items than requested"));
     }
@@ -253,6 +264,9 @@ std::optional<int> parseRetryAfterSeconds(const QByteArray& headerValue, const Q
     if (value.isEmpty()) {
         return std::nullopt;
     }
+    // Both branches clamp the same way: a negative hint, including an HTTP-date already in the
+    // past, lands on zero and so asks the caller to retry immediately, while the upper bound is
+    // the kMaxRetryAfterSeconds ceiling held by the retry policy.
     bool isInteger = false;
     const int seconds = value.toInt(&isInteger);
     if (isInteger) {

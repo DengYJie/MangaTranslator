@@ -1,4 +1,3 @@
-// Placeholder compilation unit — required for the STATIC library target.
-// Replace with real implementation as the network layer grows.
+// Placeholder translation unit so the static network library target has something to compile.
 
 namespace manga::network {}

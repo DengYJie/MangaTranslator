@@ -46,11 +46,9 @@ bool hasUnknownProperties(const QJsonObject& obj, const std::unordered_set<QStri
 
 } // namespace
 
-// Phase 1: Pre-migration envelope check
+// Pre-migration envelope check
 
 std::expected<void, domain::ValidationError> ProjectSchemaValidator::validateEnvelope(const QJsonObject& root) {
-    // Only checks that the JSON is an object and contains valid version integers.
-    // Does NOT validate content, required fields, or additionalProperties.
     if (!root.contains("schemaVersion") || !isStrictInteger(root["schemaVersion"]) ||
         root["schemaVersion"].toInt() < 1) {
         return std::unexpected(domain::ValidationError{.code = domain::ProjectErrorCode::InvalidStructure,
@@ -66,10 +64,11 @@ std::expected<void, domain::ValidationError> ProjectSchemaValidator::validateEnv
     return {};
 }
 
-// Phase 2: Full structural validation (post-migration)
+// Full structural validation of a migrated document
 
 std::expected<void, domain::ValidationError> ProjectSchemaValidator::validateFull(const QJsonObject& root) {
-    // Root allowed properties (isDirty is runtime-only, NOT persisted)
+    // The accepted root shape of project.json. This set has to keep matching the keys
+    // ProjectSerializer::serializeToJson emits, and any key outside it is rejected.
     static const std::unordered_set<QString> kRootAllowedKeys = {QStringLiteral("projectVersion"),
                                                                  QStringLiteral("schemaVersion"),
                                                                  QStringLiteral("formatVersion"),

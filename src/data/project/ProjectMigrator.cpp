@@ -42,8 +42,10 @@ std::expected<QJsonObject, domain::ValidationError> ProjectMigrator::migrateIfNe
             .path = "formatVersion"});
     }
 
-    // Step-by-step migrations will be added here as future schema versions emerge:
-    // while (schemaVer < domain::ComicProject::kCurrentSchemaVersion) { ... }
+    // Both counters start at one, so a document that passed the bounds above is already current
+    // and is returned unchanged. Raising ComicProject::kCurrentSchemaVersion needs an ascending
+    // rewrite step per skipped version before this return, because
+    // ProjectSchemaValidator::validateFull judges only the current schema.
 
     return rootObj;
 }
