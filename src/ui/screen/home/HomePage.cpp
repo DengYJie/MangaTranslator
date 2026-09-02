@@ -109,11 +109,8 @@ void HomePage::buildUi() {
     recentHeader->setFont(themeFont(Typography::FontRole::BodyStrong).toQFont());
     rootLayout->addWidget(recentHeader);
 
-    auto* stackContainer = new QWidget(this);
-    m_stack = new QStackedLayout(stackContainer);
-
     // Recent projects card grid, homogeneous single-select cards per docs/ui/pages/home.md.
-    m_gridView = new fluent::collections::GridView(stackContainer);
+    m_gridView = new fluent::collections::GridView(this);
     m_model = new RecentProjectsModel(this);
     m_delegate = new RecentProjectCardDelegate(this, m_gridView);
     m_gridView->setModel(m_model);
@@ -135,14 +132,12 @@ void HomePage::buildUi() {
         }
     };
     connect(m_gridView, &QAbstractItemView::clicked, this, openAt);
-    m_stack->addWidget(m_gridView);
-    rootLayout->addWidget(stackContainer, 1);
+    rootLayout->addWidget(m_gridView, 1);
 }
 
 void HomePage::render(const HomeState& state) {
     m_model->setProjects(state.recentProjects);
     m_model->setCovers(state.projectCovers);
-    m_stack->setCurrentWidget(m_gridView);
     m_openButton->setEnabled(!state.isOpeningProject);
 
     if (state.notice.has_value()) {

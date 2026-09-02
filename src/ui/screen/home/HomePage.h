@@ -66,7 +66,6 @@ private:
     fluent::basicinput::Button* m_retryButton{nullptr};
     QString m_currentRetryPath;
     application::RecoveryAction m_currentNoticeAction{application::RecoveryAction::None};
-    QStackedLayout* m_stack{nullptr};
     fluent::collections::GridView* m_gridView{nullptr};
 };
 
