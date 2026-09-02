@@ -33,23 +33,27 @@ struct PrepareClearResultRequest {
     QSize pageSize;      // normalized working image size, used for a fresh transparent layer
     QString projectRoot; // runtime absolute path, never persisted
     ClearResponse result;
+    QVector<ClearResponse> results;
     quint64 sessionGeneration{0};
     quint64 currentSessionGeneration{0};
     quint64 expectedRevision{0}; // region contentRevision captured when the clear was requested
+    QHash<domain::RegionId, quint64> expectedRevisions;
     OperationContext context;
 };
 struct PreparedClearChange {
     domain::ProjectId projectId;
     domain::PageId pageId;
     domain::RegionId regionId;
+    QVector<domain::RegionId> regionIds;
     quint64 expectedRevision{0};
     QString beforeRef;
     QString afterRef;
     bool beforeState{false};
     bool afterState{true};
+    QHash<domain::RegionId, bool> beforeStates;
 };
 
-/// Prepares a clear patch by compositing it onto the current page clear layer, and committing
+/// Prepares clear patches by compositing them onto the current page clear layer, and committing
 /// the result through the derived asset store. It does NOT update the Domain. Prepare may
 /// produce an unreferenced immutable asset if the request becomes stale after preparation
 /// starts; the subsequent Apply stage is authoritative for stale checks.
@@ -72,51 +76,70 @@ public:
             return makeFailedFuture<PreparedClearChange>(
                 detail::applyError(ErrorCategory::Cancelled, "cancelled.stale_generation", "Clear result is stale"));
         }
-        if (!request.expectedRegionId.isValid() || request.result.regionId != request.expectedRegionId) {
-            return makeFailedFuture<PreparedClearChange>(detail::applyError(
-                ErrorCategory::Protocol, "protocol.region_mismatch", "Clear response region does not match request"));
+
+        QVector<ClearResponse> allResults = request.results;
+        if (allResults.isEmpty() && request.expectedRegionId.isValid() && request.result.regionId.isValid()) {
+            allResults.append(request.result);
         }
+        if (allResults.isEmpty()) {
+            return makeFailedFuture<PreparedClearChange>(detail::applyError(
+                ErrorCategory::Protocol, "protocol.invalid_clear_result", "No clear results provided"));
+        }
+
         const auto* page = m_project->findPage(request.pageId);
         if (page == nullptr) {
             return makeFailedFuture<PreparedClearChange>(
                 detail::applyError(ErrorCategory::Project, "project.page_not_found", "Page was not found"));
         }
-        const auto* region = page->findRegion(request.expectedRegionId);
-        if (region == nullptr) {
-            return makeFailedFuture<PreparedClearChange>(
-                detail::applyError(ErrorCategory::Input, "input.region_not_found", "Region was not found"));
-        }
-        if (region->contentRevision() != request.expectedRevision) {
-            return makeFailedFuture<PreparedClearChange>(
-                detail::applyError(ErrorCategory::Input, "input.stale_revision", "Region content changed"));
-        }
-        if (region->isLocked()) {
-            return makeFailedFuture<PreparedClearChange>(
-                detail::applyError(ErrorCategory::Input, "input.manual_override", "Region is under manual control"));
-        }
-        if (request.pageSize.isEmpty() || request.result.patch.isNull() ||
-            request.result.patch.format() != QImage::Format_RGBA8888 || !request.result.affectedBounds.isValid()) {
-            return makeFailedFuture<PreparedClearChange>(detail::applyError(
-                ErrorCategory::Protocol, "protocol.invalid_clear_result", "Clear result is invalid"));
-        }
 
-        const int left = qFloor(request.result.affectedBounds.x);
-        const int top = qFloor(request.result.affectedBounds.y);
-        const int width = qCeil(request.result.affectedBounds.x + request.result.affectedBounds.width) - left;
-        const int height = qCeil(request.result.affectedBounds.y + request.result.affectedBounds.height) - top;
-        if (width != request.result.patch.width() || height != request.result.patch.height() || left < 0 || top < 0 ||
-            left + width > request.pageSize.width() || top + height > request.pageSize.height()) {
-            return makeFailedFuture<PreparedClearChange>(
-                detail::applyError(ErrorCategory::Protocol,
-                                   "protocol.invalid_clear_result",
-                                   "Clear patch does not match the affected bounds"));
+        QHash<domain::RegionId, bool> beforeStates;
+        QVector<domain::RegionId> validRegionIds;
+
+        for (const auto& item : allResults) {
+            if (!item.regionId.isValid()) {
+                return makeFailedFuture<PreparedClearChange>(
+                    detail::applyError(ErrorCategory::Protocol,
+                                       "protocol.region_mismatch",
+                                       "Clear response region does not match request"));
+            }
+            const auto* region = page->findRegion(item.regionId);
+            if (region == nullptr) {
+                return makeFailedFuture<PreparedClearChange>(
+                    detail::applyError(ErrorCategory::Input, "input.region_not_found", "Region was not found"));
+            }
+            quint64 expectedRev = request.expectedRevisions.value(item.regionId, request.expectedRevision);
+            if (region->contentRevision() != expectedRev) {
+                return makeFailedFuture<PreparedClearChange>(
+                    detail::applyError(ErrorCategory::Input, "input.stale_revision", "Region content changed"));
+            }
+            if (region->isLocked()) {
+                return makeFailedFuture<PreparedClearChange>(detail::applyError(
+                    ErrorCategory::Input, "input.manual_override", "Region is under manual control"));
+            }
+            if (request.pageSize.isEmpty() || item.patch.isNull() || item.patch.format() != QImage::Format_RGBA8888 ||
+                !item.affectedBounds.isValid()) {
+                return makeFailedFuture<PreparedClearChange>(detail::applyError(
+                    ErrorCategory::Protocol, "protocol.invalid_clear_result", "Clear result is invalid"));
+            }
+
+            const int left = qFloor(item.affectedBounds.x);
+            const int top = qFloor(item.affectedBounds.y);
+            const int width = qCeil(item.affectedBounds.x + item.affectedBounds.width) - left;
+            const int height = qCeil(item.affectedBounds.y + item.affectedBounds.height) - top;
+            if (width != item.patch.width() || height != item.patch.height() || left < 0 || top < 0 ||
+                left + width > request.pageSize.width() || top + height > request.pageSize.height()) {
+                return makeFailedFuture<PreparedClearChange>(
+                    detail::applyError(ErrorCategory::Protocol,
+                                       "protocol.invalid_clear_result",
+                                       "Clear patch does not match the affected bounds"));
+            }
+            validRegionIds.append(item.regionId);
+            beforeStates.insert(item.regionId, region->isCleared());
         }
 
         const QString relativePath =
             page->clearLayerAsset().has_value() ? QString::fromStdString(*page->clearLayerAsset()) : QString();
 
-        // Manual promise chaining: Qt does not unwrap nested QFuture returns in then(), and
-        // each failure path must finish the promise exactly once.
         auto promise = std::make_shared<QPromise<Result<PreparedClearChange>>>();
         promise->start();
         auto future = promise->future();
@@ -140,60 +163,72 @@ public:
             layerFuture = store->readDerivedLayer(std::move(readRequest), requestSnapshot.context);
         }
 
-        bool beforeState = region->isCleared();
+        bool firstBeforeState = beforeStates.value(validRegionIds.first(), false);
 
-        layerFuture.then(
-            [store, request = requestSnapshot, promise, relativePath, beforeState](Result<QImage> current) {
-                if (!current) {
-                    promise->addResult(std::unexpected(current.error()));
-                    promise->finish();
-                    return;
-                }
-                if ((*current).size() != request.pageSize) {
-                    promise->addResult(std::unexpected(detail::applyError(
-                        ErrorCategory::Input, "clear.layer_read_failed", "The stored clear layer is not usable")));
-                    promise->finish();
-                    return;
-                }
-                // The PNG round-trip decodes to ARGB32_Premultiplied; normalize so the commit
-                // stores the same straight-alpha format that export consumes.
-                QImage baseLayer = *current;
-                if (baseLayer.format() != QImage::Format_RGBA8888) {
-                    baseLayer = baseLayer.convertToFormat(QImage::Format_RGBA8888);
-                }
-                const int left = qFloor(request.result.affectedBounds.x);
-                const int top = qFloor(request.result.affectedBounds.y);
+        layerFuture.then([store,
+                          request = requestSnapshot,
+                          promise,
+                          relativePath,
+                          allResults,
+                          validRegionIds,
+                          beforeStates,
+                          firstBeforeState](Result<QImage> current) {
+            if (!current) {
+                promise->addResult(std::unexpected(current.error()));
+                promise->finish();
+                return;
+            }
+            if ((*current).size() != request.pageSize) {
+                promise->addResult(std::unexpected(detail::applyError(
+                    ErrorCategory::Input, "clear.layer_read_failed", "The stored clear layer is not usable")));
+                promise->finish();
+                return;
+            }
+            // The PNG round-trip decodes to ARGB32_Premultiplied; normalize so the commit
+            // stores the same straight-alpha format that export consumes.
+            QImage baseLayer = *current;
+            if (baseLayer.format() != QImage::Format_RGBA8888) {
+                baseLayer = baseLayer.convertToFormat(QImage::Format_RGBA8888);
+            }
+            {
                 QPainter painter(&baseLayer);
                 painter.setCompositionMode(QPainter::CompositionMode_SourceOver);
-                painter.drawImage(QPoint(left, top), request.result.patch);
-                painter.end();
-                baseLayer.setColorSpace(QColorSpace(QColorSpace::SRgb));
+                for (const auto& item : allResults) {
+                    const int left = qFloor(item.affectedBounds.x);
+                    const int top = qFloor(item.affectedBounds.y);
+                    painter.drawImage(QPoint(left, top), item.patch);
+                }
+            }
+            baseLayer.setColorSpace(QColorSpace(QColorSpace::SRgb));
 
-                CommitDerivedLayerRequest commitRequest;
-                commitRequest.projectId = request.projectId;
-                commitRequest.projectRoot = request.projectRoot;
-                commitRequest.pageId = request.pageId;
-                commitRequest.layerKind = DerivedLayerKind::Clear;
-                commitRequest.layer = baseLayer;
-                store->commitDerivedLayer(std::move(commitRequest), request.context)
-                    .then([request, promise, relativePath, beforeState](Result<CommitDerivedLayerResponse> committed) {
-                        if (!committed) {
-                            promise->addResult(std::unexpected(committed.error()));
-                            promise->finish();
-                            return;
-                        }
-                        PreparedClearChange change{request.projectId,
-                                                   request.pageId,
-                                                   request.expectedRegionId,
-                                                   request.expectedRevision,
-                                                   relativePath,
-                                                   committed->relativePath,
-                                                   beforeState,
-                                                   true};
-                        promise->addResult(change);
+            CommitDerivedLayerRequest commitRequest;
+            commitRequest.projectId = request.projectId;
+            commitRequest.projectRoot = request.projectRoot;
+            commitRequest.pageId = request.pageId;
+            commitRequest.layerKind = DerivedLayerKind::Clear;
+            commitRequest.layer = baseLayer;
+            store->commitDerivedLayer(std::move(commitRequest), request.context)
+                .then([request, promise, relativePath, validRegionIds, beforeStates, firstBeforeState](
+                          Result<CommitDerivedLayerResponse> committed) {
+                    if (!committed) {
+                        promise->addResult(std::unexpected(committed.error()));
                         promise->finish();
-                    });
-            });
+                        return;
+                    }
+                    PreparedClearChange change{request.projectId,
+                                               request.pageId,
+                                               validRegionIds.first(),
+                                               validRegionIds,
+                                               request.expectedRevision,
+                                               relativePath,
+                                               committed->relativePath,
+                                               firstBeforeState,
+                                               true,
+                                               beforeStates};
+                    promise->addResult(change);
+                    promise->finish();
+                });
+        });
         return future;
     }
 

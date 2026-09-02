@@ -27,13 +27,17 @@ void ProcessingAdoptionCommand::undo() {
 
     if (m_prepared.clearAssetChange) {
         const auto& c = *m_prepared.clearAssetChange;
-        if (!m_context->project()->applyClearChangeOnPage(c.pageId,
-                                                          c.regionId,
-                                                          c.beforeRef.isEmpty() ? std::optional<std::string>{}
-                                                                                : c.beforeRef.toStdString(),
-                                                          c.beforeState)) {
-            m_faulted = true;
-            return;
+        const auto regionList = c.regionIds.isEmpty() ? QVector<domain::RegionId>{c.regionId} : c.regionIds;
+        for (const auto& rId : regionList) {
+            const bool state = c.beforeStates.value(rId, c.beforeState);
+            if (!m_context->project()->applyClearChangeOnPage(c.pageId,
+                                                              rId,
+                                                              c.beforeRef.isEmpty() ? std::optional<std::string>{}
+                                                                                    : c.beforeRef.toStdString(),
+                                                              state)) {
+                m_faulted = true;
+                return;
+            }
         }
     }
 }
@@ -57,13 +61,16 @@ void ProcessingAdoptionCommand::redo() {
 
     if (m_prepared.clearAssetChange) {
         const auto& c = *m_prepared.clearAssetChange;
-        if (!m_context->project()->applyClearChangeOnPage(c.pageId,
-                                                          c.regionId,
-                                                          c.afterRef.isEmpty() ? std::optional<std::string>{}
-                                                                               : c.afterRef.toStdString(),
-                                                          c.afterState)) {
-            m_faulted = true;
-            return;
+        const auto regionList = c.regionIds.isEmpty() ? QVector<domain::RegionId>{c.regionId} : c.regionIds;
+        for (const auto& rId : regionList) {
+            if (!m_context->project()->applyClearChangeOnPage(c.pageId,
+                                                              rId,
+                                                              c.afterRef.isEmpty() ? std::optional<std::string>{}
+                                                                                   : c.afterRef.toStdString(),
+                                                              c.afterState)) {
+                m_faulted = true;
+                return;
+            }
         }
     }
 }

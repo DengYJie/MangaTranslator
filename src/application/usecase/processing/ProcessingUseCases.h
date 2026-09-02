@@ -54,6 +54,18 @@ public:
         return m_engine->recognize(request, context);
     }
 
+    [[nodiscard]] QFuture<Result<OcrResponse>> execute(const OcrRequest& request, const OperationContext& context) {
+        if (m_engine == nullptr) {
+            return makeFailedFuture<OcrResponse>(detail::unavailableDependency());
+        }
+        if (!request.pageId.isValid() || !request.regionId.isValid() || request.image.isNull() ||
+            !request.rect.isValid() || request.language.empty()) {
+            return makeFailedFuture<OcrResponse>(
+                detail::invalidProcessingInput("input.invalid_ocr_request", "OCR request is invalid"));
+        }
+        return m_engine->recognize(request, context);
+    }
+
     void cancel(OperationId id) {
         if (m_registry != nullptr) {
             m_registry->cancelOperation(id);
@@ -95,6 +107,18 @@ public:
 
         const auto context = m_registry->createOperation(descriptor, sessionGeneration, 0);
         outOperationId = context.operationId;
+        return m_translator->translate(request, context);
+    }
+
+    [[nodiscard]] QFuture<Result<TranslationResponse>> execute(const TranslationRequest& request,
+                                                               const OperationContext& context) {
+        if (m_translator == nullptr) {
+            return makeFailedFuture<TranslationResponse>(detail::unavailableDependency());
+        }
+        if (request.sourceLanguage.empty() || request.targetLanguage.empty() || request.regions.isEmpty()) {
+            return makeFailedFuture<TranslationResponse>(
+                detail::invalidProcessingInput("input.invalid_translation_request", "Translation request is invalid"));
+        }
         return m_translator->translate(request, context);
     }
 
@@ -141,6 +165,22 @@ public:
         return m_inpainter->clear(request, context);
     }
 
+    [[nodiscard]] QFuture<Result<ClearResponse>> execute(const ClearRequest& request, const OperationContext& context) {
+        if (m_inpainter == nullptr) {
+            return makeFailedFuture<ClearResponse>(detail::unavailableDependency());
+        }
+        if (!request.settings.enabled) {
+            return makeFailedFuture<ClearResponse>(
+                detail::invalidProcessingInput("clear.disabled", "Region clearing is disabled"));
+        }
+        if (!request.projectId.isValid() || !request.pageId.isValid() || !request.regionId.isValid() ||
+            request.pageImage.isNull() || !request.region.isValid() || !request.settings.isValid()) {
+            return makeFailedFuture<ClearResponse>(
+                detail::invalidProcessingInput("input.invalid_clear_request", "Clear request is invalid"));
+        }
+        return m_inpainter->clear(request, context);
+    }
+
     void cancel(OperationId id) {
         if (m_registry != nullptr) {
             m_registry->cancelOperation(id);
@@ -175,6 +215,19 @@ public:
 
         const auto context = m_registry->createOperation(descriptor, sessionGeneration, 0);
         outOperationId = context.operationId;
+        return m_layouter->layout(request, context);
+    }
+
+    [[nodiscard]] QFuture<Result<LayoutResponse>> execute(const LayoutRequest& request,
+                                                          const OperationContext& context) {
+        if (m_layouter == nullptr) {
+            return makeFailedFuture<LayoutResponse>(detail::unavailableDependency());
+        }
+        if (!request.pageId.isValid() || !request.regionId.isValid() || request.text.isEmpty() ||
+            !request.bounds.isValid() || !request.constraints.isValid() || request.logicalDpi <= 0.0) {
+            return makeFailedFuture<LayoutResponse>(
+                detail::invalidProcessingInput("input.invalid_layout_request", "Layout request is invalid"));
+        }
         return m_layouter->layout(request, context);
     }
 

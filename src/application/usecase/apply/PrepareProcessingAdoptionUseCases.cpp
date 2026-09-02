@@ -225,30 +225,41 @@ PrepareProcessingAdoptionUseCase::execute(const PrepareProcessingAdoptionRequest
     }
     if (request.stage == OperationStage::Clear || pipeline) {
         if (!request.clear.isEmpty()) {
-            const auto& clearData = request.clear.first();
-            quint64 expectedRev = request.expectedRevisions.value(
-                clearData.regionId,
-                page->findRegion(clearData.regionId) ? page->findRegion(clearData.regionId)->contentRevision() : 0);
-            auto r = checkRegion(clearData.regionId, expectedRev);
-            if (!r) {
-                ProcessingIssue issue;
-                issue.regionId = clearData.regionId;
-                issue.stage = QStringLiteral("clear");
-                issue.error = r.error();
-                prepared.skipped.append(issue);
+            QVector<ClearResponse> validClearResponses;
+            for (const auto& clearData : request.clear) {
+                quint64 expectedRev = request.expectedRevisions.value(
+                    clearData.regionId,
+                    page->findRegion(clearData.regionId) ? page->findRegion(clearData.regionId)->contentRevision() : 0);
+                auto r = checkRegion(clearData.regionId, expectedRev);
+                if (!r) {
+                    ProcessingIssue issue;
+                    issue.regionId = clearData.regionId;
+                    issue.stage = QStringLiteral("clear");
+                    issue.error = r.error();
+                    prepared.skipped.append(issue);
+                    continue;
+                }
+                validClearResponses.append(clearData);
+            }
+
+            if (validClearResponses.isEmpty()) {
                 return makeReadyFuture<PreparedProcessingAdoption>(prepared);
             }
 
             PrepareClearResultRequest req;
             req.projectId = request.projectId;
             req.pageId = request.pageId;
-            req.expectedRegionId = clearData.regionId;
+            req.expectedRegionId = validClearResponses.first().regionId;
             req.pageSize = request.pageSize;
             req.projectRoot = request.projectRoot;
-            req.result = clearData;
+            req.result = validClearResponses.first();
+            req.results = validClearResponses;
             req.sessionGeneration = request.sessionGeneration;
             req.currentSessionGeneration = request.currentSessionGeneration;
-            req.expectedRevision = expectedRev;
+            req.expectedRevision = request.expectedRevisions.value(
+                req.expectedRegionId,
+                page->findRegion(req.expectedRegionId) ? page->findRegion(req.expectedRegionId)->contentRevision() : 0);
+            req.expectedRevisions = request.expectedRevisions;
             req.context = request.context;
 
             if (!m_prepareClearUseCase) {

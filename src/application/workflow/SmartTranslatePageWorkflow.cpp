@@ -40,7 +40,7 @@ public:
         m_clearFailedRegions.clear();
 
         OperationDescriptor rootDesc{
-            OperationStage::Project, projectId, pageId, std::nullopt, QStringLiteral("Workflow"), true};
+            OperationStage::Project, projectId, pageId, std::nullopt, QObject::tr("全页智能翻译"), true};
         auto context = m_registry->createOperation(rootDesc, sessionGeneration, 0);
         outOperationId = context.operationId;
         m_rootContext = std::move(context);
@@ -63,7 +63,16 @@ public:
             return future;
         }
 
-        m_registry->markRunning(outOperationId);
+        const qint64 totalSteps = std::max(1, static_cast<int>(m_targets.size() * 3 + 1));
+        if (m_rootContext.progressReporter) {
+            m_rootContext.progressReporter->setRange(totalSteps);
+            m_rootContext.progressReporter->setValue(0);
+            m_rootContext.progressReporter->setStatusText(QObject::tr("正在识别文字 (0/%1)").arg(m_targets.size()));
+            m_rootContext.progressReporter->markRunning();
+        } else {
+            m_registry->markRunning(outOperationId);
+        }
+
         runOcrStep(0);
         return future;
     }
@@ -72,10 +81,21 @@ private:
     void finish(const Result<PageProcessingProposal>& result) {
         m_promise->addResult(result);
         m_promise->finish();
-        if (result.has_value()) {
-            m_registry->markFinished(m_rootContext.operationId);
+        if (m_rootContext.progressReporter) {
+            if (result.has_value()) {
+                const qint64 totalSteps = std::max(1, static_cast<int>(m_targets.size() * 3 + 1));
+                m_rootContext.progressReporter->setValue(totalSteps);
+                m_rootContext.progressReporter->setStatusText(QObject::tr("全页翻译完成"));
+                m_rootContext.progressReporter->markFinished();
+            } else {
+                m_rootContext.progressReporter->markFinished(result.error());
+            }
         } else {
-            m_registry->markFinished(m_rootContext.operationId, result.error());
+            if (result.has_value()) {
+                m_registry->markFinished(m_rootContext.operationId);
+            } else {
+                m_registry->markFinished(m_rootContext.operationId, result.error());
+            }
         }
     }
 
@@ -105,6 +125,12 @@ private:
             return;
         }
 
+        if (m_rootContext.progressReporter) {
+            m_rootContext.progressReporter->setValue(index);
+            m_rootContext.progressReporter->setStatusText(
+                QObject::tr("正在识别文字 (%1/%2)").arg(index + 1).arg(m_targets.size()));
+        }
+
         OcrRequest req;
         req.pageId = m_pageId;
         req.regionId = target.regionId;
@@ -112,10 +138,7 @@ private:
         req.rect = target.geometry;
         req.language = domain::LanguageCode::createUnchecked(m_sourceLanguage.toStdString());
 
-        OperationDescriptor desc{
-            OperationStage::Ocr, m_projectId, m_pageId, target.regionId, QStringLiteral("OCR"), true};
-        OperationId opId;
-        auto future = m_ocrUseCase->execute(req, desc, m_sessionGeneration, opId);
+        auto future = m_ocrUseCase->execute(req, m_rootContext);
 
         auto self = shared_from_this();
         future.then([this, self, index, target](Result<OcrResponse> res) {
@@ -164,10 +187,12 @@ private:
             return;
         }
 
-        OperationDescriptor desc{
-            OperationStage::Translate, m_projectId, m_pageId, std::nullopt, QStringLiteral("Translate"), true};
-        OperationId opId;
-        auto future = m_translateUseCase->execute(req, desc, m_sessionGeneration, opId);
+        if (m_rootContext.progressReporter) {
+            m_rootContext.progressReporter->setValue(m_targets.size());
+            m_rootContext.progressReporter->setStatusText(QObject::tr("正在调用 AI 翻译..."));
+        }
+
+        auto future = m_translateUseCase->execute(req, m_rootContext);
 
         auto self = shared_from_this();
         future.then([this, self](Result<TranslationResponse> res) {
@@ -207,18 +232,22 @@ private:
             return;
         }
 
+        if (m_rootContext.progressReporter) {
+            m_rootContext.progressReporter->setValue(m_targets.size() + 1 + index);
+            m_rootContext.progressReporter->setStatusText(
+                QObject::tr("正在清除背景 (%1/%2)").arg(index + 1).arg(m_targets.size()));
+        }
+
         ClearRequest req;
         req.projectId = m_projectId;
         req.pageId = m_pageId;
         req.regionId = target.regionId;
         req.pageImage = m_pageImage;
         req.region = target.geometry;
+        req.polygon = target.bubblePolygon;
         req.settings.enabled = true;
 
-        OperationDescriptor desc{
-            OperationStage::Clear, m_projectId, m_pageId, target.regionId, QStringLiteral("Clear"), true};
-        OperationId opId;
-        auto future = m_clearUseCase->execute(req, desc, m_sessionGeneration, opId);
+        auto future = m_clearUseCase->execute(req, m_rootContext);
 
         auto self = shared_from_this();
         future.then([this, self, index, target](Result<ClearResponse> res) {
@@ -261,6 +290,12 @@ private:
             return;
         }
 
+        if (m_rootContext.progressReporter) {
+            m_rootContext.progressReporter->setValue(m_targets.size() * 2 + 1 + index);
+            m_rootContext.progressReporter->setStatusText(
+                QObject::tr("正在排版文字 (%1/%2)").arg(index + 1).arg(m_targets.size()));
+        }
+
         LayoutRequest req;
         req.pageId = m_pageId;
         req.regionId = target.regionId;
@@ -270,10 +305,7 @@ private:
         req.logicalDpi = 72.0;
         req.contentRevision = target.contentRevision;
 
-        OperationDescriptor desc{
-            OperationStage::Layout, m_projectId, m_pageId, target.regionId, QStringLiteral("Layout"), true};
-        OperationId opId;
-        auto future = m_layoutUseCase->execute(req, desc, m_sessionGeneration, opId);
+        auto future = m_layoutUseCase->execute(req, m_rootContext);
 
         auto self = shared_from_this();
         future.then([this, self, index, target](Result<LayoutResponse> res) {
