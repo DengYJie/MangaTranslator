@@ -35,9 +35,9 @@ QString stageGlyph(application::OperationStage stage) {
         case application::OperationStage::LoadImage:
             return Typography::Icons::glyph(QStringLiteral("ic_fluent_image_20_regular"));
         case application::OperationStage::Project:
-            return Typography::Icons::glyph(QStringLiteral("ic_fluent_sparkle_20_regular"));
+            return Typography::Icons::glyph(QStringLiteral("ic_fluent_play_20_regular"));
         default:
-            return Typography::Icons::glyph(QStringLiteral("ic_fluent_sparkle_20_regular"));
+            return Typography::Icons::glyph(QStringLiteral("ic_fluent_play_20_regular"));
     }
 }
 

@@ -16,6 +16,8 @@
 #include <QDebug>
 #include <QSet>
 
+#include <optional>
+
 namespace manga::ui::screen::editor {
 
 EditorProcessingController::EditorProcessingController(EditorViewModel* viewModel,
@@ -298,7 +300,7 @@ void EditorProcessingController::smartTranslateRegions(const domain::PageId& pag
 void EditorProcessingController::smartTranslate(const domain::PageId& pageId,
                                                 const QVector<domain::RegionId>& regionIds) {
     if (m_viewModel == nullptr || !m_viewModel->hasSession() || !pageId.isValid() || m_smartWorkflow == nullptr ||
-        m_registry == nullptr) {
+        m_registry == nullptr || pageId != m_viewModel->state().currentPageId) {
         return;
     }
 
@@ -342,7 +344,7 @@ void EditorProcessingController::smartTranslate(const domain::PageId& pageId,
 
     const QSet<domain::RegionId> requested(regionIds.cbegin(), regionIds.cend());
     for (const auto& region : page->regions()) {
-        if (!requested.isEmpty() && !requested.contains(region.id())) {
+        if (!region.isEnabled() || region.isLocked() || (!requested.isEmpty() && !requested.contains(region.id()))) {
             continue;
         }
         application::RegionProcessingTarget target;
@@ -354,6 +356,9 @@ void EditorProcessingController::smartTranslate(const domain::PageId& pageId,
         target.effectiveTranslation = QString::fromStdString(region.translation().effectiveText());
         target.contentRevision = region.contentRevision();
         target.hasManualTranslation = region.translation().hasManualText();
+        target.hasManualSource =
+            region.source().sourceType == domain::TextSourceType::OcrManualModified ||
+            (region.source().sourceType == domain::TextSourceType::PureManual && !region.source().text.empty());
         targets.append(target);
 
         expectedRevisions.insert(region.id(), region.contentRevision());
@@ -361,11 +366,20 @@ void EditorProcessingController::smartTranslate(const domain::PageId& pageId,
     }
 
     if (targets.isEmpty()) {
+        m_pageSafeMessages[pageId] = tr("当前没有可处理的文本区域，请检查区域是否被禁用或锁定");
+        EditorNotice notice;
+        notice.safeMessage = m_pageSafeMessages.value(pageId);
+        m_viewModel->setNotice(notice);
+        updateProcessingStateForCurrentPage();
         return;
     }
 
-    const QString sourceLang = QStringLiteral("ja");
-    const QString targetLang = QStringLiteral("en");
+    const QString sourceLang = project->sourceLanguage().empty()
+                                   ? QStringLiteral("ja")
+                                   : QString::fromStdString(project->sourceLanguage().toString());
+    const QString targetLang = project->targetLanguage().empty()
+                                   ? QStringLiteral("zh-CN")
+                                   : QString::fromStdString(project->targetLanguage().toString());
 
     application::OperationId opId;
     const quint64 sessionGen = m_viewModel->projectSessionGeneration();
@@ -376,8 +390,22 @@ void EditorProcessingController::smartTranslate(const domain::PageId& pageId,
         return;
     }
 
-    auto future =
-        m_smartWorkflow->execute(projectId, pageId, targets, sourceLang, targetLang, pageImage, sessionGen, opId);
+    application::OperationContext context;
+    m_pageProposals.remove(pageId);
+    m_preparedAdoptions.remove(pageId);
+    m_pageConflictRegions.remove(pageId);
+    m_pageFailedRegions.remove(pageId);
+    m_pageSafeMessages.remove(pageId);
+    auto future = m_smartWorkflow->execute(projectId,
+                                           pageId,
+                                           targets,
+                                           sourceLang,
+                                           targetLang,
+                                           pageImage,
+                                           sessionGen,
+                                           opId,
+                                           project->readingDirection(),
+                                           &context);
 
     ActiveTask activeTask;
     activeTask.operationId = opId;
@@ -385,6 +413,7 @@ void EditorProcessingController::smartTranslate(const domain::PageId& pageId,
     activeTask.key = key;
     activeTask.targetRegionIds = targetRegionIds;
     activeTask.expectedRevisions = expectedRevisions;
+    activeTask.context = context;
     m_activeTasks.insert(key, activeTask);
 
     auto* watcher = new QFutureWatcher<application::Result<application::PageProcessingProposal>>(this);
@@ -447,6 +476,33 @@ void EditorProcessingController::handlePrepareAdoptionFinished(
         return;
     }
 
+    const bool smartTranslation = context.has_value() && key.stage == application::OperationStage::Translate;
+    if (smartTranslation) {
+        const auto task = m_activeTasks.constFind(key);
+        if (task == m_activeTasks.cend() || task->operationId != context->operationId) {
+            const auto proposal = m_pageProposals.constFind(key.pageId);
+            if (proposal != m_pageProposals.cend() && proposal->rootOperationId == context->operationId) {
+                m_pageProposals.remove(key.pageId);
+                m_pageConflictRegions.remove(key.pageId);
+                updateProcessingStateForCurrentPage();
+            }
+            return;
+        }
+        m_activeTasks.remove(key);
+    }
+    if (context.has_value() && context->stopToken.stop_requested()) {
+        const auto error = application::makeApplicationError(
+            application::ErrorCategory::Cancelled, QStringLiteral("cancelled.user_requested"), tr("处理已取消"));
+        if (context->progressReporter) {
+            context->progressReporter->markFinished(error);
+        }
+        m_pageProposals.remove(key.pageId);
+        m_preparedAdoptions.remove(key.pageId);
+        updateProcessingStateForCurrentPage();
+        Q_EMIT processingFinished(key.pageId, false);
+        return;
+    }
+
     auto res = watcher->result();
     if (res.has_value()) {
         qInfo().noquote() << "[EditorProcessingController] Prepared adoption success for page:"
@@ -455,14 +511,52 @@ void EditorProcessingController::handlePrepareAdoptionFinished(
         if (key.pageId == m_viewModel->state().currentPageId) {
             updateProcessingStateForCurrentPage();
         }
-        if (context.has_value() && context->progressReporter) {
-            context->progressReporter->markFinished();
+        std::optional<application::ApplicationError> error;
+        const auto proposal = m_pageProposals.value(key.pageId);
+        auto failedRegions = m_pageConflictRegions.value(key.pageId);
+        for (const auto& issue : res->skipped) {
+            if (issue.regionId.has_value() && !failedRegions.contains(*issue.regionId)) {
+                failedRegions.append(*issue.regionId);
+            }
         }
-        Q_EMIT proposalReady(key.pageId);
+        if (smartTranslation && !proposal.issues.isEmpty()) {
+            error = proposal.issues.first().error;
+        } else if (!res->skipped.isEmpty()) {
+            error = res->skipped.first().error;
+        }
+        if (!res->changes.isEmpty() || res->clearAssetChange.has_value()) {
+            Q_EMIT proposalReady(key.pageId);
+            adoptProposal(key.pageId);
+        } else {
+            m_preparedAdoptions.remove(key.pageId);
+            m_pageProposals.remove(key.pageId);
+            m_pageConflictRegions.remove(key.pageId);
+            if (!error.has_value()) {
+                error = application::makeApplicationError(application::ErrorCategory::Input,
+                                                          QStringLiteral("input.no_applicable_results"),
+                                                          tr("没有可应用的处理结果"));
+            }
+        }
 
-        adoptProposal(key.pageId);
-
-        Q_EMIT processingFinished(key.pageId, true);
+        if (m_preparedAdoptions.contains(key.pageId)) {
+            error = application::makeApplicationError(application::ErrorCategory::Project,
+                                                      QStringLiteral("project.adoption_failed"),
+                                                      m_pageSafeMessages.value(key.pageId));
+        }
+        if (error.has_value()) {
+            m_pageSafeMessages[key.pageId] = error->safeMessage;
+            m_pageFailedRegions[key.pageId] = failedRegions;
+        } else {
+            m_pageFailedRegions.remove(key.pageId);
+        }
+        if (context.has_value() && context->progressReporter) {
+            if (smartTranslation) {
+                context->progressReporter->setStatusText(error.has_value() ? error->safeMessage : tr("智能翻译完成"));
+            }
+            context->progressReporter->markFinished(error);
+        }
+        updateProcessingStateForCurrentPage();
+        Q_EMIT processingFinished(key.pageId, !error.has_value());
     } else {
         const auto& err = res.error();
         qWarning().noquote() << "[EditorProcessingController] Prepared adoption failed:" << err.safeMessage;
@@ -472,11 +566,9 @@ void EditorProcessingController::handlePrepareAdoptionFinished(
         if (err.category != application::ErrorCategory::Cancelled) {
             m_pageFailedRegions[key.pageId] = {key.regionId.value_or(domain::RegionId{})};
             m_pageSafeMessages[key.pageId] = err.safeMessage;
-            if (key.pageId == m_viewModel->state().currentPageId) {
-                updateProcessingStateForCurrentPage();
-            }
-            Q_EMIT processingFinished(key.pageId, false);
         }
+        updateProcessingStateForCurrentPage();
+        Q_EMIT processingFinished(key.pageId, false);
     }
 }
 
@@ -497,19 +589,19 @@ void EditorProcessingController::handleSmartTranslateFinished(
         return; // Stale/superseded task
     }
 
-    m_activeTasks.remove(key);
-
+    const auto context = m_activeTasks.value(key).context;
     auto result = watcher->result();
     if (!result.has_value()) {
+        m_activeTasks.remove(key);
         const auto& err = result.error();
         if (err.category != application::ErrorCategory::Cancelled) {
             m_pageFailedRegions[key.pageId] = targetRegions;
             m_pageSafeMessages[key.pageId] = err.safeMessage;
-            if (key.pageId == m_viewModel->state().currentPageId) {
-                updateProcessingStateForCurrentPage();
-            }
-            Q_EMIT processingFinished(key.pageId, false);
+        } else {
+            m_pageSafeMessages[key.pageId] = tr("智能翻译已取消");
         }
+        updateProcessingStateForCurrentPage();
+        Q_EMIT processingFinished(key.pageId, false);
         return;
     }
 
@@ -541,7 +633,7 @@ void EditorProcessingController::handleSmartTranslateFinished(
         }
     }
 
-    if (!conflictRegions.isEmpty()) {
+    if (safeMsg.isEmpty() && !conflictRegions.isEmpty()) {
         safeMsg = tr("有新的 AI 译文可比较");
     }
 
@@ -564,8 +656,9 @@ void EditorProcessingController::handleSmartTranslateFinished(
         prepReq.pageSize = QSize(page->imageSize().width, page->imageSize().height);
     }
     prepReq.replaceManualPolicy = application::ReplaceManualPolicy::Keep;
+    prepReq.context = context;
 
-    prepareAdoptionAsync(key, prepReq, sessionGen);
+    prepareAdoptionAsync(key, prepReq, sessionGen, context);
 }
 
 void EditorProcessingController::recognizeRegion(const domain::PageId& pageId, const domain::RegionId& regionId) {
@@ -1157,66 +1250,78 @@ void EditorProcessingController::inpaintStroke(const domain::PageId& pageId,
     request.expectedClearLayerRef =
         page->clearLayerAsset().has_value() ? QString::fromStdString(*page->clearLayerAsset()) : QString();
     request.context = operation;
-    qInfo().noquote() << "[Inpaint] start stroke page=" << QString::fromStdString(pageId.toString())
-                      << "points=" << points.size() << "diameter=" << diameter << "dirtyBounds=" << raster.dirtyBounds;
-
     const auto opId = operation.operationId;
+    qInfo().noquote() << "[Inpaint] start stroke page=" << QString::fromStdString(pageId.toString())
+                      << "opId=" << QString::fromStdString(opId.toString()) << "points=" << points.size()
+                      << "diameter=" << diameter << "dirtyBounds=" << raster.dirtyBounds;
+
     auto future = workflow->execute(std::move(request));
     ActiveTask active{opId, sessionGen, key, {}, {}};
     m_activeTasks.insert(key, active);
     auto* watcher = new QFutureWatcher<application::Result<application::PreparedPageInpaintChange>>(this);
     QPointer<EditorProcessingController> self(this);
-    connect(watcher, &QFutureWatcherBase::finished, this, [self, watcher, key, opId, sessionGen]() {
-        if (self == nullptr)
+    // Retain the operation until GUI adoption and terminal publication have both completed.
+    connect(watcher, &QFutureWatcherBase::finished, this, [self, watcher, key, operation, sessionGen]() {
+        if (self == nullptr) {
             return;
+        }
+        const auto opId = operation.operationId;
         auto* vm = self->m_viewModel;
-        if (vm != nullptr && vm->hasSession() && sessionGen == vm->projectSessionGeneration() &&
-            self->m_activeTasks.contains(key) && self->m_activeTasks.value(key).operationId == opId) {
+        const bool ownsTask = self->m_activeTasks.contains(key) && self->m_activeTasks.value(key).operationId == opId;
+        const bool currentSession = vm != nullptr && vm->hasSession() && sessionGen == vm->projectSessionGeneration();
+        if (ownsTask) {
             self->m_activeTasks.remove(key);
-            const auto result = watcher->result();
-            bool snapshotStillCurrent = false;
-            if (result.has_value()) {
-                const auto* currentProject = vm->projectAggregate();
-                const auto* currentPage = currentProject != nullptr ? currentProject->findPage(key.pageId) : nullptr;
-                const QSize currentPageSize =
-                    currentPage != nullptr ? QSize(currentPage->imageSize().width, currentPage->imageSize().height)
-                                           : QSize();
-                const QString currentClearLayerRef =
-                    currentPage != nullptr && currentPage->clearLayerAsset().has_value()
-                        ? QString::fromStdString(*currentPage->clearLayerAsset())
-                        : QString();
-                snapshotStillCurrent =
-                    currentProject != nullptr && currentProject->id() == key.projectId && currentPage != nullptr &&
-                    sessionGen == vm->projectSessionGeneration() && key.pageId == vm->state().currentPageId &&
-                    currentPageSize == result->expectedPageSize && currentClearLayerRef == result->beforeRef;
-            }
-            if (result.has_value() && snapshotStillCurrent && vm->applyPageInpaintChange(result.value())) {
-                qInfo().noquote() << "[Inpaint] success page=" << QString::fromStdString(key.pageId.toString())
-                                  << "layerRef="
-                                  << (result->afterRef.isEmpty() ? QStringLiteral("<empty>") : result->afterRef);
-                self->m_registry->markFinished(opId);
-                self->updateProcessingStateForCurrentPage();
-                Q_EMIT self->processingFinished(key.pageId, true);
-            } else if (!result.has_value() && !result.error().isCancelled()) {
-                qWarning().noquote() << "[Inpaint] failed page=" << QString::fromStdString(key.pageId.toString())
-                                     << "code=" << result.error().code << "message=" << result.error().safeMessage;
-                self->m_registry->markFinished(opId, result.error());
-                vm->setNotice(EditorNotice{result.error().safeMessage,
-                                           QString(),
-                                           application::RecoveryAction::None,
-                                           result.error().retryable});
-                self->updateProcessingStateForCurrentPage();
-                Q_EMIT self->processingFinished(key.pageId, false);
-            } else if (result.has_value() && !snapshotStillCurrent) {
-                self->m_registry->markFinished(
-                    opId,
-                    application::makeApplicationError(application::ErrorCategory::Cancelled,
-                                                      QStringLiteral("cancelled.stale_clear_layer"),
-                                                      QStringLiteral("Clear layer changed before commit")));
+        }
+
+        const auto result = watcher->result();
+        std::optional<application::ApplicationError> error;
+        if (operation.stopToken.stop_requested()) {
+            error = application::makeApplicationError(application::ErrorCategory::Cancelled,
+                                                      QStringLiteral("cancelled.user_requested"),
+                                                      tr("背景擦除已取消"));
+        } else if (!ownsTask || !currentSession) {
+            error = application::makeApplicationError(application::ErrorCategory::Cancelled,
+                                                      QStringLiteral("cancelled.stale_generation"),
+                                                      tr("项目或任务已变化，未应用擦除结果"));
+        } else if (!result) {
+            error = result.error();
+        } else {
+            const auto* currentProject = vm->projectAggregate();
+            const auto* currentPage = currentProject != nullptr ? currentProject->findPage(key.pageId) : nullptr;
+            const QSize currentPageSize = currentPage != nullptr
+                                              ? QSize(currentPage->imageSize().width, currentPage->imageSize().height)
+                                              : QSize();
+            const QString currentClearLayerRef = currentPage != nullptr && currentPage->clearLayerAsset().has_value()
+                                                     ? QString::fromStdString(*currentPage->clearLayerAsset())
+                                                     : QString();
+            const bool snapshotStillCurrent = currentProject != nullptr && currentProject->id() == key.projectId &&
+                                              currentPage != nullptr && key.pageId == vm->state().currentPageId &&
+                                              currentPageSize == result->expectedPageSize &&
+                                              currentClearLayerRef == result->beforeRef;
+            if (!snapshotStillCurrent) {
+                error = application::makeApplicationError(application::ErrorCategory::Cancelled,
+                                                          QStringLiteral("cancelled.stale_clear_layer"),
+                                                          tr("页面或清除图层已变化，未应用擦除结果"));
+            } else if (!vm->applyPageInpaintChange(*result)) {
+                error = application::makeApplicationError(application::ErrorCategory::Input,
+                                                          QStringLiteral("input.edit_rejected"),
+                                                          tr("无法应用背景擦除结果"));
             }
         }
+
+        self->m_registry->markFinished(opId, error);
+        qInfo().noquote() << "[Inpaint] finished opId=" << QString::fromStdString(opId.toString())
+                          << "page=" << QString::fromStdString(key.pageId.toString())
+                          << "code=" << (error ? error->code : QStringLiteral("completed"));
         self->m_idleInpaintTimer.start(60000);
         watcher->deleteLater();
+        if (ownsTask && currentSession) {
+            if (error && !error->isCancelled()) {
+                vm->setNotice(EditorNotice{error->safeMessage, QString(), error->recovery, error->retryable});
+            }
+            self->updateProcessingStateForCurrentPage();
+            Q_EMIT self->processingFinished(key.pageId, !error.has_value());
+        }
     });
     watcher->setFuture(future);
     updateProcessingStateForCurrentPage();
@@ -1268,66 +1373,78 @@ void EditorProcessingController::paintStroke(const domain::PageId& pageId,
                                          ? QString::fromStdString(*page->manualOverrideLayerAsset())
                                          : QString();
     request.context = operation;
+    const auto opId = operation.operationId;
     qInfo().noquote() << "[ManualPaint] start stroke page=" << QString::fromStdString(pageId.toString())
+                      << "opId=" << QString::fromStdString(opId.toString())
                       << "mode=" << (request.mode == application::ManualStrokeMode::Erase ? "Erase" : "Paint")
                       << "points=" << points.size() << "diameter=" << diameter << "color=" << color.name();
 
-    const auto opId = operation.operationId;
     auto future = workflow->execute(std::move(request));
     ActiveTask active{opId, sessionGen, key, {}, {}};
     m_activeTasks.insert(key, active);
     auto* watcher = new QFutureWatcher<application::Result<application::PreparedPageManualOverrideChange>>(this);
     QPointer<EditorProcessingController> self(this);
-    connect(watcher, &QFutureWatcherBase::finished, this, [self, watcher, key, opId, sessionGen]() {
+    // Retain the operation until GUI adoption and terminal publication have both completed.
+    connect(watcher, &QFutureWatcherBase::finished, this, [self, watcher, key, operation, sessionGen]() {
         if (self == nullptr) {
             return;
         }
+        const auto opId = operation.operationId;
         auto* vm = self->m_viewModel;
-        if (vm != nullptr && vm->hasSession() && sessionGen == vm->projectSessionGeneration() &&
-            self->m_activeTasks.contains(key) && self->m_activeTasks.value(key).operationId == opId) {
+        const bool ownsTask = self->m_activeTasks.contains(key) && self->m_activeTasks.value(key).operationId == opId;
+        const bool currentSession = vm != nullptr && vm->hasSession() && sessionGen == vm->projectSessionGeneration();
+        if (ownsTask) {
             self->m_activeTasks.remove(key);
-            const auto result = watcher->result();
-            bool snapshotStillCurrent = false;
-            if (result.has_value()) {
-                const auto* currentProject = vm->projectAggregate();
-                const auto* currentPage = currentProject != nullptr ? currentProject->findPage(key.pageId) : nullptr;
-                const QSize currentPageSize =
-                    currentPage != nullptr ? QSize(currentPage->imageSize().width, currentPage->imageSize().height)
-                                           : QSize();
-                const QString currentRef = currentPage != nullptr && currentPage->manualOverrideLayerAsset().has_value()
-                                               ? QString::fromStdString(*currentPage->manualOverrideLayerAsset())
-                                               : QString();
-                snapshotStillCurrent = currentProject != nullptr && currentProject->id() == key.projectId &&
-                                       currentPage != nullptr && sessionGen == vm->projectSessionGeneration() &&
-                                       key.pageId == vm->state().currentPageId &&
-                                       currentPageSize == result->expectedPageSize && currentRef == result->beforeRef;
-            }
-            if (result.has_value() && snapshotStillCurrent && vm->applyPageManualOverrideChange(result.value())) {
-                qInfo().noquote() << "[ManualPaint] success page=" << QString::fromStdString(key.pageId.toString())
-                                  << "layerRef="
-                                  << (result->afterRef.isEmpty() ? QStringLiteral("<empty>") : result->afterRef);
-                self->m_registry->markFinished(opId);
-                self->updateProcessingStateForCurrentPage();
-                Q_EMIT self->processingFinished(key.pageId, true);
-            } else if (!result.has_value() && !result.error().isCancelled()) {
-                qWarning().noquote() << "[ManualPaint] failed page=" << QString::fromStdString(key.pageId.toString())
-                                     << "code=" << result.error().code << "message=" << result.error().safeMessage;
-                self->m_registry->markFinished(opId, result.error());
-                vm->setNotice(EditorNotice{result.error().safeMessage,
-                                           QString(),
-                                           application::RecoveryAction::None,
-                                           result.error().retryable});
-                self->updateProcessingStateForCurrentPage();
-                Q_EMIT self->processingFinished(key.pageId, false);
-            } else if (result.has_value() && !snapshotStillCurrent) {
-                self->m_registry->markFinished(
-                    opId,
-                    application::makeApplicationError(application::ErrorCategory::Cancelled,
-                                                      QStringLiteral("cancelled.stale_manual_override_layer"),
-                                                      QStringLiteral("Manual override layer changed before commit")));
+        }
+
+        const auto result = watcher->result();
+        std::optional<application::ApplicationError> error;
+        if (operation.stopToken.stop_requested()) {
+            error = application::makeApplicationError(application::ErrorCategory::Cancelled,
+                                                      QStringLiteral("cancelled.user_requested"),
+                                                      tr("手工涂抹已取消"));
+        } else if (!ownsTask || !currentSession) {
+            error = application::makeApplicationError(application::ErrorCategory::Cancelled,
+                                                      QStringLiteral("cancelled.stale_generation"),
+                                                      tr("项目或任务已变化，未应用涂抹结果"));
+        } else if (!result) {
+            error = result.error();
+        } else {
+            const auto* currentProject = vm->projectAggregate();
+            const auto* currentPage = currentProject != nullptr ? currentProject->findPage(key.pageId) : nullptr;
+            const QSize currentPageSize = currentPage != nullptr
+                                              ? QSize(currentPage->imageSize().width, currentPage->imageSize().height)
+                                              : QSize();
+            const QString currentRef = currentPage != nullptr && currentPage->manualOverrideLayerAsset().has_value()
+                                           ? QString::fromStdString(*currentPage->manualOverrideLayerAsset())
+                                           : QString();
+            const bool snapshotStillCurrent = currentProject != nullptr && currentProject->id() == key.projectId &&
+                                              currentPage != nullptr && key.pageId == vm->state().currentPageId &&
+                                              currentPageSize == result->expectedPageSize &&
+                                              currentRef == result->beforeRef;
+            if (!snapshotStillCurrent) {
+                error = application::makeApplicationError(application::ErrorCategory::Cancelled,
+                                                          QStringLiteral("cancelled.stale_manual_override_layer"),
+                                                          tr("页面或手工图层已变化，未应用涂抹结果"));
+            } else if (!vm->applyPageManualOverrideChange(*result)) {
+                error = application::makeApplicationError(application::ErrorCategory::Input,
+                                                          QStringLiteral("input.edit_rejected"),
+                                                          tr("无法应用手工涂抹结果"));
             }
         }
+
+        self->m_registry->markFinished(opId, error);
+        qInfo().noquote() << "[ManualPaint] finished opId=" << QString::fromStdString(opId.toString())
+                          << "page=" << QString::fromStdString(key.pageId.toString())
+                          << "code=" << (error ? error->code : QStringLiteral("completed"));
         watcher->deleteLater();
+        if (ownsTask && currentSession) {
+            if (error && !error->isCancelled()) {
+                vm->setNotice(EditorNotice{error->safeMessage, QString(), error->recovery, error->retryable});
+            }
+            self->updateProcessingStateForCurrentPage();
+            Q_EMIT self->processingFinished(key.pageId, !error.has_value());
+        }
     });
     watcher->setFuture(future);
     updateProcessingStateForCurrentPage();
@@ -1881,16 +1998,38 @@ void EditorProcessingController::batchProcessPages(const QVector<domain::PageId>
         return;
     }
 
+    application::OperationStage stage = application::OperationStage::Project;
+    QString targetText;
+    if (stages == application::BatchStageFlag::Detect) {
+        stage = application::OperationStage::Detect;
+        targetText = tr("批量文本检测 (共 %1 页)").arg(pageIds.size());
+    } else if (stages == application::BatchStageFlag::Ocr) {
+        stage = application::OperationStage::Ocr;
+        targetText = tr("批量文字识别 (共 %1 页)").arg(pageIds.size());
+    } else if (stages == application::BatchStageFlag::Translate) {
+        stage = application::OperationStage::Translate;
+        targetText = tr("批量 AI 翻译 (共 %1 页)").arg(pageIds.size());
+    } else if (stages == application::BatchStageFlag::Clear) {
+        stage = application::OperationStage::Clear;
+        targetText = tr("批量背景清除 (共 %1 页)").arg(pageIds.size());
+    } else if (stages == application::BatchStageFlag::Layout) {
+        stage = application::OperationStage::Layout;
+        targetText = tr("批量文字排版 (共 %1 页)").arg(pageIds.size());
+    } else {
+        stage = application::OperationStage::Project;
+        targetText = tr("全书批量翻译 (共 %1 页)").arg(pageIds.size());
+    }
+
     const auto projectId = project->id();
-    const WatcherKey key{projectId, domain::PageId{}, std::nullopt, application::OperationStage::Project};
+    const WatcherKey key{projectId, domain::PageId{}, std::nullopt, stage};
     cancelMatchingTask(key);
 
     application::OperationDescriptor descriptor{
-        .stage = application::OperationStage::Project,
+        .stage = stage,
         .projectId = projectId,
         .pageId = domain::PageId{},
         .regionId = std::nullopt,
-        .displayTarget = tr("全书批量翻译 (共 %1 页)").arg(pageIds.size()),
+        .displayTarget = targetText,
         .cancellable = true,
     };
     const quint64 sessionGen = m_viewModel->projectSessionGeneration();

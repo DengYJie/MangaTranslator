@@ -71,10 +71,24 @@ QString stageGlyph(application::OperationStage stage) {
         case application::OperationStage::LoadImage:
             return Typography::Icons::glyph(QStringLiteral("ic_fluent_image_20_regular"));
         case application::OperationStage::Project:
-            return Typography::Icons::glyph(QStringLiteral("ic_fluent_sparkle_20_regular"));
+            return Typography::Icons::glyph(QStringLiteral("ic_fluent_play_20_regular"));
         default:
-            return Typography::Icons::glyph(QStringLiteral("ic_fluent_sparkle_20_regular"));
+            return Typography::Icons::glyph(QStringLiteral("ic_fluent_play_20_regular"));
     }
+}
+
+QString operationTitle(const application::OperationDescriptor& descriptor) {
+    const QString stage = stageName(descriptor.stage);
+    const QString target = descriptor.displayTarget.trimmed();
+    if (target.isEmpty()) {
+        return descriptor.pageId.isValid() ? QObject::tr("当前页面 · %1").arg(stage) : stage;
+    }
+    if (descriptor.stage == application::OperationStage::Project || target.endsWith(stage) || target.contains(stage) ||
+        target.startsWith(QObject::tr("批量")) || target.startsWith(QObject::tr("全书")) ||
+        target.startsWith(QObject::tr("全页"))) {
+        return target;
+    }
+    return QStringLiteral("%1 · %2").arg(target, stage);
 }
 
 class MicroProgressBar : public QWidget, public fluent::FluentElement {
@@ -184,18 +198,21 @@ public:
     void updateFrom(const application::OperationSnapshot& op) {
         m_iconLabel->setText(stageGlyph(op.descriptor.stage));
 
-        QString target = op.descriptor.displayTarget;
-        if (target.isEmpty()) {
-            target = op.descriptor.pageId.isValid() ? tr("当前页面") : tr("后台任务");
-        }
-        const QString title = QStringLiteral("%1 · %2").arg(target, stageName(op.descriptor.stage));
+        const QString title = operationTitle(op.descriptor);
         if (m_titleLabel->text() != title) {
             m_titleLabel->setText(title);
         }
 
-        const int percent = (op.total > 0 && op.completed >= 0)
+        const bool completed = op.state == application::OperationState::Completed;
+        const bool active = op.state == application::OperationState::Queued ||
+                            op.state == application::OperationState::Running ||
+                            op.state == application::OperationState::Cancelling;
+        const int percent = completed ? 100
+                            : (op.total > 0 && op.completed >= 0)
                                 ? std::clamp(static_cast<int>(op.completed * 100 / op.total), 0, 100)
                                 : 0;
+        m_percentLabel->setVisible(active || completed);
+        m_progress->setVisible(active || completed);
 
         const QString percentText = QStringLiteral("%1%").arg(percent);
         if (m_percentLabel->text() != percentText) {
@@ -203,8 +220,35 @@ public:
         }
 
         QString subText = op.statusText;
-        if (subText.isEmpty()) {
-            subText = (op.state == application::OperationState::Cancelling) ? tr("正在取消...") : tr("处理中...");
+        switch (op.state) {
+            case application::OperationState::Queued:
+                if (subText.isEmpty()) {
+                    subText = tr("等待处理...");
+                }
+                break;
+            case application::OperationState::Running:
+                if (subText.isEmpty()) {
+                    subText = tr("处理中...");
+                }
+                break;
+            case application::OperationState::Cancelling:
+                subText = tr("正在取消...");
+                break;
+            case application::OperationState::Completed:
+                subText = tr("已完成");
+                break;
+            case application::OperationState::Cancelled:
+                subText = tr("已取消");
+                break;
+            case application::OperationState::Skipped:
+                subText = tr("已跳过");
+                break;
+            case application::OperationState::Stale:
+                subText = tr("结果已失效");
+                break;
+            case application::OperationState::Failed:
+                subText = tr("处理失败");
+                break;
         }
         if (m_subLabel->text() != subText) {
             m_subLabel->setText(subText);
@@ -212,17 +256,11 @@ public:
 
         m_progress->setProgress(percent);
 
-        const bool canCancel = (op.state != application::OperationState::Cancelling && op.descriptor.cancellable);
+        const bool canCancel =
+            active && op.state != application::OperationState::Cancelling && op.descriptor.cancellable;
         if (m_cancelBtn->isEnabled() != canCancel) {
             m_cancelBtn->setEnabled(canCancel);
         }
-    }
-
-    void markCompleted() {
-        m_percentLabel->setText(QStringLiteral("100%"));
-        m_subLabel->setText(tr("已完成"));
-        m_progress->setProgress(100);
-        m_cancelBtn->setEnabled(false);
     }
 
     [[nodiscard]] const application::OperationId& operationId() const noexcept {
@@ -315,11 +353,7 @@ public:
     }
 
     void updateFrom(const application::OperationSnapshot& op) {
-        QString target = op.descriptor.displayTarget;
-        if (target.isEmpty()) {
-            target = tr("当前任务");
-        }
-        const QString title = QStringLiteral("%1 · %2 失败").arg(target, stageName(op.descriptor.stage));
+        const QString title = tr("%1 失败").arg(operationTitle(op.descriptor));
         if (m_titleLabel->text() != title) {
             m_titleLabel->setText(title);
         }
@@ -560,7 +594,13 @@ void ActivityCenter::syncOperations(const QVector<application::OperationSnapshot
     if (totalVisible == 0) {
         for (auto* w : m_jobRows) {
             auto* row = static_cast<ActivityJobRow*>(w);
-            row->markCompleted();
+            const auto snapshot = std::find_if(
+                operations.cbegin(), operations.cend(), [&](const auto& op) { return op.id == row->operationId(); });
+            if (snapshot != operations.cend()) {
+                row->updateFrom(*snapshot);
+            } else {
+                row->hide();
+            }
         }
 
         if (isVisible() && !m_isHiding) {

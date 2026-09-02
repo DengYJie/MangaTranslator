@@ -178,6 +178,7 @@ private:
         WatcherKey key;
         QVector<domain::RegionId> targetRegionIds;
         QHash<domain::RegionId, quint64> expectedRevisions;
+        application::OperationContext context;
     };
 
     void cancelMatchingTask(const WatcherKey& key);
