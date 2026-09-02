@@ -1,15 +1,42 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024" role="img" aria-labelledby="title desc">
-  <title id="title">MangaTranslator application icon</title>
-  <desc id="desc">A simple monochrome open manga page with opposing translation arrows.</desc>
+  <title id="title">MangaTranslator Application Icon</title>
+  <desc id="desc">Refined minimalist line art featuring balanced overlapping manga speech bubbles for source and translated text with AI sparkle.</desc>
 
-  <g fill="none" stroke="#315B8B" stroke-linecap="round" stroke-linejoin="round">
-    <path d="M220 224C220 186 250 160 288 160H512V816L282 766C244 758 220 728 220 690V224Z" stroke-width="24"/>
-    <path d="M804 224C804 186 774 160 736 160H512V816L742 766C780 758 804 728 804 690V224Z" stroke-width="24"/>
+  <defs>
+    <!-- Mask to create a clean, uniform negative-space halo where the front bubble overlaps the rear bubble -->
+    <mask id="frontBubbleMask">
+      <rect x="0" y="0" width="1024" height="1024" fill="#FFFFFF" />
+      <!-- Black silhouette of front bubble expanded with a 32px gap -->
+      <path d="M 580 170 L 720 170 C 830 170, 920 260, 920 370 L 920 510 C 920 620, 830 710, 720 710 L 690 710 L 760 830 L 630 710 L 580 710 C 470 710, 380 620, 380 510 L 380 370 C 380 260, 470 170, 580 170 Z"
+            fill="#000000" stroke="#000000" stroke-width="44" stroke-linejoin="round" />
+    </mask>
+  </defs>
 
-    <path d="M306 438H676" stroke-width="52"/>
-    <path d="M626 378L706 438L626 498" stroke-width="52"/>
-    <path d="M718 582H348" stroke-width="52"/>
-    <path d="M398 522L318 582L398 642" stroke-width="52"/>
+  <g fill="none" stroke="#2563EB" stroke-width="48" stroke-linecap="round" stroke-linejoin="round">
+    <!-- Back / Left Speech Bubble (Manga Original Source) masked with clean gap -->
+    <g mask="url(#frontBubbleMask)">
+      <path d="M 380 190 C 200 190, 70 320, 70 475 C 70 575, 126 660, 212 710 L 160 840 L 320 755 C 340 758, 360 760, 380 760 C 560 760, 690 630, 690 475 C 690 320, 560 190, 380 190 Z" />
+      <!-- Balanced '文' (Character / Source Script) centered in visible crescent -->
+      <path d="M 300 290 L 300 340" />
+      <path d="M 200 350 L 400 350" />
+      <path d="M 360 380 L 190 590" />
+      <path d="M 240 430 C 300 490, 360 550, 420 590" />
+    </g>
+
+    <!-- Front / Right Speech Bubble (Translated Target) -->
+    <g>
+      <path d="M 580 210 L 720 210 C 810 210, 880 280, 880 370 L 880 510 C 880 600, 810 670, 720 670 L 680 670 L 750 780 L 630 670 L 580 670 C 490 670, 420 600, 420 510 L 420 370 C 420 280, 490 210, 580 210 Z" />
+      <!-- Perfectly Centered Geometric 'A' -->
+      <path d="M 650 330 L 565 550" />
+      <path d="M 650 330 L 735 550" />
+      <path d="M 596 476 L 704 476" />
+    </g>
+
+    <!-- Refined 4-Point AI Sparkle Star (Top Right) -->
+    <g transform="translate(850, 160)">
+      <path d="M 0 -48 C 3 -15, 15 -3, 48 0 C 15 3, 3 15, 0 48 C -3 15, -15 3, -48 0 C -15 -3, -3 -15, 0 -48 Z"
+            fill="#2563EB" stroke="#2563EB" stroke-width="12" />
+    </g>
   </g>
 </svg>

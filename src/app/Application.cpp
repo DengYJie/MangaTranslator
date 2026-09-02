@@ -85,11 +85,14 @@ Application::Application(int& argc, char** argv, std::unique_ptr<ApplicationCont
     // Register and discover bundled fonts (NotoSansCJK-VF, etc.)
     rendering::FontRegistry::bundledFontFamilies();
 
+    const QIcon appIcon(QStringLiteral(":/icons/manga-translator-app.svg"));
     if (m_app) {
         m_app->setFont(Typography::fontStyle(Typography::FontRole::Body).toQFont());
+        m_app->setWindowIcon(appIcon);
         m_smokeTest = m_app->arguments().contains(QStringLiteral("--smoke-test"));
     } else if (qApp) {
         qApp->setFont(Typography::fontStyle(Typography::FontRole::Body).toQFont());
+        qApp->setWindowIcon(appIcon);
         m_smokeTest = qApp->arguments().contains(QStringLiteral("--smoke-test"));
     }
 

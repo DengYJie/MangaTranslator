@@ -29,6 +29,10 @@ MainWindow::MainWindow(application::IAppSettingsStore* settingsStore, QWidget* p
     setMinimumSize(640, 480);
     resize(kDefaultWidth, kDefaultHeight);
     setWindowTitle(QStringLiteral("MangaTranslator"));
+
+    const QIcon appIcon(QStringLiteral(":/icons/manga-translator-app.svg"));
+    setWindowIcon(appIcon);
+
     if (QGuiApplication::platformName() == QLatin1String("offscreen")) {
         // The offscreen platform has no compositor; translucent backdrops are meaningless there.
         setBackdropEffect(fluent::windowing::BackdropEffect::Solid);
@@ -42,6 +46,7 @@ MainWindow::MainWindow(application::IAppSettingsStore* settingsStore, QWidget* p
     m_projectTitleLabel->hide();
 
     if (titleBar()) {
+        titleBar()->setIcon(appIcon);
         titleBar()->setContentWidget(m_projectTitleLabel, TitleBar::ContentAlignment::Center);
     }
 

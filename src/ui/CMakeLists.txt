@@ -136,6 +136,13 @@ target_include_directories(manga_ui
 
 add_subdirectory(manga)
 
+qt_add_resources(manga_ui "manga_ui_resources"
+    PREFIX "/"
+    BASE "${PROJECT_SOURCE_DIR}/res"
+    FILES
+        "${PROJECT_SOURCE_DIR}/res/icons/manga-translator-app.svg"
+)
+
 target_link_libraries(manga_ui
     PUBLIC
         manga_application
@@ -144,6 +151,7 @@ target_link_libraries(manga_ui
         Qt6::Core
         Qt6::Gui
         Qt6::Widgets
+        Qt6::Svg
         FluentQt::FluentQt
         QWindowKit::Widgets
 )
