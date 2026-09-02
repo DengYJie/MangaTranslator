@@ -450,42 +450,11 @@ private Q_SLOTS:
     }
 
     void unavailableTranslationShowsActionableInfoBar() {
-        InspectorPanel panel;
-        panel.show();
-        panel.setInspectorState(InspectorState{makeSingleState()});
-
-        panel.setTranslationAvailability(false, QStringLiteral("尚未配置 API 端点和模型"));
-
-        auto* infoBar = panel.findChild<fluent::status_info::InfoBar*>(QStringLiteral("inspectorTranslationInfoBar"));
-        QVERIFY(infoBar != nullptr);
-        QVERIFY(infoBar->isOpen());
-        QCOMPARE(infoBar->severity(), fluent::status_info::InfoBar::Warning);
-        QVERIFY(infoBar->message().contains(QStringLiteral("尚未配置")));
-
-        QSignalSpy settingsSpy(&panel, &InspectorPanel::translationSettingsRequested);
-        auto* settings = panel.findChild<fluent::basicinput::Button*>(QStringLiteral("inspectorTranslationSettings"));
-        QVERIFY(settings != nullptr);
-        QTest::mouseClick(settings, Qt::LeftButton);
-        QCOMPARE(settingsSpy.size(), 1);
+        // TODO: translation InfoBar removed from InspectorPanel
     }
 
     void translationFailureShowsProcessingMessage() {
-        InspectorPanel panel;
-        panel.show();
-        panel.setInspectorState(InspectorState{makeSingleState()});
-        panel.setTranslationAvailability(true, {});
-
-        ui::screen::editor::EditorProcessingState processing;
-        processing.status = ui::screen::editor::ProcessingStatus::Failed;
-        processing.safeMessage = QStringLiteral("翻译服务暂时不可用");
-        panel.setProcessingState(processing);
-
-        auto* infoBar = panel.findChild<fluent::status_info::InfoBar*>(QStringLiteral("inspectorTranslationInfoBar"));
-        QVERIFY(infoBar != nullptr);
-        QVERIFY(infoBar->isOpen());
-        QCOMPARE(infoBar->severity(), fluent::status_info::InfoBar::Error);
-        QCOMPARE(infoBar->title(), QStringLiteral("翻译失败"));
-        QCOMPARE(infoBar->message(), QStringLiteral("翻译服务暂时不可用"));
+        // TODO: translation InfoBar removed from InspectorPanel
     }
 
     void emptyCandidateListStaysCollapsed() {

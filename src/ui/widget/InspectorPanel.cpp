@@ -144,48 +144,10 @@ void InspectorPanel::setOcrAvailability(bool available, const QString& unavailab
 void InspectorPanel::setTranslationAvailability(bool available, const QString& unavailableReason) {
     m_translationAvailable = available;
     m_translationUnavailableReason = available ? QString() : unavailableReason;
-    updateTranslationInfoBar();
 }
 
 void InspectorPanel::setProcessingState(const screen::editor::EditorProcessingState& processingState) {
     m_processingState = processingState;
-    updateTranslationInfoBar();
-}
-
-void InspectorPanel::updateTranslationInfoBar() {
-    if (m_translationInfoBar == nullptr) {
-        return;
-    }
-
-    if (!m_translationAvailable) {
-        m_translationInfoBar->setSeverity(fluent::status_info::InfoBar::Warning);
-        m_translationInfoBar->setTitle(tr("AI 翻译未配置"));
-        m_translationInfoBar->setMessage(m_translationUnavailableReason.isEmpty()
-                                             ? tr("请在设置中配置 API 端点、模型和密钥。")
-                                             : m_translationUnavailableReason);
-        m_translationInfoBar->setActionWidget(m_translationSettingsButton);
-        m_translationSettingsButton->show();
-        m_translationInfoBar->setIsOpen(true);
-        return;
-    }
-
-    if (!m_processingState.safeMessage.isEmpty() &&
-        (m_processingState.status == screen::editor::ProcessingStatus::Failed ||
-         m_processingState.status == screen::editor::ProcessingStatus::NeedsReview)) {
-        const bool failed = m_processingState.status == screen::editor::ProcessingStatus::Failed;
-        m_translationInfoBar->setSeverity(failed ? fluent::status_info::InfoBar::Error
-                                                 : fluent::status_info::InfoBar::Warning);
-        m_translationInfoBar->setTitle(failed ? tr("翻译失败") : tr("翻译需要处理"));
-        m_translationInfoBar->setMessage(m_processingState.safeMessage);
-        m_translationInfoBar->setActionWidget(nullptr);
-        m_translationSettingsButton->hide();
-        m_translationInfoBar->setIsOpen(true);
-        return;
-    }
-
-    m_translationInfoBar->setActionWidget(nullptr);
-    m_translationSettingsButton->hide();
-    m_translationInfoBar->setIsOpen(false);
 }
 
 void InspectorPanel::resizeEvent(QResizeEvent* event) {
@@ -287,16 +249,6 @@ QWidget* InspectorPanel::buildContentHost() {
     translationLayout->setContentsMargins(12, 8, 12, 12);
     translationLayout->setSpacing(8);
 
-    m_translationInfoBar = new fluent::status_info::InfoBar(translationContent);
-    m_translationInfoBar->setObjectName(QStringLiteral("inspectorTranslationInfoBar"));
-    m_translationInfoBar->setIsClosable(false);
-    m_translationInfoBar->setIsOpen(false);
-    m_translationSettingsButton = new Button(tr("打开设置"));
-    m_translationSettingsButton->setObjectName(QStringLiteral("inspectorTranslationSettings"));
-    m_translationSettingsButton->setAccessibleName(tr("打开 AI 翻译设置"));
-    connect(m_translationSettingsButton, &Button::clicked, this, &InspectorPanel::translationSettingsRequested);
-    translationLayout->addWidget(m_translationInfoBar);
-
     auto* sourceField = new Field();
     sourceField->setLabelText(tr("原文"));
     m_sourceEdit = new TextEdit();
@@ -357,9 +309,6 @@ QWidget* InspectorPanel::buildContentHost() {
     m_candidatesExpander->setContentWidget(candidatesContent, fluent::WidgetOwnership::Owned);
     translationLayout->addWidget(m_candidatesExpander);
 
-    connect(m_translationInfoBar, &fluent::status_info::InfoBar::isOpenChanged, this, [this]() {
-        refreshExpanderLayout(m_translationExpander);
-    });
     connect(m_candidatesExpander, &Expander::layoutHeightChanged, this, [this]() {
         refreshExpanderLayout(m_translationExpander);
     });
@@ -955,7 +904,7 @@ void InspectorPanel::populateSingle(const screen::editor::SingleRegionInspectorS
     m_currentRegionIds = {state.regionId};
 
     setTextPreservingCursor(m_sourceEdit, state.sourceText);
-    setTextPreservingCursor(m_translationEdit, state.manualTranslation);
+    setTextPreservingCursor(m_translationEdit, state.effectiveTranslation);
 
     m_candidatesList->clear();
     for (const auto& candidate : state.candidates) {

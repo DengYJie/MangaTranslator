@@ -120,7 +120,6 @@ private:
                          screen::editor::InspectorField field);
 
     void setLockedEditing(bool locked);
-    void updateTranslationInfoBar();
     void refreshExpanderLayout(fluent::layout::Expander* expander);
     bool m_updating{false};
     bool m_inImePreedit{false};
@@ -137,8 +136,6 @@ private:
 
     // Translation section.
     fluent::layout::Expander* m_translationExpander{nullptr};
-    fluent::status_info::InfoBar* m_translationInfoBar{nullptr};
-    fluent::basicinput::Button* m_translationSettingsButton{nullptr};
     fluent::textfields::TextEdit* m_sourceEdit{nullptr};
     fluent::textfields::TextEdit* m_translationEdit{nullptr};
     fluent::layout::Expander* m_candidatesExpander{nullptr};
