@@ -130,7 +130,7 @@ struct OpenAiCompatibleTranslator::Job : public std::enable_shared_from_this<Job
             return;
         }
 
-        QNetworkRequest request(job->config.endpoint);
+        QNetworkRequest request(normalizeChatCompletionsEndpoint(job->config.endpoint));
         // The media type, the Authorization field name and the Bearer prefix are spelled by the
         // Chat Completions contract, not chosen here, so they are not free to rename.
         request.setHeader(QNetworkRequest::ContentTypeHeader, QStringLiteral("application/json"));

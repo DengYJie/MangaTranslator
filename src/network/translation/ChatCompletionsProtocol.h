@@ -20,6 +20,9 @@ constexpr qsizetype kMaxFieldBytes = 64 * 1024;
 /// untrusted model output rather than describing the wire format.
 constexpr int kMaxCandidatesPerRegion = 5;
 
+/// Normalizes a provider endpoint URL to include the /v1/chat/completions path if omitted.
+[[nodiscard]] QUrl normalizeChatCompletionsEndpoint(QUrl endpoint);
+
 /// Builds the Chat Completions request body for one translation batch. The surrounding key
 /// spellings are the provider wire vocabulary and are documented where they are written.
 [[nodiscard]] QByteArray buildChatCompletionsRequest(const application::TranslationRequest& request,
