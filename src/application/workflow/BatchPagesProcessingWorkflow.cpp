@@ -142,6 +142,14 @@ private:
         }
     }
 
+    [[nodiscard]] OperationContext workerContext() const {
+        auto context = m_context;
+        // The composite workflow owns root progress. Child adapters must not overwrite its range
+        // or settle it while they report their own local progress.
+        context.progressReporter.reset();
+        return context;
+    }
+
     void updateProgress(int stepWithinPage, const QString& stageName) {
         const int displayPage = m_currentPageIndex + 1;
         const int total = static_cast<int>(m_pageIds.size());
@@ -207,7 +215,7 @@ private:
 
         SaveProjectRequest saveReq;
         saveReq.project = *m_request.project;
-        auto saveFuture = m_projectRepository->saveProject(saveReq, m_context);
+        auto saveFuture = m_projectRepository->saveProject(saveReq, workerContext());
         auto self = shared_from_this();
         saveFuture.then([this, self, abortError, abortOrFinish](Result<SaveProjectResult> saveRes) {
             postStep([this, self, abortError, abortOrFinish, saveRes]() {
@@ -312,7 +320,7 @@ private:
         loadReq.assetPath = QString::fromStdString(page->originalAssetPath());
         loadReq.expectedSize = page->imageSize();
 
-        auto future = m_pageImageLoader->loadPageImage(loadReq, m_context);
+        auto future = m_pageImageLoader->loadPageImage(loadReq, workerContext());
         auto self = shared_from_this();
         future.then([this, self](Result<QImage> res) {
             postStep([this, self, res]() {
@@ -355,7 +363,7 @@ private:
         req.readingDirection = m_request.project ? m_request.project->readingDirection() : m_request.readingDirection;
         req.minConfidence = m_request.minConfidence;
 
-        auto future = m_detector->detect(std::move(req), m_context);
+        auto future = m_detector->detect(std::move(req), workerContext());
         auto self = shared_from_this();
         future.then([this, self, pageId](Result<TextDetectionResponse> res) {
             postStep([this, self, pageId, res]() {
@@ -479,7 +487,7 @@ private:
                 ? m_request.sourceLanguage.toStdString()
                 : (m_request.project ? m_request.project->sourceLanguage().toString() : "ja"));
 
-        auto future = m_ocrUseCase->execute(ocrReq, m_context);
+        auto future = m_ocrUseCase->execute(ocrReq, workerContext());
         auto self = shared_from_this();
         future.then([this, self, targetIndex](Result<OcrResponse> res) {
             postStep([this, self, targetIndex, res]() {
@@ -546,7 +554,7 @@ private:
             return;
         }
 
-        auto future = m_translateUseCase->execute(transReq, m_context);
+        auto future = m_translateUseCase->execute(transReq, workerContext());
         auto self = shared_from_this();
         future.then([this, self](Result<TranslationResponse> res) {
             postStep([this, self, res]() {
@@ -613,7 +621,7 @@ private:
         clearReq.settings.enabled = true;
         clearReq.contentRevision = target.contentRevision;
 
-        auto future = m_clearUseCase->execute(clearReq, m_context);
+        auto future = m_clearUseCase->execute(clearReq, workerContext());
         auto self = shared_from_this();
         future.then([this, self, targetIndex, target](Result<ClearResponse> res) {
             postStep([this, self, targetIndex, target, res]() {
@@ -678,7 +686,7 @@ private:
         layoutReq.logicalDpi = 72.0;
         layoutReq.contentRevision = target.contentRevision;
 
-        auto future = m_layoutUseCase->execute(layoutReq, m_context);
+        auto future = m_layoutUseCase->execute(layoutReq, workerContext());
         auto self = shared_from_this();
         future.then([this, self, targetIndex](Result<LayoutResponse> res) {
             postStep([this, self, targetIndex, res]() {

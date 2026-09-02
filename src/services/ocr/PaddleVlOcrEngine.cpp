@@ -191,7 +191,10 @@ PaddleVlOcrEngine::recognize(application::OcrRequest request, application::Opera
         context,
         [this, req = std::move(request)](const application::OperationContext& ctx,
                                          application::TaskProgress& progress) {
-            return runInference(req, ctx, progress);
+            auto result = runInference(req, ctx, progress);
+            qInfo().noquote() << "[PaddleVlOcrEngine] inference callable returned region="
+                              << QString::fromStdString(req.regionId.toString()) << "success=" << result.has_value();
+            return result;
         });
 
     if (!submitRes.has_value()) {
@@ -223,6 +226,9 @@ PaddleVlOcrEngine::runInference(const application::OcrRequest& request,
         locker.relock();
     }
     ++m_impl->activeInferences;
+    // The guard acquires loadMutex while decrementing activeInferences. Do not hold the
+    // same mutex across model inference, or the guard deadlocks on every successful OCR.
+    locker.unlock();
     struct InferenceGuard {
         PaddleVlOcrEngine::Impl* impl;
         ~InferenceGuard() {
@@ -573,7 +579,11 @@ PaddleVlOcrEngine::runInference(const application::OcrRequest& request,
                       << "snippet:" << (decodedText.length() > 20 ? decodedText.left(20) + "..." : decodedText);
 
     progress.setValue(100);
+    qInfo().noquote() << "[PaddleVlOcrEngine] final progress published region="
+                      << QString::fromStdString(request.regionId.toString());
     progress.setText(QStringLiteral("PaddleOCR-VL complete"));
+    qInfo().noquote() << "[PaddleVlOcrEngine] completion text published region="
+                      << QString::fromStdString(request.regionId.toString());
     return response;
 }
 

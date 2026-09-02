@@ -129,22 +129,18 @@ struct OpenAiCompatibleTranslator::Job : public std::enable_shared_from_this<Job
             job->settle(std::unexpected(key.error()));
             return;
         }
-        if (key->isEmpty()) {
-            job->settle(std::unexpected(
-                application::makeApplicationError(application::ErrorCategory::Network,
-                                                  QStringLiteral("network.credentials_missing"),
-                                                  QStringLiteral("No API key is stored for this provider"),
-                                                  application::RecoveryAction::Reauthenticate)));
-            return;
-        }
 
         QNetworkRequest request(job->config.endpoint);
         // The media type, the Authorization field name and the Bearer prefix are spelled by the
         // Chat Completions contract, not chosen here, so they are not free to rename.
         request.setHeader(QNetworkRequest::ContentTypeHeader, QStringLiteral("application/json"));
-        // The header copy is the only plaintext survivor and lives as long as this job.
-        const QByteArray authorization = QByteArrayLiteral("Bearer ") + key->bytes();
-        request.setRawHeader("Authorization", authorization);
+        // Local providers (Ollama, LM Studio, llama.cpp server) often do not require an API key.
+        // Only add the Authorization header when a key is stored; an empty key is not an error.
+        if (!key->isEmpty()) {
+            // The header copy is the only plaintext survivor and lives as long as this job.
+            const QByteArray authorization = QByteArrayLiteral("Bearer ") + key->bytes();
+            request.setRawHeader("Authorization", authorization);
+        }
         job->httpRequest = request;
         job->body = buildChatCompletionsRequest(job->request, job->config);
         job->timer.start();

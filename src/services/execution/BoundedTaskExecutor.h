@@ -208,9 +208,8 @@ application::Result<QFuture<application::Result<T>>> BoundedTaskExecutor::submit
         }
 
         if (outcome->has_value()) {
-            if (reporter) {
-                reporter->markFinished(std::nullopt);
-            }
+            // NOTE: Do not call reporter->markFinished() here. The caller (e.g. EditorProcessingController or Workflow)
+            // owns the operation lifecycle and is responsible for finishing it when the composite operation completes.
         } else {
             if (reporter) {
                 reporter->markFinished(outcome->error());

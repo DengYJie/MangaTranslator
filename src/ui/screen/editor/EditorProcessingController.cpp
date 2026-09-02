@@ -449,6 +449,8 @@ void EditorProcessingController::handlePrepareAdoptionFinished(
 
     auto res = watcher->result();
     if (res.has_value()) {
+        qInfo().noquote() << "[EditorProcessingController] Prepared adoption success for page:"
+                          << QString::fromStdString(key.pageId.toString());
         m_preparedAdoptions[key.pageId] = res.value();
         if (key.pageId == m_viewModel->state().currentPageId) {
             updateProcessingStateForCurrentPage();
@@ -457,9 +459,13 @@ void EditorProcessingController::handlePrepareAdoptionFinished(
             context->progressReporter->markFinished();
         }
         Q_EMIT proposalReady(key.pageId);
+
+        adoptProposal(key.pageId);
+
         Q_EMIT processingFinished(key.pageId, true);
     } else {
         const auto& err = res.error();
+        qWarning().noquote() << "[EditorProcessingController] Prepared adoption failed:" << err.safeMessage;
         if (context.has_value() && context->progressReporter) {
             context->progressReporter->markFinished(err);
         }
@@ -627,6 +633,9 @@ void EditorProcessingController::recognizeRegion(const domain::PageId& pageId, c
             &QFutureWatcherBase::finished,
             this,
             [this, watcher, key, opId, sessionGen, regionId, rev = region->contentRevision()]() {
+                qInfo().noquote() << "[OCR] watcher finished page=" << QString::fromStdString(key.pageId.toString())
+                                  << "region=" << QString::fromStdString(regionId.toString())
+                                  << "operation=" << QString::fromStdString(opId.toString());
                 if (m_viewModel != nullptr && m_viewModel->hasSession() &&
                     sessionGen == m_viewModel->projectSessionGeneration() && m_activeTasks.contains(key) &&
                     m_activeTasks.value(key).operationId == opId) {
@@ -656,8 +665,10 @@ void EditorProcessingController::recognizeRegion(const domain::PageId& pageId, c
                         prepReq.replaceManualPolicy = application::ReplaceManualPolicy::Keep;
 
                         prepareAdoptionAsync(key, prepReq, sessionGen);
+                        m_registry->markFinished(opId);
                     } else {
                         const auto& err = res.error();
+                        m_registry->markFinished(opId, err);
                         qWarning().noquote() << "[OCR] failed page=" << QString::fromStdString(key.pageId.toString())
                                              << "region=" << QString::fromStdString(regionId.toString())
                                              << "category=" << static_cast<int>(err.category) << "code=" << err.code
@@ -680,6 +691,10 @@ void EditorProcessingController::recognizeRegion(const domain::PageId& pageId, c
                 watcher->deleteLater();
             });
     watcher->setFuture(future);
+    qInfo().noquote() << "[OCR] watcher attached page=" << QString::fromStdString(pageId.toString())
+                      << "region=" << QString::fromStdString(regionId.toString())
+                      << "operation=" << QString::fromStdString(opId.toString())
+                      << "futureFinished=" << future.isFinished();
 
     updateProcessingStateForCurrentPage();
     Q_EMIT processingStarted(pageId, opId);
@@ -814,14 +829,26 @@ void EditorProcessingController::recognizeRegions(const domain::PageId& pageId,
             request.language = project->sourceLanguage();
         }
 
-        auto future = m_ocrUseCase->execute(request, rootContext);
+        auto childContext = rootContext;
+        // Batch progress belongs to the controller. Do not let a child decoder replace the
+        // root range with its local 0..100 range or settle the shared operation.
+        childContext.progressReporter.reset();
+        auto future = m_ocrUseCase->execute(request, childContext);
         auto* watcher = new QFutureWatcher<application::Result<application::OcrResponse>>(this);
         connect(watcher,
                 &QFutureWatcherBase::finished,
                 this,
                 [this, watcher, key, rootOpId, rootContext, sessionGen, rId, batchState, expectedRevisions]() mutable {
+                    qInfo().noquote() << "[EditorProcessingController] batch OCR watcher finished page="
+                                      << QString::fromStdString(key.pageId.toString())
+                                      << "region=" << QString::fromStdString(rId.toString())
+                                      << "rootOperation=" << QString::fromStdString(rootOpId.toString());
                     auto res = watcher->result();
                     batchState->completed++;
+                    qInfo().noquote() << "[EditorProcessingController] OCR completed for region:"
+                                      << QString::fromStdString(rId.toString()) << "progress:" << batchState->completed
+                                      << "/" << batchState->total;
+
                     if (rootContext.progressReporter) {
                         rootContext.progressReporter->setValue(batchState->completed);
                         rootContext.progressReporter->setStatusText(
@@ -829,16 +856,29 @@ void EditorProcessingController::recognizeRegions(const domain::PageId& pageId,
                     }
 
                     if (res.has_value()) {
+                        qInfo().noquote()
+                            << "[EditorProcessingController] OCR success. Text:" << res.value().text.left(30);
                         batchState->responses.append(res.value());
                     } else {
+                        qWarning().noquote() << "[EditorProcessingController] OCR failed:" << res.error().safeMessage;
                         batchState->failedRegions.append(rId);
                         batchState->lastError = res.error();
                     }
 
                     if (batchState->completed >= batchState->total) {
-                        if (m_viewModel != nullptr && m_viewModel->hasSession() &&
-                            sessionGen == m_viewModel->projectSessionGeneration() && m_activeTasks.contains(key) &&
-                            m_activeTasks.value(key).operationId == rootOpId) {
+                        qInfo().noquote()
+                            << "[EditorProcessingController] Batch complete. Validating state for adoption...";
+                        bool hasSession = m_viewModel != nullptr && m_viewModel->hasSession();
+                        bool genMatch = sessionGen == (m_viewModel ? m_viewModel->projectSessionGeneration() : 0);
+                        bool hasTask = m_activeTasks.contains(key);
+                        bool taskMatch = hasTask && m_activeTasks.value(key).operationId == rootOpId;
+
+                        qInfo().noquote()
+                            << "[EditorProcessingController] State validation - hasSession:" << hasSession
+                            << "genMatch:" << genMatch << "hasTask:" << hasTask << "taskMatch:" << taskMatch;
+
+                        if (hasSession && genMatch && taskMatch) {
+                            qInfo().noquote() << "[EditorProcessingController] Proceeding with adoption.";
                             m_activeTasks.remove(key);
 
                             if (!batchState->responses.isEmpty()) {
@@ -884,6 +924,11 @@ void EditorProcessingController::recognizeRegions(const domain::PageId& pageId,
                     watcher->deleteLater();
                 });
         watcher->setFuture(future);
+        qInfo().noquote() << "[EditorProcessingController] batch OCR watcher attached page="
+                          << QString::fromStdString(pageId.toString())
+                          << "region=" << QString::fromStdString(rId.toString())
+                          << "rootOperation=" << QString::fromStdString(rootOpId.toString())
+                          << "futureFinished=" << future.isFinished();
     }
 
     updateProcessingStateForCurrentPage();

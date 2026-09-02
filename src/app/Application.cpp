@@ -248,14 +248,16 @@ int Application::run() {
 
         const bool configured = !state.persisted.endpoint.trimmed().isEmpty() &&
                                 !state.persisted.modelName.trimmed().isEmpty() &&
-                                state.credentialStatus == application::CredentialState::Configured &&
                                 !state.fieldErrors.contains(QStringLiteral("endpoint")) &&
                                 !state.fieldErrors.contains(QStringLiteral("modelName"));
+        const bool credentialsSatisfied =
+            state.credentialStatus == application::CredentialState::Configured ||
+            network::isLoopbackHost(QUrl(state.persisted.endpoint.trimmed(), QUrl::TolerantMode).host());
+        const bool translationAvailable = configured && credentialsSatisfied;
         QString reason;
-        if (!configured) {
+        if (!translationAvailable) {
             reason = QCoreApplication::translate("Application", "请在设置中补全有效的 API 端点、模型名称和访问密钥。");
         }
-        editorViewModel->setTranslationAvailability(configured, reason);
 
         m_context->reconfigureInpaintModel(state.persisted.inpaintModelDirectory);
         if (m_processingController != nullptr) {

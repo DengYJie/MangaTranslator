@@ -129,7 +129,8 @@ ApplicationContext::ApplicationContext()
         providerSnapshot,
         m_credentialStore.get(),
         std::move(transport),
-        network::RetryPolicy(nullptr, nullptr, settings.retryCount));
+        network::RetryPolicy(nullptr, nullptr, settings.retryCount),
+        network::EndpointPolicy::AllowLoopbackHttp);
 
     m_production->ocrUseCase =
         std::make_unique<application::RecognizeRegionUseCase>(m_ocrEngine.get(), m_operationRegistry.get());

@@ -25,6 +25,7 @@ constexpr int kHideGraceMs = 600;
 constexpr int kFastShowDurationMs = 120;
 constexpr int kSlowHideDurationMs = 300;
 constexpr int kThrottleIntervalMs = 30;
+constexpr int kFailureAutoDismissMs = 5000;
 
 QString stageName(application::OperationStage stage) {
     switch (stage) {
@@ -265,7 +266,7 @@ public:
         QFont iconFont(Typography::FontFamily::FluentIcons);
         iconFont.setPixelSize(16);
         iconLabel->setFont(iconFont);
-        iconLabel->setText(Typography::Icons::glyph(QStringLiteral("ic_fluent_error_circle_20_filled")));
+        iconLabel->setText(stageGlyph(op.descriptor.stage));
         iconLabel->setStyleSheet(QStringLiteral("color: %1;").arg(tokens.systemCritical.name(QColor::HexRgb)));
         iconLabel->setFixedSize(20, 20);
         iconLabel->setAlignment(Qt::AlignCenter);
@@ -304,13 +305,19 @@ public:
         connect(dismissBtn, &fluent::basicinput::Button::clicked, this, [this]() { Q_EMIT dismissRequested(m_opId); });
         rootLayout->addWidget(dismissBtn, 0, Qt::AlignVCenter);
 
+        m_autoDismissTimer = new QTimer(this);
+        m_autoDismissTimer->setSingleShot(true);
+        m_autoDismissTimer->setInterval(kFailureAutoDismissMs);
+        connect(m_autoDismissTimer, &QTimer::timeout, this, [this]() { Q_EMIT dismissRequested(m_opId); });
+        m_autoDismissTimer->start();
+
         updateFrom(op);
     }
 
     void updateFrom(const application::OperationSnapshot& op) {
         QString target = op.descriptor.displayTarget;
         if (target.isEmpty()) {
-            target = tr("第 1 页");
+            target = tr("当前任务");
         }
         const QString title = QStringLiteral("%1 · %2 失败").arg(target, stageName(op.descriptor.stage));
         if (m_titleLabel->text() != title) {
@@ -347,6 +354,7 @@ private:
     application::OperationId m_opId;
     fluent::textfields::Label* m_titleLabel{nullptr};
     fluent::textfields::Label* m_msgLabel{nullptr};
+    QTimer* m_autoDismissTimer{nullptr};
 };
 
 } // namespace

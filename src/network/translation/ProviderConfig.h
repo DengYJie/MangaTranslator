@@ -19,7 +19,7 @@ enum class StructuredOutputMode {
 };
 
 /// Whether a plain HTTP endpoint is acceptable. Production configuration is HTTPS only;
-/// tests point at a loopback server and opt in explicitly.
+/// loopback HTTP is also allowed so local providers such as Ollama can be reached without TLS.
 enum class EndpointPolicy {
     HttpsOnly,
     AllowLoopbackHttp,

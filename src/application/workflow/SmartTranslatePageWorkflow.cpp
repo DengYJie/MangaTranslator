@@ -81,6 +81,13 @@ public:
     }
 
 private:
+    [[nodiscard]] OperationContext workerContext() const {
+        auto context = m_rootContext;
+        // The workflow owns the root progress range. Child stages publish no local range.
+        context.progressReporter.reset();
+        return context;
+    }
+
     void finish(const Result<PageProcessingProposal>& result) {
         qInfo() << "[SmartTranslatePageWorkflow] Workflow finished for page=" << m_pageId.toString()
                 << "total elapsed ms=" << m_workflowTimer.elapsed()
@@ -148,7 +155,7 @@ private:
         req.rect = target.geometry;
         req.language = domain::LanguageCode::createUnchecked(m_sourceLanguage.toStdString());
 
-        auto future = m_ocrUseCase->execute(req, m_rootContext);
+        auto future = m_ocrUseCase->execute(req, workerContext());
 
         QElapsedTimer stepTimer;
         stepTimer.start();
@@ -213,7 +220,7 @@ private:
             m_rootContext.progressReporter->setStatusText(QObject::tr("正在调用 AI 翻译..."));
         }
 
-        auto future = m_translateUseCase->execute(req, m_rootContext);
+        auto future = m_translateUseCase->execute(req, workerContext());
 
         qInfo() << "[SmartTranslatePageWorkflow] Translation request sourceLanguage="
                 << QString::fromStdString(req.sourceLanguage.toString())
@@ -286,7 +293,7 @@ private:
         req.polygon = target.bubblePolygon;
         req.settings.enabled = true;
 
-        auto future = m_clearUseCase->execute(req, m_rootContext);
+        auto future = m_clearUseCase->execute(req, workerContext());
 
         QElapsedTimer stepTimer;
         stepTimer.start();
@@ -352,7 +359,7 @@ private:
         req.logicalDpi = 72.0;
         req.contentRevision = target.contentRevision;
 
-        auto future = m_layoutUseCase->execute(req, m_rootContext);
+        auto future = m_layoutUseCase->execute(req, workerContext());
 
         QElapsedTimer stepTimer;
         stepTimer.start();
