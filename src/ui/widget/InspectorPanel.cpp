@@ -12,6 +12,7 @@
 #include <QAbstractButton>
 #include <QButtonGroup>
 #include <QCoreApplication>
+#include <QDebug>
 #include <QHBoxLayout>
 #include <QListWidget>
 #include <QPainter>
@@ -387,11 +388,21 @@ QWidget* InspectorPanel::buildContentHost() {
 
     typesetLayout->addWidget(row1);
 
-    connect(m_fontFamilyCombo, &ComboBox::activated, this, [this](int) {
-        if (!m_updating) {
-            emitFieldEdit(InspectorField::FontFamily, m_fontFamilyCombo->currentText());
+    connect(m_fontFamilyCombo, &ComboBox::currentIndexChanged, this, [this](int index) {
+        if (!m_updating && index >= 0) {
+            emitFieldEdit(InspectorField::FontFamily, m_fontFamilyCombo->itemText(index));
         }
     });
+    if (auto* le = m_fontFamilyCombo->lineEdit()) {
+        connect(le, &QLineEdit::editingFinished, this, [this]() {
+            if (!m_updating) {
+                const QString text = m_fontFamilyCombo->currentText().trimmed();
+                if (!text.isEmpty()) {
+                    emitFieldEdit(InspectorField::FontFamily, text);
+                }
+            }
+        });
+    }
     connect(m_textColorHexEdit, &LineEdit::editingFinished, this, [this]() {
         if (!m_updating) {
             handleHexCommit(m_textColorHexEdit, m_textColorField, m_textColorSwatch, InspectorField::TextColorHex);
@@ -444,13 +455,13 @@ QWidget* InspectorPanel::buildContentHost() {
             handleNumericCommit(m_fontSizeField, InspectorField::FontSizePt, value);
         }
     });
-    connect(m_fontWeightCombo, &ComboBox::activated, this, [this](int index) {
-        if (!m_updating) {
+    connect(m_fontWeightCombo, &ComboBox::currentIndexChanged, this, [this](int index) {
+        if (!m_updating && index >= 0) {
             emitFieldEdit(InspectorField::FontWeight, (index + 1) * 100);
         }
     });
-    connect(m_vAlignCombo, &ComboBox::activated, this, [this](int index) {
-        if (!m_updating) {
+    connect(m_vAlignCombo, &ComboBox::currentIndexChanged, this, [this](int index) {
+        if (!m_updating && index >= 0) {
             emitFieldEdit(InspectorField::VerticalAlignment, index);
         }
     });
@@ -521,8 +532,8 @@ QWidget* InspectorPanel::buildContentHost() {
             emitFieldEdit(InspectorField::HorizontalAlignment, id);
         }
     });
-    connect(m_orientationCombo, &ComboBox::activated, this, [this](int index) {
-        if (!m_updating) {
+    connect(m_orientationCombo, &ComboBox::currentIndexChanged, this, [this](int index) {
+        if (!m_updating && index >= 0) {
             emitFieldEdit(InspectorField::Orientation, index);
         }
     });
@@ -995,8 +1006,13 @@ void InspectorPanel::setLockedEditing(bool locked) {
 
 void InspectorPanel::emitFieldEdit(screen::editor::InspectorField field, const QVariant& value) {
     if (m_currentRegionIds.isEmpty()) {
+        qWarning().noquote() << "[InspectorPanel] emitFieldEdit dropped: m_currentRegionIds is empty! field="
+                             << static_cast<int>(field) << "value=" << value;
         return;
     }
+    qInfo().noquote() << "[InspectorPanel] emitFieldEdit: field=" << static_cast<int>(field) << "value=" << value
+                      << "regions=" << m_currentRegionIds.size()
+                      << "firstRegion=" << QString::fromStdString(m_currentRegionIds.first().toString());
     Q_EMIT fieldEditCommitted(m_currentPageId, m_currentRegionIds, field, value);
 }
 
