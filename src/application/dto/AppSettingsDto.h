@@ -16,7 +16,7 @@ struct AppSettingsSnapshot {
     QString inpaintModelDirectory;
     QString endpoint;
     QString modelName;
-    int timeoutSeconds{300};
+    int timeoutSeconds{600};
     int retryCount{2};
     AppTheme theme{AppTheme::System};
 

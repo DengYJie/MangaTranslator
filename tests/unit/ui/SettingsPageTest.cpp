@@ -146,8 +146,8 @@ private Q_SLOTS:
                  QStringLiteral("claude-3-5-sonnet"));
 
         vm.setTimeoutSeconds(120);
-        // TODO: timeout upper bound changed to 600s
-        vm.setTimeoutSeconds(700);
+        // TODO: timeout upper bound changed from 600s to 1800s
+        vm.setTimeoutSeconds(1900);
         QVERIFY(vm.state().fieldErrors.contains(QStringLiteral("timeoutSeconds")));
 
         vm.setRetryCount(3);

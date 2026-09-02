@@ -21,7 +21,7 @@ constexpr auto kKeyRetryCount = "translation/retryCount";
 constexpr auto kKeyTheme = "appearance/theme";
 
 constexpr int kMinTimeoutSeconds = 1;
-constexpr int kMaxTimeoutSeconds = 600;
+constexpr int kMaxTimeoutSeconds = 1800;
 constexpr int kMinRetryCount = 0;
 constexpr int kMaxRetryCount = 10;
 

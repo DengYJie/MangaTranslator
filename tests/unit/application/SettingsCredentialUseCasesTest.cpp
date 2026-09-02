@@ -221,8 +221,8 @@ void SettingsCredentialUseCasesTest::rejectsInvalidTimeoutAndWritesNothing() {
     QCOMPARE(result.error().code, QStringLiteral("input.invalid_timeout"));
     QVERIFY(store.writtenKeys().isEmpty());
 
-    // TODO: timeout upper bound changed to 600s
-    snapshot.timeoutSeconds = 601;
+    // TODO: timeout upper bound changed from 600s to 1800s
+    snapshot.timeoutSeconds = 1801;
     result = saveUseCase.execute(snapshot);
     QVERIFY(!result.has_value());
     QCOMPARE(result.error().code, QStringLiteral("input.invalid_timeout"));

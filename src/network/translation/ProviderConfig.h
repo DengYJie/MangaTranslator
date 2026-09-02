@@ -37,7 +37,7 @@ struct ProviderConfig {
     QString model;
     /// Whole operation budget in milliseconds, retries included. Each attempt is given what is
     /// left of it, and a retry whose wait would overrun the remainder is not taken.
-    int timeoutMs{300000};
+    int timeoutMs{600000};
     ProviderApiFlavor apiFlavor{ProviderApiFlavor::OpenAiCompatible};
     double temperature{0.2};
     /// Overrides the API flavor default to match the configured provider and model capabilities.
@@ -48,7 +48,7 @@ struct ProviderConfig {
 
 /// Admissible range, in milliseconds, for the operation budget held by ProviderConfig.
 constexpr int kMinTimeoutMs = 5000;
-constexpr int kMaxTimeoutMs = 600000;
+constexpr int kMaxTimeoutMs = 1800000;
 
 [[nodiscard]] inline bool isLoopbackHost(const QString& host) {
     const QString lowered = host.toLower();
