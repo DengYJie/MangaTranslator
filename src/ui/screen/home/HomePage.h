@@ -67,7 +67,6 @@ private:
     QString m_currentRetryPath;
     application::RecoveryAction m_currentNoticeAction{application::RecoveryAction::None};
     QStackedLayout* m_stack{nullptr};
-    QWidget* m_emptyState{nullptr};
     fluent::collections::GridView* m_gridView{nullptr};
 };
 

@@ -180,6 +180,7 @@ void ImportPage::setupUi() {
     sourceCard->setObjectName(QStringLiteral("importSourceCard"));
     sourceCard->setAppearance(fluent::layout::Card::Layer);
     m_sourcePane = sourceCard;
+    m_sourcePane->setMinimumHeight(450);
     auto* sourceLayout = new QVBoxLayout(m_sourcePane);
     sourceLayout->setContentsMargins(16, 16, 16, 16);
     sourceLayout->setSpacing(12);

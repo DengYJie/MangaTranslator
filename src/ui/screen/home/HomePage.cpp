@@ -112,11 +112,6 @@ void HomePage::buildUi() {
     auto* stackContainer = new QWidget(this);
     m_stack = new QStackedLayout(stackContainer);
 
-    // Empty state shown instead of the recent projects grid, per docs/ui/pages/home.md.
-    m_emptyState = new QWidget(stackContainer);
-    m_emptyState->setAutoFillBackground(false);
-    m_stack->addWidget(m_emptyState);
-
     // Recent projects card grid, homogeneous single-select cards per docs/ui/pages/home.md.
     m_gridView = new fluent::collections::GridView(stackContainer);
     m_model = new RecentProjectsModel(this);
@@ -147,7 +142,7 @@ void HomePage::buildUi() {
 void HomePage::render(const HomeState& state) {
     m_model->setProjects(state.recentProjects);
     m_model->setCovers(state.projectCovers);
-    m_stack->setCurrentWidget(state.recentProjects.isEmpty() ? m_emptyState : m_gridView);
+    m_stack->setCurrentWidget(m_gridView);
     m_openButton->setEnabled(!state.isOpeningProject);
 
     if (state.notice.has_value()) {
