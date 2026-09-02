@@ -6,6 +6,7 @@ MangaTranslator 是基于 C++23、Qt 6.11 与 ONNX Runtime 的漫画翻译与排
 
 ## 目录索引
 
+- **[用户手册 (User Guide)](user-guide.md)**：**推荐新用户首先阅读**，包含基础工作流、项目创建与批量处理说明。
 - [系统架构 (Architecture)](architecture.md)：系统分层架构、数据流向、线程模型与生命周期管理。
 - [功能清单与规划 (Feature Status)](feature-status.md)：已实现功能表与后续改进规划。
 - [编译与测试 (Build & Test)](build.md)：本地环境依赖、CMake Presets 编译与测试运行命令。
