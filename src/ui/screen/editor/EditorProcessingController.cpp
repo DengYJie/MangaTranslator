@@ -1063,7 +1063,7 @@ void EditorProcessingController::translateRegions(const domain::PageId& pageId,
                     if (curPage != nullptr) {
                         prepReq.pageSize = QSize(curPage->imageSize().width, curPage->imageSize().height);
                     }
-                    prepReq.replaceManualPolicy = application::ReplaceManualPolicy::Keep;
+                    prepReq.replaceManualPolicy = application::ReplaceManualPolicy::Replace;
 
                     prepareAdoptionAsync(key, prepReq, sessionGen);
                 } else {
