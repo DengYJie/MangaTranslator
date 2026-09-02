@@ -5,6 +5,7 @@
 #include "ui/widget/AppStatusTaskStrip.h"
 #include "ui/window/TitleBar.h"
 
+#include <FluentQt/MenusToolbars.h>
 #include <FluentQt/TextFields.h>
 #include <QCloseEvent>
 #include <QGuiApplication>
@@ -44,6 +45,59 @@ MainWindow::MainWindow(application::IAppSettingsStore* settingsStore, QWidget* p
         titleBar()->setContentWidget(m_projectTitleLabel, TitleBar::ContentAlignment::Center);
     }
 
+    m_editorMenuBar = new fluent::menus_toolbars::FluentMenuBar(this);
+    m_editorMenuBar->setObjectName(QStringLiteral("mainWindowEditorMenuBar"));
+    m_editorMenuBar->setBackgroundVisible(false);
+    m_editorMenuBar->setFontStyle(Typography::FontRole::Caption);
+
+    // 1. File Menu ("文件")
+    auto* fileMenu = new fluent::menus_toolbars::FluentMenu(tr("文件"), m_editorMenuBar);
+
+    // 导入页面 (Submenu: 文件, 文件夹)
+    auto* importMenu = new fluent::menus_toolbars::FluentMenu(tr("导入页面"), fileMenu);
+    importMenu->addAction(tr("文件..."));
+    importMenu->addAction(tr("文件夹..."));
+    fileMenu->addMenu(importMenu);
+
+    // 导出
+    fileMenu->addAction(tr("导出..."));
+
+    // 分割线
+    fileMenu->addSeparator();
+
+    // 关闭项目
+    fileMenu->addAction(tr("关闭项目"));
+
+    m_editorMenuBar->addMenu(fileMenu);
+
+    // 2. Process Menu ("处理")
+    auto* processMenu = new fluent::menus_toolbars::FluentMenu(tr("处理"), m_editorMenuBar);
+
+    // 处理项目
+    processMenu->addAction(tr("处理项目"));
+
+    // 分割线
+    processMenu->addSeparator();
+
+    // 运行检测
+    processMenu->addAction(tr("运行检测"));
+
+    // 运行 OCR
+    processMenu->addAction(tr("运行 OCR"));
+
+    // 运行翻译
+    processMenu->addAction(tr("运行翻译"));
+
+    // 运行修补
+    processMenu->addAction(tr("运行修补"));
+
+    m_editorMenuBar->addMenu(processMenu);
+
+    m_editorMenuBar->hide();
+    if (titleBar()) {
+        titleBar()->setMenuBar(m_editorMenuBar);
+    }
+
     m_statusStrip = new widget::AppStatusTaskStrip(this);
     layout()->addWidget(m_statusStrip);
 
@@ -61,6 +115,15 @@ void MainWindow::setNavigationController(navigation::NavigationController* contr
             Q_EMIT navigationInterceptRequested(routeKey);
         } else {
             m_controller->navigate(routeKey);
+        }
+    });
+    connect(m_controller, &navigation::NavigationController::routeChanged, this, [this](const QString& routeKey) {
+        const bool isEditor = (routeKey == QLatin1String("editor"));
+        if (m_editorMenuBar) {
+            m_editorMenuBar->setVisible(isEditor);
+            if (titleBar()) {
+                titleBar()->updateLayout();
+            }
         }
     });
     titleBar()->setBackButtonVisible(false);

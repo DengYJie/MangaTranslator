@@ -369,6 +369,27 @@ QWidget* TitleBar::leftHeaderWidget() const {
     return m_leftHeaderWidget;
 }
 
+void TitleBar::setMenuBar(QWidget* menuBar) {
+    if (m_menuBar == menuBar)
+        return;
+    if (m_menuBar && m_menuBar != menuBar) {
+        Q_EMIT hitTestWidgetChanged(m_menuBar, false);
+        m_menuBar->removeEventFilter(this);
+        m_menuBar->setParent(nullptr);
+    }
+    m_menuBar = menuBar;
+    if (m_menuBar) {
+        m_menuBar->setParent(this);
+        m_menuBar->installEventFilter(this);
+        Q_EMIT hitTestWidgetChanged(m_menuBar, m_menuBar->isVisibleTo(this));
+    }
+    updateLayout();
+}
+
+QWidget* TitleBar::menuBar() const {
+    return m_menuBar;
+}
+
 void TitleBar::setMinDragRegionWidth(int width) {
     int clampedWidth = qMax(0, width);
     if (m_minDragRegionWidth == clampedWidth)
@@ -413,9 +434,13 @@ bool TitleBar::eventFilter(QObject* watched, QEvent* event) {
             btn->setFocusVisual(false);
         }
     } else if (watched == m_minimizeButton || watched == m_maximizeButton || watched == m_closeButton ||
-               watched == m_leftHeaderWidget || watched == m_rightHeaderWidget || watched == m_contentWidget) {
+               watched == m_leftHeaderWidget || watched == m_rightHeaderWidget || watched == m_contentWidget ||
+               watched == m_menuBar) {
         if (event->type() == QEvent::Show || event->type() == QEvent::Hide || event->type() == QEvent::ShowToParent ||
             event->type() == QEvent::HideToParent || event->type() == QEvent::Resize) {
+            if (watched == m_menuBar) {
+                Q_EMIT hitTestWidgetChanged(m_menuBar, m_menuBar->isVisibleTo(this));
+            }
             updateLayout();
         }
     }
@@ -606,6 +631,20 @@ void TitleBar::updateLayout() {
             m_subtitleLabel->setGeometry(currentX, 0, subtitleWidth, h);
             currentX += subtitleWidth + TitleBarSubtitleMarginRight;
         }
+
+        if (m_menuBar && m_menuBar->isVisibleTo(this)) {
+            int mbWidth = m_menuBar->sizeHint().width();
+            int maxAvailableMbWidth = titleMaxRight - currentX;
+            if (mbWidth > maxAvailableMbWidth) {
+                mbWidth = qMax(0, maxAvailableMbWidth);
+            }
+            int mbHeight = qMin(h, m_menuBar->sizeHint().height());
+            if (mbHeight <= 0) {
+                mbHeight = h;
+            }
+            m_menuBar->setGeometry(currentX, (h - mbHeight) / 2, mbWidth, mbHeight);
+            currentX += mbWidth + ElementSpacing;
+        }
     }
 
     if (m_contentWidget && m_contentAlignment == ContentAlignment::Stretch) {
@@ -646,6 +685,8 @@ QList<QWidget*> TitleBar::hitTestVisibleWidgets() const {
         widgets.append(m_iconButton);
     if (m_leftHeaderWidget)
         widgets.append(m_leftHeaderWidget);
+    if (m_menuBar && m_menuBar->isVisibleTo(this))
+        widgets.append(m_menuBar);
     if (m_contentWidget)
         widgets.append(m_contentWidget);
     if (m_rightHeaderWidget)

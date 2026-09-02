@@ -4,6 +4,10 @@
 
 #include <FluentQt/TextFields.h>
 
+namespace fluent::menus_toolbars {
+class FluentMenuBar;
+}
+
 namespace manga::application {
 class IAppSettingsStore;
 }
@@ -62,6 +66,7 @@ private:
     navigation::NavigationController* m_controller{nullptr}; // non-owning
     widget::AppStatusTaskStrip* m_statusStrip{nullptr};
     fluent::textfields::Label* m_projectTitleLabel{nullptr};
+    fluent::menus_toolbars::FluentMenuBar* m_editorMenuBar{nullptr};
     bool m_forceClose{false};
 };
 

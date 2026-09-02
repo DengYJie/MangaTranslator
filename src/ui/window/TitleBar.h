@@ -215,6 +215,18 @@ public:
     QWidget* leftHeaderWidget() const;
 
     /**
+     * @brief Injects custom menu bar placed immediately after the window title.
+     * @param menuBar Menu bar widget pointer.
+     */
+    void setMenuBar(QWidget* menuBar);
+
+    /**
+     * @brief Returns the menu bar widget if set.
+     * @return Menu bar widget pointer.
+     */
+    QWidget* menuBar() const;
+
+    /**
      * @brief Recomputes absolute pixel coordinates for each region and updates the drag safe zone.
      */
     void updateLayout();
@@ -393,6 +405,7 @@ private:
     QWidget* m_contentWidget = nullptr;
     ContentAlignment m_contentAlignment = ContentAlignment::Stretch;
     QWidget* m_rightHeaderWidget = nullptr;
+    QWidget* m_menuBar = nullptr;
 
     // Title and navigation controls.
     fluent::basicinput::Button* m_backButton = nullptr;
