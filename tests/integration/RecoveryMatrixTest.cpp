@@ -235,11 +235,11 @@ void RecoveryMatrixTest::missingImageKeepsProjectAndPageSelection() {
     QTRY_VERIFY_WITH_TIMEOUT(!vm->state().isPageLoading, kAwaitTimeoutMs);
     QVERIFY(!vm->state().isPageLoading);
 
-    // Assert: project and page selection preserved
+    // Project identity and the page 2 selection survive the missing original.
     QCOMPARE(vm->state().projectId, vm->projectAggregate()->id());
     QCOMPARE(vm->state().currentPageId, p2Id);
 
-    // Assert: canvas cleared without stale images and error notice is set
+    // The canvas holds no stale image and reports a retryable error notice.
     QVERIFY(vm->state().notice.has_value());
     QVERIFY(!vm->state().notice->safeMessage.isEmpty());
     QVERIFY(vm->state().notice->retryable);
@@ -431,7 +431,7 @@ void RecoveryMatrixTest::credentialMissingOr401KeepsManualTranslationAndCandidat
     QVERIFY(pres401.has_value());
     QCOMPARE(pres401->action, RecoveryAction::Reauthenticate);
 
-    // Verify manual translation and candidates preserved
+    // The rejected translation leaves the manual text and its candidate list untouched.
     auto* regionAfter = vm->projectAggregate()->findPage(pageId)->findRegion(regionId);
     QCOMPARE(regionAfter->translation().manualText().value_or(""), manualTextBefore);
     QCOMPARE(regionAfter->translation().candidates().size(), candidatesCountBefore);
@@ -533,7 +533,7 @@ void RecoveryMatrixTest::rateLimitTimeoutOfflineKeepAdoptedResults() {
     QVERIFY(presOffline.has_value());
     QCOMPARE(presOffline->action, RecoveryAction::Retry);
 
-    // Verify adopted results and manual edits preserved
+    // Adopted results and manual edits keep their text through the offline failure.
     auto* regionAfter = vm->projectAggregate()->findPage(pageId)->findRegion(regionId);
     QCOMPARE(regionAfter->source().text, sourceTextBefore);
     QCOMPARE(regionAfter->translation().manualText().value_or(""), translationBefore);
@@ -562,13 +562,13 @@ void RecoveryMatrixTest::clearLayoutFailureWritesNoPartialDerivedAsset() {
     const auto isClearedBefore = region->isCleared();
     const auto revisionBefore = region->contentRevision();
 
-    // 1. Illegal Clear Request (e.g. null image)
+    // 1. A Clear request carrying a null page image is rejected.
     ClearRegionUseCase clearUseCase(fixture.stack.inpainter.get(), &fixture.stack.operationRegistry);
     ClearRequest illegalClearReq{
         .projectId = vm->projectAggregate()->id(),
         .pageId = pageId,
         .regionId = regionId,
-        .pageImage = QImage(), // null image!
+        .pageImage = QImage(),
         .region = geom,
         .settings = domain::ClearSettings{.enabled = true},
     };
@@ -585,12 +585,12 @@ void RecoveryMatrixTest::clearLayoutFailureWritesNoPartialDerivedAsset() {
     QVERIFY(!clearRes.has_value());
     QCOMPARE(clearRes.error().category, ErrorCategory::Input);
 
-    // 2. Illegal Layout Request (e.g. empty text)
+    // 2. A Layout request carrying empty text is rejected.
     LayoutRegionUseCase layoutUseCase(fixture.stack.layouter.get(), &fixture.stack.operationRegistry);
     LayoutRequest illegalLayoutReq{
         .pageId = pageId,
         .regionId = regionId,
-        .text = QString(), // empty text!
+        .text = QString(),
         .bounds = geom,
     };
     OperationDescriptor layoutDesc{
@@ -606,7 +606,7 @@ void RecoveryMatrixTest::clearLayoutFailureWritesNoPartialDerivedAsset() {
     QVERIFY(!layoutRes.has_value());
     QCOMPARE(layoutRes.error().category, ErrorCategory::Input);
 
-    // Assert: assets/derived tree hash unchanged and domain references unchanged
+    // Neither the derived asset tree nor the domain references changed.
     const auto derivedTreeAfterFailure = sha256Tree(fixture.projectRoot, QStringLiteral("assets/derived"));
     QCOMPARE(derivedTreeAfterFailure, derivedTreeBefore);
 
@@ -617,7 +617,7 @@ void RecoveryMatrixTest::clearLayoutFailureWritesNoPartialDerivedAsset() {
     QCOMPARE(regionAfterFail->isCleared(), isClearedBefore);
     QCOMPARE(regionAfterFail->contentRevision(), revisionBefore);
 
-    // 3. Retry with valid inputs -> succeeds
+    // 3. Retrying with valid inputs succeeds.
     ClearRequest validClearReq{
         .projectId = vm->projectAggregate()->id(),
         .pageId = pageId,
@@ -724,7 +724,7 @@ void RecoveryMatrixTest::saveFailureKeepsDirtyAndLastValidFile() {
     jsonFileAfterFail.close();
     QCOMPARE(jsonBytesAfterFail, jsonBytesBefore);
 
-    // Restore probe and retry save -> succeeds
+    // Restoring the probe lets the retried save complete.
     fixture.stack.repository->setDiskSpaceProbe({});
     QSignalSpy saveSpy(vm, &EditorViewModel::saveCompleted);
     vm->saveProject();
@@ -937,7 +937,7 @@ void RecoveryMatrixTest::projectSwitchRejectsLateResults() {
     ocrEngine->complete();
     QCoreApplication::processEvents();
 
-    // 4. Verify P1's completion was rejected with stale generation and silently discarded
+    // 4. P1's completion carries a stale generation, so it is discarded without a signal.
     QCOMPARE(propSpy.count(), 0);
     QCOMPARE(finishSpy.count(), 0);
     QVERIFY(!controller->hasProposal(p1PageId));

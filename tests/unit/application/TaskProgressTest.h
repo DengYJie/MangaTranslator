@@ -5,7 +5,7 @@
 class TaskProgressTest : public QObject {
     Q_OBJECT
 
-private slots:
+private Q_SLOTS:
     void testPublishesThroughFacade();
     void testThrottleSuppressesIntermediateValues();
     void testFinalValueBypassesThrottle();

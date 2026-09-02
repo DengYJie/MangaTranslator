@@ -103,10 +103,9 @@ void ThumbnailUseCasesTest::testGenerateAndSaveThumbnail() {
 
     auto res = future.result();
     QVERIFY(res.has_value());
-    // Scaled preserving aspect ratio: 1000x2000 into 256x256 -> 128x256
+    // Keeping the 1000x2000 aspect ratio inside a 256x256 box yields 128x256.
     QCOMPARE(res->size(), QSize(128, 256));
 
-    // Check if store was updated
     QCOMPARE(store.storedImage.size(), QSize(128, 256));
 }
 

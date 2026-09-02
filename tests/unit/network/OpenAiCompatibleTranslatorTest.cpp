@@ -450,7 +450,7 @@ void OpenAiCompatibleTranslatorTest::loopbackInFlightCancelUsesRealQtHttpTranspo
     // Wait until the real network thread sends the request and the loopback server receives it.
     QVERIFY(server.waitForRequest(5000));
 
-    // Request is currently in flight. Cancel it now!
+    // The stop is requested while the request is still in flight.
     source.request_stop();
 
     // The future must finish quickly without hanging.
@@ -482,7 +482,7 @@ void OpenAiCompatibleTranslatorTest::loopbackTranslatorDestructionWhileJobIsInFl
     // Wait until the loopback server receives the request from the background network thread.
     QVERIFY(server.waitForRequest(5000));
 
-    // Now send the response from the server!
+    // The held-back response arrives only after the translator has been destroyed.
     server.sendDeferredResponse();
 
     // The future must finish successfully on the network thread without crashing.
@@ -512,14 +512,14 @@ void OpenAiCompatibleTranslatorTest::cancellationDuringRetryBackoffAbortsImmedia
     elapsed.start();
     auto future = translator.translate(translationRequest(), context);
 
-    // Verify first attempt was sent and backoff timer is armed
+    // 1. One attempt was sent, and the retry waits in backoff.
     QCOMPARE(raw->sendCount, 1);
     QVERIFY(!future.isFinished());
 
-    // Cancel while in backoff
+    // 2. The stop is requested during the backoff wait.
     source.request_stop();
 
-    // Must finish quickly without waiting for the 10-second backoff timer!
+    // 3. A cancelled wait returns long before the 10 second backoff elapses.
     QVERIFY(waitForFinished(future, 1000));
     QVERIFY(elapsed.elapsed() < 3000);
 

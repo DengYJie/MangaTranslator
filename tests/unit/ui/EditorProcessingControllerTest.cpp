@@ -209,7 +209,6 @@ private Q_SLOTS:
             m_tr->nextResponse.items.append(item);
         }
 
-        // Now complete the translation
         m_tr->complete();
         while (m_controller->hasActiveOperation(page1Id)) {
             QCoreApplication::processEvents(QEventLoop::AllEvents, 50);
@@ -309,7 +308,6 @@ private Q_SLOTS:
         QVERIFY(m_viewModel->state().processing.hasProposal);
         const int initialUndoCount = m_viewModel->undoStackCountForTest();
 
-        // Adopt proposal
         m_controller->adoptProposal(pageId);
 
         // Proposal cleared in controller & state
@@ -344,7 +342,6 @@ private Q_SLOTS:
         QVERIFY(m_controller->hasProposal(pageId));
         const int initialUndoCount = m_viewModel->undoStackCountForTest();
 
-        // Reject proposal
         m_controller->rejectProposal(pageId);
 
         QVERIFY(!m_controller->hasProposal(pageId));
@@ -393,7 +390,6 @@ private Q_SLOTS:
         const int initialUndo = m_viewModel->undoStackCountForTest();
         m_controller->adoptProposal(pageId);
         QVERIFY(!m_controller->hasProposal(pageId));
-        // Verify undo command was created
         QCOMPARE(m_viewModel->undoStackCountForTest(), initialUndo + 1);
     }
 

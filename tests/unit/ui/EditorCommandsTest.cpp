@@ -139,7 +139,7 @@ private Q_SLOTS:
         qRegisterMetaType<application::ExportResponse>();
     }
 
-    // --- Region Commands Tests ---
+    // Region commands
 
     void createUndoRedoPreservesSameRegionId() {
         auto project = makeProject();
@@ -539,7 +539,7 @@ private Q_SLOTS:
         QVERIFY(cmd.hasFaulted());
     }
 
-    // --- Processing Adoption Commands Tests ---
+    // Processing adoption commands
 
     void testCommandIsPushedOnce() {
         ComicProject project;
@@ -762,7 +762,7 @@ private Q_SLOTS:
         QCOMPARE(regionPtr->source().text, "New Text");
     }
 
-    // --- Save Tests ---
+    // Save
 
     void saveCompletionDoesNotCleanNewerRevision() {
         manga::test::FakeThumbnailStore thumbnails;
@@ -901,7 +901,7 @@ private Q_SLOTS:
         QCOMPARE(viewModel.undoStackCountForTest(), 2); // Did not merge because save sealed it
     }
 
-    // --- Export Tests ---
+    // Export
 
     void exportWithoutProjectDoesNothing() {
         ExportFixture f;

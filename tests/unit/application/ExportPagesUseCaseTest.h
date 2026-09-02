@@ -3,7 +3,7 @@
 
 class ExportPagesUseCaseTest : public QObject {
     Q_OBJECT
-private slots:
+private Q_SLOTS:
     void testSuccessfulExportForwardsFilteredRequest();
     void testSelectedScopeFiltersSnapshots();
     void testCurrentPageScopeRequiresCurrentPageId();

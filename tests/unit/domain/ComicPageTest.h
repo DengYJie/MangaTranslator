@@ -5,7 +5,7 @@
 class ComicPageTest : public QObject {
     Q_OBJECT
 
-private slots:
+private Q_SLOTS:
     void testPageCreationAndDefaults();
     void testAddAndRemoveRegion();
     void testCreationBoundaryRejection();

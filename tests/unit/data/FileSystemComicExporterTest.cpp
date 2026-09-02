@@ -126,12 +126,11 @@ void FileSystemComicExporterTest::goldenFourLayerSemiTransparentCompositeMatches
     QVERIFY(!exportedImage.isNull());
     QCOMPARE(exportedImage.size(), QSize(2, 2));
 
-    // Golden verification:
-    // (0, 0): Result of Porter-Duff SourceOver with 4 layers in strict sequence:
-    // Base: (0, 0, 255), A=255
-    // Clear: (255, 255, 255), A=128 -> (128, 128, 255, 255)
-    // Translation: (0, 255, 0), A=128 -> (64, 192, 127, 255)
-    // ManualOverride: (255, 0, 0), A=128 -> (160, 96, 63, 255)
+    // Golden value for pixel (0, 0): Porter-Duff SourceOver over four layers in strict sequence.
+    // Base: (0, 0, 255) at alpha 255.
+    // Clear composites (255, 255, 255) at alpha 128 to (128, 128, 255, 255).
+    // Translation composites (0, 255, 0) at alpha 128 to (64, 192, 127, 255).
+    // ManualOverride composites (255, 0, 0) at alpha 128 to (160, 96, 63, 255).
     const QColor c00 = exportedImage.pixelColor(0, 0);
     QCOMPARE(c00.alpha(), 255);
     QVERIFY(std::abs(c00.red() - 160) <= 2);
@@ -186,11 +185,10 @@ void FileSystemComicExporterTest::jpegExportFlattensOverOpaqueWhiteAndExcludesMe
     QVERIFY(col.green() > 100 && col.green() < 150);
     QVERIFY(col.blue() > 100 && col.blue() < 150);
 
-    // Verify sRGB color space is preserved
+    // A JPEG encoder may drop the embedded profile, so an absent or unspecified space also passes.
     QVERIFY(!img.colorSpace().isValid() || img.colorSpace() == QColorSpace(QColorSpace::SRgb) ||
             img.colorSpace().primaries() == QColorSpace::Primaries::SRgb);
 
-    // Verify no text metadata keys were injected
     QVERIFY(img.textKeys().isEmpty());
     QVERIFY(reader.textKeys().isEmpty());
 
@@ -237,7 +235,6 @@ void FileSystemComicExporterTest::neverOverwriteAllocatesIncrementedFilenamesAnd
     QVERIFY(allocatedPath.endsWith(QStringLiteral("page_0001_002.png")));
     QVERIFY(QFileInfo::exists(allocatedPath));
 
-    // Assert that existing pre-created files were never modified and their SHA-256 hashes are identical
     QCOMPARE(calculateFileHash(path0), hash0);
     QCOMPARE(calculateFileHash(path1), hash1);
     assertNoExportResidue(dir, "never overwrite");
@@ -385,7 +382,6 @@ void FileSystemComicExporterTest::noTemporaryOrLockFilesRemainAfterExport() {
     auto res = await(exporter.exportPages(std::move(request), {}));
     QVERIFY(res.has_value() && res->exported.size() == 1);
 
-    // Verify that NO .tmp or .lock files exist in output directory
     const QStringList files = dir.entryList(QDir::Files | QDir::Hidden | QDir::NoDotAndDotDot);
     for (const auto& file : files) {
         QVERIFY(!file.endsWith(QStringLiteral(".tmp")));

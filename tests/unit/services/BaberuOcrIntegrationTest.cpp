@@ -112,8 +112,8 @@ void BaberuOcrIntegrationTest::integrationPreprocessorMatchesPilGoldenSolidRed()
     QVERIFY(result.has_value());
     QCOMPARE(static_cast<int>(result->size()), 1 * 3 * 224 * 224);
 
-    // PIL golden values for solid red 2x2 -> 224x224 bicubic:
-    // All pixels same. Check (0,0).
+    // The solid red fixture resizes to a uniform 224x224 plane, so every pixel carries one value.
+    // Golden channels and the 1e-6 tolerance are recorded in tests/fixtures/ocr/preprocess/README.md.
     constexpr float kTol = 1e-6f;
     const auto& t = *result;
     const int H = 224, W = 224;

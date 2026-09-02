@@ -462,9 +462,8 @@ void BoundedTaskExecutorTest::testPreCancelledTaskCompletesImmediatelyWithoutCon
         pending.push_back(*submitted);
     }
 
-    // Now submit a task with an already-cancelled stop token.
-    // Even though the queue has 32 items (at max capacity), this pre-cancelled task
-    // should NOT be rejected with queue_full and should NOT be enqueued; it completes immediately.
+    // A submission whose stop token is already requested bypasses the queue: the pending queue holds
+    // its 32 tasks, yet this one is accepted, finishes immediately, and reports cancellation.
     std::stop_source alreadyStopped;
     alreadyStopped.request_stop();
 
@@ -545,7 +544,7 @@ void BoundedTaskExecutorTest::testConcurrentCancelDuringSubmissionDoesNotLeakQue
         QCOMPARE(future->result().error().code, QStringLiteral("cancelled.user_requested"));
     }
 
-    // Verify queue capacity is fully available (all 32 slots free)
+    // The pending queue released every slot, so all 32 submissions below are accepted.
     std::stop_source batchStop;
     std::vector<QFuture<application::Result<int>>> batch;
     for (int i = 0; i < 32; ++i) {

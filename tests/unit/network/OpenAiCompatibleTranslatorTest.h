@@ -5,7 +5,7 @@
 class OpenAiCompatibleTranslatorTest : public QObject {
     Q_OBJECT
 
-private slots:
+private Q_SLOTS:
     void translatesSuccessfullyAndKeepsProviderIdentity();
     void sendsBearerAuthorizationButNeverTheKeyInTheBody();
     void missingCredentialIsReportedWithoutSending();

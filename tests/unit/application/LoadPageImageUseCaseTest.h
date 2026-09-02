@@ -3,7 +3,7 @@
 
 class LoadPageImageUseCaseTest : public QObject {
     Q_OBJECT
-private slots:
+private Q_SLOTS:
     void testSuccessfulLoad();
     void testLoadFailure();
     void testLoaderFailurePropagates();

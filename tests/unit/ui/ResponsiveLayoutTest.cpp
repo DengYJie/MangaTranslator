@@ -129,12 +129,12 @@ private Q_SLOTS:
         QVERIFY(page.isPageDrawerVisible());
         QVERIFY(!page.isInspectorDrawerVisible());
 
-        // Open Inspector Drawer -> Page drawer must automatically close (mutual exclusivity)
+        // Opening the Inspector drawer closes the Page drawer, because the two are mutually exclusive.
         page.setInspectorDrawerVisible(true);
         QVERIFY(!page.isPageDrawerVisible());
         QVERIFY(page.isInspectorDrawerVisible());
 
-        // Toggle Inspector Drawer -> closes
+        // Toggling the only open drawer closes it.
         page.toggleInspectorPane();
         QVERIFY(!page.isInspectorDrawerVisible());
         QVERIFY(!page.isPageDrawerVisible());
@@ -181,7 +181,7 @@ private Q_SLOTS:
         const QPointF targetCenter(600.0, 900.0);
         page.canvasForTest()->centerOnPage(targetCenter);
 
-        // Resize to narrow width (800) -> viewport center on page must be preserved without jumping to (0,0)
+        // Resizing to narrow must keep the page center rather than moving the viewport to (0, 0).
         page.resize(800, 700);
         QPointF centerAfter = page.canvasForTest()->viewCenterOnPage();
         QVERIFY(centerAfter.x() > 0.0 && centerAfter.y() > 0.0);

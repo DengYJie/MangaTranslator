@@ -12,7 +12,7 @@ using namespace manga::ui;
 
 class NavigationWindowTest : public QObject {
     Q_OBJECT
-private slots:
+private Q_SLOTS:
     void mainSurfaceIsCreatedAutomatically() {
         window::NavigationWindow window;
         QVERIFY(window.mainNavigationPanel() != nullptr);

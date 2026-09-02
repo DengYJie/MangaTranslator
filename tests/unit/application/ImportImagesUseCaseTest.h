@@ -3,7 +3,7 @@
 
 class ImportImagesUseCaseTest : public QObject {
     Q_OBJECT
-private slots:
+private Q_SLOTS:
     void testSuccessfulImportAndSorting();
     void testDuplicatePathsRejected();
     void testEquivalentPathsRejected();

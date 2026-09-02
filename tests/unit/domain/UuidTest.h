@@ -5,7 +5,7 @@
 class UuidTest : public QObject {
     Q_OBJECT
 
-private slots:
+private Q_SLOTS:
     void testV4Generation();
     void testParseValid();
     void testParseInvalid();

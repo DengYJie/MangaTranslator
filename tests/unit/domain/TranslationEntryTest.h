@@ -5,7 +5,7 @@
 class TranslationEntryTest : public QObject {
     Q_OBJECT
 
-private slots:
+private Q_SLOTS:
     void testDefaultState();
     void testModelTextOnly();
     void testCandidatesWithoutSelection();

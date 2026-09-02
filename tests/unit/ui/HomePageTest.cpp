@@ -21,7 +21,7 @@ private Q_SLOTS:
         qRegisterMetaType<manga::application::OpenedProjectSession>();
     }
 
-    // --- ViewModel Tests ---
+    // ViewModel tests
 
     void constructionLoadsPersistedRecentsIntoState() {
         test::FakeRecentProjectsStore recents;
@@ -127,7 +127,7 @@ private Q_SLOTS:
         QVERIFY(viewModel.state().recentProjects.isEmpty());
     }
 
-    // --- Page / UI Tests ---
+    // Page and widget tests
 
     void emptyStateVisibleWithoutRecents() {
         test::FakeRecentProjectsStore recents;

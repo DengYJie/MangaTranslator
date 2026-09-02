@@ -174,7 +174,7 @@ void PrepareProcessingAdoptionTest::testManualSourceOverride() {
     QCOMPARE(result.skipped.size(), 1);
     QCOMPARE(result.skipped[0].error.code, QString("input.manual_override"));
 
-    // Now test with ReplaceManualPolicy::Replace
+    // Second phase: the same request with ReplaceManualPolicy::Replace.
     req.replaceManualPolicy = ReplaceManualPolicy::Replace;
     auto futureReplace = useCase.execute(req);
     QVERIFY(futureReplace.isFinished());
@@ -228,7 +228,7 @@ void PrepareProcessingAdoptionTest::testManualTranslationOverride() {
     QCOMPARE(result.skipped.size(), 1);
     QCOMPARE(result.skipped[0].error.code, QString("input.manual_override"));
 
-    // Now test with ReplaceManualPolicy::Replace
+    // Second phase: the same request with ReplaceManualPolicy::Replace.
     req.replaceManualPolicy = ReplaceManualPolicy::Replace;
     auto futureReplace = useCase.execute(req);
     QVERIFY(futureReplace.isFinished());

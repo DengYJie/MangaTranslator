@@ -5,7 +5,7 @@
 class ChatCompletionsProtocolTest : public QObject {
     Q_OBJECT
 
-private slots:
+private Q_SLOTS:
     void requestCarriesPromptV1AndDeterministicPayload();
     void requestUsesJsonObjectModeWhenConfigured();
     void requestSkipsDisabledOrInvalidGlossary();

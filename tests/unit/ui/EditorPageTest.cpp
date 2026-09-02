@@ -150,7 +150,7 @@ private Q_SLOTS:
         auto session = makeSession(1);
         viewModel.openProjectSession(session);
 
-        // Page has 0 regions -> button should be disabled with descriptive tooltip
+        // The disabled button carries a tooltip naming the missing text regions.
         QVERIFY(!translateBtn->isEnabled());
         QVERIFY(translateBtn->toolTip().contains(QStringLiteral("无文本区域")) ||
                 translateBtn->toolTip().contains(QStringLiteral("区域")));

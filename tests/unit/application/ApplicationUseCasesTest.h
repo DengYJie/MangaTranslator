@@ -5,7 +5,7 @@
 class ApplicationUseCasesTest : public QObject {
     Q_OBJECT
 
-private slots:
+private Q_SLOTS:
     void testReorderRegionChangesReadingOrder();
     void testReorderRegionRejectsInvalidIndex();
     void testExportResolvesSelectedPages();

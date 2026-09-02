@@ -256,7 +256,6 @@ void TranslationScenarioTest::loopbackChatCompletionsRoundTrip() {
     auto result = future.result();
     QVERIFY(result.has_value());
 
-    // Verify response items and providerId
     QCOMPARE(result->providerId, QStringLiteral("openai-compatible"));
     QCOMPARE(result->items.size(), 2);
     QCOMPARE(result->items[0].regionId, r1);
@@ -268,7 +267,6 @@ void TranslationScenarioTest::loopbackChatCompletionsRoundTrip() {
     QCOMPARE(result->items[1].translation, QStringLiteral("World"));
     QCOMPARE(result->items[1].candidates, QVector<QString>({QStringLiteral("World"), QStringLiteral("The world")}));
 
-    // Verify recorded HTTP request on loopback server
     QCOMPARE(fixture.server.requestCount(), 1);
     const auto lastReq = fixture.server.lastRequest();
     QCOMPARE(lastReq.authorizationHeader(), QByteArrayLiteral("Bearer sk-fake-secret-key-12345"));
@@ -530,14 +528,14 @@ void TranslationScenarioTest::credential401MapsToReauthenticateAndKeepsManualTex
     QVERIFY(awaitFuture(future));
     auto result = future.result();
 
-    // Assert 401 maps to Network error category and Reauthenticate recovery action
+    // A 401 maps to the Network category and the Reauthenticate recovery action.
     QVERIFY(!result.has_value());
     const auto& err = result.error();
     QCOMPARE(err.category, ErrorCategory::Network);
     QCOMPARE(err.code, QStringLiteral("network.unauthorized"));
     QCOMPARE(err.recovery, RecoveryAction::Reauthenticate);
 
-    // Verify manual text, existing candidates and revision remain strictly untouched
+    // A rejected translation leaves the region revision, source, and translation untouched.
     const auto* afterRegion = fixture.project.findPage(fixture.pageId)->findRegion(r1);
     QVERIFY(afterRegion != nullptr);
     QCOMPARE(afterRegion->contentRevision(), initialRevision);
@@ -571,23 +569,23 @@ void TranslationScenarioTest::retryable429HonorsRetryAfterWithFixedClock() {
     QVERIFY(decisionHttpDate.shouldRetry);
     QCOMPARE(decisionHttpDate.delayMs, 10000);
 
-    // Exceeding deadline should not retry
+    // A Retry-After that outruns the request deadline schedules no retry.
     const auto decisionExceeds = policy.decide(rateLimitFailure, 0, "45", 30000);
     QVERIFY(!decisionExceeds.shouldRetry);
 
-    // Max retries exceeded should not retry
+    // The policy schedules no retry once the attempt count passes its ceiling.
     const auto decisionMaxRetries = policy.decide(rateLimitFailure, 2, "0", 30000);
     QVERIFY(!decisionMaxRetries.shouldRetry);
 
-    // Non-retryable error (e.g. 401) should not retry
+    // An HTTP 401 classifies as non-retryable, so the policy schedules no retry.
     const auto authFailure = network::classifyHttpStatus(401);
     QVERIFY(!authFailure.retryable);
     const auto decisionAuth = policy.decide(authFailure, 0, "0", 30000);
     QVERIFY(!decisionAuth.shouldRetry);
 
-    // 2. End-to-end integration test with real QtHttpTransport + loopback server:
-    // 1st attempt: 429 + Retry-After: 0 (or delta 0) -> policy retries boundedly
-    // 2nd attempt: 200 OK -> succeeds without wall-clock sleep
+    // 2. End to end over the real QtHttpTransport and the loopback server. The first attempt answers
+    // 429 with Retry-After 0, so the policy retries, and the second attempt answers 200 OK without a
+    // wall-clock sleep.
     TranslationScenarioFixture fixture;
     network::RetryPolicy translatorPolicy(fixedClock, []() { return 0.0; }, 2);
     QVERIFY(fixture.init(QStringLiteral("retry_429"), {QStringLiteral("リトライ原文")}, translatorPolicy));
@@ -633,7 +631,7 @@ void TranslationScenarioTest::retryable429HonorsRetryAfterWithFixedClock() {
     QCOMPARE(result->items.size(), 1);
     QCOMPARE(result->items[0].translation, QStringLiteral("Retry Succeeded"));
 
-    // Verify 2 requests were recorded on loopback server (initial attempt + retry)
+    // The loopback server recorded two requests: the initial attempt and the retry.
     QCOMPARE(fixture.server.requestCount(), 2);
 }
 
@@ -726,7 +724,7 @@ void TranslationScenarioTest::adoptedTranslationSurvivesSaveReopen() {
     QVERIFY(openFuture.result().has_value());
     domain::ComicProject reopenedProject = openFuture.result().value().project;
 
-    // Verify reopened domain matches original
+    // A reopened project carries the same source text and translation as the saved one.
     const auto* reopenedRegion = reopenedProject.findPage(fixture.pageId)->findRegion(r1);
     QVERIFY(reopenedRegion != nullptr);
     QCOMPARE(reopenedRegion->source(), originalSource);

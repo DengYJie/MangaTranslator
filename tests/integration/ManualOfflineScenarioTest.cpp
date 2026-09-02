@@ -447,7 +447,6 @@ void ManualOfflineScenarioTest::reopenYieldsIdenticalDomainWithEmptyUndoHistory(
     QVERIFY(openRes.has_value());
     const domain::ComicProject reopenedProject = openRes.value().project;
 
-    // Assert domain equality
     QVERIFY(reopenedProject == expectedProject);
 
     // Open new session in ViewModel and verify empty undo history

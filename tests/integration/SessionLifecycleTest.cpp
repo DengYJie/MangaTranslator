@@ -289,7 +289,7 @@ void SessionLifecycleTest::fastPageSwitchDiscardsLateViewResults() {
     QCOMPARE(controllableLoader.pending.size(), 1);
     QCOMPARE(controllableLoader.pending[0].request.pageId, pageA);
 
-    // Rapid switch to Page B and back to Page A: A -> B -> A
+    // The rapid switch walks A, B, A, and every selection queues its own load.
     viewModel->selectPage(pageB);
     QCOMPARE(controllableLoader.pending.size(), 2);
     QCOMPARE(controllableLoader.pending[1].request.pageId, pageB);
@@ -371,7 +371,7 @@ void SessionLifecycleTest::projectBoundTaskSurvivesPageSwitch() {
     fixture.viewModel->selectPage(pageB);
     QCOMPARE(fixture.viewModel->state().currentPageId, pageB);
 
-    // Verify task on Page A is NOT cancelled and remains active
+    // Navigation invalidates view loads only, so the Page A task stays active.
     QVERIFY(fixture.controller->hasActiveOperation(pageA));
 
     // Complete OCR for Page A
@@ -387,14 +387,14 @@ void SessionLifecycleTest::projectBoundTaskSurvivesPageSwitch() {
     QCOMPARE(propSpy.count(), 1);
     QCOMPARE(propSpy.first().at(0).value<domain::PageId>(), pageA);
 
-    // Verify proposal is bound to Page A and adoptable
+    // The proposal stays bound to Page A and remains adoptable.
     QVERIFY(fixture.controller->hasProposal(pageA));
     QVERIFY(!fixture.controller->hasProposal(pageB));
     const auto* prop = fixture.controller->proposal(pageA);
     QVERIFY(prop != nullptr);
     QCOMPARE(prop->pageId, pageA);
 
-    // Adopt proposal for Page A (we are currently on Page B)
+    // Page B is the current page while Page A's proposal is adopted.
     QSignalSpy adoptSpy(fixture.controller.get(), &EditorProcessingController::proposalAdopted);
     fixture.controller->adoptProposal(pageA);
     QCOMPARE(adoptSpy.count(), 1);
@@ -549,7 +549,7 @@ void SessionLifecycleTest::projectSwitchRejectsLateCompletions() {
     ocrEngine->complete();
     QCoreApplication::processEvents();
 
-    // 4. Verify P1's completion was rejected with stale generation and silently discarded
+    // 4. P1's completion carries a stale generation, so it is discarded without a signal.
     QCOMPARE(propSpy.count(), 0);
     QCOMPARE(finishSpy.count(), 0);
     QVERIFY(!controller->hasProposal(p1PageId));
@@ -634,7 +634,7 @@ void SessionLifecycleTest::confirmedCloseRunsTeardownInOrder() {
     fixture.viewModel->createRegion(geom);
     const auto regionId = fixture.viewModel->state().regions.first().id;
 
-    // Verify lock file exists while project is open
+    // Baseline: the open session holds the project lock file.
     const QString lockFilePath = fixture.projectRoot + QStringLiteral("/.mangatranslator.lock");
     QVERIFY(QFileInfo::exists(lockFilePath));
 
@@ -670,7 +670,7 @@ void SessionLifecycleTest::confirmedCloseRunsTeardownInOrder() {
     fixture.ocrEngine->complete();
     QCoreApplication::processEvents();
 
-    // Verify no callbacks triggered on destroyed objects and no crash
+    // A completion arriving after teardown must not reach a destroyed controller or ViewModel.
     QVERIFY(!fixture.controller->hasProposal(pageId));
     QVERIFY(!fixture.viewModel->hasSession());
 }
@@ -727,8 +727,9 @@ void SessionLifecycleTest::applicationExitRunsSameProtocolAsWindowClose() {
         QVERIFY(app->mainWindow() != nullptr);
         QVERIFY(app->context() != nullptr);
 
-        // Window close triggers MainWindow::closeEvent -> closeRequested -> editorViewModel->requestCloseProject
-        // -> projectClosed -> handleProjectClose (mainWindow->forceClose, context->shutdown, app->quit)
+        // Closing the window runs MainWindow::closeEvent, which emits closeRequested and calls
+        // EditorViewModel::requestCloseProject. The resulting projectClosed signal reaches the
+        // Application close handler, where forceClose, shutdown, and quit run in that order.
         app->mainWindow()->close();
     });
 

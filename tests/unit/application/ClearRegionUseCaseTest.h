@@ -3,7 +3,7 @@
 
 class ClearRegionUseCaseTest : public QObject {
     Q_OBJECT
-private slots:
+private Q_SLOTS:
     void testSuccessfulClear();
     void testClearFailure();
     void testInvalidRequestDoesNotCallInpainter();

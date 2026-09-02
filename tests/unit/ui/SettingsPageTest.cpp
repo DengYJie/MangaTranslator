@@ -72,7 +72,7 @@ class SettingsPageTest : public QObject {
     Q_OBJECT
 
 private Q_SLOTS:
-    // --- ViewModel Tests ---
+    // ViewModel tests
 
     void testInitialObserveReplay() {
         FakeAppSettingsStore store;
@@ -202,7 +202,7 @@ private Q_SLOTS:
         QVERIFY(vm.state().fieldErrors.contains(QStringLiteral("persist")));
     }
 
-    // --- Page / UI Tests ---
+    // Page and widget tests
 
     void testInitialRendering() {
         FakeAppSettingsStore store;
@@ -248,7 +248,7 @@ private Q_SLOTS:
         page.resize(600, 600);
         QTest::qWait(50);
 
-        // Verify same widget instance is preserved and retains focus
+        // A responsive relayout reuses the editor widget, so focus survives the width change.
         QCOMPARE(ocrRow->editorWidget(), editor);
         QVERIFY(editor->hasFocus());
 
@@ -307,7 +307,7 @@ private Q_SLOTS:
         QCOMPARE(vm.state().persisted.timeoutSeconds, 90);
         QCOMPARE(store.m_values.value(QStringLiteral("translation/timeoutSeconds")).toInt(), 90);
 
-        // Test restore defaults
+        // Restore falls back to the AppSettingsDto default timeout of 60.
         auto* restoreBtn = page.restoreDefaultsButtonForTest();
         QVERIFY(restoreBtn != nullptr);
         vm.setTimeoutSeconds(150);
@@ -315,8 +315,6 @@ private Q_SLOTS:
         QCOMPARE(vm.state().persisted.timeoutSeconds, 60);
         QCOMPARE(store.m_values.value(QStringLiteral("translation/timeoutSeconds")).toInt(), 60);
     }
-
-    // --- Lifetime Tests ---
 
     void testViewModelPageDestructionCleanliness() {
         FakeAppSettingsStore store;

@@ -239,7 +239,7 @@ void FileSystemDerivedAssetStoreTest::corruptedExistingFileFailsAndIsNeverOverwr
     const QByteArray tamperedBytes = readAllBytes(finalPath);
     QVERIFY(!tamperedBytes.isEmpty());
 
-    // Committing original again must detect the content mismatch, fail, and NEVER overwrite the file.
+    // Committing original again must detect the content mismatch, fail, and keep the tampered bytes.
     CommitDerivedLayerRequest request;
     request.projectId = m_projectId;
     request.projectRoot = m_tempDir.path();
@@ -251,7 +251,6 @@ void FileSystemDerivedAssetStoreTest::corruptedExistingFileFailsAndIsNeverOverwr
     QVERIFY(!result.has_value());
     QCOMPARE(result.error().code, QStringLiteral("clear.layer_commit_failed"));
 
-    // Verify the file on disk remains untouched and was not overwritten.
     QCOMPARE(readAllBytes(finalPath), tamperedBytes);
 }
 

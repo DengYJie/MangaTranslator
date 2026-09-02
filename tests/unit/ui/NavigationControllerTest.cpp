@@ -39,7 +39,7 @@ public:
 
 class NavigationControllerTest : public QObject {
     Q_OBJECT
-private slots:
+private Q_SLOTS:
     void navigateCommitsHistoryAfterRender() {
         FakePresenter presenter;
         manga::ui::navigation::NavigationController controller(&presenter);

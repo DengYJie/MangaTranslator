@@ -5,7 +5,7 @@
 class RetryPolicyTest : public QObject {
     Q_OBJECT
 
-private slots:
+private Q_SLOTS:
     void rateLimitRetriesUsingRetryAfterSeconds();
     void rateLimitClampsHttpDateRetryAfter();
     void serverErrorIsNotRetriedAutomatically();

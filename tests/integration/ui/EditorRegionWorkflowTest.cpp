@@ -68,15 +68,15 @@ void EditorRegionWorkflowTest::testWorkflow() {
     vm.commitInspectorFieldEdit(page1, {region1Id}, InspectorField::ManualTranslation, QString("Hello"));
     vm.sealTextEditSession();
 
-    // Assert stable IDs
+    // Sealing the edit session keeps the committed region identifier.
     QCOMPARE(vm.state().regions.first().id, region1Id);
 
-    // Undo/Redo cross-page
+    // Undo and redo across pages
     vm.selectPage(page2);
     QCOMPARE(vm.state().currentPageId, page2);
     QCOMPARE(vm.state().regions.size(), 0);
 
-    // Undo Translation, Style, Move, Create
+    // Undo the translation, style, move, and create steps
     vm.undo();
     vm.undo();
     vm.undo();
@@ -142,7 +142,7 @@ void EditorRegionWorkflowTest::testPerformance() {
     }
     canvas.setRegions(displayRegions);
 
-    // Assert scene items scale linearly and there are no QWidget-per-region items
+    // Three hundred regions produce a bounded scene item count and no QWidget per region.
     int itemCount = canvas.scene()->items().size();
     QVERIFY(itemCount > 300 && itemCount < 300 * 10);
 
@@ -168,7 +168,7 @@ void EditorRegionWorkflowTest::testPerformance() {
     int elapsed = timer.elapsed();
     qDebug() << "Pan/Zoom time for 300 regions:" << elapsed << "ms";
 
-    // Assert that Domain queries, layout calls, and I/O calls are 0 during pan/zoom
+    // Pan and zoom trigger no image load and no thumbnail read.
     QCOMPARE(imageLoader.callCount, ioCountBefore);
     QCOMPARE(thumbStore.readCount, readCountBefore);
 }

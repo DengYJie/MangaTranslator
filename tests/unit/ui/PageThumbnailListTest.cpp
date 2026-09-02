@@ -21,7 +21,7 @@ PageListEntry makeEntry(int order) {
 
 class PageThumbnailListTest : public QObject {
     Q_OBJECT
-private slots:
+private Q_SLOTS:
     void initTestCase() {
         qRegisterMetaType<manga::domain::PageId>("manga::domain::PageId");
         qRegisterMetaType<manga::domain::PageId>("::manga::domain::PageId");
@@ -41,14 +41,16 @@ private slots:
         list.requestVisibleThumbnails(); // Explicit call to ensure it covers if not painted
         const int firstCount = spy.size();
         QVERIFY(firstCount > 0);
+        // A request is emitted at most once per row, and the model above holds ten pages.
         QVERIFY(firstCount <= 10);
-        list.requestVisibleThumbnails(); // 已置 Loading 的行不重复请求
+        list.requestVisibleThumbnails(); // The first pass left every visible row in Loading.
         QCOMPARE(spy.size(), firstCount);
     }
 
     void thumbnailCacheHonorsSixtyFourMiBBudget() {
         PageThumbnailList list;
-        // 每张 1024x1024 RGBA = 4 MiB = 4096 KiB cost；64 MiB 预算最多容纳 16 张。
+        // Cache cost is in KiB: a 1024x1024 RGBA image is 4096 KiB, so the widget's 64 MiB budget of
+        // 64 * 1024 holds sixteen entries and evicts the oldest first.
         const QImage image(1024, 1024, QImage::Format_RGBA8888);
         for (int i = 0; i < 40; ++i) {
             list.insertThumbnail(manga::domain::PageId::generate(), image);
@@ -63,7 +65,8 @@ private slots:
         list.markThumbnailFailed(entry.id, QStringLiteral("无法解码"));
         QCOMPARE(list.model()->index(0).data(manga::ui::widget::PageListModel::ThumbnailStatusRole).toInt(),
                  static_cast<int>(ThumbnailStatus::Failed));
-        // force 重试由 delegate 热点触发；这里直接验证信号路径存在：
+        // A force retry normally comes from a delegate hotspot click, so this calls the signal
+        // directly.
         QSignalSpy spy(&list, &PageThumbnailList::thumbnailRequested);
         list.requestThumbnailForTest(entry.id, true);
         QCOMPARE(spy.size(), 1);

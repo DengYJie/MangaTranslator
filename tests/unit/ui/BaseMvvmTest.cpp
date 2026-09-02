@@ -28,7 +28,7 @@ public:
     }
     using BaseViewModel::invalidateRequests;
     using BaseViewModel::isRequestCurrent;
-signals:
+Q_SIGNALS:
     void stateChanged(const CounterState& state);
 
 protected:
@@ -42,7 +42,7 @@ class Probe : public QObject {
 public:
     int replayCount{0};
     CounterState last;
-public slots:
+public Q_SLOTS:
     void render(const CounterState& state) {
         ++replayCount;
         last = state;
@@ -70,7 +70,7 @@ protected:
 
 class BaseMvvmTest : public QObject {
     Q_OBJECT
-private slots:
+private Q_SLOTS:
     void observeReplaysCurrentStateImmediately() {
         CounterViewModel viewModel;
         viewModel.setValue(7);

@@ -13,8 +13,7 @@ void QtTextLayouterTest::testBasicLayout() {
     services::QtTextLayouter layouter(&executor);
 
     application::LayoutRequest req;
-    // We don't necessarily need a valid UUID for a basic test, but we can generate one.
-    // Let's just rely on comparing res.regionId == req.regionId
+    // The result regionId is only compared against the request one, so a default identifier is enough.
     req.text = "Hello Manga";
     req.bounds = {0, 0, 200, 200};
     req.logicalDpi = 96.0;

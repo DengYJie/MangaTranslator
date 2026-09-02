@@ -5,7 +5,7 @@
 class GeometryTest : public QObject {
     Q_OBJECT
 
-private slots:
+private Q_SLOTS:
     void testRectValidity();
     void testRectWithinBounds();
     void testRectClamping();

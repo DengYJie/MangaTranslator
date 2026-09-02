@@ -162,12 +162,13 @@ private Q_SLOTS:
         QVERIFY(res3.has_value());
         QCOMPARE(res3->occurrenceCount, 3);
 
-        // Fourth occurrence at t = 7000 ms (delta = 3500 >= 3000 ms from t=3500) -> resets count
+        // Fourth occurrence at t = 7000 ms. The delta of 3500 ms from t = 3500 ms exceeds the 3000 ms
+        // window, so the count restarts.
         auto res4 = presenter.present(err, QStringLiteral("C:/manga/demo"), 7000);
         QVERIFY(res4.has_value());
         QCOMPARE(res4->occurrenceCount, 1);
 
-        // Different targetKey at t = 7500 ms -> independent entry
+        // A different targetKey at t = 7500 ms keeps its own independent history entry.
         auto resDiffTarget = presenter.present(err, QStringLiteral("C:/manga/other"), 7500);
         QVERIFY(resDiffTarget.has_value());
         QCOMPARE(resDiffTarget->occurrenceCount, 1);

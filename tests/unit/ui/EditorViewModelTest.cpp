@@ -71,7 +71,7 @@ struct Fixture {
 
 class EditorViewModelTest : public QObject {
     Q_OBJECT
-private slots:
+private Q_SLOTS:
     void initTestCase() {
         qRegisterMetaType<domain::PageId>();
         qRegisterMetaType<PageImageDelivery>();
@@ -247,7 +247,7 @@ private slots:
         QCOMPARE(viewModel.currentProjectRevision(), quint64{0});
     }
 
-    // ---- Region projection tests ----
+    // Region projection
 
     void openPageProjectsRegionsSortedByOrderWithGeometry() {
         Fixture f;
@@ -583,7 +583,7 @@ private slots:
         QCOMPARE(viewModel.state().previewMode, PreviewMode::Compare);
     }
 
-    // ---- Undo/redo command integration tests ----
+    // Undo and redo command integration
 
     void createRegionPushesCommandAndFlipsCanUndo() {
         Fixture f;

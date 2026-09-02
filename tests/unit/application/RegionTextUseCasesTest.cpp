@@ -161,7 +161,6 @@ void RegionTextUseCasesTest::testRemoveRegionReturnsFullRegionAndOrder() {
     QCOMPARE(result->orderIndex, 0);
     QCOMPARE(result->region.geometry(), RectGeometry(10, 10, 50, 50));
 
-    // Verify region was actually removed
     const auto* projPage = project.findPage(page.id());
     QCOMPARE(projPage->regions().size(), size_t{1});
     QCOMPARE(projPage->regions()[0].id(), r2);

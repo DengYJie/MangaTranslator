@@ -4,7 +4,7 @@
 
 class RecognizeRegionUseCaseTest : public QObject {
     Q_OBJECT
-private slots:
+private Q_SLOTS:
     void testSuccessfulRecognition();
     void testCancellation();
     void testEngineFailure();

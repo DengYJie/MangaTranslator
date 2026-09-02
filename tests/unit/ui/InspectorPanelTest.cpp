@@ -139,7 +139,7 @@ private Q_SLOTS:
         qRegisterMetaType<InspectorField>();
     }
 
-    // --- State Projection Tests ---
+    // State projection
 
     void emptySelectionYieldsNulloptInspector() {
         domain::TextRegion withText(domain::RegionId::generate(), makeGeometry(10.0, 10.0), 0);
@@ -318,7 +318,7 @@ private Q_SLOTS:
         QVERIFY(std::holds_alternative<std::monostate>(viewModel.state().inspector));
     }
 
-    // --- Panel / Widget Tests ---
+    // Panel and widget
 
     void unselectedStateDisablesContentHost() {
         InspectorPanel panel;
@@ -700,7 +700,7 @@ private Q_SLOTS:
         QCOMPARE(inner->textCursor().position(), 6);
         QCOMPARE(inner->textCursor().anchor(), 2);
 
-        // A genuinely different text (e.g. Undo) restores a clamped, valid cursor.
+        // Text that genuinely differs, such as an undo restoring "Undo", rebuilds a clamped valid cursor.
         state.manualTranslation = QStringLiteral("abc");
         panel.setInspectorState(InspectorState{state});
         QCOMPARE(edit->toPlainText(), QStringLiteral("abc"));

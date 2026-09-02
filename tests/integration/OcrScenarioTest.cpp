@@ -360,7 +360,7 @@ void OcrScenarioTest::staleSessionGenerationResultIsRejected() {
     auto* project = fixture.viewModel->projectAggregate();
     QVERIFY(project != nullptr);
 
-    // 1. Verify PrepareProcessingAdoptionUseCase rejects mismatched session generation
+    // 1. PrepareProcessingAdoptionUseCase rejects a mismatched session generation.
     PrepareProcessingAdoptionUseCase prepUseCase(project, nullptr);
     PrepareProcessingAdoptionRequest staleReq{
         .projectId = project->id(),

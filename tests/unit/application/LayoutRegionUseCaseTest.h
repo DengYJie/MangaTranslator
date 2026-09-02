@@ -3,7 +3,7 @@
 
 class LayoutRegionUseCaseTest : public QObject {
     Q_OBJECT
-private slots:
+private Q_SLOTS:
     void testSuccessfulLayout();
     void testLayoutFailure();
     void testInvalidRequestDoesNotCallLayouter();

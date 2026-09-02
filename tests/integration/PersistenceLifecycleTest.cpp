@@ -193,7 +193,7 @@ void PersistenceLifecycleTest::saveRaceDuringTransactionKeepsDirty() {
     QVERIFY(hookRan);
     fixture.stack.repository->setSaveTransactionHook({});
 
-    // 4. Verify save completion received older revision and project remains dirty
+    // 4. The completion carries the older revision while the project stays dirty.
     const QString savedRevStr = saveSpy.first().at(0).toString();
     QCOMPARE(savedRevStr.toULongLong(), revAfterFirstEdit);
     QVERIFY(fixture.viewModel->currentProjectRevision() > revAfterFirstEdit);
@@ -282,11 +282,9 @@ void PersistenceLifecycleTest::saveAsWritesCopyAndKeepsOriginalUntouched() {
     QVERIFY(awaitFuture(saveFuture));
     QVERIFY(saveFuture.result().has_value());
 
-    // Verify new root has the update
     const QByteArray newJsonBytes = readFile(newRoot + QStringLiteral("/project.json"));
     QVERIFY(newJsonBytes.contains("After Save As Modification"));
 
-    // Verify original root is still untouched
     const QByteArray originalJsonBytesFinal = readFile(originalRoot + QStringLiteral("/project.json"));
     QCOMPARE(originalJsonBytesFinal, originalJsonBytes);
 
@@ -529,7 +527,7 @@ void PersistenceLifecycleTest::diskFullSaveFailureKeepsDirtyAndLastValidFile() {
     PersistenceFixture fixture;
     QVERIFY(fixture.init(QStringLiteral("disk_full_project"), 1));
 
-    // Verify initial clean state
+    // The session starts clean, so any dirty flag below has only one possible cause.
     QVERIFY(!fixture.viewModel->state().saveState.isDirty);
     QVERIFY(fixture.viewModel->undoStackIsCleanForTest());
 
@@ -546,7 +544,7 @@ void PersistenceLifecycleTest::diskFullSaveFailureKeepsDirtyAndLastValidFile() {
     // 2. Inject disk full simulation
     fixture.stack.repository->setDiskSpaceProbe([](const QString&) { return qint64(0); });
 
-    // 3. Save project -> fails with persistence.disk_full
+    // 3. Saving fails with persistence.disk_full.
     QSignalSpy failedSpy(fixture.viewModel.get(), &EditorViewModel::saveFailed);
     fixture.viewModel->saveProject();
     QVERIFY(failedSpy.wait(kAwaitTimeoutMs));

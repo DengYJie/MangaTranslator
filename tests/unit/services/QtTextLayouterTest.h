@@ -5,7 +5,7 @@
 class QtTextLayouterTest : public QObject {
     Q_OBJECT
 
-private slots:
+private Q_SLOTS:
     void testBasicLayout();
     void testCancellation();
 };

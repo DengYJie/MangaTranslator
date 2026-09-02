@@ -29,7 +29,7 @@ void ImportImagesUseCaseTest::testSuccessfulImportAndSorting() {
     QVERIFY(future.isFinished());
     QVERIFY(future.result().has_value());
 
-    // Verify sorting (1, 2, 10 instead of 1, 10, 2)
+    // Natural ordering puts img_10.png last, where a lexicographic sort would place it second.
     QCOMPARE(importer.lastRequest.filePaths.size(), 3);
     QCOMPARE(importer.lastRequest.filePaths[0], QString("img_1.png"));
     QCOMPARE(importer.lastRequest.filePaths[1], QString("img_2.png"));

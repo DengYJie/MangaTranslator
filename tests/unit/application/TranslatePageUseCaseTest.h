@@ -3,7 +3,7 @@
 
 class TranslatePageUseCaseTest : public QObject {
     Q_OBJECT
-private slots:
+private Q_SLOTS:
     void testSuccessfulTranslation();
     void testTranslatorFailure();
     void testInvalidRequestDoesNotCallTranslator();

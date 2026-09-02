@@ -2,7 +2,7 @@
 #include <QObject>
 class TextLayoutEngineTest : public QObject {
     Q_OBJECT
-private slots:
+private Q_SLOTS:
     void layoutHorizontalWrapsCorrectly();
     void layoutHorizontalHonorsPageCoordinatesAndDpi();
     void layoutVerticalHasCorrectBounds();

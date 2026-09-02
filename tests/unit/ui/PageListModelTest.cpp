@@ -19,7 +19,7 @@ PageListEntry makeEntry(int order) {
 
 class PageListModelTest : public QObject {
     Q_OBJECT
-private slots:
+private Q_SLOTS:
     void setPagesPopulatesRows() {
         PageListModel model;
         QVector<PageListEntry> pages{makeEntry(0), makeEntry(1), makeEntry(2)};
@@ -52,12 +52,13 @@ private slots:
         QCOMPARE(model.index(0).data(PageListModel::ThumbnailStatusRole).toInt(),
                  static_cast<int>(ThumbnailStatus::Failed));
         QCOMPARE(model.index(0).data(PageListModel::ThumbnailErrorRole).toString(), QStringLiteral("无法解码"));
-        model.setThumbnailStatus(manga::domain::PageId::generate(), ThumbnailStatus::Ready); // 未知 ID：忽略
+        // The model ignores a status update for a page id it does not hold.
+        model.setThumbnailStatus(manga::domain::PageId::generate(), ThumbnailStatus::Ready);
         QCOMPARE(model.rowCount(), 1);
     }
 
     void modelHoldsNoPixmaps() {
-        // 结构性断言：Model 的 Role 集合里没有图像 Role（像素只进 QCache）。
+        // The model declares no image role, so thumbnail pixels live only in the bounded cache.
         PageListModel model;
         model.setPages({makeEntry(0)});
         QVERIFY(!model.index(0).data(Qt::DecorationRole).isValid());

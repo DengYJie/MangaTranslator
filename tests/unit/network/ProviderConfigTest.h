@@ -5,7 +5,7 @@
 class ProviderConfigTest : public QObject {
     Q_OBJECT
 
-private slots:
+private Q_SLOTS:
     void acceptsHttpsEndpoint();
     void rejectsPlainHttpByDefault();
     void allowsLoopbackHttpOnlyWhenOptedIn();

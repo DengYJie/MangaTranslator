@@ -72,7 +72,7 @@ private Q_SLOTS:
         const double zoom = 0.05;
         const double dpr = 1.0;
         const QRectF hit = handleHitRect(HandlePosition::SouthEast, geom, zoom, dpr);
-        // At 5% zoom, scene pos (300, 400) -> view (15, 20). Hit rect centered there.
+        // At 5% zoom the scene point (300, 400) becomes view (15, 20), where the hit rect is centered.
         QVERIFY(hit.contains(QPointF(15.0, 20.0)));
         QCOMPARE(hit.width(), kHandleHitSizeDevicePx);
     }
@@ -82,7 +82,7 @@ private Q_SLOTS:
         const double zoom = 16.0;
         const double dpr = 2.0;
         const QRectF hit = handleHitRect(HandlePosition::East, geom, zoom, dpr);
-        // East handle at (300, 250) in source -> view (4800, 4000) -> device (9600, 8000).
+        // The East handle at source (300, 250) becomes view (4800, 4000) and device (9600, 8000).
         QVERIFY(hit.contains(QPointF(9600.0, 8000.0)));
         QCOMPARE(hit.width(), kHandleHitSizeDevicePx);
     }

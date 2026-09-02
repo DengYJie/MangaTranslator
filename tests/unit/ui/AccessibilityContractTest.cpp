@@ -41,14 +41,14 @@ private Q_SLOTS:
         page.resize(1440, 900);
         page.show();
 
-        // Forward Pane Cycling: Canvas -> Inspector -> CommandBar -> PageList -> Canvas
+        // Forward cycling visits Canvas, Inspector, CommandBar, PageList, then wraps to Canvas.
         page.cyclePaneFocus(true);
         page.cyclePaneFocus(true);
         page.cyclePaneFocus(true);
         page.cyclePaneFocus(true);
         QVERIFY(page.isVisible());
 
-        // Reverse Pane Cycling: Canvas -> PageList -> CommandBar -> Inspector -> Canvas
+        // Reverse cycling visits Canvas, PageList, CommandBar, Inspector, then wraps to Canvas.
         page.cyclePaneFocus(false);
         page.cyclePaneFocus(false);
         page.cyclePaneFocus(false);
@@ -63,7 +63,7 @@ private Q_SLOTS:
         ui::screen::editor::EditorViewModel viewModel(&thumbnails, &images, &registry);
         ui::screen::editor::EditorPage editorPage(&viewModel);
 
-        // Check all buttons in EditorCommandBar
+        // 1. EditorCommandBar buttons
         auto* cmdBar = editorPage.commandBarForTest();
         const auto buttons = cmdBar->findChildren<fluent::basicinput::Button*>();
         QVERIFY(!buttons.isEmpty());
@@ -79,7 +79,7 @@ private Q_SLOTS:
                      qPrintable(QStringLiteral("CommandBar button %1 missing toolTip").arg(btn->objectName())));
         }
 
-        // Check buttons in HomePage
+        // 2. HomePage buttons
         ui::screen::home::HomeViewModel homeVm(nullptr, nullptr, nullptr);
         ui::screen::home::HomePage homePage(&homeVm);
         const auto homeButtons = homePage.findChildren<fluent::basicinput::Button*>();
@@ -95,7 +95,7 @@ private Q_SLOTS:
                      qPrintable(QStringLiteral("HomePage button %1 missing toolTip").arg(btn->objectName())));
         }
 
-        // Check buttons in ImportPage
+        // 3. ImportPage buttons
         ui::screen::import_::ImportViewModel importVm(nullptr, nullptr, nullptr);
         ui::screen::import_::ImportPage importPage(&importVm);
         const auto importButtons = importPage.findChildren<fluent::basicinput::Button*>();
@@ -111,7 +111,7 @@ private Q_SLOTS:
                      qPrintable(QStringLiteral("ImportPage button %1 missing toolTip").arg(btn->objectName())));
         }
 
-        // Check buttons in InspectorPanel
+        // 4. InspectorPanel buttons
         auto* inspector = editorPage.inspectorForTest();
         const auto inspectorButtons = inspector->findChildren<fluent::basicinput::Button*>();
         for (auto* btn : inspectorButtons) {
@@ -138,7 +138,7 @@ private Q_SLOTS:
         page.resize(800, 700);
         page.show();
 
-        // 1. Canvas gesture active -> Escape cancels gesture and consumes event
+        // 1. With a canvas gesture active, Escape cancels the gesture and consumes the event.
         auto* canvas = page.canvasForTest();
         QSignalSpy gestureSpy(canvas, &ui::manga::MangaCanvas::gestureCancelled);
 
@@ -155,7 +155,7 @@ private Q_SLOTS:
         QApplication::sendEvent(canvas, &escKey);
         QCOMPARE(gestureSpy.size(), 1);
 
-        // 2. Narrow Drawer open -> Escape closes drawer
+        // 2. With the narrow drawer open, Escape closes the drawer.
         page.setPageDrawerVisible(true);
         QVERIFY(page.isPageDrawerVisible());
         QKeyEvent escKeyPage(QEvent::KeyPress, Qt::Key_Escape, Qt::NoModifier);

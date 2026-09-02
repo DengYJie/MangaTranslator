@@ -45,7 +45,9 @@ using namespace manga::ui::screen::editor;
 
 namespace {
 
-/// Documented pixel tolerance for sRGB round-trips through the PNG encoder.
+/// Per channel slack for an image comparison. PNG encoding is lossless here, so the delta can only
+/// come from the rounding of the premultiplied intermediate a composite passes through. A
+/// comparison that requires byte identity asserts a zero delta instead.
 constexpr int kChannelTolerance = 2;
 
 /// Digests one file so its content can be matched against a sha256Tree value set.
@@ -164,8 +166,8 @@ struct ImageDiff {
     return result;
 }
 
-/// Composites the four export layers in the documented order:
-/// Original -> Clear -> Translation -> ManualOverride.
+/// Composites the export layers in the order the exporter applies them: original, clear,
+/// translation, then manual override.
 [[nodiscard]] QImage
 compositeLayers(const QImage& source, const QImage& clear, const QImage& translation, const QImage& manualOverride) {
     QImage composite(source.size(), QImage::Format_RGBA8888_Premultiplied);
@@ -341,7 +343,7 @@ struct ProcessingFixture {
         return true;
     }
 
-    /// Runs the full OCR -> translation -> clear -> layout pipeline and adopts the proposal.
+    /// Runs OCR, translation, clear, and layout in sequence and adopts the resulting proposal.
     [[nodiscard]] bool runFullPipeline() {
         QSignalSpy proposalSpy(controller.get(), &EditorProcessingController::proposalReady);
         controller->smartTranslatePage(pageId);

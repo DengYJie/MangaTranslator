@@ -51,7 +51,7 @@ class ImportPageTest : public QObject {
     Q_OBJECT
 
 private Q_SLOTS:
-    // --- ViewModel Tests ---
+    // ViewModel tests
 
     void addSourcesValidatesFormatsAndDeduplicates() {
         Fixture f;
@@ -185,7 +185,7 @@ private Q_SLOTS:
         QTRY_VERIFY_WITH_TIMEOUT(!viewModel.state().importInProgress, 4000);
     }
 
-    // --- Page / UI Tests ---
+    // Page and widget tests
 
     void contentUsesFluentCardsOnTransparentScrollSurface() {
         test::FakeProjectRepository repository;
@@ -214,16 +214,19 @@ private Q_SLOTS:
         ui::screen::import_::ImportPage page(&viewModel);
         page.show();
 
-        QVERIFY(!page.submitButtonForTest()->isEnabled()); // 无来源
+        // Stage 1: no sources, no save location, no name.
+        QVERIFY(!page.submitButtonForTest()->isEnabled());
 
         viewModel.addSourcePaths({QStringLiteral("D:/src/a.jpg")});
         viewModel.setSaveLocation(QStringLiteral("D:/projects"));
         viewModel.submit(); // Validate form and set errors
 
-        QVERIFY(!page.submitButtonForTest()->isEnabled()); // 仍缺名称
+        // Stage 2: sources and location are set while the name is still empty.
+        QVERIFY(!page.submitButtonForTest()->isEnabled());
 
         viewModel.setProjectName(QStringLiteral("项目"));
-        QVERIFY(page.submitButtonForTest()->isEnabled()); // 有名称，并且errorCount=0
+        // Stage 3: every required field is valid, so no validation error remains.
+        QVERIFY(page.submitButtonForTest()->isEnabled());
         QCOMPARE(page.submitButtonForTest()->text(), QStringLiteral("创建并导入"));
     }
 

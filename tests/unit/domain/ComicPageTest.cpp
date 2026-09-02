@@ -61,7 +61,7 @@ void ComicPageTest::testUpdateRegionGeometryClamping() {
     const RegionId r1Id = RegionId::generate();
     page.addRegion(TextRegion(r1Id, {.x = 100.0, .y = 100.0, .width = 200.0, .height = 200.0}));
 
-    // Edit geometry overflowing page boundaries -> safely clamped
+    // A rect overflowing the page keeps its origin, and the far edges shrink to the page bounds.
     const auto clamped = page.updateRegionGeometry(r1Id, {.x = 900.0, .y = 1400.0, .width = 200.0, .height = 200.0});
     QVERIFY(clamped.has_value());
     QCOMPARE(clamped->x, 900.0);
@@ -332,7 +332,7 @@ void ComicPageTest::testInsertRegionMaintainsContiguousOrder() {
     TextRegion inserted(rNew, {.x = 200.0, .y = 200.0, .width = 50.0, .height = 50.0});
     QVERIFY(page.insertRegion(std::move(inserted), 1).has_value());
 
-    // Verify contiguous 0..3
+    // Insertion renumbers orderIndex contiguously from zero.
     QCOMPARE(page.regions().size(), size_t{4});
     for (size_t i = 0; i < page.regions().size(); ++i) {
         QCOMPARE(page.regions()[i].orderIndex(), static_cast<int>(i));

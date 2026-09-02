@@ -19,9 +19,7 @@
 
 namespace manga::services::test {
 
-// ---------------------------------------------------------------------------
 // Helpers
-// ---------------------------------------------------------------------------
 
 namespace {
 
@@ -30,8 +28,8 @@ static QString fixtureDir() {
     return QStringLiteral(MANGA_OCR_FIXTURES_DIR);
 }
 
-// Build a minimal valid manifest directory in a temp dir.
-// Files are small dummy binaries whose SHA-256 we control.
+// Writes one fixture file. Hashes elsewhere are computed from the same bytes, so a manifest can
+// declare a digest that matches its blob.
 static bool writeFakeFile(const QString& path, const QByteArray& data) {
     QFile f(path);
     if (!f.open(QIODevice::WriteOnly)) {
@@ -102,14 +100,8 @@ static QString buildValidManifestDir(QTemporaryDir& dir) {
 
 } // namespace
 
-// ---------------------------------------------------------------------------
-// Test case implementations
-// ---------------------------------------------------------------------------
-
 void BaberuOcrTest::initTestCase() {}
 void BaberuOcrTest::cleanupTestCase() {}
-
-// --- Manifest validation ---
 
 void BaberuOcrTest::manifestRejectsMissingDirectory() {
     auto result = loadAndValidateManifest(QStringLiteral("/nonexistent/path/xyz987"));
@@ -219,8 +211,6 @@ void BaberuOcrTest::manifestRejectsMissingFile() {
     QCOMPARE(result.error().code, QStringLiteral("model.missing"));
 }
 
-// --- Vocab ---
-
 void BaberuOcrTest::vocabDecodesIdsCorrectly() {
     QTemporaryDir dir;
     QVERIFY(dir.isValid());
@@ -253,8 +243,8 @@ void BaberuOcrTest::vocabSkipsSpecialTokens() {
 void BaberuOcrTest::vocabContentIdsExcludeWaveChars() {
     QTemporaryDir dir;
     QVERIFY(dir.isValid());
-    // Include: 'A' (letter), '5' (digit), hiragana あ.
-    // Exclude: 'ー' (wave), '~' (wave), '〜' (wave), 'ｰ' (half-width dash).
+    // Content ids are the single-character Letter and Number entries. The dash-like marks below are
+    // excluded by name in BaberuVocab::load.
     const QByteArray vocabJson = R"(["A","5","\u3042","\u30fc","\uff70","\u301c","~"])";
     QString vocabPath = QDir(dir.path()).filePath(QStringLiteral("vocab.json"));
     writeFakeFile(vocabPath, vocabJson);
@@ -263,14 +253,12 @@ void BaberuOcrTest::vocabContentIdsExcludeWaveChars() {
     const auto& cids = result->contentIds();
     QVERIFY(cids.contains(4));   // 'A'
     QVERIFY(cids.contains(5));   // '5'
-    QVERIFY(cids.contains(6));   // 'あ'
-    QVERIFY(!cids.contains(7));  // 'ー'
-    QVERIFY(!cids.contains(8));  // 'ｰ'
-    QVERIFY(!cids.contains(9));  // '〜'
-    QVERIFY(!cids.contains(10)); // '~'
+    QVERIFY(cids.contains(6));   // 'あ' hiragana letter
+    QVERIFY(!cids.contains(7));  // 'ー' prolonged sound mark
+    QVERIFY(!cids.contains(8));  // 'ｰ' halfwidth prolonged sound mark
+    QVERIFY(!cids.contains(9));  // '〜' wave dash
+    QVERIFY(!cids.contains(10)); // '~' tilde
 }
-
-// --- Preprocessor ---
 
 namespace {
 
@@ -308,12 +296,12 @@ void BaberuOcrTest::preprocessorOutputsCorrectNCHWShape() {
     auto m = makeManifestForPreprocess();
     auto result = BaberuOcrPreprocessor::preprocess(makeRequest(img), m);
     QVERIFY(result.has_value());
-    // Shape: [1, 3, 224, 224] = 150528 floats
+    // The preprocessed tensor is NCHW with three channels for a 224x224 RGB input.
     QCOMPARE(static_cast<int>(result->size()), 1 * 3 * 224 * 224);
 }
 
 void BaberuOcrTest::preprocessorGoldenSolidRed() {
-    // Load fixture: solid_red_2x2.png -> all pixels (255,0,0,255)
+    // solid_red_2x2.png is 2x2 RGBA red at full alpha, so the resized 224x224 plane carries one value.
     QString path = QDir(fixtureDir()).filePath(QStringLiteral("solid_red_2x2.png"));
     if (!QFile::exists(path)) {
         QSKIP("Fixture not found; skipping golden test");
@@ -324,13 +312,12 @@ void BaberuOcrTest::preprocessorGoldenSolidRed() {
     auto result = BaberuOcrPreprocessor::preprocess(makeRequest(img), m);
     QVERIFY(result.has_value());
 
-    // PIL golden: R=2.248908, G=-2.035714, B=-1.804444 (all pixels same)
+    // Golden channels and the 1e-6 tolerance are recorded in tests/fixtures/ocr/preprocess/README.md.
     const float goldenR = 2.248908f;
     const float goldenG = -2.035714f;
     const float goldenB = -1.804444f;
     const auto& t = *result;
     const int H = 224, W = 224;
-    // Check pixel (0,0) and (112,112)
     for (int pix : {0, 112 * W + 112}) {
         QVERIFY(std::abs(t[0 * H * W + pix] - goldenR) <= kTol);
         QVERIFY(std::abs(t[1 * H * W + pix] - goldenG) <= kTol);
@@ -408,7 +395,7 @@ void BaberuOcrTest::preprocessorRejectsEmptyIntersection() {
     req.pageId = domain::PageId::generate();
     req.regionId = domain::RegionId::generate();
     req.image = img;
-    // Rect outside image bounds -> empty intersection
+    // The rect lies entirely outside the image, so its intersection is empty.
     req.rect = domain::RectGeometry{20.0, 20.0, 5.0, 5.0};
     auto m = makeManifestForPreprocess();
     auto result = BaberuOcrPreprocessor::preprocess(req, m);
@@ -416,9 +403,9 @@ void BaberuOcrTest::preprocessorRejectsEmptyIntersection() {
     QCOMPARE(result.error().code, QStringLiteral("input.invalid_ocr_region"));
 }
 
-// --- Decode logic ---
-// These tests exercise the static decode logic directly by calling helpers.
-// We test the penalty / cap formulas using simple arithmetic.
+// The decoder tests drive OnnxMangaOcrEngine against the fixture's fake graphs, so the expected
+// token sequence follows from the logits baked into those graphs and from the manifest generation
+// settings.
 
 void BaberuOcrTest::decoderUsesFakeSessionToVerifyDecoding() {
     Ort::Env env(ORT_LOGGING_LEVEL_WARNING, "Test");
@@ -443,22 +430,18 @@ void BaberuOcrTest::decoderUsesFakeSessionToVerifyDecoding() {
         QFAIL(qPrintable(res.error().safeMessage));
     }
 
-    // In our fake session:
-    // prefill outputs 10.
-    // 10 -> 11 (logit 5.0) vs 12 (logit 4.0) -> picks 11.
-    // 11 (RP=1.2) -> 11 (5.0/1.2=4.16) vs 12 (4.0) -> picks 11.
-    // 11 (run cap=2) -> logit -inf -> picks 12.
-    // 12 -> 2 (EOS).
-    // So sequence is 10, 11, 11, 12.
-    // vocab is: id 4=a, 5=b... 10=g, 11=h, 12=i.
-    // So output string should be "ghhi".
+    // The fake graphs fix this trajectory. Prefill emits id 10. The first step scores id 11 at logit
+    // 5.0 and id 12 at logit 4.0, so greedy decoding takes 11. Repeating 11 divides its score by the
+    // manifest repetition penalty of 1.2, giving 4.16, which still beats 4.0, so 11 is taken again.
+    // The content run cap of 2 then suppresses a third 11, so the step returns 12, and the next step
+    // returns the end token 2. With the fixture vocab starting at id 4 for 'a', ids 10, 11, 11, 12
+    // spell "ghhi".
     QCOMPARE(res.value().text, QStringLiteral("ghhi"));
 }
 
 void BaberuOcrTest::decoderMaxLengthReturnsDecodeLimit() {
-    // Need to modify manifest to have maxLength = 2
-    // But since it's hard to modify on disk safely during parallel tests,
-    // we can just copy the manifest dir to a temporary dir, modify it, and test.
+    // The model fixture directory is shared by every OCR test, so maxLength is lowered on a copy in a
+    // temporary directory rather than in place.
     QTemporaryDir tempDir;
     QVERIFY(tempDir.isValid());
 
