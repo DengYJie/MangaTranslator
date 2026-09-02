@@ -14,6 +14,7 @@
 #include "application/usecase/credential/CredentialUseCases.h"
 #include "application/usecase/processing/ProcessingUseCases.h"
 #include "application/usecase/settings/AppSettingsUseCases.h"
+#include "application/workflow/AppendPagesWorkflow.h"
 #include "application/workflow/BatchPagesProcessingWorkflow.h"
 #include "application/workflow/OperationRegistry.h"
 #include "data/derived/FileSystemDerivedAssetStore.h"
@@ -55,6 +56,7 @@ struct ApplicationContext::ProductionAdapters {
     std::unique_ptr<application::ClearRegionUseCase> clearUseCase;
     std::unique_ptr<application::LayoutRegionUseCase> layoutUseCase;
     std::unique_ptr<application::BatchPagesProcessingWorkflow> batchPagesWorkflow;
+    std::unique_ptr<application::AppendPagesWorkflow> appendPagesWorkflow;
 };
 
 ApplicationContext::ApplicationContext()
@@ -148,6 +150,8 @@ ApplicationContext::ApplicationContext()
                                                                     m_derivedAssetStore.get(),
                                                                     m_projectRepository.get(),
                                                                     m_operationRegistry.get());
+    m_production->appendPagesWorkflow =
+        std::make_unique<application::AppendPagesWorkflow>(m_comicImporter.get(), m_projectRepository.get());
 
     // Schedule derived-asset garbage collection after successful saves. Test constructor
     // paths never create a derived store, so the dynamic_cast simply skips there.
@@ -314,6 +318,10 @@ bool ApplicationContext::reconfigureDetectionModel(const QString& modelDirectory
 
 application::BatchPagesProcessingWorkflow* ApplicationContext::batchPagesWorkflow() const {
     return m_production ? m_production->batchPagesWorkflow.get() : nullptr;
+}
+
+application::AppendPagesWorkflow* ApplicationContext::appendPagesWorkflow() const {
+    return m_production ? m_production->appendPagesWorkflow.get() : nullptr;
 }
 
 void ApplicationContext::shutdown() {

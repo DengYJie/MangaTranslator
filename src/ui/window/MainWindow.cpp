@@ -142,58 +142,32 @@ MainWindow::MainWindow(application::IAppSettingsStore* settingsStore, QWidget* p
     auto* fileMenu = new fluent::menus_toolbars::FluentMenu(tr("文件"), m_editorMenuBar);
 
     auto* importMenu = new fluent::menus_toolbars::FluentMenu(tr("导入页面"), fileMenu);
-    connect(importMenu->addAction(tr("文件...")), &QAction::triggered, this, [this]() {
-        qInfo() << "[MainWindow] User action: Import Files requested";
-        Q_EMIT importFilesRequested();
-    });
-    connect(importMenu->addAction(tr("文件夹...")), &QAction::triggered, this, [this]() {
-        qInfo() << "[MainWindow] User action: Import Folder requested";
-        Q_EMIT importFolderRequested();
-    });
+    connect(importMenu->addAction(tr("文件...")), &QAction::triggered, this, &MainWindow::importFilesRequested);
+    connect(importMenu->addAction(tr("文件夹...")), &QAction::triggered, this, &MainWindow::importFolderRequested);
     fileMenu->addMenu(importMenu);
 
-    connect(fileMenu->addAction(tr("导出...")), &QAction::triggered, this, [this]() {
-        qInfo() << "[MainWindow] User action: Export Project requested";
-        Q_EMIT exportProjectRequested();
-    });
+    connect(fileMenu->addAction(tr("导出...")), &QAction::triggered, this, &MainWindow::exportProjectRequested);
 
     fileMenu->addSeparator();
 
-    connect(fileMenu->addAction(tr("关闭项目")), &QAction::triggered, this, [this]() {
-        qInfo() << "[MainWindow] User action: Close Project requested";
-        Q_EMIT closeProjectRequested();
-    });
+    connect(fileMenu->addAction(tr("关闭项目")), &QAction::triggered, this, &MainWindow::closeProjectRequested);
 
     m_editorMenuBar->addMenu(fileMenu);
 
     auto* processMenu = new fluent::menus_toolbars::FluentMenu(tr("处理"), m_editorMenuBar);
 
-    connect(processMenu->addAction(tr("处理项目")), &QAction::triggered, this, [this]() {
-        qInfo() << "[MainWindow] User action: Process Project requested";
-        Q_EMIT processProjectRequested();
-    });
+    connect(processMenu->addAction(tr("处理项目")), &QAction::triggered, this, &MainWindow::processProjectRequested);
 
     processMenu->addSeparator();
 
-    connect(processMenu->addAction(tr("运行文本检测")), &QAction::triggered, this, [this]() {
-        qInfo() << "[MainWindow] User action: Run Text Detection requested";
-        Q_EMIT runDetectionRequested();
-    });
+    connect(processMenu->addAction(tr("运行文本检测")), &QAction::triggered, this, &MainWindow::runDetectionRequested);
 
-    connect(processMenu->addAction(tr("运行文字识别")), &QAction::triggered, this, [this]() {
-        qInfo() << "[MainWindow] User action: Run OCR requested";
-        Q_EMIT runOcrRequested();
-    });
+    connect(processMenu->addAction(tr("运行文字识别")), &QAction::triggered, this, &MainWindow::runOcrRequested);
 
-    connect(processMenu->addAction(tr("运行 AI 翻译")), &QAction::triggered, this, [this]() {
-        qInfo() << "[MainWindow] User action: Run Translation requested";
-        Q_EMIT runTranslationRequested();
-    });
+    connect(
+        processMenu->addAction(tr("运行 AI 翻译")), &QAction::triggered, this, &MainWindow::runTranslationRequested);
 
-    connect(processMenu->addAction(tr("运行文字消除")), &QAction::triggered, this, [this]() {
-        qInfo() << "[MainWindow] User action: Run Text Clear requested";
-        Q_EMIT runTextClearRequested();
-    });
+    connect(processMenu->addAction(tr("运行文字消除")), &QAction::triggered, this, &MainWindow::runTextClearRequested);
 
     m_editorMenuBar->addMenu(processMenu);
 

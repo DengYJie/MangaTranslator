@@ -37,8 +37,9 @@ struct ProviderConfig;
 }
 
 namespace manga::application {
+class AppendPagesWorkflow;
 class BatchPagesProcessingWorkflow;
-}
+} // namespace manga::application
 
 namespace manga::app {
 
@@ -98,6 +99,7 @@ public:
         return m_comicExporter.get();
     }
     [[nodiscard]] application::BatchPagesProcessingWorkflow* batchPagesWorkflow() const;
+    [[nodiscard]] application::AppendPagesWorkflow* appendPagesWorkflow() const;
 
     [[nodiscard]] application::IOcrEngine* ocrEngine() const {
         return m_ocrEngine.get();

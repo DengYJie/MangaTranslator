@@ -37,6 +37,10 @@ public:
     void setProjectTitleInfo(const QString& projectName, int currentPage, int totalPages, bool isDirty = false);
     void clearProjectTitleInfo();
 
+    /// Marks whether a project session is open. The editor menu bar in the title
+    /// bar is only shown on the editor route while a project session is active.
+    void setProjectSessionActive(bool active);
+
     /// Wires the controller to the title bar and panel intents. Non-owning.
     void setNavigationController(navigation::NavigationController* controller);
 
@@ -55,12 +59,25 @@ Q_SIGNALS:
     /// If connected, receivers must call forceNavigate(routeKey) later to actually navigate.
     void navigationInterceptRequested(const QString& routeKey);
 
+    /// Title bar menu intents. The composition root wires these to the real
+    /// use cases; the window only reports user intent.
+    void importFilesRequested();
+    void importFolderRequested();
+    void exportProjectRequested();
+    void closeProjectRequested();
+    void processProjectRequested();
+    void runDetectionRequested();
+    void runOcrRequested();
+    void runTranslationRequested();
+    void runTextClearRequested();
+
 protected:
     void closeEvent(QCloseEvent* event) override;
 
 private:
     void restoreWindowGeometry();
     void saveWindowGeometry();
+    void updateEditorMenuBarVisibility();
 
     application::IAppSettingsStore* m_settingsStore;         // non-owning
     navigation::NavigationController* m_controller{nullptr}; // non-owning
@@ -69,6 +86,8 @@ private:
     fluent::menus_toolbars::FluentMenuBar* m_editorMenuBar{nullptr};
     QString m_lastMainRoute{QStringLiteral("home")};
     bool m_forceClose{false};
+    bool m_editorRouteActive{false};
+    bool m_projectSessionActive{false};
 };
 
 } // namespace manga::ui::window

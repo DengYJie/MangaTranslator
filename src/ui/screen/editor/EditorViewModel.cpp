@@ -147,6 +147,10 @@ EditorViewModel::EditorViewModel(application::IThumbnailStore* thumbnailStore,
             &QFutureWatcher<application::Result<application::ExportResponse>>::finished,
             this,
             &EditorViewModel::handleExportFinished);
+    connect(&m_appendPagesWatcher,
+            &QFutureWatcher<application::Result<application::AppendPagesReport>>::finished,
+            this,
+            &EditorViewModel::handleAppendPagesFinished);
 }
 
 EditorViewModel::~EditorViewModel() {
@@ -159,6 +163,9 @@ EditorViewModel::~EditorViewModel() {
     }
     if (m_operationRegistry && m_previewOperation.isValid()) {
         m_operationRegistry->cancelOperation(m_previewOperation);
+    }
+    if (m_operationRegistry && m_appendPagesOperation.isValid()) {
+        m_operationRegistry->cancelOperation(m_appendPagesOperation);
     }
     cancelExport();
 }
@@ -254,6 +261,10 @@ void EditorViewModel::closeProjectSession() {
         m_pageLoadOperation = application::OperationId{};
     }
     cancelExport();
+    if (m_operationRegistry && m_appendPagesOperation.isValid()) {
+        m_operationRegistry->cancelOperation(m_appendPagesOperation);
+        m_appendPagesOperation = application::OperationId{};
+    }
     invalidateRequests();
 
     // Project-owned tasks are stopped here, before the session is torn down below.
@@ -2139,6 +2150,99 @@ void EditorViewModel::exportPages(application::ExportScope scope, const QString&
 void EditorViewModel::retryExportInDirectory(const QString& outputDir) {
     if (!outputDir.trimmed().isEmpty()) {
         exportPages(m_exportScope, outputDir);
+    }
+}
+
+void EditorViewModel::setAppendPagesWorkflow(application::AppendPagesWorkflow* workflow) {
+    m_appendPagesWorkflow = workflow;
+}
+
+void EditorViewModel::importPagesIntoProject(const QVector<QString>& filePaths) {
+    if (!m_hasSession || !m_openedSession || m_appendPagesWorkflow == nullptr || m_operationRegistry == nullptr) {
+        return;
+    }
+    if (filePaths.isEmpty() || m_appendPagesOperation.isValid()) {
+        return;
+    }
+
+    application::OperationDescriptor descriptor{
+        .stage = application::OperationStage::Import,
+        .projectId = m_session.projectId,
+        .displayTarget = tr("导入页面"),
+        .cancellable = true,
+    };
+    auto context = m_operationRegistry->createOperation(
+        std::move(descriptor), m_state.projectSessionGeneration, m_state.viewGeneration);
+    m_appendPagesOperation = context.operationId;
+    m_appendPagesSessionGeneration = m_state.projectSessionGeneration;
+
+    application::AppendPagesRequest request;
+    request.projectId = m_session.projectId;
+    request.projectRoot = m_session.projectRootPath;
+    request.filePaths = filePaths;
+    request.project = &m_openedSession->project;
+    request.sessionGeneration = m_state.projectSessionGeneration;
+    request.currentSessionGeneration = [this]() { return m_state.projectSessionGeneration; };
+
+    m_appendPagesWatcher.setFuture(m_appendPagesWorkflow->execute(std::move(request), std::move(context)));
+}
+
+void EditorViewModel::handleAppendPagesFinished() {
+    const quint64 sessionGen = m_appendPagesSessionGeneration;
+    m_appendPagesOperation = application::OperationId{};
+    m_appendPagesSessionGeneration = 0;
+
+    // A stale completion belongs to a closed or replaced session; its aggregate
+    // mutation was already rejected inside the workflow.
+    if (!m_hasSession || !m_openedSession || sessionGen != m_state.projectSessionGeneration) {
+        return;
+    }
+
+    const auto result = m_appendPagesWatcher.result();
+    if (!result.has_value()) {
+        if (result.error().category == application::ErrorCategory::Cancelled) {
+            return;
+        }
+        const auto presentation = m_recoveryPresenter.present(result.error());
+        updateState([&](EditorState& s) {
+            EditorNotice notice;
+            if (presentation) {
+                notice.safeMessage = presentation->safeMessage;
+                notice.actionText = presentation->actionText;
+                notice.action = presentation->action;
+                notice.retryable = presentation->action == application::RecoveryAction::Retry;
+            } else {
+                notice.safeMessage = result.error().safeMessage;
+                notice.action = application::RecoveryAction::Retry;
+                notice.retryable = true;
+            }
+            s.notice = notice;
+        });
+        return;
+    }
+
+    // The aggregate gained pages, so the session descriptor and the page list
+    // projection are re-derived from it.
+    m_session = application::mapping::ProjectMapper::toSessionDescriptor(*m_openedSession);
+    updateState([this](EditorState& s) {
+        s.pages.clear();
+        for (const auto& pageDesc : m_session.pages) {
+            EditorPageEntry entry;
+            entry.id = pageDesc.id;
+            entry.orderIndex = pageDesc.orderIndex;
+            entry.displayName = QFileInfo(pageDesc.originalAssetPath).fileName();
+            entry.imageSize = pageDesc.imageSize;
+            entry.regionCount = pageDesc.regionCount;
+            s.pages.append(entry);
+        }
+        s.saveState.isDirty = m_openedSession->project.isDirty();
+    });
+
+    if (result->projectSaved) {
+        markProjectCleanAtRevision(result->savedRevision);
+    }
+    if (!result->pageIds.isEmpty()) {
+        selectPage(result->pageIds.first());
     }
 }
 

@@ -148,6 +148,7 @@ int Application::run() {
     editorViewModel->setInpaintAvailability(m_context->isInpaintModelAvailable(),
                                             m_context->inpaintModelUnavailableReason());
     editorViewModel->setExportDependencies(m_context->comicExporter(), m_context->derivedAssetStore());
+    editorViewModel->setAppendPagesWorkflow(m_context->appendPagesWorkflow());
     auto* editorPage = new ui::screen::editor::EditorPage(editorViewModel, mainWindow);
     QObject::connect(editorPage,
                      &ui::screen::editor::EditorPage::chooseExportPathRequested,
@@ -197,7 +198,12 @@ int Application::run() {
                                               m_context->detectionModelUnavailableReason());
 
     editorViewModel->observe(mainWindow, [mainWindow](const ui::screen::editor::EditorState& state) {
-        if (!state.projectId.isValid() || state.projectName.isEmpty()) {
+        const bool sessionActive = state.projectId.isValid() && !state.projectName.isEmpty();
+        mainWindow->setProjectSessionActive(sessionActive);
+        if (auto* panel = mainWindow->mainNavigationPanel()) {
+            panel->setItemEnabled(QStringLiteral("editor"), sessionActive);
+        }
+        if (!sessionActive) {
             mainWindow->clearProjectTitleInfo();
             return;
         }
@@ -220,6 +226,11 @@ int Application::run() {
     editorItem.iconGlyph = QStringLiteral("\uE70F");
     mainWindow->addNavigationItem(editorItem, QStringLiteral("main"));
     mainWindow->registerRoute(QStringLiteral("editor"), editorPage, QStringLiteral("main"));
+    // The observe callback above replays before the editor item is registered,
+    // so the initial enabled state is applied here explicitly.
+    if (auto* panel = mainWindow->mainNavigationPanel()) {
+        panel->setItemEnabled(editorItem.routeKey, editorViewModel->hasSession());
+    }
 
     auto* settingsViewModel = new ui::screen::settings::SettingsViewModel(m_context->appSettingsStore(),
                                                                           m_context->credentialOperations(),
@@ -538,6 +549,77 @@ int Application::run() {
     auto* importPage = new ui::screen::import_::ImportPage(importViewModel, mainWindow);
 
     mainWindow->registerRoute(QStringLiteral("import"), importPage, QStringLiteral("main"));
+
+    QObject::connect(
+        mainWindow, &ui::window::MainWindow::importFilesRequested, mainWindow, [editorViewModel, mainWindow]() {
+            const auto paths = QFileDialog::getOpenFileNames(
+                mainWindow,
+                QCoreApplication::translate("Application", "选择图片文件"),
+                QString(),
+                QCoreApplication::translate("Application", "图片文件 (*.jpg *.jpeg *.png *.webp)"));
+            if (!paths.isEmpty()) {
+                editorViewModel->importPagesIntoProject(paths);
+            }
+        });
+    QObject::connect(
+        mainWindow, &ui::window::MainWindow::importFolderRequested, mainWindow, [editorViewModel, mainWindow]() {
+            const QString path = QFileDialog::getExistingDirectory(
+                mainWindow, QCoreApplication::translate("Application", "选择图片文件夹"));
+            if (!path.isEmpty()) {
+                editorViewModel->importPagesIntoProject({path});
+            }
+        });
+    QObject::connect(
+        mainWindow, &ui::window::MainWindow::exportProjectRequested, mainWindow, [editorViewModel, mainWindow]() {
+            const QString path = QFileDialog::getExistingDirectory(
+                mainWindow, QCoreApplication::translate("Application", "选择导出目录"));
+            if (!path.isEmpty()) {
+                editorViewModel->exportPages(application::ExportScope::AllPages, path);
+            }
+        });
+    QObject::connect(
+        mainWindow, &ui::window::MainWindow::closeProjectRequested, mainWindow, [editorViewModel, pendingAction]() {
+            // Reuse the close-interception workflow, landing on the home route
+            // instead of closing the window.
+            *pendingAction = QStringLiteral("home");
+            editorViewModel->requestCloseProject();
+        });
+
+    const auto allProjectPageIds = [editorViewModel]() {
+        QVector<domain::PageId> pageIds;
+        const auto& pages = editorViewModel->state().pages;
+        pageIds.reserve(pages.size());
+        for (const auto& page : pages) {
+            pageIds.append(page.id);
+        }
+        return pageIds;
+    };
+    QObject::connect(mainWindow,
+                     &ui::window::MainWindow::processProjectRequested,
+                     mainWindow,
+                     [processingController, allProjectPageIds]() {
+                         processingController->batchSmartTranslatePages(allProjectPageIds());
+                     });
+    QObject::connect(
+        mainWindow,
+        &ui::window::MainWindow::runDetectionRequested,
+        mainWindow,
+        [processingController, allProjectPageIds]() { processingController->batchDetectPages(allProjectPageIds()); });
+    QObject::connect(
+        mainWindow, &ui::window::MainWindow::runOcrRequested, mainWindow, [processingController, allProjectPageIds]() {
+            processingController->batchOcrPages(allProjectPageIds());
+        });
+    QObject::connect(mainWindow,
+                     &ui::window::MainWindow::runTranslationRequested,
+                     mainWindow,
+                     [processingController, allProjectPageIds]() {
+                         processingController->batchTranslatePages(allProjectPageIds());
+                     });
+    QObject::connect(
+        mainWindow,
+        &ui::window::MainWindow::runTextClearRequested,
+        mainWindow,
+        [processingController, allProjectPageIds]() { processingController->batchClearPages(allProjectPageIds()); });
 
     QObject::connect(importViewModel,
                      &ui::screen::import_::ImportViewModel::projectImported,

@@ -9,6 +9,7 @@
 #include "application/usecase/apply/PrepareProcessingAdoptionUseCases.h"
 #include "application/usecase/export/ExportUseCases.h"
 #include "application/usecase/processing/ManualInpaintWorkflow.h"
+#include "application/workflow/AppendPagesWorkflow.h"
 #include "ui/base/BaseViewModel.h"
 #include "ui/command/EditorCommandContext.h"
 #include "ui/command/PageClearLayerCommand.h"
@@ -192,6 +193,13 @@ public:
     void exportPages(application::ExportScope scope, const QString& outputDir);
     void retryExportInDirectory(const QString& outputDir);
 
+    /// Injects the append-pages pipeline. Non-owning; import intents are ignored
+    /// until it is set.
+    void setAppendPagesWorkflow(application::AppendPagesWorkflow* workflow);
+    /// Imports image files or folders as new pages of the open project, then saves
+    /// the project metadata. Duplicate intents while an import is running are ignored.
+    void importPagesIntoProject(const QVector<QString>& filePaths);
+
     /// Test-only hook: removes a region via RemoveRegionUseCase and rebuilds projection.
     /// Production intents must not use this method.
     [[nodiscard]] bool removeRegionForTest(const domain::RegionId& regionId);
@@ -300,6 +308,7 @@ private:
     void handleExportSnapshotFinished();
     void handleExportFinished();
     void failExport(const application::ApplicationError& error);
+    void handleAppendPagesFinished();
     [[nodiscard]] const application::PageDescriptor* findPage(const domain::PageId& pageId) const;
     /// Index of pageId inside m_session.pages, or -1 when the page is unknown.
     [[nodiscard]] int pageOrder(const domain::PageId& pageId) const;
@@ -410,6 +419,12 @@ private:
     /// Aggregate copy owned for the duration of one export so the background
     /// snapshot chain never reads a released session aggregate.
     std::unique_ptr<domain::ComicProject> m_exportProjectSnapshot;
+
+    /// Append-pages pipeline, injected via setAppendPagesWorkflow. Non-owning.
+    application::AppendPagesWorkflow* m_appendPagesWorkflow{nullptr};
+    QFutureWatcher<application::Result<application::AppendPagesReport>> m_appendPagesWatcher;
+    application::OperationId m_appendPagesOperation{};
+    quint64 m_appendPagesSessionGeneration{0};
 
     ui::error::RecoveryPresenter m_recoveryPresenter;
     EditorProcessingController* m_processingController{nullptr};
