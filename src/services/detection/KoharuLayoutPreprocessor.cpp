@@ -1,6 +1,6 @@
 #include "KoharuLayoutPreprocessor.h"
 
-#include <QPainter>
+#include <QImage>
 
 #include <algorithm>
 #include <cmath>
@@ -14,54 +14,50 @@ KoharuLayoutPreprocessor::process(const QImage& sourceImage, int targetWidth, in
     result.originalHeight = sourceImage.height();
     result.targetWidth = targetWidth;
     result.targetHeight = targetHeight;
-
-    if (result.originalWidth <= 0 || result.originalHeight <= 0) {
-        result.tensorData.assign(static_cast<size_t>(3) * targetWidth * targetHeight, 0.0f);
-        return result;
-    }
-
-    const double scaleX = static_cast<double>(targetWidth) / result.originalWidth;
-    const double scaleY = static_cast<double>(targetHeight) / result.originalHeight;
-    result.scale = std::min(scaleX, scaleY);
-
-    result.scaledWidth = std::clamp(static_cast<int>(std::round(result.originalWidth * result.scale)), 1, targetWidth);
-    result.scaledHeight =
-        std::clamp(static_cast<int>(std::round(result.originalHeight * result.scale)), 1, targetHeight);
-
-    const int padX = (targetWidth - result.scaledWidth) / 2;
-    const int padY = (targetHeight - result.scaledHeight) / 2;
-    result.padX = static_cast<double>(padX);
-    result.padY = static_cast<double>(padY);
-
-    // Create 1152x1152 RGB working image with 0.0 padding
-    QImage canvas(targetWidth, targetHeight, QImage::Format_RGB888);
-    canvas.fill(Qt::black);
-
-    QImage rgbSource = sourceImage.format() == QImage::Format_RGB888
-                           ? sourceImage
-                           : sourceImage.convertToFormat(QImage::Format_RGB888);
-    QImage scaled =
-        rgbSource.scaled(result.scaledWidth, result.scaledHeight, Qt::IgnoreAspectRatio, Qt::SmoothTransformation);
-
-    QPainter painter(&canvas);
-    painter.drawImage(padX, padY, scaled);
-    painter.end();
+    result.scale = 1.0;
+    result.padX = 0.0;
+    result.padY = 0.0;
+    result.scaledWidth = targetWidth;
+    result.scaledHeight = targetHeight;
 
     const size_t planeSize = static_cast<size_t>(targetWidth) * targetHeight;
     result.tensorData.resize(3 * planeSize);
+
+    if (result.originalWidth <= 0 || result.originalHeight <= 0) {
+        std::fill(result.tensorData.begin(), result.tensorData.end(), 0.0f);
+        return result;
+    }
+
+    // Direct bilinear resize matching RF-DETR Albumentations training
+    QImage rgbSource = sourceImage.format() == QImage::Format_RGB888
+                           ? sourceImage
+                           : sourceImage.convertToFormat(QImage::Format_RGB888);
+    QImage scaled = rgbSource.scaled(targetWidth, targetHeight, Qt::IgnoreAspectRatio, Qt::SmoothTransformation);
 
     float* rChannel = result.tensorData.data();
     float* gChannel = result.tensorData.data() + planeSize;
     float* bChannel = result.tensorData.data() + 2 * planeSize;
 
+    // ImageNet normalization constants matching Koharu
+    constexpr float meanR = 0.485f;
+    constexpr float meanG = 0.456f;
+    constexpr float meanB = 0.406f;
+    constexpr float stdR = 0.229f;
+    constexpr float stdG = 0.224f;
+    constexpr float stdB = 0.225f;
+
     for (int y = 0; y < targetHeight; ++y) {
-        const uchar* line = canvas.constScanLine(y);
+        const uchar* line = scaled.constScanLine(y);
         const size_t rowOffset = static_cast<size_t>(y) * targetWidth;
         for (int x = 0; x < targetWidth; ++x) {
             const size_t index = rowOffset + x;
-            rChannel[index] = line[x * 3 + 0] / 255.0f;
-            gChannel[index] = line[x * 3 + 1] / 255.0f;
-            bChannel[index] = line[x * 3 + 2] / 255.0f;
+            const float r = line[x * 3 + 0] / 255.0f;
+            const float g = line[x * 3 + 1] / 255.0f;
+            const float b = line[x * 3 + 2] / 255.0f;
+
+            rChannel[index] = (r - meanR) / stdR;
+            gChannel[index] = (g - meanG) / stdG;
+            bChannel[index] = (b - meanB) / stdB;
         }
     }
 

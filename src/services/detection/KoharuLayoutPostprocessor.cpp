@@ -2,10 +2,30 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdint>
+#include <vector>
 
 namespace manga::services {
 
 namespace {
+
+// Class index constants matching Koharu RF-DETR label order:
+// 0: text, 1: onomatopoeia, 2: bubble, 3: panel, 4: background (suppressed)
+constexpr int kClassText = 0;
+constexpr int kClassOnomatopoeia = 1;
+constexpr int kClassBubble = 2;
+constexpr int kClassPanel = 3;
+constexpr int kClassBackground = 4;
+constexpr int kNumClasses = 5;
+
+struct RawDetection {
+    float x1{0};
+    float y1{0};
+    float x2{0};
+    float y2{0};
+    float score{0};
+    int label{0};
+};
 
 struct InternalItem {
     domain::RectGeometry rect;
@@ -15,11 +35,185 @@ struct InternalItem {
     int panelIndex{-1};
 };
 
+// Sigmoid activation
+inline float sigmoid(float x) {
+    return 1.0f / (1.0f + std::exp(-x));
+}
+
+// Intersection over union on [x1,y1,x2,y2] absolute coords
+float iou(const RawDetection& a, const RawDetection& b) {
+    const float ix1 = std::max(a.x1, b.x1);
+    const float iy1 = std::max(a.y1, b.y1);
+    const float ix2 = std::min(a.x2, b.x2);
+    const float iy2 = std::min(a.y2, b.y2);
+    const float iw = std::max(0.0f, ix2 - ix1);
+    const float ih = std::max(0.0f, iy2 - iy1);
+    const float intersection = iw * ih;
+    if (intersection <= 0.0f) {
+        return 0.0f;
+    }
+    const float aArea = std::max(0.0f, a.x2 - a.x1) * std::max(0.0f, a.y2 - a.y1);
+    const float bArea = std::max(0.0f, b.x2 - b.x1) * std::max(0.0f, b.y2 - b.y1);
+    const float unionArea = aArea + bArea - intersection;
+    return unionArea > 0.0f ? intersection / unionArea : 0.0f;
+}
+
+// Non-maximum suppression per class (IoU threshold 0.5, matching Koharu)
+std::vector<RawDetection> nonMaximumSuppression(std::vector<RawDetection> dets, float iouThreshold) {
+    // Sort descending by score
+    std::stable_sort(
+        dets.begin(), dets.end(), [](const RawDetection& a, const RawDetection& b) { return a.score > b.score; });
+
+    std::vector<bool> suppressed(dets.size(), false);
+    std::vector<RawDetection> kept;
+    kept.reserve(dets.size());
+
+    for (size_t i = 0; i < dets.size(); ++i) {
+        if (suppressed[i]) {
+            continue;
+        }
+        kept.push_back(dets[i]);
+        for (size_t j = i + 1; j < dets.size(); ++j) {
+            if (!suppressed[j] && dets[j].label == dets[i].label && iou(dets[i], dets[j]) >= iouThreshold) {
+                suppressed[j] = true;
+            }
+        }
+    }
+    return kept;
+}
+
 bool intersectsOrContains(const domain::RectGeometry& panel, const domain::RectGeometry& item) {
     const double centerX = item.x + item.width / 2.0;
     const double centerY = item.y + item.height / 2.0;
     return centerX >= panel.x && centerX <= (panel.x + panel.width) && centerY >= panel.y &&
            centerY <= (panel.y + panel.height);
+}
+
+// Decode RF-DETR native outputs: pred_logits [1,N,C] + pred_boxes [1,N,4]
+// Returns raw detections in original-image pixel coordinates
+std::vector<RawDetection> decodeNativeRfDetr(const float* logits,
+                                             const std::vector<int64_t>& logitsShape,
+                                             const float* boxes,
+                                             const std::vector<int64_t>& boxesShape,
+                                             int origWidth,
+                                             int origHeight,
+                                             float minConfidence) {
+    // Expected shapes: logits [1, N, 5], boxes [1, N, 4]
+    if (logitsShape.size() < 3 || boxesShape.size() < 3) {
+        return {};
+    }
+    const int64_t numQueries = logitsShape[1];
+    const int64_t numClasses = logitsShape[2];
+    if (numQueries <= 0 || numClasses < kNumClasses) {
+        return {};
+    }
+
+    const float W = static_cast<float>(origWidth);
+    const float H = static_cast<float>(origHeight);
+
+    std::vector<RawDetection> result;
+    result.reserve(static_cast<size_t>(numQueries));
+
+    for (int64_t q = 0; q < numQueries; ++q) {
+        const float* logitRow = logits + q * numClasses;
+        const float* boxRow = boxes + q * 4;
+
+        // cx, cy, w, h in [0,1] normalized
+        const float cx = boxRow[0];
+        const float cy = boxRow[1];
+        const float bw = boxRow[2];
+        const float bh = boxRow[3];
+
+        // Convert to pixel x1,y1,x2,y2 in original image space
+        const float x1 = std::clamp((cx - bw / 2.0f) * W, 0.0f, W);
+        const float y1 = std::clamp((cy - bh / 2.0f) * H, 0.0f, H);
+        const float x2 = std::clamp((cx + bw / 2.0f) * W, 0.0f, W);
+        const float y2 = std::clamp((cy + bh / 2.0f) * H, 0.0f, H);
+
+        if (x2 - x1 < 3.0f || y2 - y1 < 3.0f) {
+            continue;
+        }
+
+        // Apply sigmoid; skip background (index 4)
+        for (int c = 0; c < kClassBackground; ++c) {
+            const float score = sigmoid(logitRow[c]);
+            if (score >= minConfidence) {
+                result.push_back({x1, y1, x2, y2, score, c});
+            }
+        }
+    }
+    return result;
+}
+
+// Decode pre-processed legacy format: dets [N, 5+] with score at index 4, labels int64
+std::vector<RawDetection> decodeLegacyFormat(const float* dets,
+                                             const std::vector<int64_t>& detsShape,
+                                             const int64_t* labelData,
+                                             int origWidth,
+                                             int origHeight,
+                                             float minConfidence) {
+    size_t numDets = 0;
+    size_t boxDim = 4;
+    if (detsShape.size() == 3) {
+        numDets = static_cast<size_t>(detsShape[1]);
+        boxDim = static_cast<size_t>(detsShape[2]);
+    } else if (detsShape.size() == 2) {
+        numDets = static_cast<size_t>(detsShape[0]);
+        boxDim = static_cast<size_t>(detsShape[1]);
+    }
+
+    const float W = static_cast<float>(origWidth);
+    const float H = static_cast<float>(origHeight);
+
+    std::vector<RawDetection> result;
+    result.reserve(numDets);
+
+    for (size_t i = 0; i < numDets; ++i) {
+        const float* ptr = dets + i * boxDim;
+        const int64_t label = labelData[i];
+
+        float x1 = ptr[0];
+        float y1 = ptr[1];
+        float x2 = ptr[2];
+        float y2 = ptr[3];
+        float score = (boxDim >= 5) ? ptr[4] : 1.0f;
+
+        if (score < minConfidence) {
+            continue;
+        }
+
+        // Handle normalized [0,1] coordinates
+        if (x1 <= 1.0f && y1 <= 1.0f && x2 <= 1.0f && y2 <= 1.0f) {
+            x1 *= W;
+            y1 *= H;
+            x2 *= W;
+            y2 *= H;
+        }
+
+        // Handle cxcywh format
+        if (x2 < x1 || y2 < y1) {
+            const float cx = x1;
+            const float cy = y1;
+            const float bw = x2;
+            const float bh = y2;
+            x1 = cx - bw / 2.0f;
+            y1 = cy - bh / 2.0f;
+            x2 = cx + bw / 2.0f;
+            y2 = cy + bh / 2.0f;
+        }
+
+        x1 = std::clamp(x1, 0.0f, W);
+        y1 = std::clamp(y1, 0.0f, H);
+        x2 = std::clamp(x2, 0.0f, W);
+        y2 = std::clamp(y2, 0.0f, H);
+
+        if (x2 - x1 < 3.0f || y2 - y1 < 3.0f) {
+            continue;
+        }
+
+        result.push_back({x1, y1, x2, y2, score, static_cast<int>(label)});
+    }
+    return result;
 }
 
 } // namespace
@@ -32,101 +226,53 @@ application::TextDetectionResponse KoharuLayoutPostprocessor::process(const doma
     application::TextDetectionResponse response;
     response.pageId = pageId;
 
-    if (raw.dets == nullptr || raw.labels == nullptr || prep.scale <= 0.0) {
+    const float confF = static_cast<float>(minConfidence);
+
+    // Decode raw detections, preferring native RF-DETR logits+boxes format
+    std::vector<RawDetection> rawDets;
+    if (raw.logits != nullptr && raw.boxes != nullptr && !raw.logitsShape.empty() && !raw.boxesShape.empty()) {
+        rawDets = decodeNativeRfDetr(
+            raw.logits, raw.logitsShape, raw.boxes, raw.boxesShape, prep.originalWidth, prep.originalHeight, confF);
+    } else if (raw.dets != nullptr && raw.labels != nullptr && !raw.detsShape.empty()) {
+        rawDets =
+            decodeLegacyFormat(raw.dets, raw.detsShape, raw.labels, prep.originalWidth, prep.originalHeight, confF);
+    } else {
         return response;
     }
 
-    // Determine number of predictions
-    size_t numDets = 0;
-    size_t boxDim = 4;
-    if (raw.detsShape.size() == 3) {
-        numDets = static_cast<size_t>(raw.detsShape[1]);
-        boxDim = static_cast<size_t>(raw.detsShape[2]);
-    } else if (raw.detsShape.size() == 2) {
-        numDets = static_cast<size_t>(raw.detsShape[0]);
-        boxDim = static_cast<size_t>(raw.detsShape[1]);
-    }
+    // NMS with IoU threshold 0.5 (matching Koharu non_maximum_suppression)
+    rawDets = nonMaximumSuppression(std::move(rawDets), 0.5f);
 
+    // Split by class
     QVector<domain::RectGeometry> rawPanels;
     QVector<InternalItem> candidateItems;
 
-    for (size_t i = 0; i < numDets; ++i) {
-        const float* boxPtr = raw.dets + i * boxDim;
-        const int64_t label = raw.labels[i];
-
-        float x1 = boxPtr[0];
-        float y1 = boxPtr[1];
-        float x2 = boxPtr[2];
-        float y2 = boxPtr[3];
-        float score = 1.0f;
-        if (boxDim >= 5) {
-            score = boxPtr[4];
-        }
-
-        if (score < static_cast<float>(minConfidence)) {
-            continue;
-        }
-
-        // Check if coordinates are normalized [0, 1]
-        if (x1 <= 1.0f && y1 <= 1.0f && x2 <= 1.0f && y2 <= 1.0f && (x2 > x1 || y2 > y1)) {
-            x1 *= prep.targetWidth;
-            y1 *= prep.targetHeight;
-            x2 *= prep.targetWidth;
-            y2 *= prep.targetHeight;
-        }
-
-        // If coordinates are in [cx, cy, w, h] format
-        if (x2 < x1 || y2 < y1) {
-            const float cx = x1;
-            const float cy = y1;
-            const float w = x2;
-            const float h = y2;
-            x1 = cx - w / 2.0f;
-            y1 = cy - h / 2.0f;
-            x2 = cx + w / 2.0f;
-            y2 = cy + h / 2.0f;
-        }
-
-        // Unpad and rescale back to original image space
-        const double origX1 = std::clamp((x1 - prep.padX) / prep.scale, 0.0, static_cast<double>(prep.originalWidth));
-        const double origY1 = std::clamp((y1 - prep.padY) / prep.scale, 0.0, static_cast<double>(prep.originalHeight));
-        const double origX2 = std::clamp((x2 - prep.padX) / prep.scale, 0.0, static_cast<double>(prep.originalWidth));
-        const double origY2 = std::clamp((y2 - prep.padY) / prep.scale, 0.0, static_cast<double>(prep.originalHeight));
-
-        const double width = origX2 - origX1;
-        const double height = origY2 - origY1;
-
-        if (width < 3.0 || height < 3.0) {
-            continue;
-        }
-
+    for (const auto& det : rawDets) {
         domain::RectGeometry rect;
-        rect.x = origX1;
-        rect.y = origY1;
-        rect.width = width;
-        rect.height = height;
+        rect.x = static_cast<double>(det.x1);
+        rect.y = static_cast<double>(det.y1);
+        rect.width = static_cast<double>(det.x2 - det.x1);
+        rect.height = static_cast<double>(det.y2 - det.y1);
 
-        if (label == 3) {
-            // Panel frame
+        if (det.label == kClassPanel) {
             rawPanels.append(rect);
-        } else if (label == 2) {
-            // Speech bubble
+        } else if (det.label == kClassBubble) {
             InternalItem item;
             item.rect = rect;
-            item.confidence = score;
+            item.confidence = det.score;
             item.regionClass = application::DetectedRegionClass::Bubble;
             candidateItems.append(item);
-        } else {
+        } else if (det.label == kClassText || det.label == kClassOnomatopoeia) {
             InternalItem item;
             item.rect = rect;
-            item.confidence = score;
-            item.regionClass =
-                (label == 1) ? application::DetectedRegionClass::Onomatopoeia : application::DetectedRegionClass::Text;
+            item.confidence = det.score;
+            item.regionClass = (det.label == kClassOnomatopoeia) ? application::DetectedRegionClass::Onomatopoeia
+                                                                 : application::DetectedRegionClass::Text;
             candidateItems.append(item);
         }
     }
 
-    // Separate text/sfx items and bubble items
+    // Separate bubbles from text/sfx
     QVector<InternalItem> textItems;
     QVector<domain::RectGeometry> rawBubbles;
     for (const auto& item : candidateItems) {
@@ -137,9 +283,8 @@ application::TextDetectionResponse KoharuLayoutPostprocessor::process(const doma
         }
     }
 
+    // Associate text regions with their containing bubble (containment >= 50% of text area)
     QVector<bool> bubbleHasText(rawBubbles.size(), false);
-
-    // Associate each text item with its containing speech bubble
     for (auto& text : textItems) {
         double bestOverlap = 0.0;
         int bestBubbleIdx = -1;
@@ -153,7 +298,8 @@ application::TextDetectionResponse KoharuLayoutPostprocessor::process(const doma
                 const double intersection = (ix2 - ix1) * (iy2 - iy1);
                 const double textArea = text.rect.width * text.rect.height;
                 const double overlapRatio = textArea > 0.0 ? (intersection / textArea) : 0.0;
-                if (overlapRatio > 0.35 && overlapRatio > bestOverlap) {
+                // Koharu uses mask containment >= 0.9; box approximation uses 0.5
+                if (overlapRatio >= 0.5 && overlapRatio > bestOverlap) {
                     bestOverlap = overlapRatio;
                     bestBubbleIdx = b;
                 }
@@ -165,7 +311,7 @@ application::TextDetectionResponse KoharuLayoutPostprocessor::process(const doma
         }
     }
 
-    // For any speech bubble that has no text inside it, create a default centered text box
+    // For bubbles with no associated text, synthesize a default centered text box
     for (int b = 0; b < rawBubbles.size(); ++b) {
         if (!bubbleHasText.at(b)) {
             const auto& bubble = rawBubbles.at(b);
@@ -186,7 +332,7 @@ application::TextDetectionResponse KoharuLayoutPostprocessor::process(const doma
         }
     }
 
-    // Sort detected panels: Top-to-Bottom, Right-to-Left (for RTL)
+    // Sort panels: top-to-bottom, then RTL or LTR
     std::sort(rawPanels.begin(),
               rawPanels.end(),
               [readingDirection](const domain::RectGeometry& a, const domain::RectGeometry& b) {
@@ -199,7 +345,7 @@ application::TextDetectionResponse KoharuLayoutPostprocessor::process(const doma
 
     response.panels = rawPanels;
 
-    // Associate candidate text items with containing panel
+    // Associate text items with panels by center-point containment
     for (auto& item : textItems) {
         for (int p = 0; p < rawPanels.size(); ++p) {
             if (intersectsOrContains(rawPanels.at(p), item.rect)) {
@@ -209,41 +355,37 @@ application::TextDetectionResponse KoharuLayoutPostprocessor::process(const doma
         }
     }
 
-    // Sort candidate items by Panel order, then by Japanese / Manga reading order
-    std::sort(textItems.begin(), textItems.end(), [readingDirection](const InternalItem& a, const InternalItem& b) {
-        if (a.panelIndex != b.panelIndex) {
-            if (a.panelIndex == -1)
-                return false;
-            if (b.panelIndex == -1)
-                return true;
-            return a.panelIndex < b.panelIndex;
-        }
+    // Sort text items: by panel order, then Koharu-style spatial order within each panel
+    // RTL manga: detection_order = top.cmp(other_top).then_with(right_x.cmp(left_x)) i.e. top-to-bottom, right-to-left
+    // LTR comics: top-to-bottom, left-to-right
+    std::stable_sort(
+        textItems.begin(), textItems.end(), [readingDirection](const InternalItem& a, const InternalItem& b) {
+            // Panel-scoped first
+            if (a.panelIndex != b.panelIndex) {
+                if (a.panelIndex == -1) {
+                    return false;
+                }
+                if (b.panelIndex == -1) {
+                    return true;
+                }
+                return a.panelIndex < b.panelIndex;
+            }
 
-        // Within same panel / root:
-        // RTL manga: columns from Right to Left, then Top to Bottom
-        // LTR comic: lines from Top to Bottom, then Left to Right
-        if (readingDirection == domain::ReadingDirection::RightToLeft) {
-            const double centerAx = a.rect.x + a.rect.width / 2.0;
-            const double centerAy = a.rect.y + a.rect.height / 2.0;
-            const double centerBx = b.rect.x + b.rect.width / 2.0;
-            const double centerBy = b.rect.y + b.rect.height / 2.0;
+            // Within same panel: Koharu detection_order = bbox[1] (top y) asc, then bbox[0] (left x) desc for RTL
+            const double topA = a.rect.y;
+            const double topB = b.rect.y;
+            const double yDiff = topA - topB;
+            if (std::abs(yDiff) > 20.0) {
+                return topA < topB;
+            }
+            if (readingDirection == domain::ReadingDirection::RightToLeft) {
+                // Right-to-left: larger x comes first
+                return (a.rect.x + a.rect.width / 2.0) > (b.rect.x + b.rect.width / 2.0);
+            }
+            return (a.rect.x + a.rect.width / 2.0) < (b.rect.x + b.rect.width / 2.0);
+        });
 
-            const double scoreA = -centerAx + 1.6 * centerAy;
-            const double scoreB = -centerBx + 1.6 * centerBy;
-            return scoreA < scoreB;
-        } else {
-            const double centerAx = a.rect.x + a.rect.width / 2.0;
-            const double centerAy = a.rect.y + a.rect.height / 2.0;
-            const double centerBx = b.rect.x + b.rect.width / 2.0;
-            const double centerBy = b.rect.y + b.rect.height / 2.0;
-
-            const double scoreA = 1.6 * centerAy + centerAx;
-            const double scoreB = 1.6 * centerBy + centerBx;
-            return scoreA < scoreB;
-        }
-    });
-
-    // Populate response detectedRegions with monotonic orderIndex
+    // Build response
     int order = 0;
     for (const auto& item : textItems) {
         application::DetectedRegionItem regionItem;

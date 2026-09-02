@@ -268,18 +268,37 @@ OnnxKoharuLayoutDetector::runInference(const application::TextDetectionRequest& 
             const QString name = QString::fromUtf8(outputNames[i]);
             auto typeInfo = outputTensors[i].GetTensorTypeAndShapeInfo();
             auto shape = typeInfo.GetShape();
+            const auto elemType = typeInfo.GetElementType();
 
-            if (name == m_impl->manifest.detsOutputName || name.contains(QStringLiteral("box")) ||
-                name.contains(QStringLiteral("det"))) {
-                raw.dets = outputTensors[i].GetTensorData<float>();
-                raw.detsShape = std::move(shape);
+            // RF-DETR native: pred_logits [1, N, C] float, pred_boxes [1, N, 4] float
+            if (name == QStringLiteral("pred_logits") || name.contains(QStringLiteral("logit"))) {
+                if (elemType == ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT) {
+                    raw.logits = outputTensors[i].GetTensorData<float>();
+                    raw.logitsShape = std::move(shape);
+                }
+            } else if (name == QStringLiteral("pred_boxes") ||
+                       (name.contains(QStringLiteral("box")) && !name.contains(QStringLiteral("det")))) {
+                if (elemType == ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT) {
+                    raw.boxes = outputTensors[i].GetTensorData<float>();
+                    raw.boxesShape = std::move(shape);
+                }
+            } else if (name == m_impl->manifest.masksOutputName || name.contains(QStringLiteral("mask"))) {
+                if (elemType == ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT) {
+                    raw.masks = outputTensors[i].GetTensorData<float>();
+                    raw.masksShape = std::move(shape);
+                }
+            } else if (name == m_impl->manifest.detsOutputName || name.contains(QStringLiteral("det"))) {
+                // Legacy pre-processed format
+                if (elemType == ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT) {
+                    raw.dets = outputTensors[i].GetTensorData<float>();
+                    raw.detsShape = std::move(shape);
+                }
             } else if (name == m_impl->manifest.labelsOutputName || name.contains(QStringLiteral("label")) ||
                        name.contains(QStringLiteral("class"))) {
-                raw.labels = outputTensors[i].GetTensorData<int64_t>();
-                raw.labelsShape = std::move(shape);
-            } else if (name == m_impl->manifest.masksOutputName || name.contains(QStringLiteral("mask"))) {
-                raw.masks = outputTensors[i].GetTensorData<float>();
-                raw.masksShape = std::move(shape);
+                if (elemType == ONNX_TENSOR_ELEMENT_DATA_TYPE_INT64) {
+                    raw.labels = outputTensors[i].GetTensorData<int64_t>();
+                    raw.labelsShape = std::move(shape);
+                }
             }
         }
 
