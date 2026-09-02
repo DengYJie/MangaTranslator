@@ -165,10 +165,11 @@ void EditorCommandBar::buildUi() {
     m_previewSelectorButton->hide();
     m_previewOverflowAction->setVisible(false);
     addGroup({m_detectButton, m_ocrButton, m_inpaintButton, m_translateButton});
-    addGroup({m_saveButton});
     layout->addStretch();
+    hasGroup = false;
     addGroup({m_pagePaneToggleButton, m_inspectorPaneToggleButton});
     addGroup({m_overflowButton});
+    addGroup({m_saveButton});
 
     connect(m_undoButton, &fluent::basicinput::Button::clicked, m_viewModel, &EditorViewModel::undo);
     connect(m_redoButton, &fluent::basicinput::Button::clicked, m_viewModel, &EditorViewModel::redo);
@@ -323,6 +324,9 @@ void EditorCommandBar::updateResponsiveLayout() {
 
     bool previousGroupVisible = false;
     for (int i = 0; i < m_commandGroups.size(); ++i) {
+        if (m_commandSeparators.at(i) == nullptr) {
+            previousGroupVisible = false;
+        }
         const auto children = m_commandGroups.at(i)->findChildren<QWidget*>(QString(), Qt::FindDirectChildrenOnly);
         bool groupVisible = false;
         for (const auto* child : children) {
