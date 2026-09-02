@@ -4,6 +4,7 @@
 
 #include <QChar>
 #include <QCoreApplication>
+#include <QDebug>
 #include <QDir>
 #include <QFile>
 #include <QFontDatabase>
@@ -187,6 +188,10 @@ LayoutResult TextLayoutEngine::layoutHorizontal(const QString& text,
     font.setLetterSpacing(QFont::AbsoluteSpacing, constraints.letterSpacingEm * pixelSize);
 
     QFontInfo info(font);
+    qDebug().noquote() << "[TextLayoutEngine] layoutHorizontal: reqFamily="
+                       << QString::fromStdString(constraints.fontFamily) << "actFamily=" << info.family()
+                       << "reqWeight=" << constraints.fontWeight << "actWeight=" << static_cast<int>(info.weight())
+                       << "styleName=" << info.styleName();
     if (info.family().compare(font.family(), Qt::CaseInsensitive) != 0) {
         if (!info.family().isEmpty()) {
             result.resolvedLayout.fontFamily = info.family().toStdString();
@@ -310,6 +315,10 @@ LayoutResult TextLayoutEngine::layoutVertical(const QString& text,
     font.setWeight(static_cast<QFont::Weight>(constraints.fontWeight));
 
     QFontInfo info(font);
+    qDebug().noquote() << "[TextLayoutEngine] layoutVertical: reqFamily="
+                       << QString::fromStdString(constraints.fontFamily) << "actFamily=" << info.family()
+                       << "reqWeight=" << constraints.fontWeight << "actWeight=" << static_cast<int>(info.weight())
+                       << "styleName=" << info.styleName();
     if (info.family().compare(font.family(), Qt::CaseInsensitive) != 0) {
         if (!info.family().isEmpty()) {
             result.resolvedLayout.fontFamily = info.family().toStdString();

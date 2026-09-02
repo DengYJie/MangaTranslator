@@ -1,6 +1,7 @@
 #include "rendering/FontRegistry.h"
 
 #include <QCoreApplication>
+#include <QDebug>
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
@@ -45,14 +46,19 @@ QStringList FontRegistry::bundledFontFamilies() {
                 const int id = QFontDatabase::addApplicationFont(filePath);
                 if (id != -1) {
                     const QStringList families = QFontDatabase::applicationFontFamilies(id);
+                    qInfo().noquote() << "[FontRegistry] Loaded font file:" << filePath << "id=" << id
+                                      << "families=" << families;
                     for (const auto& f : families) {
                         if (!result.contains(f)) {
                             result.append(f);
                         }
                     }
+                } else {
+                    qWarning().noquote() << "[FontRegistry] Failed to load font file:" << filePath;
                 }
             }
         }
+        qInfo().noquote() << "[FontRegistry] Total bundled font families registered:" << result;
         return result;
     }();
     return bundled;

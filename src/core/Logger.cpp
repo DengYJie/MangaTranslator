@@ -59,11 +59,8 @@ void customMessageHandler(QtMsgType type, const QMessageLogContext& context, con
     if (g_logFile && g_logFile->isOpen()) {
         QTextStream out(g_logFile);
         out << formattedMsg << "\n";
-
-        if (type == QtCriticalMsg || type == QtFatalMsg) {
-            out.flush();
-            g_logFile->flush();
-        }
+        out.flush();
+        g_logFile->flush();
     }
 
     if (type == QtFatalMsg) {

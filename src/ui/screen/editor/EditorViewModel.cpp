@@ -1628,7 +1628,17 @@ void EditorViewModel::commitInspectorFieldEdit(const domain::PageId& pageId,
                                                const QVector<domain::RegionId>& regionIds,
                                                InspectorField field,
                                                const QVariant& value) {
+    qInfo().noquote() << "[EditorViewModel] commitInspectorFieldEdit: field=" << static_cast<int>(field)
+                      << "value=" << value << "targetRegions=" << regionIds.size()
+                      << "currentPage=" << QString::fromStdString(m_state.currentPageId.toString())
+                      << "pageId=" << QString::fromStdString(pageId.toString());
+
     if (!m_hasSession || !m_undoStack || !m_commandContext || regionIds.isEmpty() || pageId != m_state.currentPageId) {
+        qWarning().noquote() << "[EditorViewModel] commitInspectorFieldEdit ignored: hasSession=" << m_hasSession
+                             << "undoStack=" << (m_undoStack != nullptr)
+                             << "commandContext=" << (m_commandContext != nullptr)
+                             << "regionIdsEmpty=" << regionIds.isEmpty()
+                             << "pageMatches=" << (pageId == m_state.currentPageId);
         return;
     }
 
@@ -1698,6 +1708,8 @@ void EditorViewModel::commitStyleEdit(const domain::PageId& pageId,
                                       const QVariant& value) {
     const auto* page = m_openedSession->project.findPage(pageId);
     if (page == nullptr) {
+        qWarning().noquote() << "[EditorViewModel] commitStyleEdit: page not found"
+                             << QString::fromStdString(pageId.toString());
         return;
     }
 
@@ -1706,15 +1718,39 @@ void EditorViewModel::commitStyleEdit(const domain::PageId& pageId,
         const auto* region = page->findRegion(regionId);
         // One missing or locked target vetoes the whole batch before anything is pushed.
         if (region == nullptr || region->isLocked()) {
+            qWarning().noquote() << "[EditorViewModel] commitStyleEdit vetoed: region missing or locked:"
+                                 << QString::fromStdString(regionId.toString());
             return;
         }
         auto layout = region->layout();
-        if (!applyStyleFieldValue(layout, field, value) || !layout.isValid()) {
+        const auto oldLayout = layout;
+        if (!applyStyleFieldValue(layout, field, value)) {
+            qWarning().noquote() << "[EditorViewModel] applyStyleFieldValue failed for field="
+                                 << static_cast<int>(field) << "value=" << value;
+            return;
+        }
+        if (!layout.isValid()) {
+            qWarning().noquote() << "[EditorViewModel] layout.isValid() failed after field=" << static_cast<int>(field)
+                                 << "value=" << value << "weight=" << layout.fontWeight
+                                 << "fontSize=" << layout.fontSizePt << "letterSpacing=" << layout.letterSpacingEm
+                                 << "textColor=" << QString::fromStdString(layout.textColorHex)
+                                 << "strokeColor=" << QString::fromStdString(layout.strokeColorHex)
+                                 << "strokeWidth=" << layout.strokeWidthPx << "lineSpacing=" << layout.lineSpacing
+                                 << "marginsValid=" << layout.margins.isValid();
             return;
         }
         if (layout == region->layout()) {
+            qInfo().noquote() << "[EditorViewModel] layout unchanged for region"
+                              << QString::fromStdString(regionId.toString());
             continue;
         }
+        qInfo().noquote() << "[EditorViewModel] style edit staged: region="
+                          << QString::fromStdString(regionId.toString()) << "oldWeight=" << oldLayout.fontWeight
+                          << "newWeight=" << layout.fontWeight
+                          << "oldOrient=" << static_cast<int>(oldLayout.orientation)
+                          << "newOrient=" << static_cast<int>(layout.orientation)
+                          << "oldFamily=" << QString::fromStdString(oldLayout.fontFamily)
+                          << "newFamily=" << QString::fromStdString(layout.fontFamily);
         command::RegionPropertyCommand::PropertyEdit entry;
         entry.regionId = regionId;
         entry.before.regionId = regionId;
@@ -1724,12 +1760,14 @@ void EditorViewModel::commitStyleEdit(const domain::PageId& pageId,
         edits.append(std::move(entry));
     }
     if (edits.isEmpty()) {
+        qInfo().noquote() << "[EditorViewModel] commitStyleEdit: no edits to push";
         return;
     }
 
     sealActiveTextSession();
     auto* cmd = new command::RegionPropertyCommand(m_commandContext.get(), pageId, edits, QStringLiteral("Edit Style"));
     pushPropertyCommand(cmd);
+    qInfo().noquote() << "[EditorViewModel] pushed RegionPropertyCommand for" << edits.size() << "regions";
 }
 
 void EditorViewModel::adoptCandidate(const domain::PageId& pageId,

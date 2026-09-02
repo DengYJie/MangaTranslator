@@ -1,6 +1,8 @@
 #include "rendering/TextRasterizer.h"
 
 #include <QColor>
+#include <QDebug>
+#include <QFontInfo>
 #include <QGlyphRun>
 #include <QPainterPath>
 #include <QPen>
@@ -21,6 +23,12 @@ void TextRasterizer::draw(QPainter& painter, const LayoutResult& layout, double 
     font.setPixelSize(qRound(pixelSize));
     font.setWeight(static_cast<QFont::Weight>(constraints.fontWeight));
     font.setLetterSpacing(QFont::AbsoluteSpacing, constraints.letterSpacingEm * pixelSize);
+
+    QFontInfo info(font);
+    qDebug().noquote() << "[TextRasterizer] draw: reqFamily=" << QString::fromStdString(constraints.fontFamily)
+                       << "actFamily=" << info.family() << "reqWeight=" << constraints.fontWeight
+                       << "actWeight=" << static_cast<int>(info.weight()) << "pixelSize=" << pixelSize << "orientation="
+                       << (constraints.orientation == domain::TextOrientation::Horizontal ? "H" : "V");
 
     painter.save();
     painter.setRenderHint(QPainter::Antialiasing, true);

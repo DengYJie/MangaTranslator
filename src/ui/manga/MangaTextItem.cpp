@@ -3,6 +3,7 @@
 #include "rendering/TextRasterizer.h"
 #include "ui/manga/CanvasZOrder.h"
 
+#include <QDebug>
 #include <QPainter>
 #include <QStyleOptionGraphicsItem>
 
@@ -20,10 +21,21 @@ void MangaTextItem::setDisplay(const TextLayerDisplay& display) {
     const bool geometryChanged = m_display.geometry.width != display.geometry.width ||
                                  m_display.geometry.height != display.geometry.height ||
                                  strokeMargin() != std::max<qreal>(2.0, display.layout.strokeWidthPx * 0.5);
+    const bool layoutDiff = m_display.layout != display.layout;
     const bool layoutChanged = !m_hasCachedLayout || m_display.text != display.text ||
                                m_display.geometry.width != display.geometry.width ||
-                               m_display.geometry.height != display.geometry.height ||
-                               m_display.layout != display.layout || m_display.logicalDpi != display.logicalDpi;
+                               m_display.geometry.height != display.geometry.height || layoutDiff ||
+                               m_display.logicalDpi != display.logicalDpi;
+
+    if (layoutDiff || layoutChanged) {
+        qDebug().noquote() << "[MangaTextItem] setDisplay: region=" << QString::fromStdString(m_display.id.toString())
+                           << "layoutChanged=" << layoutChanged << "layoutDiff=" << layoutDiff
+                           << "oldWeight=" << m_display.layout.fontWeight << "newWeight=" << display.layout.fontWeight
+                           << "oldOrient=" << static_cast<int>(m_display.layout.orientation)
+                           << "newOrient=" << static_cast<int>(display.layout.orientation)
+                           << "oldFamily=" << QString::fromStdString(m_display.layout.fontFamily)
+                           << "newFamily=" << QString::fromStdString(display.layout.fontFamily);
+    }
 
     if (geometryChanged) {
         prepareGeometryChange();
@@ -90,6 +102,11 @@ void MangaTextItem::paint(QPainter* painter, const QStyleOptionGraphicsItem* opt
 
 void MangaTextItem::updateLayout() {
     const domain::RectGeometry localBounds{0.0, 0.0, m_display.geometry.width, m_display.geometry.height};
+    qDebug().noquote() << "[MangaTextItem] updateLayout: region=" << QString::fromStdString(m_display.id.toString())
+                       << "fontFamily=" << QString::fromStdString(m_display.layout.fontFamily)
+                       << "fontWeight=" << m_display.layout.fontWeight << "fontSizePt=" << m_display.layout.fontSizePt
+                       << "orient=" << static_cast<int>(m_display.layout.orientation)
+                       << "text=" << m_display.text.left(30);
     m_cachedLayout =
         rendering::TextLayoutEngine::layoutText(m_display.text, localBounds, m_display.layout, m_display.logicalDpi);
     m_hasCachedLayout = true;
