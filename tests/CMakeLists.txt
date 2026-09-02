@@ -32,7 +32,6 @@ function(manga_add_test)
     manga_deploy_qt_runtime(${ARG_NAME})
 
     target_compile_definitions(${ARG_NAME} PRIVATE
-        QT_NO_KEYWORDS
         MANGA_TEST_FIXTURES_DIR="${PROJECT_SOURCE_DIR}/tests/fixtures"
         ${ARG_DEFINES}
     )

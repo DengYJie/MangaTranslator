@@ -94,34 +94,7 @@ private Q_SLOTS:
         QCOMPARE(receivedState.persisted, ::manga::application::AppSettingsSnapshot{});
     }
 
-    void testGeneralEditingPersistsImmediately() {
-        FakeAppSettingsStore store;
-        ::manga::application::test::FakeCredentialStore credStore;
-        FakeOcrModelValidator validator;
-
-        ::manga::application::CredentialOperations credentialOperations(&credStore);
-        SettingsViewModel vm(&store, &credentialOperations, &validator);
-
-        vm.setRestoreLastProject(false);
-        QCOMPARE(vm.state().persisted.restoreLastProject, false);
-        QCOMPARE(store.m_values.value(QStringLiteral("general/restoreLastProject")).toBool(), false);
-
-        vm.setRecentProjectLimit(20);
-        QCOMPARE(vm.state().persisted.recentProjectLimit, 20);
-        QCOMPARE(store.m_values.value(QStringLiteral("general/recentProjectLimit")).toInt(), 20);
-        QVERIFY(!vm.state().hasFieldErrors());
-
-        vm.setRecentProjectLimit(0);
-        QCOMPARE(vm.state().persisted.recentProjectLimit, 0);
-        QVERIFY(vm.state().fieldErrors.contains(QStringLiteral("recentProjectLimit")));
-        QCOMPARE(store.m_values.value(QStringLiteral("general/recentProjectLimit")).toInt(), 20);
-
-        vm.setTheme(::manga::application::AppTheme::Dark);
-        QCOMPARE(vm.state().persisted.theme, ::manga::application::AppTheme::Dark);
-        QCOMPARE(store.m_values.value(QStringLiteral("appearance/theme")).toString(), QStringLiteral("dark"));
-    }
-
-    void testOcrEditingPersistsImmediatelyAndValidates() {
+    void testModelsEditingPersistsImmediatelyAndValidates() {
         FakeAppSettingsStore store;
         ::manga::application::test::FakeCredentialStore credStore;
         FakeOcrModelValidator validator;
@@ -140,15 +113,6 @@ private Q_SLOTS:
         QCOMPARE(vm.state().persisted.ocrModelDirectory, QStringLiteral("C:/invalid/path"));
         QVERIFY(!vm.state().modelStatus.isValid);
         QVERIFY(vm.state().fieldErrors.contains(QStringLiteral("ocrModelDirectory")));
-
-        validator.shouldFail = false;
-        vm.setOcrLanguage(QStringLiteral("zh"));
-        QCOMPARE(vm.state().persisted.ocrLanguage, QStringLiteral("zh"));
-        QCOMPARE(store.m_values.value(QStringLiteral("ocr/language")).toString(), QStringLiteral("zh"));
-        QVERIFY(!vm.state().fieldErrors.contains(QStringLiteral("ocrLanguage")));
-
-        vm.setOcrLanguage(QStringLiteral("   "));
-        QVERIFY(vm.state().fieldErrors.contains(QStringLiteral("ocrLanguage")));
     }
 
     void testAiTranslationEditingPersistsImmediatelyAndCredentials() {
@@ -158,11 +122,6 @@ private Q_SLOTS:
 
         ::manga::application::CredentialOperations credentialOperations(&credStore);
         SettingsViewModel vm(&store, &credentialOperations, &validator);
-
-        vm.setProviderId(QStringLiteral("openai-compatible"));
-        QCOMPARE(vm.state().credentialStatus, ::manga::application::CredentialState::Missing);
-        QCOMPARE(store.m_values.value(QStringLiteral("translation/providerId")).toString(),
-                 QStringLiteral("openai-compatible"));
 
         vm.setCredential(::manga::application::SecretBytes(QByteArray("sk-test-secret-key")));
         QCOMPARE(vm.state().credentialStatus, ::manga::application::CredentialState::Configured);
@@ -212,23 +171,6 @@ private Q_SLOTS:
         QCOMPARE(store.m_values.value(QStringLiteral("appearance/theme")).toString(), QStringLiteral("dark"));
         QCOMPARE(themeSpy.count(), 1);
         QCOMPARE(themeSpy.at(0).at(0).value<::manga::application::AppTheme>(), ::manga::application::AppTheme::Dark);
-
-        vm.setDensity(::manga::application::InterfaceDensity::Comfortable);
-        QCOMPARE(vm.state().persisted.density, ::manga::application::InterfaceDensity::Comfortable);
-        QCOMPARE(store.m_values.value(QStringLiteral("appearance/density")).toString(), QStringLiteral("comfortable"));
-
-        vm.setReduceMotion(true);
-        QCOMPARE(vm.state().persisted.reduceMotion, true);
-        QCOMPARE(store.m_values.value(QStringLiteral("appearance/reduceMotion")).toBool(), true);
-
-        vm.setCanvasBackground(QStringLiteral("#1e1e1e"));
-        QCOMPARE(vm.state().persisted.canvasBackground, QStringLiteral("#1e1e1e"));
-        QVERIFY(!vm.state().fieldErrors.contains(QStringLiteral("canvasBackground")));
-        QCOMPARE(store.m_values.value(QStringLiteral("appearance/canvasBackground")).toString(),
-                 QStringLiteral("#1e1e1e"));
-
-        vm.setCanvasBackground(QStringLiteral("not-a-color"));
-        QVERIFY(vm.state().fieldErrors.contains(QStringLiteral("canvasBackground")));
     }
 
     void testRestoreDefaultsPersistsImmediately() {
@@ -240,11 +182,11 @@ private Q_SLOTS:
         SettingsViewModel vm(&store, &credentialOperations, &validator);
 
         vm.setTheme(::manga::application::AppTheme::Dark);
-        vm.setRecentProjectLimit(25);
+        vm.setTimeoutSeconds(120);
         vm.restoreDefaults();
 
         QCOMPARE(vm.state().persisted, ::manga::application::AppSettingsSnapshot{});
-        QCOMPARE(store.m_values.value(QStringLiteral("general/recentProjectLimit")).toInt(), 8);
+        QCOMPARE(store.m_values.value(QStringLiteral("translation/timeoutSeconds")).toInt(), 60);
         QCOMPARE(store.m_values.value(QStringLiteral("appearance/theme")).toString(), QStringLiteral("system"));
     }
 
@@ -254,9 +196,9 @@ private Q_SLOTS:
         ::manga::application::CredentialOperations credentialOperations(&credStore);
         SettingsViewModel vm(nullptr, &credentialOperations, &validator);
 
-        vm.setReduceMotion(true);
+        vm.setTimeoutSeconds(90);
 
-        QCOMPARE(vm.state().persisted.reduceMotion, true);
+        QCOMPARE(vm.state().persisted.timeoutSeconds, 90);
         QVERIFY(vm.state().fieldErrors.contains(QStringLiteral("persist")));
     }
 
@@ -269,15 +211,15 @@ private Q_SLOTS:
 
         ::manga::application::CredentialOperations credentialOperations(&credStore);
         SettingsViewModel vm(&store, &credentialOperations, &validator);
-        SettingsPage page(&vm);
+        SettingsPage page(&vm, SettingsCategory::Models);
         page.resize(800, 600);
         page.show();
         QVERIFY(QTest::qWaitForWindowExposed(&page));
 
-        QCOMPARE(page.currentCategory(), SettingsCategory::General);
-        auto* limitRow = page.rowForField(QStringLiteral("recentProjectLimit"));
-        QVERIFY(limitRow != nullptr);
-        QVERIFY(!limitRow->hasError());
+        QCOMPARE(page.currentCategory(), SettingsCategory::Models);
+        auto* ocrRow = page.rowForField(QStringLiteral("ocrModelDirectory"));
+        QVERIFY(ocrRow != nullptr);
+        QVERIFY(!ocrRow->hasError());
         QVERIFY(page.findChild<fluent::basicinput::Button*>(QStringLiteral("settingsSaveButton")) == nullptr);
     }
 
@@ -288,33 +230,33 @@ private Q_SLOTS:
 
         ::manga::application::CredentialOperations credentialOperations(&credStore);
         SettingsViewModel vm(&store, &credentialOperations, &validator);
-        SettingsPage page(&vm);
+        SettingsPage page(&vm, SettingsCategory::Models);
         page.resize(800, 600);
         page.show();
         QVERIFY(QTest::qWaitForWindowExposed(&page));
 
-        auto* limitRow = page.rowForField(QStringLiteral("recentProjectLimit"));
-        QVERIFY(limitRow != nullptr);
-        auto* editor = limitRow->editorWidget();
+        auto* ocrRow = page.rowForField(QStringLiteral("ocrModelDirectory"));
+        QVERIFY(ocrRow != nullptr);
+        auto* editor = ocrRow->editorWidget();
         QVERIFY(editor != nullptr);
 
         // Give editor focus
         editor->setFocus();
         QVERIFY(editor->hasFocus());
 
-        // Switch to narrow width (< 680px)
+        // Switch to narrow width (< 800px)
         page.resize(600, 600);
         QTest::qWait(50);
 
         // Verify same widget instance is preserved and retains focus
-        QCOMPARE(limitRow->editorWidget(), editor);
+        QCOMPARE(ocrRow->editorWidget(), editor);
         QVERIFY(editor->hasFocus());
 
-        // Switch back to wide width (>= 680px)
+        // Switch back to wide width (>= 800px)
         page.resize(900, 600);
         QTest::qWait(50);
 
-        QCOMPARE(limitRow->editorWidget(), editor);
+        QCOMPARE(ocrRow->editorWidget(), editor);
         QVERIFY(editor->hasFocus());
     }
 
@@ -325,22 +267,24 @@ private Q_SLOTS:
 
         ::manga::application::CredentialOperations credentialOperations(&credStore);
         SettingsViewModel vm(&store, &credentialOperations, &validator);
-        SettingsPage page(&vm);
+        SettingsPage page(&vm, SettingsCategory::Models);
         page.resize(800, 600);
         page.show();
         QVERIFY(QTest::qWaitForWindowExposed(&page));
 
-        auto* limitRow = page.rowForField(QStringLiteral("recentProjectLimit"));
-        QVERIFY(limitRow != nullptr);
+        auto* ocrRow = page.rowForField(QStringLiteral("ocrModelDirectory"));
+        QVERIFY(ocrRow != nullptr);
 
         // Trigger error
-        vm.setRecentProjectLimit(999);
-        QVERIFY(limitRow->hasError());
-        QCOMPARE(limitRow->error(), vm.state().fieldErrors.value(QStringLiteral("recentProjectLimit")));
+        validator.shouldFail = true;
+        vm.setOcrModelDirectory(QStringLiteral("C:/bad/path"));
+        QVERIFY(ocrRow->hasError());
+        QCOMPARE(ocrRow->error(), vm.state().fieldErrors.value(QStringLiteral("ocrModelDirectory")));
 
         // Clear error
-        vm.setRecentProjectLimit(8);
-        QVERIFY(!limitRow->hasError());
+        validator.shouldFail = false;
+        vm.setOcrModelDirectory(QStringLiteral("C:/good/path"));
+        QVERIFY(!ocrRow->hasError());
     }
 
     void testImmediatePersistenceAndRestoreDefaults() {
@@ -350,26 +294,26 @@ private Q_SLOTS:
 
         ::manga::application::CredentialOperations credentialOperations(&credStore);
         SettingsViewModel vm(&store, &credentialOperations, &validator);
-        SettingsPage page(&vm);
+        SettingsPage page(&vm, SettingsCategory::AiTranslation);
         page.resize(800, 600);
 
         QVERIFY(page.findChild<fluent::basicinput::Button*>(QStringLiteral("settingsSaveButton")) == nullptr);
 
-        auto* limitRow = page.rowForField(QStringLiteral("recentProjectLimit"));
-        QVERIFY(limitRow != nullptr);
-        auto* limitBox = qobject_cast<fluent::textfields::NumberBox*>(limitRow->editorWidget());
-        QVERIFY(limitBox != nullptr);
-        limitBox->setValue(12);
-        QCOMPARE(vm.state().persisted.recentProjectLimit, 12);
-        QCOMPARE(store.m_values.value(QStringLiteral("general/recentProjectLimit")).toInt(), 12);
+        auto* timeoutRow = page.rowForField(QStringLiteral("timeoutSeconds"));
+        QVERIFY(timeoutRow != nullptr);
+        auto* timeoutBox = qobject_cast<fluent::textfields::NumberBox*>(timeoutRow->editorWidget());
+        QVERIFY(timeoutBox != nullptr);
+        timeoutBox->setValue(90);
+        QCOMPARE(vm.state().persisted.timeoutSeconds, 90);
+        QCOMPARE(store.m_values.value(QStringLiteral("translation/timeoutSeconds")).toInt(), 90);
 
         // Test restore defaults
         auto* restoreBtn = page.restoreDefaultsButtonForTest();
         QVERIFY(restoreBtn != nullptr);
-        vm.setRecentProjectLimit(25);
+        vm.setTimeoutSeconds(150);
         restoreBtn->click();
-        QCOMPARE(vm.state().persisted.recentProjectLimit, 8);
-        QCOMPARE(store.m_values.value(QStringLiteral("general/recentProjectLimit")).toInt(), 8);
+        QCOMPARE(vm.state().persisted.timeoutSeconds, 60);
+        QCOMPARE(store.m_values.value(QStringLiteral("translation/timeoutSeconds")).toInt(), 60);
     }
 
     // --- Lifetime Tests ---
@@ -381,13 +325,13 @@ private Q_SLOTS:
         FakeOcrModelValidator validator;
         {
             auto* vm = new SettingsViewModel(&store, &credentialOperations, &validator);
-            auto* page = new SettingsPage(vm);
+            auto* page = new SettingsPage(vm, SettingsCategory::AiTranslation);
             page->resize(800, 600);
             page->show();
             QTest::qWait(20);
-            vm->setRecentProjectLimit(15);
-            QCOMPARE(vm->state().persisted.recentProjectLimit, 15);
-            QCOMPARE(store.m_values.value(QStringLiteral("general/recentProjectLimit")).toInt(), 15);
+            vm->setTimeoutSeconds(45);
+            QCOMPARE(vm->state().persisted.timeoutSeconds, 45);
+            QCOMPARE(store.m_values.value(QStringLiteral("translation/timeoutSeconds")).toInt(), 45);
             delete page;
             delete vm;
         }
@@ -414,7 +358,7 @@ private Q_SLOTS:
         FakeOcrModelValidator validator;
         SettingsViewModel vm(&store, &credentialOperations, &validator);
 
-        auto* lazyPage = SettingsPage::createLazyPage(&vm, SettingsCategory::General);
+        auto* lazyPage = SettingsPage::createLazyPage(&vm, SettingsCategory::Models);
         QCOMPARE(lazyPage->findChildren<SettingsPage*>().size(), 0);
         lazyPage->resize(800, 600);
         lazyPage->show();

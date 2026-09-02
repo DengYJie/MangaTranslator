@@ -216,33 +216,6 @@ void dilateSquare(std::vector<quint8>& grid, int width, int height, int radius) 
     }
 }
 
-/// One box average that turns the hard binary edge into a single grayscale rim row.
-void featherBox3x3(const std::vector<quint8>& source, std::vector<quint8>& target, int width, int height) {
-    const std::size_t stride = std::size_t(width);
-    for (int y = 0; y < height; ++y) {
-        for (int x = 0; x < width; ++x) {
-            int sum = 0;
-            int count = 0;
-            for (int offsetY = -1; offsetY <= 1; ++offsetY) {
-                const int sourceY = y + offsetY;
-                if (sourceY < 0 || sourceY >= height) {
-                    continue;
-                }
-                for (int offsetX = -1; offsetX <= 1; ++offsetX) {
-                    const int sourceX = x + offsetX;
-                    if (sourceX < 0 || sourceX >= width) {
-                        continue;
-                    }
-                    sum += source[indexAt(stride, sourceX, sourceY)];
-                    ++count;
-                }
-            }
-            const int average = count > 0 ? (sum + count / 2) / count : 0;
-            target[indexAt(stride, x, y)] = quint8(std::clamp(average, 0, 255));
-        }
-    }
-}
-
 void applyClip(std::vector<quint8>& values, const std::vector<quint8>& clip) {
     for (std::size_t i = 0; i < values.size(); ++i) {
         if (clip[i] == 0) {
@@ -388,7 +361,7 @@ LamaClearMask buildClearMask(const QImage& pageImage,
     std::vector<double> greens;
     std::vector<double> blues;
     for (int y = 0; y < height; ++y) {
-        const uchar* line = page.constScanLine(dirtyBounds.y() + y);
+        const uchar* line = page.constScanLine(dirtyBounds.y() + y) + std::size_t(dirtyBounds.x()) * 4;
         for (int x = 0; x < width; ++x) {
             const std::size_t i = indexAt(stride, x, y);
             if (candidate[i] != 0 || (hasPolygon ? clip[i] == 0 : !ringBounds.contains(x, y))) {
@@ -414,7 +387,7 @@ LamaClearMask buildClearMask(const QImage& pageImage,
         const double tau = std::clamp(kInkTauStdDevFactor * meanDeviation, kInkTauMin, kInkTauMax);
         std::size_t inkCount = 0;
         for (int y = 0; y < height; ++y) {
-            const uchar* line = page.constScanLine(dirtyBounds.y() + y);
+            const uchar* line = page.constScanLine(dirtyBounds.y() + y) + std::size_t(dirtyBounds.x()) * 4;
             for (int x = 0; x < width; ++x) {
                 const std::size_t i = indexAt(stride, x, y);
                 if (candidate[i] == 0) {
@@ -440,12 +413,9 @@ LamaClearMask buildClearMask(const QImage& pageImage,
 
     dilateSquare(binary, width, height, kInkDilateRadius);
     applyClip(binary, clip);
-    std::vector<quint8> rim(binary.size(), 0);
-    featherBox3x3(binary, rim, width, height);
-    applyClip(rim, clip);
 
     for (int y = 0; y < height; ++y) {
-        const quint8* source = rim.data() + indexAt(stride, 0, y);
+        const quint8* source = binary.data() + indexAt(stride, 0, y);
         std::copy(source, source + width, result.mask.scanLine(y));
     }
     return result;
@@ -559,7 +529,7 @@ QImage makeColorPatch(const QRect& bounds, const QColor& color, const QImage& ma
             target[offset + 0] = red;
             target[offset + 1] = green;
             target[offset + 2] = blue;
-            target[offset + 3] = maskLine != nullptr ? maskLine[x] : uchar(255);
+            target[offset + 3] = (maskLine != nullptr && maskLine[x] >= 127) ? uchar(255) : uchar(0);
         }
     }
     return patch;
@@ -598,7 +568,7 @@ QImage makeInpaintedPatch(const QRect& bounds, const QImage& source, const QImag
             target[offset + 0] = sourceLine[offset + 0];
             target[offset + 1] = sourceLine[offset + 1];
             target[offset + 2] = sourceLine[offset + 2];
-            target[offset + 3] = maskLine != nullptr ? maskLine[x] : uchar(255);
+            target[offset + 3] = (maskLine != nullptr && maskLine[x] >= 127) ? uchar(255) : uchar(0);
         }
     }
     return patch;

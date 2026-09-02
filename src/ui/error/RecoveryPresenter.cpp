@@ -159,21 +159,21 @@ QString RecoveryPresenter::localizedActionText(application::RecoveryAction actio
 
 QString RecoveryPresenter::settingsRouteForAction(application::RecoveryAction action, const QString& errorCode) {
     if (action == application::RecoveryAction::LocateModel) {
-        return QStringLiteral("settings/ocr");
+        return QStringLiteral("settings/models");
     }
     if (action == application::RecoveryAction::Reauthenticate) {
         return QStringLiteral("settings/ai-translation");
     }
     if (action == application::RecoveryAction::OpenSettings) {
         if (errorCode.startsWith(QLatin1String("model.")) || errorCode.startsWith(QLatin1String("ocr"))) {
-            return QStringLiteral("settings/ocr");
+            return QStringLiteral("settings/models");
         }
         if (errorCode.startsWith(QLatin1String("network.")) || errorCode.startsWith(QLatin1String("credentials."))) {
             return QStringLiteral("settings/ai-translation");
         }
-        return QStringLiteral("settings/general");
+        return QStringLiteral("settings/models");
     }
-    return QStringLiteral("settings/general");
+    return QStringLiteral("settings/models");
 }
 
 } // namespace manga::ui::error

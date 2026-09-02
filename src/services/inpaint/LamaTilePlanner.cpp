@@ -194,7 +194,7 @@ componentBoundsIn(const std::vector<quint32>& labels, int width, quint32 label, 
 
 } // namespace
 
-std::vector<LamaTile> planLamaTiles(const QImage& mask, const QRect& imageRect, int tileCore, int tileContext) {
+LamaTilePlan planLamaTiles(const QImage& mask, const QRect& imageRect, int tileCore, int tileContext) {
     if (mask.isNull() || tileCore <= 0) {
         return {};
     }
@@ -210,18 +210,19 @@ std::vector<LamaTile> planLamaTiles(const QImage& mask, const QRect& imageRect, 
     if (pageBounds.isEmpty()) {
         pageBounds = maskBounds;
     }
-    const Bounds clipBounds = intersectBounds(maskBounds, pageBounds);
-    if (clipBounds.isEmpty()) {
+    if (intersectBounds(maskBounds, pageBounds).isEmpty()) {
         return {};
     }
 
     const int context = std::max(tileContext, 0);
-    const auto growCrop = [context, clipBounds](const Bounds& core) {
+    // Clipping to the image rather than to the mask extent is what keeps the surrounding artwork in
+    // the crop. LaMa's Fourier convolutions need that context to reconstruct the erased area.
+    const auto growCrop = [context, pageBounds](const Bounds& core) {
         return Bounds{
-            std::max(core.left - context, clipBounds.left),
-            std::max(core.top - context, clipBounds.top),
-            std::min(core.right + context, clipBounds.right),
-            std::min(core.bottom + context, clipBounds.bottom),
+            std::max(core.left - context, pageBounds.left),
+            std::max(core.top - context, pageBounds.top),
+            std::min(core.right + context, pageBounds.right),
+            std::min(core.bottom + context, pageBounds.bottom),
         };
     };
     const auto makeTile = [](quint32 label, const Bounds& core, const Bounds& crop) {
@@ -301,10 +302,19 @@ std::vector<LamaTile> planLamaTiles(const QImage& mask, const QRect& imageRect, 
 
     std::vector<LamaTile> tiles;
     tiles.reserve(boundedTiles.size());
-    for (const PlannedTile& planned : boundedTiles) {
+    for (PlannedTile& planned : boundedTiles) {
+        // The writeback looks labels up by binary search, so the set must be sorted here.
+        std::sort(planned.labels.begin(), planned.labels.end());
+        planned.labels.erase(std::unique(planned.labels.begin(), planned.labels.end()), planned.labels.end());
         tiles.push_back(LamaTile{rectOf(planned.core), rectOf(planned.crop), planned.labels});
     }
-    return tiles;
+
+    LamaTilePlan plan;
+    plan.width = grayMask.width();
+    plan.height = grayMask.height();
+    plan.labels = std::move(labels);
+    plan.tiles = std::move(tiles);
+    return plan;
 }
 
 void buildSymmetricPadIndices(int length, int padMultiple, std::vector<int>& indices) {

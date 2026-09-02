@@ -63,25 +63,6 @@ void SettingsViewModel::loadSettings() {
     m_lastPersistedSnapshot = m_state.persisted;
 }
 
-void SettingsViewModel::setRestoreLastProject(bool enabled) {
-    updateState([enabled](SettingsState& state) { state.persisted.restoreLastProject = enabled; });
-    persistSettings();
-}
-
-void SettingsViewModel::setRecentProjectLimit(int limit) {
-    updateState([this, limit](SettingsState& state) {
-        state.persisted.recentProjectLimit = limit;
-        if (limit < kMinRecentProjectLimit || limit > kMaxRecentProjectLimit) {
-            state.fieldErrors.insert(
-                QStringLiteral("recentProjectLimit"),
-                tr("最近项目数量必须在 %1 到 %2 之间").arg(kMinRecentProjectLimit).arg(kMaxRecentProjectLimit));
-        } else {
-            state.fieldErrors.remove(QStringLiteral("recentProjectLimit"));
-        }
-    });
-    persistSettings();
-}
-
 void SettingsViewModel::setOcrModelDirectory(const QString& directory) {
     updateState([this, directory](SettingsState& state) {
         state.persisted.ocrModelDirectory = directory;
@@ -102,31 +83,6 @@ void SettingsViewModel::setInpaintModelDirectory(const QString& directory) {
     updateState([this, directory](SettingsState& state) {
         state.persisted.inpaintModelDirectory = directory;
         validateInpaintModelDirectory(state);
-    });
-    persistSettings();
-}
-
-void SettingsViewModel::setOcrLanguage(const QString& language) {
-    updateState([this, language](SettingsState& state) {
-        state.persisted.ocrLanguage = language;
-        if (language.trimmed().isEmpty()) {
-            state.fieldErrors.insert(QStringLiteral("ocrLanguage"), tr("OCR 语言不能为空"));
-        } else {
-            state.fieldErrors.remove(QStringLiteral("ocrLanguage"));
-        }
-    });
-    persistSettings();
-}
-
-void SettingsViewModel::setProviderId(const QString& providerId) {
-    updateState([this, providerId](SettingsState& state) {
-        state.persisted.providerId = providerId;
-        if (providerId.trimmed().isEmpty()) {
-            state.fieldErrors.insert(QStringLiteral("providerId"), tr("服务商不能为空"));
-        } else {
-            state.fieldErrors.remove(QStringLiteral("providerId"));
-        }
-        refreshCredentialStatus(state);
     });
     persistSettings();
 }
@@ -177,7 +133,7 @@ void SettingsViewModel::setRetryCount(int count) {
 
 void SettingsViewModel::setCredential(application::SecretBytes key) {
     if (m_credentialOperations != nullptr) {
-        const auto res = m_credentialOperations->set(m_state.persisted.providerId, std::move(key));
+        const auto res = m_credentialOperations->set(QStringLiteral("openai-compatible"), std::move(key));
         if (!res) {
             updateState([&res](SettingsState& state) {
                 state.fieldErrors.insert(QStringLiteral("credential"),
@@ -190,7 +146,7 @@ void SettingsViewModel::setCredential(application::SecretBytes key) {
 
 void SettingsViewModel::removeCredential() {
     if (m_credentialOperations != nullptr) {
-        const auto res = m_credentialOperations->clear(m_state.persisted.providerId);
+        const auto res = m_credentialOperations->clear(QStringLiteral("openai-compatible"));
         if (!res) {
             updateState([&res](SettingsState& state) {
                 state.fieldErrors.insert(QStringLiteral("credential"),
@@ -205,28 +161,6 @@ void SettingsViewModel::setTheme(application::AppTheme theme) {
     updateState([theme](SettingsState& state) { state.persisted.theme = theme; });
     persistSettings();
     Q_EMIT themePreviewRequested(theme);
-}
-
-void SettingsViewModel::setDensity(application::InterfaceDensity density) {
-    updateState([density](SettingsState& state) { state.persisted.density = density; });
-    persistSettings();
-}
-
-void SettingsViewModel::setReduceMotion(bool reduce) {
-    updateState([reduce](SettingsState& state) { state.persisted.reduceMotion = reduce; });
-    persistSettings();
-}
-
-void SettingsViewModel::setCanvasBackground(const QString& color) {
-    updateState([this, color](SettingsState& state) {
-        state.persisted.canvasBackground = color;
-        if (!QColor::isValidColorName(color.trimmed())) {
-            state.fieldErrors.insert(QStringLiteral("canvasBackground"), tr("画布背景必须是有效的颜色代码"));
-        } else {
-            state.fieldErrors.remove(QStringLiteral("canvasBackground"));
-        }
-    });
-    persistSettings();
 }
 
 void SettingsViewModel::restoreDefaults() {
@@ -252,20 +186,14 @@ void SettingsViewModel::persistSettings() {
 
     const auto hasValidationError = [this](const QString& field) { return m_state.fieldErrors.contains(field); };
     auto snapshot = m_state.persisted;
-    if (hasValidationError(QStringLiteral("recentProjectLimit"))) {
-        snapshot.recentProjectLimit = m_lastPersistedSnapshot.recentProjectLimit;
-    }
-    if (hasValidationError(QStringLiteral("ocrLanguage"))) {
-        snapshot.ocrLanguage = m_lastPersistedSnapshot.ocrLanguage;
+    if (hasValidationError(QStringLiteral("ocrModelDirectory"))) {
+        snapshot.ocrModelDirectory = m_lastPersistedSnapshot.ocrModelDirectory;
     }
     if (hasValidationError(QStringLiteral("detectionModelDirectory"))) {
         snapshot.detectionModelDirectory = m_lastPersistedSnapshot.detectionModelDirectory;
     }
     if (hasValidationError(QStringLiteral("inpaintModelDirectory"))) {
         snapshot.inpaintModelDirectory = m_lastPersistedSnapshot.inpaintModelDirectory;
-    }
-    if (hasValidationError(QStringLiteral("providerId"))) {
-        snapshot.providerId = m_lastPersistedSnapshot.providerId;
     }
     if (hasValidationError(QStringLiteral("endpoint"))) {
         snapshot.endpoint = m_lastPersistedSnapshot.endpoint;
@@ -276,23 +204,17 @@ void SettingsViewModel::persistSettings() {
     if (hasValidationError(QStringLiteral("retryCount"))) {
         snapshot.retryCount = m_lastPersistedSnapshot.retryCount;
     }
-    if (hasValidationError(QStringLiteral("canvasBackground"))) {
-        snapshot.canvasBackground = m_lastPersistedSnapshot.canvasBackground;
-    }
 
     application::SaveAppSettingsUseCase saveUseCase(m_settingsStore);
     const auto result = saveUseCase.execute(snapshot);
 
     if (!result) {
-        if (!m_state.fieldErrors.contains(QStringLiteral("recentProjectLimit")) &&
-            !m_state.fieldErrors.contains(QStringLiteral("ocrLanguage")) &&
+        if (!m_state.fieldErrors.contains(QStringLiteral("ocrModelDirectory")) &&
             !m_state.fieldErrors.contains(QStringLiteral("detectionModelDirectory")) &&
             !m_state.fieldErrors.contains(QStringLiteral("inpaintModelDirectory")) &&
-            !m_state.fieldErrors.contains(QStringLiteral("providerId")) &&
             !m_state.fieldErrors.contains(QStringLiteral("endpoint")) &&
             !m_state.fieldErrors.contains(QStringLiteral("timeoutSeconds")) &&
-            !m_state.fieldErrors.contains(QStringLiteral("retryCount")) &&
-            !m_state.fieldErrors.contains(QStringLiteral("canvasBackground"))) {
+            !m_state.fieldErrors.contains(QStringLiteral("retryCount"))) {
             updateState([&result](SettingsState& state) {
                 state.fieldErrors.insert(QStringLiteral("persist"),
                                          ui::error::RecoveryPresenter::localizedSafeMessage(result.error()));
@@ -311,7 +233,7 @@ void SettingsViewModel::refreshCredentialStatus(SettingsState& state) {
         state.credentialStatus = application::CredentialState::Unavailable;
         return;
     }
-    const auto result = m_credentialOperations->status(state.persisted.providerId);
+    const auto result = m_credentialOperations->status(QStringLiteral("openai-compatible"));
     state.credentialStatus = result ? result->state : application::CredentialState::Unavailable;
 }
 

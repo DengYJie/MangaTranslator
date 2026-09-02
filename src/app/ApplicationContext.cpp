@@ -115,7 +115,7 @@ ApplicationContext::ApplicationContext()
         services::createOcrEngine(m_production->ocrEnv.get(), m_production->executor.get(), settings.ocrModelDirectory);
 
     network::ProviderConfig provider;
-    provider.providerId = settings.providerId;
+    provider.providerId = QStringLiteral("openai-compatible");
     provider.endpoint = QUrl(settings.endpoint);
     provider.model = settings.modelName;
     provider.timeoutMs = settings.timeoutSeconds * 1000;

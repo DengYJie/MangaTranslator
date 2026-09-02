@@ -44,7 +44,7 @@ class SettingsPage : public base::BasePage {
     Q_OBJECT
 public:
     explicit SettingsPage(SettingsViewModel* viewModel,
-                          SettingsCategory category = SettingsCategory::General,
+                          SettingsCategory category = SettingsCategory::Models,
                           QWidget* parent = nullptr);
     ~SettingsPage() override = default;
 
@@ -64,8 +64,7 @@ protected:
 private:
     void buildUi();
     QWidget* buildCategoryView(SettingsCategory category);
-    QWidget* buildGeneralView();
-    QWidget* buildOcrView();
+    QWidget* buildModelsView();
     QWidget* buildAiTranslationView();
     QWidget* buildAppearanceView();
 
@@ -75,7 +74,7 @@ private:
     void showCredentialRemovalDialog();
 
     SettingsViewModel* m_viewModel; // non-owning
-    SettingsCategory m_category{SettingsCategory::General};
+    SettingsCategory m_category{SettingsCategory::Models};
     bool m_isUpdatingFromState{false};
     bool m_isCredentialEditMode{false};
 
@@ -96,13 +95,7 @@ private:
     QWidget* m_actionBar{nullptr};
     fluent::basicinput::Button* m_restoreDefaultsButton{nullptr};
 
-    // General category controls
-    widget::SettingsRow* m_restoreLastProjectRow{nullptr};
-    fluent::basicinput::ToggleSwitch* m_restoreLastProjectSwitch{nullptr};
-    widget::SettingsRow* m_recentProjectLimitRow{nullptr};
-    fluent::textfields::NumberBox* m_recentProjectLimitBox{nullptr};
-
-    // OCR category controls
+    // OCR & Models category controls
     widget::SettingsRow* m_ocrModelDirRow{nullptr};
     fluent::textfields::LineEdit* m_ocrModelDirEdit{nullptr};
     fluent::basicinput::Button* m_ocrBrowseButton{nullptr};
@@ -115,12 +108,8 @@ private:
     fluent::textfields::LineEdit* m_inpaintModelDirEdit{nullptr};
     fluent::basicinput::Button* m_inpaintBrowseButton{nullptr};
     fluent::status_info::InfoBar* m_inpaintStatusInfoBar{nullptr};
-    widget::SettingsRow* m_ocrLanguageRow{nullptr};
-    fluent::basicinput::ComboBox* m_ocrLanguageCombo{nullptr};
 
     // AI Translation category controls
-    widget::SettingsRow* m_providerIdRow{nullptr};
-    fluent::basicinput::ComboBox* m_providerIdCombo{nullptr};
     widget::SettingsRow* m_endpointRow{nullptr};
     fluent::textfields::LineEdit* m_endpointEdit{nullptr};
     widget::SettingsRow* m_credentialRow{nullptr};
@@ -142,12 +131,6 @@ private:
     // Appearance category controls
     widget::SettingsRow* m_themeRow{nullptr};
     fluent::basicinput::ComboBox* m_themeCombo{nullptr};
-    widget::SettingsRow* m_densityRow{nullptr};
-    fluent::basicinput::ComboBox* m_densityCombo{nullptr};
-    widget::SettingsRow* m_reduceMotionRow{nullptr};
-    fluent::basicinput::ToggleSwitch* m_reduceMotionSwitch{nullptr};
-    widget::SettingsRow* m_canvasBackgroundRow{nullptr};
-    fluent::textfields::LineEdit* m_canvasBackgroundEdit{nullptr};
 
     QHash<QString, widget::SettingsRow*> m_fieldRowMap;
     QList<widget::SettingsGroup*> m_allGroups;

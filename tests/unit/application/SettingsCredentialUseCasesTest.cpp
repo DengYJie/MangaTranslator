@@ -87,19 +87,14 @@ public:
 };
 
 /// Every key the typed settings are allowed to persist; nothing here carries credential material.
-const QStringList kExpectedSettingKeys = {QStringLiteral("general/restoreLastProject"),
-                                          QStringLiteral("general/recentProjectLimit"),
-                                          QStringLiteral("ocr/modelDirectory"),
-                                          QStringLiteral("ocr/language"),
-                                          QStringLiteral("translation/providerId"),
+const QStringList kExpectedSettingKeys = {QStringLiteral("ocr/modelDirectory"),
+                                          QStringLiteral("detection/modelDirectory"),
+                                          QStringLiteral("inpaint/modelDirectory"),
                                           QStringLiteral("translation/endpoint"),
                                           QStringLiteral("translation/modelName"),
                                           QStringLiteral("translation/timeoutSeconds"),
                                           QStringLiteral("translation/retryCount"),
-                                          QStringLiteral("appearance/theme"),
-                                          QStringLiteral("appearance/density"),
-                                          QStringLiteral("appearance/reduceMotion"),
-                                          QStringLiteral("appearance/canvasBackground")};
+                                          QStringLiteral("appearance/theme")};
 
 } // namespace
 
@@ -110,19 +105,14 @@ void SettingsCredentialUseCasesTest::loadsDefaultSettingsWhenStoreEmpty() {
     AppSettingsSnapshot snapshot = useCase.execute();
     AppSettingsSnapshot defaults{};
 
-    QCOMPARE(snapshot.restoreLastProject, defaults.restoreLastProject);
-    QCOMPARE(snapshot.recentProjectLimit, defaults.recentProjectLimit);
     QCOMPARE(snapshot.ocrModelDirectory, defaults.ocrModelDirectory);
-    QCOMPARE(snapshot.ocrLanguage, defaults.ocrLanguage);
-    QCOMPARE(snapshot.providerId, defaults.providerId);
+    QCOMPARE(snapshot.detectionModelDirectory, defaults.detectionModelDirectory);
+    QCOMPARE(snapshot.inpaintModelDirectory, defaults.inpaintModelDirectory);
     QCOMPARE(snapshot.endpoint, defaults.endpoint);
     QCOMPARE(snapshot.modelName, defaults.modelName);
     QCOMPARE(snapshot.timeoutSeconds, defaults.timeoutSeconds);
     QCOMPARE(snapshot.retryCount, defaults.retryCount);
     QCOMPARE(snapshot.theme, defaults.theme);
-    QCOMPARE(snapshot.density, defaults.density);
-    QCOMPARE(snapshot.reduceMotion, defaults.reduceMotion);
-    QCOMPARE(snapshot.canvasBackground, defaults.canvasBackground);
 }
 
 void SettingsCredentialUseCasesTest::loadsDefaultSettingsWhenStoreNull() {
@@ -138,87 +128,60 @@ void SettingsCredentialUseCasesTest::savesAndLoadsValidSnapshotRoundtrip() {
     LoadAppSettingsUseCase loadUseCase(&store);
 
     AppSettingsSnapshot custom;
-    custom.restoreLastProject = false;
-    custom.recentProjectLimit = 12;
     custom.ocrModelDirectory = QStringLiteral("/opt/models/baberu");
-    custom.ocrLanguage = QStringLiteral("zh");
-    custom.providerId = QStringLiteral("deepseek");
+    custom.detectionModelDirectory = QStringLiteral("/opt/models/koharu");
+    custom.inpaintModelDirectory = QStringLiteral("/opt/models/lama");
     custom.endpoint = QStringLiteral("https://api.deepseek.com/v1");
     custom.modelName = QStringLiteral("deepseek-chat");
     custom.timeoutSeconds = 45;
     custom.retryCount = 4;
     custom.theme = AppTheme::Dark;
-    custom.density = InterfaceDensity::Comfortable;
-    custom.reduceMotion = true;
-    custom.canvasBackground = QStringLiteral("#1e1e1e");
 
     auto saveResult = saveUseCase.execute(custom);
     QVERIFY(saveResult.has_value());
 
     AppSettingsSnapshot loaded = loadUseCase.execute();
-    QCOMPARE(loaded.restoreLastProject, custom.restoreLastProject);
-    QCOMPARE(loaded.recentProjectLimit, custom.recentProjectLimit);
     QCOMPARE(loaded.ocrModelDirectory, custom.ocrModelDirectory);
-    QCOMPARE(loaded.ocrLanguage, custom.ocrLanguage);
-    QCOMPARE(loaded.providerId, custom.providerId);
+    QCOMPARE(loaded.detectionModelDirectory, custom.detectionModelDirectory);
+    QCOMPARE(loaded.inpaintModelDirectory, custom.inpaintModelDirectory);
     QCOMPARE(loaded.endpoint, custom.endpoint);
     QCOMPARE(loaded.modelName, custom.modelName);
     QCOMPARE(loaded.timeoutSeconds, custom.timeoutSeconds);
     QCOMPARE(loaded.retryCount, custom.retryCount);
     QCOMPARE(loaded.theme, custom.theme);
-    QCOMPARE(loaded.density, custom.density);
-    QCOMPARE(loaded.reduceMotion, custom.reduceMotion);
-    QCOMPARE(loaded.canvasBackground, custom.canvasBackground);
 }
 
-void SettingsCredentialUseCasesTest::coercesUnknownThemeAndDensityValuesToDefaults() {
+void SettingsCredentialUseCasesTest::coercesUnknownThemeValuesToDefaults() {
     FakeAppSettingsStore store;
     store.writeSetting(QStringLiteral("appearance/theme"), QStringLiteral("rainbow_mode"));
-    store.writeSetting(QStringLiteral("appearance/density"), QStringLiteral("super_wide"));
 
     LoadAppSettingsUseCase loadUseCase(&store);
     AppSettingsSnapshot loaded = loadUseCase.execute();
 
     QCOMPARE(loaded.theme, AppTheme::System);
-    QCOMPARE(loaded.density, InterfaceDensity::Compact);
 }
 
 void SettingsCredentialUseCasesTest::clampsOutOfRangePersistedNumbers() {
     FakeAppSettingsStore store;
-    store.writeSetting(QStringLiteral("general/recentProjectLimit"), 500);
     store.writeSetting(QStringLiteral("translation/timeoutSeconds"), 0);
     store.writeSetting(QStringLiteral("translation/retryCount"), 99);
 
     AppSettingsSnapshot loaded = LoadAppSettingsUseCase(&store).execute();
 
-    QCOMPARE(loaded.recentProjectLimit, 50);
     QCOMPARE(loaded.timeoutSeconds, 1);
     QCOMPARE(loaded.retryCount, 10);
 }
 
 void SettingsCredentialUseCasesTest::keepsDefaultsForUnreadablePersistedValues() {
     FakeAppSettingsStore store;
-    store.writeSetting(QStringLiteral("general/recentProjectLimit"), QStringLiteral("many"));
     store.writeSetting(QStringLiteral("translation/timeoutSeconds"), QStringLiteral("soon"));
     store.writeSetting(QStringLiteral("translation/retryCount"), QVariant(QByteArrayLiteral("nope")));
-    store.writeSetting(QStringLiteral("appearance/canvasBackground"), QStringLiteral("not_a_valid_hex_color"));
     store.writeSetting(QStringLiteral("translation/endpoint"), QStringLiteral("ftp://example.invalid"));
 
     const AppSettingsSnapshot loaded = LoadAppSettingsUseCase(&store).execute();
     const AppSettingsSnapshot defaults{};
 
     QCOMPARE(loaded, defaults);
-}
-
-void SettingsCredentialUseCasesTest::readsTextFormsOfBooleanSettings() {
-    FakeAppSettingsStore store;
-    store.writeSetting(QStringLiteral("general/restoreLastProject"), QStringLiteral("false"));
-    store.writeSetting(QStringLiteral("appearance/reduceMotion"), QStringLiteral("true"));
-
-    const AppSettingsSnapshot loaded = LoadAppSettingsUseCase(&store).execute();
-
-    QVERIFY(!loaded.restoreLastProject);
-    QVERIFY(loaded.reduceMotion);
 }
 
 void SettingsCredentialUseCasesTest::rejectsInvalidEndpointAndWritesNothing() {
@@ -284,70 +247,6 @@ void SettingsCredentialUseCasesTest::rejectsInvalidRetryCountAndWritesNothing() 
     QVERIFY(store.writtenKeys().isEmpty());
 }
 
-void SettingsCredentialUseCasesTest::rejectsInvalidRecentLimitAndWritesNothing() {
-    FakeAppSettingsStore store;
-    SaveAppSettingsUseCase saveUseCase(&store);
-
-    AppSettingsSnapshot snapshot;
-    snapshot.recentProjectLimit = 0;
-
-    auto result = saveUseCase.execute(snapshot);
-    QVERIFY(!result.has_value());
-    QCOMPARE(result.error().code, QStringLiteral("input.invalid_recent_project_limit"));
-    QVERIFY(store.writtenKeys().isEmpty());
-
-    snapshot.recentProjectLimit = -5;
-    result = saveUseCase.execute(snapshot);
-    QVERIFY(!result.has_value());
-    QCOMPARE(result.error().code, QStringLiteral("input.invalid_recent_project_limit"));
-    QVERIFY(store.writtenKeys().isEmpty());
-
-    snapshot.recentProjectLimit = 51;
-    result = saveUseCase.execute(snapshot);
-    QVERIFY(!result.has_value());
-    QCOMPARE(result.error().code, QStringLiteral("input.invalid_recent_project_limit"));
-    QVERIFY(store.writtenKeys().isEmpty());
-}
-
-void SettingsCredentialUseCasesTest::rejectsInvalidCanvasBackgroundAndWritesNothing() {
-    FakeAppSettingsStore store;
-    SaveAppSettingsUseCase saveUseCase(&store);
-
-    AppSettingsSnapshot snapshot;
-    snapshot.canvasBackground = QStringLiteral("not_a_valid_hex_color");
-
-    auto result = saveUseCase.execute(snapshot);
-    QVERIFY(!result.has_value());
-    QCOMPARE(result.error().code, QStringLiteral("input.invalid_canvas_background"));
-    QVERIFY(store.writtenKeys().isEmpty());
-}
-
-void SettingsCredentialUseCasesTest::rejectsEmptyOcrLanguageAndWritesNothing() {
-    FakeAppSettingsStore store;
-    SaveAppSettingsUseCase saveUseCase(&store);
-
-    AppSettingsSnapshot snapshot;
-    snapshot.ocrLanguage = QStringLiteral("   ");
-
-    auto result = saveUseCase.execute(snapshot);
-    QVERIFY(!result.has_value());
-    QCOMPARE(result.error().code, QStringLiteral("input.invalid_ocr_language"));
-    QVERIFY(store.writtenKeys().isEmpty());
-}
-
-void SettingsCredentialUseCasesTest::rejectsEmptyProviderIdAndWritesNothing() {
-    FakeAppSettingsStore store;
-    SaveAppSettingsUseCase saveUseCase(&store);
-
-    AppSettingsSnapshot snapshot;
-    snapshot.providerId = QStringLiteral("   ");
-
-    auto result = saveUseCase.execute(snapshot);
-    QVERIFY(!result.has_value());
-    QCOMPARE(result.error().code, QStringLiteral("input.invalid_provider_id"));
-    QVERIFY(store.writtenKeys().isEmpty());
-}
-
 void SettingsCredentialUseCasesTest::allowsEmptyModelDirectory() {
     FakeAppSettingsStore store;
     SaveAppSettingsUseCase saveUseCase(&store);
@@ -379,8 +278,9 @@ void SettingsCredentialUseCasesTest::writtenKeysDoNotContainApiKeyOrSecret() {
         QVERIFY2(written.contains(key), qPrintable(QStringLiteral("missing setting key: ") + key));
     }
 
-    static const QStringList kAllowedNamespaces = {QStringLiteral("general/"),
-                                                   QStringLiteral("ocr/"),
+    static const QStringList kAllowedNamespaces = {QStringLiteral("ocr/"),
+                                                   QStringLiteral("detection/"),
+                                                   QStringLiteral("inpaint/"),
                                                    QStringLiteral("translation/"),
                                                    QStringLiteral("appearance/")};
     for (const QString& key : written) {

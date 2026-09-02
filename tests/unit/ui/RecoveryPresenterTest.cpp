@@ -283,7 +283,7 @@ private Q_SLOTS:
 
     void testSettingsRouteForAction() {
         QCOMPARE(RecoveryPresenter::settingsRouteForAction(application::RecoveryAction::LocateModel),
-                 QStringLiteral("settings/ocr"));
+                 QStringLiteral("settings/models"));
         QCOMPARE(RecoveryPresenter::settingsRouteForAction(application::RecoveryAction::Reauthenticate),
                  QStringLiteral("settings/ai-translation"));
         QCOMPARE(RecoveryPresenter::settingsRouteForAction(application::RecoveryAction::OpenSettings,
@@ -294,10 +294,10 @@ private Q_SLOTS:
                  QStringLiteral("settings/ai-translation"));
         QCOMPARE(RecoveryPresenter::settingsRouteForAction(application::RecoveryAction::OpenSettings,
                                                            QStringLiteral("model.invalid")),
-                 QStringLiteral("settings/ocr"));
+                 QStringLiteral("settings/models"));
         QCOMPARE(RecoveryPresenter::settingsRouteForAction(application::RecoveryAction::OpenSettings,
                                                            QStringLiteral("general.unknown")),
-                 QStringLiteral("settings/general"));
+                 QStringLiteral("settings/models"));
     }
 };
 

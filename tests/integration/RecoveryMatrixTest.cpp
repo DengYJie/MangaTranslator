@@ -301,7 +301,7 @@ void RecoveryMatrixTest::ocrModelMissingKeepsManualEditingSaveExport() {
     QVERIFY(presentation.has_value());
     QCOMPARE(presentation->action, RecoveryAction::LocateModel);
     QCOMPARE(presentation->actionText, QStringLiteral("选择模型目录"));
-    QCOMPARE(RecoveryPresenter::settingsRouteForAction(presentation->action), QStringLiteral("settings/ocr"));
+    QCOMPARE(RecoveryPresenter::settingsRouteForAction(presentation->action), QStringLiteral("settings/models"));
 
     // Manual editing continues normally
     vm->commitInspectorFieldEdit(pageId, {regionId}, InspectorField::SourceText, QStringLiteral("人工录入原文"));

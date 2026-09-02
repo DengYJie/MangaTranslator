@@ -178,10 +178,8 @@ void SettingsPage::buildUi() {
 
 QWidget* SettingsPage::buildCategoryView(SettingsCategory category) {
     switch (category) {
-        case SettingsCategory::General:
-            return buildGeneralView();
-        case SettingsCategory::Ocr:
-            return buildOcrView();
+        case SettingsCategory::Models:
+            return buildModelsView();
         case SettingsCategory::AiTranslation:
             return buildAiTranslationView();
         case SettingsCategory::Appearance:
@@ -190,7 +188,7 @@ QWidget* SettingsPage::buildCategoryView(SettingsCategory category) {
     return new QWidget(m_columnContainer);
 }
 
-QWidget* SettingsPage::buildGeneralView() {
+QWidget* SettingsPage::buildModelsView() {
     auto* container = new QWidget();
     container->setAutoFillBackground(false);
     container->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
@@ -198,56 +196,7 @@ QWidget* SettingsPage::buildGeneralView() {
     layout->setContentsMargins(0, 0, 0, 0);
     layout->setSpacing(4);
 
-    auto* group = new widget::SettingsGroup(tr("常规偏好"), tr("管理项目恢复与最近项目记录"), container);
-    m_allGroups.append(group);
-
-    // Restore last project
-    m_restoreLastProjectRow =
-        new widget::SettingsRow(tr("启动时恢复上次项目"), tr("应用启动时自动打开上次未关闭的项目会话"), group);
-    m_restoreLastProjectSwitch = new fluent::basicinput::ToggleSwitch(m_restoreLastProjectRow);
-    m_restoreLastProjectSwitch->setObjectName(QStringLiteral("restoreLastProjectSwitch"));
-    connect(m_restoreLastProjectSwitch, &fluent::basicinput::ToggleSwitch::toggled, this, [this](bool on) {
-        if (!m_isUpdatingFromState && m_viewModel) {
-            m_viewModel->setRestoreLastProject(on);
-        }
-    });
-    m_restoreLastProjectRow->setEditorWidget(m_restoreLastProjectSwitch, false);
-    group->addRow(m_restoreLastProjectRow);
-    m_fieldRowMap.insert(QStringLiteral("restoreLastProject"), m_restoreLastProjectRow);
-
-    // Recent project limit
-    m_recentProjectLimitRow =
-        new widget::SettingsRow(tr("最近项目数量"), tr("在首页项目列表中显示的最大最近项目条目数（1–50）"), group);
-    m_recentProjectLimitBox = new fluent::textfields::NumberBox(m_recentProjectLimitRow);
-    m_recentProjectLimitBox->setObjectName(QStringLiteral("recentProjectLimitBox"));
-    m_recentProjectLimitBox->setRange(1, 50);
-    m_recentProjectLimitBox->setDisplayPrecision(0);
-    m_recentProjectLimitBox->setSpinButtonPlacementMode(
-        fluent::textfields::NumberBox::SpinButtonPlacementMode::Compact);
-    connect(m_recentProjectLimitBox, &fluent::textfields::NumberBox::valueChanged, this, [this](double val) {
-        if (!m_isUpdatingFromState && m_viewModel) {
-            m_viewModel->setRecentProjectLimit(static_cast<int>(val));
-        }
-    });
-    m_recentProjectLimitRow->setEditorWidget(m_recentProjectLimitBox, true);
-    group->addRow(m_recentProjectLimitRow);
-    m_fieldRowMap.insert(QStringLiteral("recentProjectLimit"), m_recentProjectLimitRow);
-
-    layout->addWidget(group);
-    layout->addStretch(1);
-    return container;
-}
-
-QWidget* SettingsPage::buildOcrView() {
-    auto* container = new QWidget();
-    container->setAutoFillBackground(false);
-    container->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
-    auto* layout = new QVBoxLayout(container);
-    layout->setContentsMargins(0, 0, 0, 0);
-    layout->setSpacing(4);
-
-    auto* group =
-        new widget::SettingsGroup(tr("文字识别 (OCR)"), tr("配置用于漫画台词识别的 OCR 模型与默认识别语言"), container);
+    auto* group = new widget::SettingsGroup(tr("文字识别 (OCR)"), tr("配置用于漫画台词识别的 ONNX 模型"), container);
     m_allGroups.append(group);
 
     // Model directory row
@@ -282,25 +231,6 @@ QWidget* SettingsPage::buildOcrView() {
     m_ocrModelDirRow->setEditorWidget(dirEditor, true);
     group->addRow(m_ocrModelDirRow);
     m_fieldRowMap.insert(QStringLiteral("ocrModelDirectory"), m_ocrModelDirRow);
-
-    // Language row
-    m_ocrLanguageRow =
-        new widget::SettingsRow(tr("默认识别语言"), tr("OCR 识别使用的默认语言（仅对新建项目生效）"), group);
-    m_ocrLanguageCombo = new fluent::basicinput::ComboBox(m_ocrLanguageRow);
-    m_ocrLanguageCombo->setObjectName(QStringLiteral("ocrLanguageCombo"));
-    m_ocrLanguageCombo->addItem(tr("自动 (Auto)"), QStringLiteral("auto"));
-    m_ocrLanguageCombo->addItem(tr("日语 (Japanese)"), QStringLiteral("ja"));
-    m_ocrLanguageCombo->addItem(tr("中文 (Chinese)"), QStringLiteral("zh"));
-    m_ocrLanguageCombo->addItem(tr("英语 (English)"), QStringLiteral("en"));
-    m_ocrLanguageCombo->addItem(tr("韩语 (Korean)"), QStringLiteral("ko"));
-    connect(m_ocrLanguageCombo, &QComboBox::currentIndexChanged, this, [this](int index) {
-        if (!m_isUpdatingFromState && m_viewModel && index >= 0) {
-            m_viewModel->setOcrLanguage(m_ocrLanguageCombo->itemData(index).toString());
-        }
-    });
-    m_ocrLanguageRow->setEditorWidget(m_ocrLanguageCombo, true);
-    group->addRow(m_ocrLanguageRow);
-    m_fieldRowMap.insert(QStringLiteral("ocrLanguage"), m_ocrLanguageRow);
 
     layout->addWidget(group);
 
@@ -404,20 +334,6 @@ QWidget* SettingsPage::buildAiTranslationView() {
     auto* group =
         new widget::SettingsGroup(tr("服务商配置"), tr("配置用于漫画台词翻译的 AI 模型、端点与访问密钥"), container);
     m_allGroups.append(group);
-
-    // Provider row
-    m_providerIdRow = new widget::SettingsRow(tr("服务商"), tr("选择翻译所使用的 AI 服务商"), group);
-    m_providerIdCombo = new fluent::basicinput::ComboBox(m_providerIdRow);
-    m_providerIdCombo->setObjectName(QStringLiteral("providerIdCombo"));
-    m_providerIdCombo->addItem(tr("OpenAI 兼容 (OpenAI-Compatible)"), QStringLiteral("openai-compatible"));
-    connect(m_providerIdCombo, &QComboBox::currentIndexChanged, this, [this](int index) {
-        if (!m_isUpdatingFromState && m_viewModel && index >= 0) {
-            m_viewModel->setProviderId(m_providerIdCombo->itemData(index).toString());
-        }
-    });
-    m_providerIdRow->setEditorWidget(m_providerIdCombo, true);
-    group->addRow(m_providerIdRow);
-    m_fieldRowMap.insert(QStringLiteral("providerId"), m_providerIdRow);
 
     // Endpoint row
     m_endpointRow = new widget::SettingsRow(tr("API 端点"), tr("API 基础 URL，留空使用服务商默认端点"), group);
@@ -584,12 +500,12 @@ QWidget* SettingsPage::buildAppearanceView() {
     layout->setContentsMargins(0, 0, 0, 0);
     layout->setSpacing(4);
 
-    auto* group = new widget::SettingsGroup(
-        tr("主题与外观"), tr("自定义应用界面主题、显示密度与视觉偏好（修改将即时预览）"), container);
+    auto* group =
+        new widget::SettingsGroup(tr("主题与外观"), tr("自定义应用界面色彩主题（修改将即时生效）"), container);
     m_allGroups.append(group);
 
     // Theme row
-    m_themeRow = new widget::SettingsRow(tr("应用主题"), tr("选择界面色彩模式（更改将即时预览）"), group);
+    m_themeRow = new widget::SettingsRow(tr("应用主题"), tr("选择界面色彩模式（更改将即时生效）"), group);
     m_themeCombo = new fluent::basicinput::ComboBox(m_themeRow);
     m_themeCombo->setObjectName(QStringLiteral("themeCombo"));
     m_themeCombo->addItem(tr("跟随系统 (System)"), static_cast<int>(application::AppTheme::System));
@@ -605,50 +521,6 @@ QWidget* SettingsPage::buildAppearanceView() {
     group->addRow(m_themeRow);
     m_fieldRowMap.insert(QStringLiteral("theme"), m_themeRow);
 
-    // Density row
-    m_densityRow = new widget::SettingsRow(tr("界面密度"), tr("选择控件的紧凑或舒适间距布局"), group);
-    m_densityCombo = new fluent::basicinput::ComboBox(m_densityRow);
-    m_densityCombo->setObjectName(QStringLiteral("densityCombo"));
-    m_densityCombo->addItem(tr("紧凑 (Compact)"), static_cast<int>(application::InterfaceDensity::Compact));
-    m_densityCombo->addItem(tr("舒适 (Comfortable)"), static_cast<int>(application::InterfaceDensity::Comfortable));
-    connect(m_densityCombo, &QComboBox::currentIndexChanged, this, [this](int index) {
-        if (!m_isUpdatingFromState && m_viewModel && index >= 0) {
-            const auto density = static_cast<application::InterfaceDensity>(m_densityCombo->itemData(index).toInt());
-            m_viewModel->setDensity(density);
-        }
-    });
-    m_densityRow->setEditorWidget(m_densityCombo, true);
-    group->addRow(m_densityRow);
-    m_fieldRowMap.insert(QStringLiteral("density"), m_densityRow);
-
-    // Reduce motion row
-    m_reduceMotionRow = new widget::SettingsRow(tr("减少动效"), tr("减少界面切换与操作中的过渡动画"), group);
-    m_reduceMotionSwitch = new fluent::basicinput::ToggleSwitch(m_reduceMotionRow);
-    m_reduceMotionSwitch->setObjectName(QStringLiteral("reduceMotionSwitch"));
-    connect(m_reduceMotionSwitch, &fluent::basicinput::ToggleSwitch::toggled, this, [this](bool on) {
-        if (!m_isUpdatingFromState && m_viewModel) {
-            m_viewModel->setReduceMotion(on);
-        }
-    });
-    m_reduceMotionRow->setEditorWidget(m_reduceMotionSwitch, false);
-    group->addRow(m_reduceMotionRow);
-    m_fieldRowMap.insert(QStringLiteral("reduceMotion"), m_reduceMotionRow);
-
-    // Canvas background color row
-    m_canvasBackgroundRow = new widget::SettingsRow(
-        tr("画布背景"), tr("编辑器漫画画布的工作区背景色（十六进制颜色代码，例如 #202124）"), group);
-    m_canvasBackgroundEdit = new fluent::textfields::LineEdit(m_canvasBackgroundRow);
-    m_canvasBackgroundEdit->setObjectName(QStringLiteral("canvasBackgroundEdit"));
-    m_canvasBackgroundEdit->setPlaceholderText(QStringLiteral("#202124"));
-    connect(m_canvasBackgroundEdit, &fluent::textfields::LineEdit::textChanged, this, [this](const QString& text) {
-        if (!m_isUpdatingFromState && m_viewModel) {
-            m_viewModel->setCanvasBackground(text.trimmed());
-        }
-    });
-    m_canvasBackgroundRow->setEditorWidget(m_canvasBackgroundEdit, true);
-    group->addRow(m_canvasBackgroundRow);
-    m_fieldRowMap.insert(QStringLiteral("canvasBackground"), m_canvasBackgroundRow);
-
     layout->addWidget(group);
     layout->addStretch(1);
     return container;
@@ -657,23 +529,9 @@ QWidget* SettingsPage::buildAppearanceView() {
 void SettingsPage::render(const SettingsState& state) {
     m_isUpdatingFromState = true;
 
-    // Update controls owned by this category page.
-    if (m_restoreLastProjectSwitch) {
-        m_restoreLastProjectSwitch->setIsOn(state.persisted.restoreLastProject);
-    }
-    if (m_recentProjectLimitBox) {
-        m_recentProjectLimitBox->setValue(state.persisted.recentProjectLimit);
-    }
-
     // Update OCR category inputs.
     if (m_ocrModelDirEdit && m_ocrModelDirEdit->text() != state.persisted.ocrModelDirectory) {
         m_ocrModelDirEdit->setText(state.persisted.ocrModelDirectory);
-    }
-    if (m_ocrLanguageCombo) {
-        const int langIdx = m_ocrLanguageCombo->findData(state.persisted.ocrLanguage);
-        if (langIdx >= 0 && m_ocrLanguageCombo->currentIndex() != langIdx) {
-            m_ocrLanguageCombo->setCurrentIndex(langIdx);
-        }
     }
 
     if (m_detectionModelDirEdit && m_detectionModelDirEdit->text() != state.persisted.detectionModelDirectory)
@@ -738,12 +596,6 @@ void SettingsPage::render(const SettingsState& state) {
     }
 
     // Update AI Translation category inputs.
-    if (m_providerIdCombo) {
-        const int provIdx = m_providerIdCombo->findData(state.persisted.providerId);
-        if (provIdx >= 0 && m_providerIdCombo->currentIndex() != provIdx) {
-            m_providerIdCombo->setCurrentIndex(provIdx);
-        }
-    }
     if (m_endpointEdit && m_endpointEdit->text() != state.persisted.endpoint) {
         m_endpointEdit->setText(state.persisted.endpoint);
     }
@@ -777,18 +629,6 @@ void SettingsPage::render(const SettingsState& state) {
             m_themeCombo->setCurrentIndex(themeIdx);
         }
     }
-    if (m_densityCombo) {
-        const int densityIdx = m_densityCombo->findData(static_cast<int>(state.persisted.density));
-        if (densityIdx >= 0 && m_densityCombo->currentIndex() != densityIdx) {
-            m_densityCombo->setCurrentIndex(densityIdx);
-        }
-    }
-    if (m_reduceMotionSwitch) {
-        m_reduceMotionSwitch->setIsOn(state.persisted.reduceMotion);
-    }
-    if (m_canvasBackgroundEdit && m_canvasBackgroundEdit->text() != state.persisted.canvasBackground) {
-        m_canvasBackgroundEdit->setText(state.persisted.canvasBackground);
-    }
 
     // Update field errors
     for (auto it = m_fieldRowMap.begin(); it != m_fieldRowMap.end(); ++it) {
@@ -820,22 +660,18 @@ void SettingsPage::render(const SettingsState& state) {
 
 void SettingsPage::updateCategoryHeaders(SettingsCategory category) {
     switch (category) {
-        case SettingsCategory::General:
-            m_categoryTitleLabel->setText(tr("常规"));
-            m_categorySubtitleLabel->setText(tr("配置应用启动、恢复与项目记录等常规偏好。"));
-            break;
-        case SettingsCategory::Ocr:
-            m_categoryTitleLabel->setText(tr("OCR 与本地模型"));
-            m_categorySubtitleLabel->setText(
-                tr("配置漫画台词文字识别 (OCR)、版面与文字检测 (Koharu Layout) 以及图像修复 (Inpaint) 的 ONNX 模型。"));
+        case SettingsCategory::Models:
+            m_categoryTitleLabel->setText(tr("模型配置"));
+            m_categorySubtitleLabel->setText(tr(
+                "配置漫画台词文字识别 (OCR)、版面与文字检测 (Koharu Layout) 以及图像修复 (Inpaint) 的本地 ONNX 模型。"));
             break;
         case SettingsCategory::AiTranslation:
             m_categoryTitleLabel->setText(tr("AI 翻译"));
-            m_categorySubtitleLabel->setText(tr("配置大语言模型服务商、安全凭据、请求参数与模型标识。"));
+            m_categorySubtitleLabel->setText(tr("配置大语言模型端点、API 密钥、请求参数与模型标识。"));
             break;
         case SettingsCategory::Appearance:
             m_categoryTitleLabel->setText(tr("外观与主题"));
-            m_categorySubtitleLabel->setText(tr("配置应用色彩模式、界面密度、动效偏好与画布背景。"));
+            m_categorySubtitleLabel->setText(tr("配置应用色彩主题模式（支持即时热切换）。"));
             break;
     }
 }

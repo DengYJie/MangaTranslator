@@ -18,24 +18,26 @@ constexpr int kCancelBtnPadding = 12;
 
 QString stageGlyph(application::OperationStage stage) {
     switch (stage) {
-        case application::OperationStage::Project:
-            return QStringLiteral("\uE80F"); // Project / Document
-        case application::OperationStage::Import:
-            return QStringLiteral("\uE8B5"); // Import
-        case application::OperationStage::LoadImage:
-            return QStringLiteral("\uEB9F"); // Photo
+        case application::OperationStage::Detect:
+            return Typography::Icons::glyph(QStringLiteral("ic_fluent_scan_text_20_regular"));
         case application::OperationStage::Ocr:
-            return QStringLiteral("\uE80F"); // Document / Search
+            return Typography::Icons::glyph(QStringLiteral("ic_fluent_scan_type_20_regular"));
         case application::OperationStage::Translate:
-            return QStringLiteral("\uE774"); // Globe / Translation
+            return Typography::Icons::glyph(QStringLiteral("ic_fluent_translate_20_regular"));
         case application::OperationStage::Clear:
-            return QStringLiteral("\uE74D"); // Eraser
+            return Typography::Icons::glyph(QStringLiteral("ic_fluent_eraser_20_regular"));
         case application::OperationStage::Layout:
-            return QStringLiteral("\uE8D3"); // Font / Text
+            return Typography::Icons::glyph(QStringLiteral("ic_fluent_text_font_size_20_regular"));
         case application::OperationStage::Export:
-            return QStringLiteral("\uEDE1"); // Export
+            return Typography::Icons::glyph(QStringLiteral("ic_fluent_arrow_export_up_20_regular"));
+        case application::OperationStage::Import:
+            return Typography::Icons::glyph(QStringLiteral("ic_fluent_folder_open_20_regular"));
+        case application::OperationStage::LoadImage:
+            return Typography::Icons::glyph(QStringLiteral("ic_fluent_image_20_regular"));
+        case application::OperationStage::Project:
+            return Typography::Icons::glyph(QStringLiteral("ic_fluent_sparkle_20_regular"));
         default:
-            return QStringLiteral("\uE768"); // Work
+            return Typography::Icons::glyph(QStringLiteral("ic_fluent_sparkle_20_regular"));
     }
 }
 
@@ -92,10 +94,13 @@ void OperationRowDelegate::paint(QPainter* painter,
 
     if (state == application::OperationState::Failed) {
         painter->setPen(tokens.systemCritical);
-        painter->drawText(iconRect, Qt::AlignCenter, QStringLiteral("\uE7BA"));
+        painter->drawText(
+            iconRect, Qt::AlignCenter, Typography::Icons::glyph(QStringLiteral("ic_fluent_error_circle_20_filled")));
     } else if (state == application::OperationState::Completed) {
         painter->setPen(tokens.systemSuccess);
-        painter->drawText(iconRect, Qt::AlignCenter, QStringLiteral("\uE73E"));
+        painter->drawText(iconRect,
+                          Qt::AlignCenter,
+                          Typography::Icons::glyph(QStringLiteral("ic_fluent_checkmark_circle_20_filled")));
     } else {
         painter->setPen(state == application::OperationState::Running ? tokens.accentDefault : tokens.textSecondary);
         painter->drawText(iconRect, Qt::AlignCenter, stageGlyph(stage));
@@ -149,7 +154,8 @@ void OperationRowDelegate::paint(QPainter* painter,
         const QRect cancelRect = cancelButtonRect(option.rect);
         painter->setFont(iconFont);
         painter->setPen(tokens.textTertiary);
-        painter->drawText(cancelRect, Qt::AlignCenter, QStringLiteral("\uE711")); // Cancel / Close
+        painter->drawText(
+            cancelRect, Qt::AlignCenter, Typography::Icons::glyph(QStringLiteral("ic_fluent_dismiss_20_regular")));
     }
 
     // 4. Progress bar line at bottom edge if running

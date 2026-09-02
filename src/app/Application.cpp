@@ -226,7 +226,7 @@ int Application::run() {
                                                                           mainWindow);
     settingsViewModel->observe(mainWindow, [this, editorViewModel](const ui::screen::settings::SettingsState& state) {
         network::ProviderConfig provider;
-        provider.providerId = state.persisted.providerId;
+        provider.providerId = QStringLiteral("openai-compatible");
         provider.endpoint = QUrl(state.persisted.endpoint);
         provider.model = state.persisted.modelName;
         provider.timeoutMs = state.persisted.timeoutSeconds * 1000;
@@ -235,7 +235,6 @@ int Application::run() {
         const bool configured = !state.persisted.endpoint.trimmed().isEmpty() &&
                                 !state.persisted.modelName.trimmed().isEmpty() &&
                                 state.credentialStatus == application::CredentialState::Configured &&
-                                !state.fieldErrors.contains(QStringLiteral("providerId")) &&
                                 !state.fieldErrors.contains(QStringLiteral("endpoint")) &&
                                 !state.fieldErrors.contains(QStringLiteral("modelName"));
         QString reason;
@@ -258,10 +257,8 @@ int Application::run() {
         editorViewModel->setDetectionAvailability(m_context->isDetectionModelAvailable(),
                                                   m_context->detectionModelUnavailableReason());
     });
-    auto* generalSettingsPage = ui::screen::settings::SettingsPage::createLazyPage(
-        settingsViewModel, ui::screen::settings::SettingsCategory::General);
-    auto* ocrSettingsPage = ui::screen::settings::SettingsPage::createLazyPage(
-        settingsViewModel, ui::screen::settings::SettingsCategory::Ocr);
+    auto* modelsSettingsPage = ui::screen::settings::SettingsPage::createLazyPage(
+        settingsViewModel, ui::screen::settings::SettingsCategory::Models);
     auto* translationSettingsPage = ui::screen::settings::SettingsPage::createLazyPage(
         settingsViewModel, ui::screen::settings::SettingsCategory::AiTranslation);
     auto* appearanceSettingsPage = ui::screen::settings::SettingsPage::createLazyPage(
@@ -270,19 +267,12 @@ int Application::run() {
     auto* settingsPanel = new ui::navigation::NavigationPanel(nullptr);
     mainWindow->registerSurface(QStringLiteral("settings"), settingsPanel);
 
-    ui::navigation::NavigationItemDescriptor generalItem;
-    generalItem.routeKey = QStringLiteral("settings/general");
-    generalItem.text = QCoreApplication::translate("Application", "常规");
-    generalItem.iconGlyph = Typography::Icons::Settings;
-    mainWindow->addNavigationItem(generalItem, QStringLiteral("settings"));
-    mainWindow->registerRoute(QStringLiteral("settings/general"), generalSettingsPage, QStringLiteral("settings"));
-
-    ui::navigation::NavigationItemDescriptor ocrItem;
-    ocrItem.routeKey = QStringLiteral("settings/ocr");
-    ocrItem.text = QCoreApplication::translate("Application", "OCR 与模型");
-    ocrItem.iconGlyph = Typography::Icons::glyph(QStringLiteral("ic_fluent_scan_text_20_regular"));
-    mainWindow->addNavigationItem(ocrItem, QStringLiteral("settings"));
-    mainWindow->registerRoute(QStringLiteral("settings/ocr"), ocrSettingsPage, QStringLiteral("settings"));
+    ui::navigation::NavigationItemDescriptor modelsItem;
+    modelsItem.routeKey = QStringLiteral("settings/models");
+    modelsItem.text = QCoreApplication::translate("Application", "模型配置");
+    modelsItem.iconGlyph = Typography::Icons::glyph(QStringLiteral("ic_fluent_scan_text_20_regular"));
+    mainWindow->addNavigationItem(modelsItem, QStringLiteral("settings"));
+    mainWindow->registerRoute(QStringLiteral("settings/models"), modelsSettingsPage, QStringLiteral("settings"));
 
     ui::navigation::NavigationItemDescriptor translationItem;
     translationItem.routeKey = QStringLiteral("settings/ai-translation");
@@ -302,7 +292,7 @@ int Application::run() {
 
     // Main surface footer item for Settings
     ui::navigation::NavigationItemDescriptor settingsFooterItem;
-    settingsFooterItem.routeKey = QStringLiteral("settings/general");
+    settingsFooterItem.routeKey = QStringLiteral("settings/models");
     settingsFooterItem.text = QCoreApplication::translate("Application", "设置");
     settingsFooterItem.iconGlyph = Typography::Icons::Settings;
     settingsFooterItem.position = ui::navigation::NavigationItemPosition::Bottom;

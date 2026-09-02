@@ -53,23 +53,26 @@ QString stageName(application::OperationStage stage) {
 
 QString stageGlyph(application::OperationStage stage) {
     switch (stage) {
-        case application::OperationStage::Ocr:
         case application::OperationStage::Detect:
-            return QStringLiteral("\uE80F"); // Document
+            return Typography::Icons::glyph(QStringLiteral("ic_fluent_scan_text_20_regular"));
+        case application::OperationStage::Ocr:
+            return Typography::Icons::glyph(QStringLiteral("ic_fluent_scan_type_20_regular"));
         case application::OperationStage::Translate:
-            return QStringLiteral("\uE774"); // Globe / Translate
+            return Typography::Icons::glyph(QStringLiteral("ic_fluent_translate_20_regular"));
         case application::OperationStage::Clear:
-            return QStringLiteral("\uE74D"); // Eraser
+            return Typography::Icons::glyph(QStringLiteral("ic_fluent_eraser_20_regular"));
         case application::OperationStage::Layout:
-            return QStringLiteral("\uE8D3"); // Font
+            return Typography::Icons::glyph(QStringLiteral("ic_fluent_text_font_size_20_regular"));
         case application::OperationStage::Export:
-            return QStringLiteral("\uEDE1"); // Export
+            return Typography::Icons::glyph(QStringLiteral("ic_fluent_arrow_export_up_20_regular"));
         case application::OperationStage::Import:
-            return QStringLiteral("\uE8B5"); // Import
+            return Typography::Icons::glyph(QStringLiteral("ic_fluent_folder_open_20_regular"));
         case application::OperationStage::LoadImage:
-            return QStringLiteral("\uEB9F"); // Photo
+            return Typography::Icons::glyph(QStringLiteral("ic_fluent_image_20_regular"));
+        case application::OperationStage::Project:
+            return Typography::Icons::glyph(QStringLiteral("ic_fluent_sparkle_20_regular"));
         default:
-            return QStringLiteral("\uE768"); // Work
+            return Typography::Icons::glyph(QStringLiteral("ic_fluent_sparkle_20_regular"));
     }
 }
 
@@ -166,7 +169,8 @@ public:
         m_cancelBtn = new fluent::basicinput::Button(this);
         m_cancelBtn->setFluentStyle(fluent::basicinput::Button::Subtle);
         m_cancelBtn->setFluentLayout(fluent::basicinput::Button::IconOnly);
-        m_cancelBtn->setIconGlyph(QStringLiteral("\uE71A"), Typography::IconSize::Compact); // Stop square
+        m_cancelBtn->setIconGlyph(Typography::Icons::glyph(QStringLiteral("ic_fluent_dismiss_circle_20_regular")),
+                                  Typography::IconSize::Compact);
         m_cancelBtn->setFixedSize(24, 24);
         m_cancelBtn->setAccessibleName(tr("取消任务"));
         m_cancelBtn->setToolTip(tr("取消任务"));
@@ -261,7 +265,7 @@ public:
         QFont iconFont(Typography::FontFamily::FluentIcons);
         iconFont.setPixelSize(16);
         iconLabel->setFont(iconFont);
-        iconLabel->setText(QStringLiteral("\uE7BA")); // Warning
+        iconLabel->setText(Typography::Icons::glyph(QStringLiteral("ic_fluent_error_circle_20_filled")));
         iconLabel->setStyleSheet(QStringLiteral("color: %1;").arg(tokens.systemCritical.name(QColor::HexRgb)));
         iconLabel->setFixedSize(20, 20);
         iconLabel->setAlignment(Qt::AlignCenter);
@@ -292,7 +296,8 @@ public:
         auto* dismissBtn = new fluent::basicinput::Button(this);
         dismissBtn->setFluentStyle(fluent::basicinput::Button::Subtle);
         dismissBtn->setFluentLayout(fluent::basicinput::Button::IconOnly);
-        dismissBtn->setIconGlyph(QStringLiteral("\uE711"), Typography::IconSize::Compact); // Close X
+        dismissBtn->setIconGlyph(Typography::Icons::glyph(QStringLiteral("ic_fluent_dismiss_20_regular")),
+                                 Typography::IconSize::Compact);
         dismissBtn->setFixedSize(24, 24);
         dismissBtn->setAccessibleName(tr("忽略"));
         dismissBtn->setToolTip(tr("忽略"));

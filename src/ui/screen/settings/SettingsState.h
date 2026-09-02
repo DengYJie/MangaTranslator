@@ -15,54 +15,46 @@ namespace manga::ui::screen::settings {
 
 using AppSettingsSnapshot = ::manga::application::AppSettingsSnapshot;
 using AppTheme = ::manga::application::AppTheme;
-using InterfaceDensity = ::manga::application::InterfaceDensity;
 using CredentialState = ::manga::application::CredentialState;
 using OcrModelStatus = ::manga::application::OcrModelStatus;
 using DetectionModelStatus = ::manga::application::DetectionModelStatus;
 using InpaintModelStatus = ::manga::application::InpaintModelStatus;
 
 enum class SettingsCategory {
-    General,
-    Ocr,
+    Models,
     AiTranslation,
     Appearance
 };
 
 inline QString settingsCategoryToString(SettingsCategory category) {
     switch (category) {
-        case SettingsCategory::General:
-            return QStringLiteral("General");
-        case SettingsCategory::Ocr:
-            return QStringLiteral("Ocr");
+        case SettingsCategory::Models:
+            return QStringLiteral("Models");
         case SettingsCategory::AiTranslation:
             return QStringLiteral("AiTranslation");
         case SettingsCategory::Appearance:
             return QStringLiteral("Appearance");
     }
-    return QStringLiteral("General");
+    return QStringLiteral("Models");
 }
 
 inline QString settingsCategoryRouteKey(SettingsCategory category) {
     switch (category) {
-        case SettingsCategory::General:
-            return QStringLiteral("settings/general");
-        case SettingsCategory::Ocr:
-            return QStringLiteral("settings/ocr");
+        case SettingsCategory::Models:
+            return QStringLiteral("settings/models");
         case SettingsCategory::AiTranslation:
             return QStringLiteral("settings/ai-translation");
         case SettingsCategory::Appearance:
             return QStringLiteral("settings/appearance");
     }
-    return QStringLiteral("settings/general");
+    return QStringLiteral("settings/models");
 }
 
 inline std::optional<SettingsCategory> settingsCategoryFromRouteKey(const QString& routeKey) {
-    if (routeKey == QLatin1String("settings") || routeKey == QLatin1String("settings/general") ||
-        routeKey == QLatin1String("general")) {
-        return SettingsCategory::General;
-    }
-    if (routeKey == QLatin1String("settings/ocr") || routeKey == QLatin1String("ocr")) {
-        return SettingsCategory::Ocr;
+    if (routeKey == QLatin1String("settings") || routeKey == QLatin1String("settings/models") ||
+        routeKey == QLatin1String("models") || routeKey == QLatin1String("settings/ocr") ||
+        routeKey == QLatin1String("ocr")) {
+        return SettingsCategory::Models;
     }
     if (routeKey == QLatin1String("settings/ai-translation") || routeKey == QLatin1String("ai-translation") ||
         routeKey == QLatin1String("translation")) {

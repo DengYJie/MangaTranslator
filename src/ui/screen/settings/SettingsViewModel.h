@@ -32,18 +32,12 @@ public:
     // --- Navigation & Lifetime ---
     void loadSettings();
 
-    // --- General Category Intents ---
-    void setRestoreLastProject(bool enabled);
-    void setRecentProjectLimit(int limit);
-
-    // --- OCR Category Intents ---
+    // --- OCR & Models Category Intents ---
     void setOcrModelDirectory(const QString& directory);
     void setDetectionModelDirectory(const QString& directory);
     void setInpaintModelDirectory(const QString& directory);
-    void setOcrLanguage(const QString& language);
 
     // --- AI Translation Category Intents ---
-    void setProviderId(const QString& providerId);
     void setEndpoint(const QString& endpoint);
     void setModelName(const QString& modelName);
     void setTimeoutSeconds(int seconds);
@@ -53,9 +47,6 @@ public:
 
     // --- Appearance Category Intents ---
     void setTheme(AppTheme theme);
-    void setDensity(InterfaceDensity density);
-    void setReduceMotion(bool reduce);
-    void setCanvasBackground(const QString& color);
 
     // --- Actions ---
     void restoreDefaults();
