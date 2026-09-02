@@ -101,6 +101,9 @@ public:
         return m_translator.get();
     }
     [[nodiscard]] application::IInpainter* inpainter() const {
+        if (auto* inpainter = dynamic_cast<application::IInpainter*>(m_pageInpainter.get())) {
+            return inpainter;
+        }
         return m_inpainter.get();
     }
     [[nodiscard]] application::ITextLayouter* textLayouter() const {

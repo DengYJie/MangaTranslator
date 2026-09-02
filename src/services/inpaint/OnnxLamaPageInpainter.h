@@ -1,5 +1,6 @@
 #pragma once
 
+#include "application/ports/IInpainter.h"
 #include "application/ports/IPageInpainter.h"
 #include "services/inpaint/InpaintManifest.h"
 
@@ -12,13 +13,16 @@ struct Env;
 namespace manga::services {
 class BoundedTaskExecutor;
 
-class OnnxLamaPageInpainter final : public application::IPageInpainter {
+class OnnxLamaPageInpainter final : public application::IPageInpainter, public application::IInpainter {
 public:
     OnnxLamaPageInpainter(Ort::Env* env, BoundedTaskExecutor* executor, InpaintManifest manifest);
     ~OnnxLamaPageInpainter() override;
 
     [[nodiscard]] QFuture<application::Result<application::PageInpaintResponse>>
     inpaint(application::PageInpaintRequest request, application::OperationContext context) override;
+
+    [[nodiscard]] QFuture<application::Result<application::ClearResponse>>
+    clear(application::ClearRequest request, application::OperationContext context) override;
 
     void release() override;
 

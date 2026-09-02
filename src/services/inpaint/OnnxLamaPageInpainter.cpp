@@ -10,6 +10,9 @@
 #include <QElapsedTimer>
 #include <QMutex>
 #include <QMutexLocker>
+#include <QPainter>
+#include <QPolygonF>
+#include <QPromise>
 
 #include <algorithm>
 #include <cmath>
@@ -87,7 +90,9 @@ application::Result<void> OnnxLamaPageInpainter::ensureLoaded() {
 
     Ort::SessionOptions options;
     options.SetGraphOptimizationLevel(GraphOptimizationLevel::ORT_ENABLE_ALL);
-    options.SetIntraOpNumThreads(1);
+    const unsigned int hardwareThreads = std::thread::hardware_concurrency();
+    const int threadCount = std::clamp(static_cast<int>(hardwareThreads), 2, 8);
+    options.SetIntraOpNumThreads(threadCount);
     options.SetInterOpNumThreads(1);
     options.SetExecutionMode(ExecutionMode::ORT_SEQUENTIAL);
     qInfo().noquote() << "[InpaintEngine] loading inpaint model from dir=" << m_impl->manifest.modelDirectory
@@ -283,6 +288,248 @@ OnnxLamaPageInpainter::inpaint(application::PageInpaintRequest request, applicat
     if (!submitted)
         return application::makeFailedFuture<application::PageInpaintResponse>(submitted.error());
     return *submitted;
+}
+
+namespace {
+
+uint8_t calcMedian(std::vector<uint8_t>& values) {
+    if (values.empty()) {
+        return 255;
+    }
+    const size_t mid = values.size() / 2;
+    std::nth_element(values.begin(), values.begin() + mid, values.end());
+    return values[mid];
+}
+
+double calcStdDev(const std::vector<uint8_t>& values, double medianVal) {
+    if (values.empty()) {
+        return 0.0;
+    }
+    double sumSq = 0.0;
+    for (uint8_t v : values) {
+        const double diff = static_cast<double>(v) - medianVal;
+        sumSq += diff * diff;
+    }
+    return std::sqrt(sumSq / static_cast<double>(values.size()));
+}
+
+// Aligns with Koharu's uniform_region_color algorithm (inpainting.rs:774-814)
+std::optional<QColor> detectUniformBackgroundColor(const QImage& image,
+                                                   const QRect& regionRect,
+                                                   const std::optional<domain::PolygonGeometry>& polygon) {
+    Q_UNUSED(polygon);
+    const int imgW = image.width();
+    const int imgH = image.height();
+    const QImage rgba = (image.format() == QImage::Format_RGBA8888 || image.format() == QImage::Format_RGB32 ||
+                         image.format() == QImage::Format_ARGB32)
+                            ? image
+                            : image.convertToFormat(QImage::Format_RGBA8888);
+
+    std::vector<uint8_t> rChan, gChan, bChan;
+    rChan.reserve(1024);
+    gChan.reserve(1024);
+    bChan.reserve(1024);
+
+    // Sample background reference pixels around the border band of the text region (outer 4-8px)
+    // and inside the region away from dark text strokes.
+    const int pad = 6;
+    const QRect sampleRect = regionRect.adjusted(-pad, -pad, pad, pad).intersected(QRect(0, 0, imgW, imgH));
+
+    for (int y = sampleRect.top(); y <= sampleRect.bottom(); ++y) {
+        const auto* scan = rgba.constScanLine(y);
+        for (int x = sampleRect.left(); x <= sampleRect.right(); ++x) {
+            const int offset = x * 4;
+            const uint8_t r = scan[offset + 0];
+            const uint8_t g = scan[offset + 1];
+            const uint8_t b = scan[offset + 2];
+
+            const double luma = 0.299 * r + 0.587 * g + 0.114 * b;
+
+            // Filter out dark text strokes (luma < 120) so they don't spoil background variance
+            if (luma >= 120.0) {
+                rChan.push_back(r);
+                gChan.push_back(g);
+                bChan.push_back(b);
+            }
+        }
+    }
+
+    if (rChan.size() < 16) {
+        return std::nullopt;
+    }
+
+    const uint8_t medR = calcMedian(rChan);
+    const uint8_t medG = calcMedian(gChan);
+    const uint8_t medB = calcMedian(bChan);
+
+    const double devR = calcStdDev(rChan, medR);
+    const double devG = calcStdDev(gChan, medG);
+    const double devB = calcStdDev(bChan, medB);
+
+    const double meanDev = (devR + devG + devB) / 3.0;
+    const double devSpread = std::sqrt(((devR - meanDev) * (devR - meanDev) + (devG - meanDev) * (devG - meanDev) +
+                                        (devB - meanDev) * (devB - meanDev)) /
+                                       3.0);
+
+    const double threshold = (devSpread > 1.0) ? 7.0 : 10.0;
+    const double maxDev = std::max({devR, devG, devB});
+
+    // If max deviation is within threshold, it is a uniform flat background!
+    // Or if all channels are bright near white (> 220 with dev < 15.0)
+    if (maxDev < threshold || (medR > 220 && medG > 220 && medB > 220 && maxDev < 15.0)) {
+        return QColor(medR, medG, medB);
+    }
+
+    return std::nullopt;
+}
+
+application::ClearResponse uniformClear(const application::ClearRequest& request, const QColor& color) {
+    const int left = qFloor(request.region.x);
+    const int top = qFloor(request.region.y);
+    const int right = qCeil(request.region.x + request.region.width);
+    const int bottom = qCeil(request.region.y + request.region.height);
+    const int width = std::max(1, right - left);
+    const int height = std::max(1, bottom - top);
+    const QRect bounds(left, top, width, height);
+
+    // Tight 2px padding
+    const QRect patchRect =
+        bounds.adjusted(-2, -2, 2, 2).intersected(QRect(0, 0, request.pageImage.width(), request.pageImage.height()));
+
+    QImage patch(patchRect.size(), QImage::Format_RGBA8888);
+    patch.fill(color);
+    patch.setColorSpace(QColorSpace(QColorSpace::SRgb));
+
+    application::ClearResponse resp;
+    resp.regionId = request.regionId;
+    resp.affectedBounds = domain::RectGeometry{static_cast<double>(patchRect.x()),
+                                               static_cast<double>(patchRect.y()),
+                                               static_cast<double>(patchRect.width()),
+                                               static_cast<double>(patchRect.height())};
+    resp.patch = std::move(patch);
+    return resp;
+}
+
+application::ClearResponse fallbackClear(const application::ClearRequest& request) {
+    return uniformClear(request, Qt::white);
+}
+} // namespace
+
+QFuture<application::Result<application::ClearResponse>>
+OnnxLamaPageInpainter::clear(application::ClearRequest request, application::OperationContext context) {
+    if (!m_impl || !m_impl->executor) {
+        return application::makeReadyFuture<application::ClearResponse>(fallbackClear(request));
+    }
+
+    if (request.pageImage.isNull() || !std::isfinite(request.region.x) || !std::isfinite(request.region.y) ||
+        !std::isfinite(request.region.width) || !std::isfinite(request.region.height)) {
+        return application::makeFailedFuture<application::ClearResponse>(
+            inputError(QStringLiteral("inference.invalid_input"), QStringLiteral("Invalid clear request geometry")));
+    }
+
+    const QSize size = request.pageImage.size();
+    if (size.isEmpty()) {
+        return application::makeFailedFuture<application::ClearResponse>(
+            inputError(QStringLiteral("inference.invalid_input"), QStringLiteral("Page image is empty")));
+    }
+
+    const int rx = qFloor(request.region.x);
+    const int ry = qFloor(request.region.y);
+    const int rw = std::max(1, qCeil(request.region.width));
+    const int rh = std::max(1, qCeil(request.region.height));
+    const QRect regionRect(rx, ry, rw, rh);
+
+    // 1. Check if the region has a uniform background (speech bubbles, solid boxes)
+    // Aligns with Koharu's fill_uniform_regions (inpainting.rs:591-620)
+    if (auto uniformColor = detectUniformBackgroundColor(request.pageImage, regionRect, request.polygon)) {
+        qInfo().noquote() << "[InpaintEngine] detected uniform background color=" << uniformColor->name()
+                          << "for regionId=" << QString::fromStdString(request.regionId.toString())
+                          << "- performing fast uniform fill";
+        return application::makeReadyFuture<application::ClearResponse>(uniformClear(request, *uniformColor));
+    }
+
+    // 2. Non-uniform background (complex art, textures, screentone): Run LaMa with tight mask and 128px context
+    // Expanding context around dirty bounds allows LaMa Fast Fourier Convolutions to sample
+    // surrounding screentone, texture, and line art frequencies cleanly.
+    // Aligns with Koharu's hd_strategy_crop_margin = 128.
+    const int contextMargin = m_impl ? m_impl->manifest.tileContext : 128;
+    const QRect dirtyBounds = regionRect.adjusted(-contextMargin, -contextMargin, contextMargin, contextMargin)
+                                  .intersected(QRect(QPoint(0, 0), size));
+    if (dirtyBounds.isEmpty()) {
+        return application::makeFailedFuture<application::ClearResponse>(
+            inputError(QStringLiteral("inference.invalid_input"), QStringLiteral("Region is outside image bounds")));
+    }
+
+    QImage mask(size, QImage::Format_Grayscale8);
+    mask.fill(0);
+    {
+        QPainter painter(&mask);
+        painter.setRenderHint(QPainter::Antialiasing, true);
+        painter.setPen(Qt::NoPen);
+        painter.setBrush(Qt::white);
+
+        // Tight mask: 3px padding around text bounding box to prevent eating into surrounding artwork
+        painter.drawRect(regionRect.adjusted(-3, -3, 3, 3));
+    }
+
+    QImage croppedSource = request.pageImage.copy(dirtyBounds);
+    QImage croppedMask = mask.copy(dirtyBounds);
+    const QRect localDirty(0, 0, dirtyBounds.width(), dirtyBounds.height());
+
+    application::PageInpaintRequest inpaintReq;
+    inpaintReq.projectId = request.projectId;
+    inpaintReq.pageId = request.pageId;
+    inpaintReq.sourceImage = std::move(croppedSource);
+    inpaintReq.mask = croppedMask;
+    inpaintReq.dirtyBounds = localDirty;
+
+    auto promise = std::make_shared<QPromise<Result<application::ClearResponse>>>();
+    promise->start();
+    auto future = promise->future();
+
+    inpaint(std::move(inpaintReq), context)
+        .then([promise, request, dirtyBounds, croppedMask](Result<application::PageInpaintResponse> res) {
+            if (!res) {
+                if (res.error().category == application::ErrorCategory::Cancelled) {
+                    promise->addResult(std::unexpected(res.error()));
+                } else {
+                    qWarning().noquote() << "[InpaintEngine] LaMa inpaint failed, falling back to solid fill:"
+                                         << res.error().safeMessage;
+                    promise->addResult(fallbackClear(request));
+                }
+            } else {
+                const QImage& inpaintedPatch = res->image;
+
+                // Create patch where RGB comes from the inpainted background and Alpha
+                // channel strictly follows the mask (255 inside text, 0 outside).
+                QImage patch(dirtyBounds.size(), QImage::Format_RGBA8888);
+                patch.setColorSpace(QColorSpace(QColorSpace::SRgb));
+
+                for (int y = 0; y < dirtyBounds.height(); ++y) {
+                    const auto* srcPtr = inpaintedPatch.constScanLine(y);
+                    const auto* maskPtr = croppedMask.constScanLine(y);
+                    auto* dstPtr = patch.scanLine(y);
+                    for (int x = 0; x < dirtyBounds.width(); ++x) {
+                        dstPtr[x * 4 + 0] = srcPtr[x * 4 + 0];
+                        dstPtr[x * 4 + 1] = srcPtr[x * 4 + 1];
+                        dstPtr[x * 4 + 2] = srcPtr[x * 4 + 2];
+                        dstPtr[x * 4 + 3] = maskPtr[x];
+                    }
+                }
+
+                application::ClearResponse resp;
+                resp.regionId = request.regionId;
+                resp.affectedBounds = domain::RectGeometry{static_cast<double>(dirtyBounds.x()),
+                                                           static_cast<double>(dirtyBounds.y()),
+                                                           static_cast<double>(dirtyBounds.width()),
+                                                           static_cast<double>(dirtyBounds.height())};
+                resp.patch = std::move(patch);
+                promise->addResult(resp);
+            }
+            promise->finish();
+        });
+
+    return future;
 }
 
 } // namespace manga::services
