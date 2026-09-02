@@ -1872,13 +1872,14 @@ void EditorProcessingController::batchProcessPages(const QVector<domain::PageId>
     auto future = m_batchWorkflow->execute(req, context, sessionGen);
     auto* watcher = new QFutureWatcher<application::Result<application::BatchProcessingReport>>(this);
     connect(watcher, &QFutureWatcherBase::finished, this, [this, watcher, key, opId, sessionGen]() {
-        if (m_activeTasks.contains(key) && m_activeTasks[key].operationId == opId) {
+        const bool ownsTask = m_activeTasks.contains(key) && m_activeTasks[key].operationId == opId;
+        if (ownsTask) {
             m_activeTasks.remove(key);
         }
         if (m_registry != nullptr) {
             m_registry->markFinished(opId);
         }
-        if (m_viewModel != nullptr && m_viewModel->hasSession() &&
+        if (ownsTask && m_viewModel != nullptr && m_viewModel->hasSession() &&
             sessionGen == m_viewModel->projectSessionGeneration()) {
             auto result = watcher->result();
             const bool success = result.has_value() && result->failedPages == 0;

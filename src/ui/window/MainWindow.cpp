@@ -63,10 +63,7 @@ void MainWindow::setNavigationController(navigation::NavigationController* contr
             m_controller->navigate(routeKey);
         }
     });
-    connect(m_controller, &navigation::NavigationController::canGoBackChanged, this, [this](bool canGoBack) {
-        titleBar()->setBackButtonVisible(canGoBack);
-    });
-    titleBar()->setBackButtonVisible(m_controller->canGoBack());
+    titleBar()->setBackButtonVisible(false);
 
     auto* backShortcut = new QShortcut(QKeySequence::Back, this);
     connect(backShortcut, &QShortcut::activated, m_controller, &navigation::NavigationController::goBack);

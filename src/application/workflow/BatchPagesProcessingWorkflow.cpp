@@ -132,6 +132,8 @@ private:
         }
     }
 
+    /// Ports complete their promise on a worker thread, so a QFuture::then body inherits that
+    /// affinity. Every mutation of orchestrator or project state is therefore marshalled here first.
     template <typename F> void postStep(F&& func) {
         if (qApp != nullptr) {
             QMetaObject::invokeMethod(qApp, std::forward<F>(func), Qt::QueuedConnection);
@@ -172,9 +174,22 @@ private:
         }
     }
 
+    void finishCancelled() {
+        finish(std::unexpected(makeApplicationError(
+            ErrorCategory::Cancelled, QStringLiteral("cancelled.user_requested"), QStringLiteral("批量处理已被取消"))));
+    }
+
+    /// Records the first failing stage for the page in flight. The page is still committed so that
+    /// successful regions keep their results, but it reports as failed rather than as a clean run.
+    void noteStageFailure(const QString& reason) {
+        if (m_currentPageFailure.isEmpty()) {
+            m_currentPageFailure = reason;
+        }
+    }
+
     void runPage(int pageIndex) {
         if (m_context.stopToken.stop_requested()) {
-            finish(m_report);
+            finishCancelled();
             return;
         }
 
@@ -194,6 +209,7 @@ private:
         m_currentClear.clear();
         m_currentLayout.clear();
         m_currentClearFailedRegions.clear();
+        m_currentPageFailure.clear();
 
         runLoadImageStep();
     }
@@ -220,7 +236,7 @@ private:
 
     void runLoadImageStep() {
         if (m_context.stopToken.stop_requested()) {
-            finish(m_report);
+            finishCancelled();
             return;
         }
 
@@ -252,22 +268,24 @@ private:
         auto future = m_pageImageLoader->loadPageImage(loadReq, m_context);
         auto self = shared_from_this();
         future.then([this, self](Result<QImage> res) {
-            if (m_context.stopToken.stop_requested()) {
-                finish(m_report);
-                return;
-            }
-            if (!res.has_value()) {
-                completeCurrentPage(false, res.error().safeMessage);
-                return;
-            }
-            m_currentPageImage = res.value();
-            postStep([this, self]() { runDetectStep(); });
+            postStep([this, self, res]() {
+                if (m_context.stopToken.stop_requested()) {
+                    finishCancelled();
+                    return;
+                }
+                if (!res.has_value()) {
+                    completeCurrentPage(false, res.error().safeMessage);
+                    return;
+                }
+                m_currentPageImage = res.value();
+                runDetectStep();
+            });
         });
     }
 
     void runDetectStep() {
         if (m_context.stopToken.stop_requested()) {
-            finish(m_report);
+            finishCancelled();
             return;
         }
 
@@ -293,46 +311,57 @@ private:
         auto future = m_detector->detect(std::move(req), m_context);
         auto self = shared_from_this();
         future.then([this, self, pageId](Result<TextDetectionResponse> res) {
-            if (m_context.stopToken.stop_requested()) {
-                finish(m_report);
-                return;
-            }
-            if (!res.has_value()) {
-                completeCurrentPage(false, res.error().safeMessage);
-                return;
-            }
+            postStep([this, self, pageId, res]() {
+                if (m_context.stopToken.stop_requested()) {
+                    finishCancelled();
+                    return;
+                }
+                if (!res.has_value()) {
+                    completeCurrentPage(false, res.error().safeMessage);
+                    return;
+                }
 
-            if (m_request.project != nullptr) {
-                const auto* page = m_request.project->findPage(pageId);
-                if (page != nullptr) {
-                    if (m_request.replacePolicy == ReplaceManualPolicy::Replace) {
-                        const auto existingRegions = page->regions();
-                        for (const auto& r : existingRegions) {
-                            if (!r.isLocked()) {
-                                m_request.project->removeRegionFromPage(pageId, r.id());
+                if (m_request.project != nullptr) {
+                    const auto* page = m_request.project->findPage(pageId);
+                    if (page != nullptr) {
+                        if (m_request.replacePolicy == ReplaceManualPolicy::Replace) {
+                            const auto existingRegions = page->regions();
+                            for (const auto& r : existingRegions) {
+                                if (!r.isLocked()) {
+                                    const auto removed = m_request.project->removeRegionFromPage(pageId, r.id());
+                                    if (!removed.has_value()) {
+                                        noteStageFailure(QString::fromStdString(removed.error().toString()));
+                                    }
+                                }
+                            }
+                        }
+                        const auto* freshPage = m_request.project->findPage(pageId);
+                        int orderIndex = freshPage ? static_cast<int>(freshPage->regions().size()) : 0;
+                        for (const auto& item : res->detectedRegions) {
+                            if (!item.rect.isValid()) {
+                                continue;
+                            }
+                            domain::TextRegion region(domain::RegionId::generate(),
+                                                      item.rect,
+                                                      item.bubbleRect,
+                                                      orderIndex++,
+                                                      item.bubblePolygon);
+                            const auto added = m_request.project->addRegionToPage(pageId, std::move(region));
+                            if (!added.has_value()) {
+                                noteStageFailure(QString::fromStdString(added.error().toString()));
                             }
                         }
                     }
-                    const auto* freshPage = m_request.project->findPage(pageId);
-                    int orderIndex = freshPage ? static_cast<int>(freshPage->regions().size()) : 0;
-                    for (const auto& item : res->detectedRegions) {
-                        if (!item.rect.isValid()) {
-                            continue;
-                        }
-                        domain::TextRegion region(
-                            domain::RegionId::generate(), item.rect, item.bubbleRect, orderIndex++, item.bubblePolygon);
-                        m_request.project->addRegionToPage(pageId, std::move(region));
-                    }
                 }
-            }
 
-            postStep([this, self]() { prepareTargetsAndRunOcr(); });
+                prepareTargetsAndRunOcr();
+            });
         });
     }
 
     void prepareTargetsAndRunOcr() {
         if (m_context.stopToken.stop_requested()) {
-            finish(m_report);
+            finishCancelled();
             return;
         }
 
@@ -372,7 +401,7 @@ private:
 
     void runOcrForTarget(int targetIndex) {
         if (m_context.stopToken.stop_requested()) {
-            finish(m_report);
+            finishCancelled();
             return;
         }
 
@@ -406,21 +435,25 @@ private:
         auto future = m_ocrUseCase->execute(ocrReq, m_context);
         auto self = shared_from_this();
         future.then([this, self, targetIndex](Result<OcrResponse> res) {
-            if (m_context.stopToken.stop_requested()) {
-                finish(m_report);
-                return;
-            }
-            if (res.has_value()) {
-                m_currentOcr.append(res.value());
-                m_currentPageTargets[targetIndex].sourceText = res.value().text;
-            }
-            postStep([this, self, targetIndex]() { runOcrForTarget(targetIndex + 1); });
+            postStep([this, self, targetIndex, res]() {
+                if (m_context.stopToken.stop_requested()) {
+                    finishCancelled();
+                    return;
+                }
+                if (res.has_value()) {
+                    m_currentOcr.append(res.value());
+                    m_currentPageTargets[targetIndex].sourceText = res.value().text;
+                } else {
+                    noteStageFailure(res.error().safeMessage);
+                }
+                runOcrForTarget(targetIndex + 1);
+            });
         });
     }
 
     void runTranslateStep() {
         if (m_context.stopToken.stop_requested()) {
-            finish(m_report);
+            finishCancelled();
             return;
         }
 
@@ -469,27 +502,31 @@ private:
         auto future = m_translateUseCase->execute(transReq, m_context);
         auto self = shared_from_this();
         future.then([this, self](Result<TranslationResponse> res) {
-            if (m_context.stopToken.stop_requested()) {
-                finish(m_report);
-                return;
-            }
-            if (res.has_value()) {
-                m_currentTranslation = res.value();
-                for (const auto& item : res.value().items) {
-                    for (auto& t : m_currentPageTargets) {
-                        if (t.regionId == item.regionId) {
-                            t.effectiveTranslation = item.translation;
+            postStep([this, self, res]() {
+                if (m_context.stopToken.stop_requested()) {
+                    finishCancelled();
+                    return;
+                }
+                if (res.has_value()) {
+                    m_currentTranslation = res.value();
+                    for (const auto& item : res.value().items) {
+                        for (auto& t : m_currentPageTargets) {
+                            if (t.regionId == item.regionId) {
+                                t.effectiveTranslation = item.translation;
+                            }
                         }
                     }
+                } else {
+                    noteStageFailure(res.error().safeMessage);
                 }
-            }
-            postStep([this, self]() { runClearForTarget(0); });
+                runClearForTarget(0);
+            });
         });
     }
 
     void runClearForTarget(int targetIndex) {
         if (m_context.stopToken.stop_requested()) {
-            finish(m_report);
+            finishCancelled();
             return;
         }
 
@@ -532,22 +569,25 @@ private:
         auto future = m_clearUseCase->execute(clearReq, m_context);
         auto self = shared_from_this();
         future.then([this, self, targetIndex, target](Result<ClearResponse> res) {
-            if (m_context.stopToken.stop_requested()) {
-                finish(m_report);
-                return;
-            }
-            if (res.has_value()) {
-                m_currentClear.append(res.value());
-            } else {
-                m_currentClearFailedRegions.insert(target.regionId);
-            }
-            postStep([this, self, targetIndex]() { runClearForTarget(targetIndex + 1); });
+            postStep([this, self, targetIndex, target, res]() {
+                if (m_context.stopToken.stop_requested()) {
+                    finishCancelled();
+                    return;
+                }
+                if (res.has_value()) {
+                    m_currentClear.append(res.value());
+                } else {
+                    m_currentClearFailedRegions.insert(target.regionId);
+                    noteStageFailure(res.error().safeMessage);
+                }
+                runClearForTarget(targetIndex + 1);
+            });
         });
     }
 
     void runLayoutForTarget(int targetIndex) {
         if (m_context.stopToken.stop_requested()) {
-            finish(m_report);
+            finishCancelled();
             return;
         }
 
@@ -594,20 +634,24 @@ private:
         auto future = m_layoutUseCase->execute(layoutReq, m_context);
         auto self = shared_from_this();
         future.then([this, self, targetIndex](Result<LayoutResponse> res) {
-            if (m_context.stopToken.stop_requested()) {
-                finish(m_report);
-                return;
-            }
-            if (res.has_value()) {
-                m_currentLayout.append(res.value());
-            }
-            postStep([this, self, targetIndex]() { runLayoutForTarget(targetIndex + 1); });
+            postStep([this, self, targetIndex, res]() {
+                if (m_context.stopToken.stop_requested()) {
+                    finishCancelled();
+                    return;
+                }
+                if (res.has_value()) {
+                    m_currentLayout.append(res.value());
+                } else {
+                    noteStageFailure(res.error().safeMessage);
+                }
+                runLayoutForTarget(targetIndex + 1);
+            });
         });
     }
 
     void runCommitStep() {
         if (m_context.stopToken.stop_requested()) {
-            finish(m_report);
+            finishCancelled();
             return;
         }
 
@@ -649,52 +693,66 @@ private:
         auto prepFuture = prepUseCase->execute(prepReq);
         auto self = shared_from_this();
         prepFuture.then([this, self, pageId, clearHelper, prepUseCase](Result<PreparedProcessingAdoption> prepRes) {
-            if (m_context.stopToken.stop_requested()) {
-                finish(m_report);
-                return;
-            }
-            if (!prepRes.has_value()) {
-                completeCurrentPage(false, prepRes.error().safeMessage);
-                return;
-            }
-
-            const auto& prepared = prepRes.value();
-            for (const auto& change : prepared.changes) {
-                domain::PageRegionEdit edit = change.after;
-                const domain::PageRegionEdit edits[] = {edit};
-                m_request.project->applyPageRegionEdits(change.pageId, edits);
-            }
-
-            if (prepared.clearAssetChange) {
-                const auto& c = *prepared.clearAssetChange;
-                const auto regionList = c.regionIds.isEmpty() ? QVector<domain::RegionId>{c.regionId} : c.regionIds;
-                for (const auto& rId : regionList) {
-                    m_request.project->applyClearChangeOnPage(c.pageId,
-                                                              rId,
-                                                              c.afterRef.isEmpty() ? std::optional<std::string>{}
-                                                                                   : c.afterRef.toStdString(),
-                                                              c.afterState);
+            postStep([this, self, pageId, clearHelper, prepUseCase, prepRes]() {
+                if (m_context.stopToken.stop_requested()) {
+                    finishCancelled();
+                    return;
                 }
-            }
+                if (!prepRes.has_value()) {
+                    completeCurrentPage(false, prepRes.error().safeMessage);
+                    return;
+                }
 
-            if (m_projectRepository != nullptr) {
-                SaveProjectRequest saveReq;
-                saveReq.project = *m_request.project;
-                auto saveFuture = m_projectRepository->saveProject(saveReq, m_context);
-                saveFuture.then([this, self, pageId](Result<SaveProjectResult> saveRes) {
-                    if (m_context.stopToken.stop_requested()) {
-                        finish(m_report);
-                        return;
+                const auto& prepared = prepRes.value();
+                for (const auto& change : prepared.changes) {
+                    domain::PageRegionEdit edit = change.after;
+                    const domain::PageRegionEdit edits[] = {edit};
+                    const auto applied = m_request.project->applyPageRegionEdits(change.pageId, edits);
+                    if (!applied.has_value()) {
+                        noteStageFailure(QString::fromStdString(applied.error().toString()));
                     }
-                    if (!saveRes.has_value()) {
-                        completeCurrentPage(false, saveRes.error().safeMessage);
-                        return;
+                }
+
+                if (prepared.clearAssetChange) {
+                    const auto& c = *prepared.clearAssetChange;
+                    const auto regionList = c.regionIds.isEmpty() ? QVector<domain::RegionId>{c.regionId} : c.regionIds;
+                    for (const auto& rId : regionList) {
+                        const auto cleared = m_request.project->applyClearChangeOnPage(
+                            c.pageId,
+                            rId,
+                            c.afterRef.isEmpty() ? std::optional<std::string>{} : c.afterRef.toStdString(),
+                            c.afterState);
+                        if (!cleared.has_value()) {
+                            noteStageFailure(QString::fromStdString(cleared.error().toString()));
+                        }
                     }
-                    completeCurrentPage(true, {});
-                });
-            } else {
-                completeCurrentPage(true, {});
-            }
+                }
+
+                if (!prepared.skipped.isEmpty()) {
+                    noteStageFailure(prepared.skipped.first().error.safeMessage);
+                }
+
+                if (m_projectRepository != nullptr) {
+                    SaveProjectRequest saveReq;
+                    saveReq.project = *m_request.project;
+                    auto saveFuture = m_projectRepository->saveProject(saveReq, m_context);
+                    saveFuture.then([this, self, pageId](Result<SaveProjectResult> saveRes) {
+                        postStep([this, self, pageId, saveRes]() {
+                            if (m_context.stopToken.stop_requested()) {
+                                finishCancelled();
+                                return;
+                            }
+                            if (!saveRes.has_value()) {
+                                completeCurrentPage(false, saveRes.error().safeMessage);
+                                return;
+                            }
+                            completeCurrentPage(m_currentPageFailure.isEmpty(), m_currentPageFailure);
+                        });
+                    });
+                } else {
+                    completeCurrentPage(m_currentPageFailure.isEmpty(), m_currentPageFailure);
+                }
+            });
         });
     }
 
@@ -724,6 +782,7 @@ private:
     QVector<ClearResponse> m_currentClear;
     QVector<LayoutResponse> m_currentLayout;
     QSet<domain::RegionId> m_currentClearFailedRegions;
+    QString m_currentPageFailure;
 
     std::shared_ptr<QPromise<Result<BatchProcessingReport>>> m_promise;
     BatchProcessingReport m_report;
