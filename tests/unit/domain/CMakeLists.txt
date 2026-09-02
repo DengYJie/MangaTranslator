@@ -1,5 +1,5 @@
 qt_add_executable(manga_tests_domain
-    domain_test_main.cpp
+    DomainTestMain.cpp
     UuidTest.cpp
     GeometryTest.cpp
     TranslationEntryTest.cpp

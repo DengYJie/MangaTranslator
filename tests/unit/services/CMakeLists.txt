@@ -1,5 +1,5 @@
 qt_add_executable(manga_tests_services
-    services_test_main.cpp
+    ServicesTestMain.cpp
     BoundedTaskExecutorTest.cpp
     SolidColorInpainterTest.cpp
     BaberuOcrTest.h

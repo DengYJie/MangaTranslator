@@ -1,4 +1,4 @@
-qt_add_executable(manga_tests_app application_context_test.cpp)
+qt_add_executable(manga_tests_app ApplicationContextTest.cpp)
 manga_apply_project_options(manga_tests_app)
 set_target_properties(manga_tests_app PROPERTIES AUTOMOC ON)
 

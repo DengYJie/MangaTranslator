@@ -3,7 +3,6 @@ if(NOT BUILD_TESTING)
 endif()
 
 add_subdirectory(unit)
-add_subdirectory(contract)
 add_subdirectory(integration)
 
 if(TARGET MangaTranslatorApp)

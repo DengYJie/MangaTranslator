@@ -1,5 +1,5 @@
 qt_add_executable(manga_tests_network
-    network_test_main.cpp
+    NetworkTestMain.cpp
     ProviderConfigTest.cpp
     ProviderConfigTest.h
     ChatCompletionsProtocolTest.cpp

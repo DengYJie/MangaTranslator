@@ -1,5 +1,5 @@
 add_executable(manga_tests_rendering
-    rendering_test_main.cpp
+    RenderingTestMain.cpp
     TextLayoutEngineTest.h
     TextLayoutEngineTest.cpp
     TextRasterizerTest.h

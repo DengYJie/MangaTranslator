@@ -1,0 +1,108 @@
+#include "ApplicationUseCasesTest.h"
+#include "ApplyResultUseCaseTest.h"
+#include "ClearRegionUseCaseTest.h"
+#include "ExportPagesUseCaseTest.h"
+#include "ImportImagesUseCaseTest.h"
+#include "LayoutRegionUseCaseTest.h"
+#include "LoadPageImageUseCaseTest.h"
+#include "OperationRegistryTest.h"
+#include "PrepareProcessingAdoptionTest.h"
+#include "ProjectUseCasesTest.h"
+#include "RecognizeRegionUseCaseTest.h"
+#include "RegionTextUseCasesTest.h"
+#include "SettingsCredentialUseCasesTest.h"
+#include "SmartTranslatePageWorkflowTest.h"
+#include "TaskProgressTest.h"
+#include "ThumbnailUseCasesTest.h"
+#include "TranslatePageUseCaseTest.h"
+
+#include <QCoreApplication>
+#include <QtTest/QtTest>
+
+#include <iostream>
+
+int main(int argc, char* argv[]) {
+    QCoreApplication app(argc, argv);
+
+    int status = 0;
+
+    auto runSuite = [&](const char* name, QObject* testSuite) {
+        std::cout << "\n================ Running " << name << " ================\n" << std::flush;
+        const int res = QTest::qExec(testSuite, argc, argv);
+        if (res != 0) {
+            std::cerr << "FAILED: " << name << " exited with status " << res << "\n" << std::flush;
+            status |= res;
+        }
+    };
+
+    {
+        RecognizeRegionUseCaseTest suite;
+        runSuite("RecognizeRegionUseCaseTest", &suite);
+    }
+    {
+        ApplyResultUseCaseTest suite;
+        runSuite("ApplyResultUseCaseTest", &suite);
+    }
+    {
+        TranslatePageUseCaseTest suite;
+        runSuite("TranslatePageUseCaseTest", &suite);
+    }
+    {
+        ClearRegionUseCaseTest suite;
+        runSuite("ClearRegionUseCaseTest", &suite);
+    }
+    {
+        LayoutRegionUseCaseTest suite;
+        runSuite("LayoutRegionUseCaseTest", &suite);
+    }
+    {
+        ImportImagesUseCaseTest suite;
+        runSuite("ImportImagesUseCaseTest", &suite);
+    }
+    {
+        ExportPagesUseCaseTest suite;
+        runSuite("ExportPagesUseCaseTest", &suite);
+    }
+    {
+        LoadPageImageUseCaseTest suite;
+        runSuite("LoadPageImageUseCaseTest", &suite);
+    }
+    {
+        RegionTextUseCasesTest suite;
+        runSuite("RegionTextUseCasesTest", &suite);
+    }
+    {
+        ApplicationUseCasesTest suite;
+        runSuite("ApplicationUseCasesTest", &suite);
+    }
+    {
+        TaskProgressTest suite;
+        runSuite("TaskProgressTest", &suite);
+    }
+    {
+        ProjectUseCasesTest suite;
+        runSuite("ProjectUseCasesTest", &suite);
+    }
+    {
+        ThumbnailUseCasesTest suite;
+        runSuite("ThumbnailUseCasesTest", &suite);
+    }
+    {
+        OperationRegistryTest suite;
+        runSuite("OperationRegistryTest", &suite);
+    }
+    {
+        PrepareProcessingAdoptionTest suite;
+        runSuite("PrepareProcessingAdoptionTest", &suite);
+    }
+    {
+        SettingsCredentialUseCasesTest suite;
+        runSuite("SettingsCredentialUseCasesTest", &suite);
+    }
+    {
+        SmartTranslatePageWorkflowTest suite;
+        runSuite("SmartTranslatePageWorkflowTest", &suite);
+    }
+
+    return status;
+}

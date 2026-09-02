@@ -1,5 +1,5 @@
 qt_add_executable(manga_tests_data
-    data_test_main.cpp
+    DataTestMain.cpp
     ProjectSerializerTest.cpp
     FileSystemProjectRepositoryTest.cpp
     FileSystemComicImporterTest.cpp

@@ -1,6 +1,7 @@
 qt_add_executable(manga_tests_application
-    application_test_main.cpp
+    ApplicationTestMain.cpp
     RecognizeRegionUseCaseTest.cpp
+    RecognizeRegionUseCaseTest.h
     ApplyResultUseCaseTest.cpp
     ApplyResultUseCaseTest.h
     TranslatePageUseCaseTest.cpp
@@ -19,24 +20,20 @@ qt_add_executable(manga_tests_application
     ProjectUseCasesTest.h
     LoadPageImageUseCaseTest.cpp
     LoadPageImageUseCaseTest.h
-    RegionUseCasesTest.cpp
-    RegionUseCasesTest.h
-    TextUseCasesTest.cpp
-    TextUseCasesTest.h
+    RegionTextUseCasesTest.cpp
+    RegionTextUseCasesTest.h
     ApplicationUseCasesTest.cpp
     ApplicationUseCasesTest.h
     TaskProgressTest.cpp
     TaskProgressTest.h
-    CredentialUseCasesTest.cpp
-    CredentialUseCasesTest.h
     OperationRegistryTest.cpp
     OperationRegistryTest.h
     ThumbnailUseCasesTest.cpp
     ThumbnailUseCasesTest.h
     PrepareProcessingAdoptionTest.cpp
     PrepareProcessingAdoptionTest.h
-    AppSettingsUseCasesTest.cpp
-    AppSettingsUseCasesTest.h
+    SettingsCredentialUseCasesTest.cpp
+    SettingsCredentialUseCasesTest.h
 )
 manga_apply_project_options(manga_tests_application)
 set_target_properties(manga_tests_application PROPERTIES AUTOMOC ON WIN32_EXECUTABLE FALSE)
