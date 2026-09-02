@@ -529,7 +529,7 @@ QImage makeColorPatch(const QRect& bounds, const QColor& color, const QImage& ma
             target[offset + 0] = red;
             target[offset + 1] = green;
             target[offset + 2] = blue;
-            target[offset + 3] = (maskLine != nullptr && maskLine[x] >= 127) ? uchar(255) : uchar(0);
+            target[offset + 3] = (maskLine != nullptr && maskLine[x] >= kMaskBinaryLevel) ? uchar(255) : uchar(0);
         }
     }
     return patch;
@@ -568,7 +568,7 @@ QImage makeInpaintedPatch(const QRect& bounds, const QImage& source, const QImag
             target[offset + 0] = sourceLine[offset + 0];
             target[offset + 1] = sourceLine[offset + 1];
             target[offset + 2] = sourceLine[offset + 2];
-            target[offset + 3] = (maskLine != nullptr && maskLine[x] >= 127) ? uchar(255) : uchar(0);
+            target[offset + 3] = (maskLine != nullptr && maskLine[x] >= kMaskBinaryLevel) ? uchar(255) : uchar(0);
         }
     }
     return patch;

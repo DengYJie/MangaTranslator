@@ -346,7 +346,6 @@ OnnxLamaPageInpainter::inpaint(application::PageInpaintRequest request, applicat
             Ort::MemoryInfo memory = Ort::MemoryInfo::CreateCpu(OrtArenaAllocator, OrtMemTypeDefault);
             const QPoint offset = dirty.topLeft();
             std::int64_t writtenPixels = 0;
-            std::uint64_t writtenAlphaSum = 0;
             for (size_t tileIndex = 0; tileIndex < tiles.size(); ++tileIndex) {
                 if (auto r = checkpoint(ctx); !r)
                     return std::unexpected(r.error());
@@ -456,13 +455,13 @@ OnnxLamaPageInpainter::inpaint(application::PageInpaintRequest request, applicat
                         d[0] = g[0];
                         d[1] = g[1];
                         d[2] = g[2];
+                        ++writtenPixels;
                     }
                 }
                 progress.setValue(int(tileIndex) + 1);
             }
             qInfo().noquote() << "[InpaintEngine] inpainting completed in" << timer.elapsed() << "ms"
-                              << "written=" << writtenPixels << "meanAlpha="
-                              << (writtenPixels > 0 ? double(writtenAlphaSum) / double(writtenPixels) : 0.0);
+                              << "written=" << writtenPixels;
             dumpDebugImage(QStringLiteral("inpaint_result"), result.copy(dirty));
             application::PageInpaintResponse response{request.projectId, request.pageId, std::move(result), dirty};
             return response;
