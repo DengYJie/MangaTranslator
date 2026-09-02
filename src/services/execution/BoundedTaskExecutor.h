@@ -20,6 +20,13 @@
 namespace manga::services {
 namespace detail {
 
+/// Logs model and export task lifecycle events without input content or filesystem paths.
+void logTaskEvent(const char* event,
+                  application::OperationId operationId,
+                  application::OperationStage stage,
+                  qint64 elapsedMs,
+                  const QString& errorCode = {});
+
 /// Fallback failure code for unexpected std::exceptions raised inside a task, keyed by the
 /// task's processing stage.
 [[nodiscard]] inline QString stageFailedCode(application::OperationStage stage) {
@@ -30,6 +37,8 @@ namespace detail {
             return QStringLiteral("import.failed");
         case application::OperationStage::LoadImage:
             return QStringLiteral("load_image.failed");
+        case application::OperationStage::Detect:
+            return QStringLiteral("detection.failed");
         case application::OperationStage::Ocr:
             return QStringLiteral("ocr.failed");
         case application::OperationStage::Translate:
@@ -125,8 +134,12 @@ application::Result<QFuture<application::Result<T>>> BoundedTaskExecutor::submit
     auto future = promise->future();
     const auto reporter = context.progressReporter;
     const auto cancelled = detail::cancelledUserError();
+    QElapsedTimer taskTimer;
+    taskTimer.start();
+    detail::logTaskEvent("submitted", context.operationId, stage, 0);
 
-    auto cancelComplete = [promise, reporter, cancelled]() {
+    auto cancelComplete = [promise, reporter, cancelled, operationId = context.operationId, stage, taskTimer]() {
+        detail::logTaskEvent("cancelled", operationId, stage, taskTimer.elapsed(), cancelled.code);
         if (reporter) {
             reporter->markFinished(cancelled);
         }
@@ -144,6 +157,7 @@ application::Result<QFuture<application::Result<T>>> BoundedTaskExecutor::submit
                 promise,
                 context,
                 stage,
+                taskTimer,
                 cancelComplete,
                 reporter,
                 work = std::forward<Fn>(work)]() mutable {
@@ -154,6 +168,7 @@ application::Result<QFuture<application::Result<T>>> BoundedTaskExecutor::submit
             return;
         }
 
+        detail::logTaskEvent("started", context.operationId, stage, taskTimer.elapsed());
         if (reporter) {
             reporter->markRunning();
         }
@@ -207,6 +222,11 @@ application::Result<QFuture<application::Result<T>>> BoundedTaskExecutor::submit
             return;
         }
 
+        detail::logTaskEvent(outcome->has_value() ? "work_completed" : "failed",
+                             context.operationId,
+                             stage,
+                             taskTimer.elapsed(),
+                             outcome->has_value() ? QString{} : outcome->error().code);
         if (outcome->has_value()) {
             // NOTE: Do not call reporter->markFinished() here. The caller (e.g. EditorProcessingController or Workflow)
             // owns the operation lifecycle and is responsible for finishing it when the composite operation completes.
@@ -233,31 +253,29 @@ application::Result<QFuture<application::Result<T>>> BoundedTaskExecutor::submit
         pending.stopCallback = std::make_shared<std::stop_callback<std::function<void()>>>(
             context.stopToken, [weakState = std::weak_ptr<SharedState>(m_state), taskId]() {
                 if (auto state = weakState.lock()) {
-                    std::function<void()> completeCancelled;
-                    std::shared_ptr<std::stop_callback<std::function<void()>>> holdCb;
+                    std::optional<PendingTask> cancelledTask;
                     {
                         QMutexLocker locker(&state->mutex);
                         for (auto it = state->interactive.begin(); it != state->interactive.end(); ++it) {
                             if (it->id == taskId) {
-                                completeCancelled = std::move(it->completeCancelled);
-                                holdCb = std::move(it->stopCallback);
+                                cancelledTask = std::move(*it);
                                 state->interactive.erase(it);
                                 break;
                             }
                         }
-                        if (!completeCancelled) {
+                        if (!cancelledTask) {
                             for (auto it = state->background.begin(); it != state->background.end(); ++it) {
                                 if (it->id == taskId) {
-                                    completeCancelled = std::move(it->completeCancelled);
-                                    holdCb = std::move(it->stopCallback);
+                                    cancelledTask = std::move(*it);
                                     state->background.erase(it);
                                     break;
                                 }
                             }
                         }
                     }
-                    if (completeCancelled) {
-                        completeCancelled();
+                    // Completion and captured context destruction may reenter task infrastructure.
+                    if (cancelledTask) {
+                        cancelledTask->completeCancelled();
                     }
                 }
             });
@@ -294,6 +312,7 @@ application::Result<QFuture<application::Result<T>>> BoundedTaskExecutor::submit
     }
 
     if (!rejection.code.isEmpty()) {
+        detail::logTaskEvent("rejected", context.operationId, stage, taskTimer.elapsed(), rejection.code);
         if (reporter) {
             reporter->markFinished(rejection);
         }

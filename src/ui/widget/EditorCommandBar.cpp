@@ -380,7 +380,14 @@ void EditorCommandBar::render(const EditorState& state) {
     m_textButton->setChecked(state.activeTool == CanvasTool::Text);
 
     // Disable viewport and canvas tools if no page is active
-    const bool hasPage = state.currentPageId.isValid();
+    const bool hasPage = state.currentPageId.isValid() && !state.isPageLoading;
+    const auto detectionReason = processingUnavailableReason(state, application::OperationStage::Detect);
+    const auto ocrReason = processingUnavailableReason(state, application::OperationStage::Ocr);
+    const auto inpaintReason = processingUnavailableReason(state, application::OperationStage::Clear);
+    const auto translationReason = processingUnavailableReason(state, application::OperationStage::Translate);
+    const auto smartReason = !ocrReason.isEmpty()           ? ocrReason
+                             : !translationReason.isEmpty() ? translationReason
+                                                            : inpaintReason;
     const bool hasRegions = !state.regions.isEmpty();
     m_zoomOutButton->setEnabled(hasPage);
     m_zoomInButton->setEnabled(hasPage);
@@ -394,8 +401,11 @@ void EditorCommandBar::render(const EditorState& state) {
 
     // 1. Detection: only for whole page (hidden when text boxes are selected)
     m_detectButton->setVisible(!hasSelectedRegions);
-    m_detectButton->setEnabled(hasPage && !isRunning);
-    m_detectButton->setToolTip(isRunning ? tr("正在执行处理任务...") : tr("检测整页文字区域"));
+    m_detectButton->setEnabled(hasPage && !isRunning && detectionReason.isEmpty());
+    m_detectButton->setToolTip(!detectionReason.isEmpty() ? detectionReason
+                               : isRunning                ? tr("正在执行处理任务...")
+                               : !hasPage                 ? tr("请先打开页面并等待加载完成")
+                                                          : tr("检测整页文字区域"));
     m_detectButton->setAccessibleName(tr("文本检测 (整页)"));
 
     // 2. OCR: only for whole page (hidden when text boxes are selected)
@@ -404,7 +414,7 @@ void EditorCommandBar::render(const EditorState& state) {
     if (isRunning) {
         m_ocrButton->setToolTip(tr("正在执行处理任务..."));
     } else if (!state.isOcrAvailable) {
-        m_ocrButton->setToolTip(tr("OCR 模型不可用，请先在设置中配置模型"));
+        m_ocrButton->setToolTip(ocrReason);
     } else if (!hasRegions) {
         m_ocrButton->setToolTip(tr("当前页面没有文字区域，请先检测或创建区域"));
     } else {
@@ -414,9 +424,11 @@ void EditorCommandBar::render(const EditorState& state) {
 
     // 3. Inpaint: only for whole page (hidden when text boxes are selected)
     m_inpaintButton->setVisible(!hasSelectedRegions);
-    m_inpaintButton->setEnabled(hasPage && hasRegions && !isRunning);
+    m_inpaintButton->setEnabled(hasPage && hasRegions && !isRunning && inpaintReason.isEmpty());
     if (isRunning) {
         m_inpaintButton->setToolTip(tr("正在执行处理任务..."));
+    } else if (!inpaintReason.isEmpty()) {
+        m_inpaintButton->setToolTip(inpaintReason);
     } else if (!hasRegions) {
         m_inpaintButton->setToolTip(tr("当前页面没有文字区域"));
     } else {
@@ -431,9 +443,7 @@ void EditorCommandBar::render(const EditorState& state) {
     if (isRunning) {
         m_translateButton->setToolTip(tr("正在执行处理任务..."));
     } else if (!state.isTranslationAvailable) {
-        m_translateButton->setToolTip(state.translationUnavailableReason.isEmpty()
-                                          ? tr("翻译服务不可用，请在设置中配置")
-                                          : state.translationUnavailableReason);
+        m_translateButton->setToolTip(translationReason);
     } else if (hasSelectedRegions) {
         m_translateButton->setToolTip(tr("翻译所选文字区域 (%1 个) (Ctrl+T)").arg(state.selectedRegionIds.size()));
     } else if (!hasRegions) {
@@ -452,16 +462,14 @@ void EditorCommandBar::render(const EditorState& state) {
         m_smartTranslateButton->setToolTip(tr("停止翻译"));
         m_smartTranslateButton->setAccessibleName(tr("停止翻译"));
     } else {
-        const bool canSmartTranslate = hasPage && hasRegions && state.isTranslationAvailable;
+        const bool canSmartTranslate = hasPage && hasRegions && smartReason.isEmpty();
         m_smartTranslateButton->setEnabled(canSmartTranslate);
         m_smartTranslateButton->setIconGlyph(Typography::Icons::glyph(QStringLiteral("ic_fluent_play_12_regular")),
                                              Typography::IconSize::Standard);
         if (!hasPage) {
             m_smartTranslateButton->setToolTip(tr("请先打开页面"));
-        } else if (!state.isTranslationAvailable) {
-            m_smartTranslateButton->setToolTip(state.translationUnavailableReason.isEmpty()
-                                                   ? tr("翻译服务不可用，请在设置中配置")
-                                                   : state.translationUnavailableReason);
+        } else if (!smartReason.isEmpty()) {
+            m_smartTranslateButton->setToolTip(smartReason);
         } else if (!hasRegions) {
             m_smartTranslateButton->setToolTip(tr("当前页面没有文字区域，请先检测或创建区域"));
         } else {

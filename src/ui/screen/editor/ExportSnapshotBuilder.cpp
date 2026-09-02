@@ -9,6 +9,7 @@
 
 #include <QColorSpace>
 #include <QImage>
+#include <QObject>
 #include <QPainter>
 #include <QPromise>
 #include <QSet>
@@ -186,6 +187,10 @@ ExportSnapshotBuilder::execute(const Request& request, const application::Operat
         }
 
         const auto& page = state->pages.at(state->currentIndex);
+        if (state->context.progressReporter) {
+            state->context.progressReporter->setStatusText(
+                QObject::tr("正在准备页面 (%1/%2)").arg(state->currentIndex + 1).arg(state->pages.size()));
+        }
 
         // 1. Load source image
         application::LoadPageImageRequest loadReq{

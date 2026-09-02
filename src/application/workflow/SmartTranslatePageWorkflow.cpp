@@ -219,8 +219,6 @@ private:
             } else {
                 qWarning() << "[SmartTranslatePageWorkflow] OCR failed for index=" << index;
                 m_proposal.issues.append({target.regionId, QStringLiteral("Ocr"), res.error()});
-                finishWithProposal();
-                return;
             }
             QMetaObject::invokeMethod(qApp, [this, self, index]() { runOcrStep(index + 1); }, Qt::QueuedConnection);
         });

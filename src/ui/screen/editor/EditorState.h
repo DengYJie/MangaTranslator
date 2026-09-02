@@ -39,6 +39,7 @@ struct EditorNotice {
     QString actionText;
     application::RecoveryAction action{application::RecoveryAction::None};
     bool retryable{false};
+    std::optional<application::OperationStage> unavailableStage;
     bool operator==(const EditorNotice&) const = default;
 };
 
@@ -206,6 +207,9 @@ struct EditorState {
 
     bool operator==(const EditorState&) const = default;
 };
+
+/// Returns the configured capability failure with settings guidance, or an empty string when available.
+[[nodiscard]] QString processingUnavailableReason(const EditorState& state, application::OperationStage stage);
 
 /// One-shot delivery of a decoded page image to the canvas. Never stored in State.
 struct PageImageDelivery {

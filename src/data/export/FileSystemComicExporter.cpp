@@ -8,6 +8,7 @@
 #include <QFileInfo>
 #include <QImageWriter>
 #include <QLockFile>
+#include <QObject>
 #include <QPainter>
 #include <QRegularExpression>
 #include <QTemporaryFile>
@@ -91,7 +92,20 @@ FileSystemComicExporter::exportPages(application::ExportRequest request, applica
         const QString opId = context.operationId.isValid() ? QString::fromStdString(context.operationId.toString())
                                                            : QStringLiteral("op");
 
-        for (const auto& page : request.pages) {
+        if (context.progressReporter) {
+            context.progressReporter->setRange(request.pages.size());
+            context.progressReporter->setValue(0);
+            context.progressReporter->setStatusText(QObject::tr("正在写入图片 (0/%1)").arg(request.pages.size()));
+            context.progressReporter->markRunning();
+        }
+
+        for (qsizetype pageIndex = 0; pageIndex < request.pages.size(); ++pageIndex) {
+            const auto& page = request.pages.at(pageIndex);
+            if (context.progressReporter) {
+                context.progressReporter->setValue(pageIndex);
+                context.progressReporter->setStatusText(
+                    QObject::tr("正在写入图片 (%1/%2)").arg(pageIndex + 1).arg(request.pages.size()));
+            }
             if (context.stopToken.stop_requested()) {
                 response.failures.append(
                     {page.pageId,
@@ -271,6 +285,9 @@ FileSystemComicExporter::exportPages(application::ExportRequest request, applica
             }
         }
 
+        if (context.progressReporter) {
+            context.progressReporter->setValue(request.pages.size());
+        }
         return response;
     });
 }

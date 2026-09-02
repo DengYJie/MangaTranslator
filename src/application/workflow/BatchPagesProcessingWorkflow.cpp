@@ -442,7 +442,11 @@ private:
         }
 
         if (m_currentPageTargets.isEmpty()) {
-            postStep([this, self = shared_from_this()]() { runCommitStep(); });
+            if (!m_request.stages.testFlag(BatchStageFlag::Detect)) {
+                completeCurrentPage(false, QObject::tr("页面无有效文字区域，请先运行文本检测"));
+            } else {
+                postStep([this, self = shared_from_this()]() { runCommitStep(); });
+            }
             return;
         }
 
@@ -545,6 +549,10 @@ private:
         }
 
         if (transReq.regions.isEmpty()) {
+            if (!m_request.stages.testFlag(BatchStageFlag::Ocr)) {
+                completeCurrentPage(false, QObject::tr("当前页面无识别文字，请先运行文字识别"));
+                return;
+            }
             postStep([this, self = shared_from_this()]() { runClearForTarget(0); });
             return;
         }

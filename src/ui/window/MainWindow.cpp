@@ -2,6 +2,7 @@
 
 #include "application/ports/IAppSettingsStore.h"
 #include "ui/navigation/NavigationController.h"
+#include "ui/screen/editor/EditorState.h"
 #include "ui/widget/AppStatusTaskStrip.h"
 #include "ui/window/TitleBar.h"
 
@@ -155,19 +156,25 @@ MainWindow::MainWindow(application::IAppSettingsStore* settingsStore, QWidget* p
     m_editorMenuBar->addMenu(fileMenu);
 
     auto* processMenu = new fluent::menus_toolbars::FluentMenu(tr("处理"), m_editorMenuBar);
+    processMenu->setToolTipsVisible(true);
 
-    connect(processMenu->addAction(tr("处理项目")), &QAction::triggered, this, &MainWindow::processProjectRequested);
+    m_processProjectAction = processMenu->addAction(tr("处理项目"));
+    connect(m_processProjectAction, &QAction::triggered, this, &MainWindow::processProjectRequested);
 
     processMenu->addSeparator();
 
-    connect(processMenu->addAction(tr("运行文本检测")), &QAction::triggered, this, &MainWindow::runDetectionRequested);
+    m_detectionAction = processMenu->addAction(tr("运行文本检测"));
+    connect(m_detectionAction, &QAction::triggered, this, &MainWindow::runDetectionRequested);
 
-    connect(processMenu->addAction(tr("运行文字识别")), &QAction::triggered, this, &MainWindow::runOcrRequested);
+    m_ocrAction = processMenu->addAction(tr("运行文字识别"));
+    connect(m_ocrAction, &QAction::triggered, this, &MainWindow::runOcrRequested);
 
-    connect(
-        processMenu->addAction(tr("运行 AI 翻译")), &QAction::triggered, this, &MainWindow::runTranslationRequested);
+    m_translationAction = processMenu->addAction(tr("运行 AI 翻译"));
+    connect(m_translationAction, &QAction::triggered, this, &MainWindow::runTranslationRequested);
 
-    connect(processMenu->addAction(tr("运行文字消除")), &QAction::triggered, this, &MainWindow::runTextClearRequested);
+    m_clearAction = processMenu->addAction(tr("运行文字消除"));
+    connect(m_clearAction, &QAction::triggered, this, &MainWindow::runTextClearRequested);
+    setEditorProcessingState({});
 
     m_editorMenuBar->addMenu(processMenu);
 
@@ -180,6 +187,34 @@ MainWindow::MainWindow(application::IAppSettingsStore* settingsStore, QWidget* p
     layout()->addWidget(m_statusStrip);
 
     restoreWindowGeometry();
+}
+
+void MainWindow::setEditorProcessingState(const screen::editor::EditorState& state) {
+    using application::OperationStage;
+    const auto updateAction = [this, &state](QAction* action, const QString& capabilityReason) {
+        QString reason = capabilityReason;
+        if (!state.projectId.isValid() || state.pages.isEmpty()) {
+            reason = tr("请先打开包含页面的项目");
+        } else if (state.processing.isRunning) {
+            reason = tr("正在执行处理任务，请等待任务结束");
+        }
+        action->setEnabled(reason.isEmpty());
+        action->setToolTip(reason.isEmpty() ? tr("对项目中的所有页面执行此操作") : reason);
+        action->setStatusTip(action->toolTip());
+    };
+    const auto detect = screen::editor::processingUnavailableReason(state, OperationStage::Detect);
+    const auto ocr = screen::editor::processingUnavailableReason(state, OperationStage::Ocr);
+    const auto translate = screen::editor::processingUnavailableReason(state, OperationStage::Translate);
+    const auto clear = screen::editor::processingUnavailableReason(state, OperationStage::Clear);
+    updateAction(m_detectionAction, detect);
+    updateAction(m_ocrAction, ocr);
+    updateAction(m_translationAction, translate);
+    updateAction(m_clearAction, clear);
+    updateAction(m_processProjectAction,
+                 !detect.isEmpty()      ? detect
+                 : !ocr.isEmpty()       ? ocr
+                 : !translate.isEmpty() ? translate
+                                        : clear);
 }
 
 void MainWindow::setNavigationController(navigation::NavigationController* controller) {

@@ -1,5 +1,6 @@
 #include "services/execution/BoundedTaskExecutor.h"
 
+#include <QDebug>
 #include <QMutexLocker>
 #include <QThread>
 
@@ -28,6 +29,35 @@ application::ApplicationError makeShutdownError() {
 }
 
 } // namespace
+
+void detail::logTaskEvent(const char* event,
+                          application::OperationId operationId,
+                          application::OperationStage stage,
+                          qint64 elapsedMs,
+                          const QString& errorCode) {
+    const char* stageName = nullptr;
+    switch (stage) {
+        case application::OperationStage::Detect:
+            stageName = "detect";
+            break;
+        case application::OperationStage::Ocr:
+            stageName = "ocr";
+            break;
+        case application::OperationStage::Translate:
+            stageName = "translate";
+            break;
+        case application::OperationStage::Clear:
+            stageName = "clear";
+            break;
+        case application::OperationStage::Export:
+            stageName = "export";
+            break;
+        default:
+            return;
+    }
+    qInfo().noquote() << "[TaskExecutor]" << event << "opId=" << QString::fromStdString(operationId.toString())
+                      << "stage=" << stageName << "elapsedSinceSubmitMs=" << elapsedMs << "code=" << errorCode;
+}
 
 int BoundedTaskExecutor::defaultWorkerCount() {
     int cores = QThread::idealThreadCount();

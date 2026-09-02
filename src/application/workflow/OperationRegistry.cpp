@@ -12,6 +12,7 @@
 #include <limits>
 #include <list>
 #include <utility>
+#include <vector>
 
 namespace manga::application {
 
@@ -312,7 +313,7 @@ QVector<OperationSnapshot> OperationRegistry::snapshot() const {
 }
 
 void OperationRegistry::cancelOperation(OperationId id) {
-    bool changed = false;
+    std::shared_ptr<std::stop_source> stopSource;
     {
         QMutexLocker locker(&m_state->mutex);
         const auto mapIt = m_state->index.find(keyFor(id));
@@ -324,44 +325,47 @@ void OperationRegistry::cancelOperation(OperationId id) {
             return;
         }
         entry.state = OperationState::Cancelling;
-        entry.stopSource->request_stop();
-        changed = true;
+        stopSource = entry.stopSource;
     }
-    if (changed) {
-        scheduleEmit(this);
-    }
+    // Stop callbacks may synchronously settle tasks and acquire the registry mutex.
+    stopSource->request_stop();
+    scheduleEmit(this);
 }
 
 void OperationRegistry::cancelProject(domain::ProjectId projectId) {
-    bool changed = false;
+    std::vector<std::shared_ptr<std::stop_source>> stopSources;
     {
         QMutexLocker locker(&m_state->mutex);
         for (auto& entry : m_state->operations) {
             if (entry.descriptor.projectId == projectId && !isSettled(entry.state)) {
                 entry.state = OperationState::Cancelling;
-                entry.stopSource->request_stop();
-                changed = true;
+                stopSources.push_back(entry.stopSource);
             }
         }
     }
-    if (changed) {
+    for (const auto& stopSource : stopSources) {
+        stopSource->request_stop();
+    }
+    if (!stopSources.empty()) {
         scheduleEmit(this);
     }
 }
 
 void OperationRegistry::cancelAll() {
-    bool changed = false;
+    std::vector<std::shared_ptr<std::stop_source>> stopSources;
     {
         QMutexLocker locker(&m_state->mutex);
         for (auto& entry : m_state->operations) {
             if (!isSettled(entry.state)) {
                 entry.state = OperationState::Cancelling;
-                entry.stopSource->request_stop();
-                changed = true;
+                stopSources.push_back(entry.stopSource);
             }
         }
     }
-    if (changed) {
+    for (const auto& stopSource : stopSources) {
+        stopSource->request_stop();
+    }
+    if (!stopSources.empty()) {
         scheduleEmit(this);
     }
 }

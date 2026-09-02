@@ -21,6 +21,7 @@
 #include <QTimer>
 
 #include <algorithm>
+#include <optional>
 #include <string>
 #include <unordered_map>
 
@@ -399,8 +400,7 @@ void EditorViewModel::selectPage(const domain::PageId& pageId) {
         m_processingController->handlePageSwitched(pageId);
     }
 
-    m_thumbnailQueue.clear();
-    m_thumbnailQueueSet.clear();
+    // Thumbnail work belongs to the project session and survives page navigation.
     startPageLoad(pageId);
 }
 
@@ -1143,8 +1143,10 @@ void EditorViewModel::startThumbnail(const domain::PageId& pageId) {
         .displayTarget = tr("缩略图"),
         .cancellable = true,
     };
-    auto context = m_operationRegistry->createOperation(
-        std::move(descriptor), m_state.projectSessionGeneration, m_state.viewGeneration);
+    auto context = m_operationRegistry->createOperation(std::move(descriptor), m_state.projectSessionGeneration, 0);
+    if (context.progressReporter) {
+        context.progressReporter->markRunning();
+    }
 
     ThumbnailTicket ticket;
     ticket.operationId = context.operationId;
@@ -1163,40 +1165,47 @@ void EditorViewModel::startThumbnail(const domain::PageId& pageId) {
     auto* watcher = new QFutureWatcher<application::Result<QImage>>(this);
     m_thumbnailWatchers.insert(key, watcher);
 
-    connect(watcher, &QFutureWatcher<application::Result<QImage>>::finished, this, [this, pageId]() {
-        handleThumbnailFinished(pageId);
+    connect(watcher, &QFutureWatcher<application::Result<QImage>>::finished, this, [this, pageId, watcher, context]() {
+        handleThumbnailFinished(pageId, watcher, context);
     });
 
     watcher->setFuture(m_thumbnailUseCase->execute(request, context));
 }
 
-void EditorViewModel::handleThumbnailFinished(const domain::PageId& pageId) {
+void EditorViewModel::handleThumbnailFinished(const domain::PageId& pageId,
+                                              QFutureWatcher<application::Result<QImage>>* watcher,
+                                              const application::OperationContext& context) {
+    watcher->deleteLater();
     const QString key = QString::fromStdString(pageId.toString());
 
-    if (!m_thumbnailInFlight.contains(key)) {
+    const auto pending = m_thumbnailInFlight.constFind(key);
+    if (pending == m_thumbnailInFlight.cend() || pending->operationId != context.operationId ||
+        m_thumbnailWatchers.value(key) != watcher) {
         return; // Already cancelled or handled
     }
 
-    auto ticket = m_thumbnailInFlight.take(key);
-    auto* watcher = m_thumbnailWatchers.take(key);
-
-    if (watcher) {
-        watcher->deleteLater();
+    const auto ticket = m_thumbnailInFlight.take(key);
+    m_thumbnailWatchers.remove(key);
+    auto result = watcher->result();
+    if (context.stopToken.stop_requested()) {
+        result = std::unexpected(application::makeApplicationError(application::ErrorCategory::Cancelled,
+                                                                   QStringLiteral("cancelled.user_requested"),
+                                                                   tr("缩略图加载已取消，点击重试")));
+    } else if (result && result->isNull()) {
+        result = std::unexpected(application::makeApplicationError(
+            application::ErrorCategory::Input, QStringLiteral("thumbnail.empty_image"), tr("缩略图为空，点击重试")));
+    }
+    if (context.progressReporter) {
+        context.progressReporter->markFinished(result ? std::nullopt
+                                                      : std::optional<application::ApplicationError>(result.error()));
     }
 
-    if (ticket.projectSessionGeneration == m_state.projectSessionGeneration) {
-        auto result = watcher ? watcher->result()
-                              : std::unexpected(application::makeApplicationError(application::ErrorCategory::Internal,
-                                                                                  QStringLiteral("Missing watcher"),
-                                                                                  QStringLiteral("Missing watcher")));
-
+    if (m_hasSession && ticket.projectSessionGeneration == m_state.projectSessionGeneration && findPage(pageId)) {
         if (result.has_value()) {
             Q_EMIT thumbnailReady(pageId, result.value());
         } else {
             const auto& error = result.error();
-            if (error.category != application::ErrorCategory::Cancelled) {
-                Q_EMIT thumbnailFailed(pageId, error.safeMessage);
-            }
+            Q_EMIT thumbnailFailed(pageId, error.isCancelled() ? tr("缩略图加载已取消，点击重试") : error.safeMessage);
         }
     }
 
@@ -2172,6 +2181,14 @@ void EditorViewModel::exportPages(application::ExportScope scope, const QString&
 
     auto context =
         m_operationRegistry->createOperation(descriptor, m_state.projectSessionGeneration, m_state.viewGeneration);
+    if (context.progressReporter) {
+        context.progressReporter->setRange(0);
+        context.progressReporter->setStatusText(tr("正在准备导出页面"));
+        context.progressReporter->markRunning();
+    } else {
+        m_operationRegistry->markRunning(context.operationId);
+    }
+    qInfo() << "[Export] Started operation=" << context.operationId.toString() << "pages=" << ordinals.size();
     m_exportContext = context;
     m_exportOperation = context.operationId;
     m_exportScope = scope;
@@ -2322,6 +2339,8 @@ void EditorViewModel::handleExportSnapshotFinished() {
         return;
     }
 
+    qInfo() << "[Export] Snapshots ready operation=" << m_exportOperation.toString() << "pages=" << result->size();
+
     application::ExportPagesRequest request;
     request.projectId = m_exportProjectSnapshot->id();
     request.scope = m_exportScope;
@@ -2345,12 +2364,18 @@ void EditorViewModel::handleExportFinished() {
     auto result = m_exportWatcher.result();
     if (result.has_value()) {
         const auto& response = result.value();
-        if (m_operationRegistry && m_exportOperation.isValid()) {
-            if (!response.failures.isEmpty()) {
-                m_operationRegistry->markFinished(m_exportOperation, response.failures.constFirst().error);
-            } else {
-                m_operationRegistry->markFinished(m_exportOperation);
-            }
+        const std::optional<application::ApplicationError> error =
+            response.failures.isEmpty()
+                ? std::nullopt
+                : std::optional<application::ApplicationError>(response.failures.constFirst().error);
+        qInfo() << "[Export] Finished operation=" << m_exportOperation.toString()
+                << "exported=" << response.exported.size() << "failed=" << response.failures.size();
+        if (m_exportContext.progressReporter) {
+            m_exportContext.progressReporter->setValue(response.exported.size() + response.failures.size());
+            m_exportContext.progressReporter->setStatusText(error.has_value() ? error->safeMessage : tr("导出完成"));
+            m_exportContext.progressReporter->markFinished(error);
+        } else if (m_operationRegistry && m_exportOperation.isValid()) {
+            m_operationRegistry->markFinished(m_exportOperation, error);
         }
         m_exportOperation = application::OperationId{};
         m_exportContext = {};
@@ -2382,7 +2407,11 @@ void EditorViewModel::handleExportFinished() {
 }
 
 void EditorViewModel::failExport(const application::ApplicationError& error) {
-    if (m_operationRegistry && m_exportOperation.isValid()) {
+    qWarning() << "[Export] Failed operation=" << m_exportOperation.toString() << "code=" << error.code;
+    if (m_exportContext.progressReporter) {
+        m_exportContext.progressReporter->setStatusText(error.safeMessage);
+        m_exportContext.progressReporter->markFinished(error);
+    } else if (m_operationRegistry && m_exportOperation.isValid()) {
         m_operationRegistry->markFinished(m_exportOperation, error);
     }
     m_exportOperation = application::OperationId{};

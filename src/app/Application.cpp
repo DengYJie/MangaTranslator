@@ -198,6 +198,7 @@ int Application::run() {
                                               m_context->detectionModelUnavailableReason());
 
     editorViewModel->observe(mainWindow, [mainWindow](const ui::screen::editor::EditorState& state) {
+        mainWindow->setEditorProcessingState(state);
         const bool sessionActive = state.projectId.isValid() && !state.projectName.isEmpty();
         mainWindow->setProjectSessionActive(sessionActive);
         if (auto* panel = mainWindow->mainNavigationPanel()) {

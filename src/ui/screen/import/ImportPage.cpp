@@ -18,6 +18,19 @@ namespace manga::ui::screen::import_ {
 
 namespace {
 
+class ImportProgressBar final : public fluent::status_info::ProgressBar {
+public:
+    explicit ImportProgressBar(QWidget* parent) : fluent::status_info::ProgressBar(parent) {
+        setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Fixed);
+    }
+
+protected:
+    void resizeEvent(QResizeEvent* event) override {
+        fluent::status_info::ProgressBar::resizeEvent(event);
+        setBarWidth(event->size().width());
+    }
+};
+
 void makeScrollSurfaceTransparent(QScrollArea* scrollArea) {
     scrollArea->setAutoFillBackground(false);
     scrollArea->setAttribute(Qt::WA_TranslucentBackground);
@@ -146,10 +159,6 @@ void ImportPage::setupUi() {
     m_infoBar->setTitleMessageSpacing(8);
     m_infoBar->setSeverityIconSize(20);
     rootLayout->addWidget(m_infoBar);
-
-    m_progressBar = new fluent::status_info::ProgressBar(this);
-    m_progressBar->setVisible(false);
-    rootLayout->addWidget(m_progressBar);
 
     auto* scrollArea = new QScrollArea(this);
     scrollArea->setObjectName(QStringLiteral("importScrollArea"));
@@ -296,6 +305,10 @@ void ImportPage::setupUi() {
     settingsLayout->addWidget(m_targetLangCombo);
     settingsLayout->addWidget(m_languageCautionLabel);
     settingsLayout->addStretch(1);
+    m_progressBar = new ImportProgressBar(m_settingsPane);
+    m_progressBar->setAccessibleName(tr("导入进度"));
+    m_progressBar->setVisible(false);
+    settingsLayout->addWidget(m_progressBar);
     settingsLayout->addLayout(buttonsLayout);
 
     m_mainLayout->addWidget(m_sourcePane, 1);
@@ -487,7 +500,8 @@ void ImportPage::updateResponsiveLayout(int availableWidth) {
         m_settingsPane->setFixedWidth(380);
     } else {
         m_mainLayout->setDirection(QBoxLayout::TopToBottom);
-        m_settingsPane->setFixedWidth(QWIDGETSIZE_MAX);
+        m_settingsPane->setMinimumWidth(0);
+        m_settingsPane->setMaximumWidth(QWIDGETSIZE_MAX);
     }
 }
 

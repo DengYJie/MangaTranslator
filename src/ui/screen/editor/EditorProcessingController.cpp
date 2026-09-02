@@ -207,7 +207,44 @@ void EditorProcessingController::smartTranslatePage(const domain::PageId& pageId
     smartTranslate(pageId, {});
 }
 
+bool EditorProcessingController::ensureProcessingAvailable(application::OperationStage stage, bool serviceAvailable) {
+    if (m_viewModel == nullptr || !m_viewModel->hasSession()) {
+        return false;
+    }
+    if (!serviceAvailable) {
+        switch (stage) {
+            case application::OperationStage::Detect:
+                m_viewModel->setDetectionAvailability(false, m_viewModel->state().detectionUnavailableReason);
+                break;
+            case application::OperationStage::Ocr:
+                m_viewModel->setOcrAvailability(false, m_viewModel->state().ocrUnavailableReason);
+                break;
+            case application::OperationStage::Translate:
+                m_viewModel->setTranslationAvailability(false, m_viewModel->state().translationUnavailableReason);
+                break;
+            case application::OperationStage::Clear:
+                m_viewModel->setInpaintAvailability(false, m_viewModel->state().inpaintUnavailableReason);
+                break;
+            default:
+                break;
+        }
+    }
+    const auto reason = processingUnavailableReason(m_viewModel->state(), stage);
+    if (reason.isEmpty()) {
+        return true;
+    }
+    EditorNotice notice;
+    notice.safeMessage = reason;
+    notice.unavailableStage = stage;
+    m_viewModel->setNotice(notice);
+    qWarning() << "[Processing] rejected unavailable capability stage=" << static_cast<int>(stage);
+    return false;
+}
+
 void EditorProcessingController::detectRegions(const domain::PageId& pageId, bool clearExisting) {
+    if (!ensureProcessingAvailable(application::OperationStage::Detect, m_textDetector != nullptr)) {
+        return;
+    }
     if (m_viewModel == nullptr || !m_viewModel->hasSession() || m_textDetector == nullptr) {
         return;
     }
@@ -299,6 +336,11 @@ void EditorProcessingController::smartTranslateRegions(const domain::PageId& pag
 
 void EditorProcessingController::smartTranslate(const domain::PageId& pageId,
                                                 const QVector<domain::RegionId>& regionIds) {
+    if (!ensureProcessingAvailable(application::OperationStage::Ocr, m_ocrUseCase != nullptr) ||
+        !ensureProcessingAvailable(application::OperationStage::Translate, m_translateUseCase != nullptr) ||
+        !ensureProcessingAvailable(application::OperationStage::Clear, m_clearUseCase != nullptr)) {
+        return;
+    }
     if (m_viewModel == nullptr || !m_viewModel->hasSession() || !pageId.isValid() || m_smartWorkflow == nullptr ||
         m_registry == nullptr || pageId != m_viewModel->state().currentPageId) {
         return;
@@ -662,6 +704,9 @@ void EditorProcessingController::handleSmartTranslateFinished(
 }
 
 void EditorProcessingController::recognizeRegion(const domain::PageId& pageId, const domain::RegionId& regionId) {
+    if (!ensureProcessingAvailable(application::OperationStage::Ocr, m_ocrUseCase != nullptr)) {
+        return;
+    }
     if (m_viewModel == nullptr || !m_viewModel->hasSession() || !pageId.isValid() || !regionId.isValid() ||
         m_ocrUseCase == nullptr || m_registry == nullptr) {
         qWarning() << "[OCR] rejected invalid controller/session/request state";
@@ -794,6 +839,9 @@ void EditorProcessingController::recognizeRegion(const domain::PageId& pageId, c
 }
 
 void EditorProcessingController::recognizePage(const domain::PageId& pageId) {
+    if (!ensureProcessingAvailable(application::OperationStage::Ocr, m_ocrUseCase != nullptr)) {
+        return;
+    }
     if (m_viewModel == nullptr || !m_viewModel->hasSession() || !pageId.isValid()) {
         return;
     }
@@ -825,6 +873,9 @@ void EditorProcessingController::recognizeSelectedRegions() {
 
 void EditorProcessingController::recognizeRegions(const domain::PageId& pageId,
                                                   const QVector<domain::RegionId>& regionIds) {
+    if (!ensureProcessingAvailable(application::OperationStage::Ocr, m_ocrUseCase != nullptr)) {
+        return;
+    }
     if (m_viewModel == nullptr || !m_viewModel->hasSession() || !pageId.isValid() || regionIds.isEmpty() ||
         m_ocrUseCase == nullptr || m_registry == nullptr) {
         return;
@@ -1029,6 +1080,9 @@ void EditorProcessingController::recognizeRegions(const domain::PageId& pageId,
 }
 
 void EditorProcessingController::translatePage(const domain::PageId& pageId) {
+    if (!ensureProcessingAvailable(application::OperationStage::Translate, m_translateUseCase != nullptr)) {
+        return;
+    }
     if (m_viewModel == nullptr || !m_viewModel->hasSession() || !pageId.isValid()) {
         return;
     }
@@ -1051,6 +1105,9 @@ void EditorProcessingController::translatePage(const domain::PageId& pageId) {
 
 void EditorProcessingController::translateRegions(const domain::PageId& pageId,
                                                   const QVector<domain::RegionId>& regionIds) {
+    if (!ensureProcessingAvailable(application::OperationStage::Translate, m_translateUseCase != nullptr)) {
+        return;
+    }
     if (m_viewModel == nullptr || !m_viewModel->hasSession() || !pageId.isValid() || regionIds.isEmpty() ||
         m_translateUseCase == nullptr || m_registry == nullptr) {
         return;
@@ -1179,6 +1236,9 @@ void EditorProcessingController::translateRegions(const domain::PageId& pageId,
 }
 
 void EditorProcessingController::clearPage(const domain::PageId& pageId) {
+    if (!ensureProcessingAvailable(application::OperationStage::Clear, m_clearUseCase != nullptr)) {
+        return;
+    }
     if (m_viewModel == nullptr || !m_viewModel->hasSession() || !pageId.isValid()) {
         return;
     }
@@ -1211,6 +1271,9 @@ void EditorProcessingController::clearSelectedRegions() {
 void EditorProcessingController::inpaintStroke(const domain::PageId& pageId,
                                                const QVector<QPointF>& points,
                                                double diameter) {
+    if (!ensureProcessingAvailable(application::OperationStage::Clear, m_pageInpainter != nullptr)) {
+        return;
+    }
     if (m_viewModel == nullptr || !m_viewModel->hasSession() || !pageId.isValid() || m_registry == nullptr ||
         m_assetStore == nullptr || points.isEmpty())
         return;
@@ -1453,6 +1516,9 @@ void EditorProcessingController::paintStroke(const domain::PageId& pageId,
 
 void EditorProcessingController::clearRegions(const domain::PageId& pageId,
                                               const QVector<domain::RegionId>& regionIds) {
+    if (!ensureProcessingAvailable(application::OperationStage::Clear, m_clearUseCase != nullptr)) {
+        return;
+    }
     if (m_viewModel == nullptr || !m_viewModel->hasSession() || !pageId.isValid() || regionIds.isEmpty() ||
         m_clearUseCase == nullptr || m_registry == nullptr) {
         return;
@@ -1991,6 +2057,16 @@ void EditorProcessingController::updateProcessingStateForCurrentPage() {
 void EditorProcessingController::batchProcessPages(const QVector<domain::PageId>& pageIds,
                                                    application::BatchStageFlags stages) {
     if (pageIds.isEmpty() || m_batchWorkflow == nullptr || m_viewModel == nullptr || !m_viewModel->hasSession()) {
+        return;
+    }
+    if ((stages.testFlag(application::BatchStageFlag::Detect) &&
+         !ensureProcessingAvailable(application::OperationStage::Detect)) ||
+        (stages.testFlag(application::BatchStageFlag::Ocr) &&
+         !ensureProcessingAvailable(application::OperationStage::Ocr)) ||
+        (stages.testFlag(application::BatchStageFlag::Translate) &&
+         !ensureProcessingAvailable(application::OperationStage::Translate)) ||
+        (stages.testFlag(application::BatchStageFlag::Clear) &&
+         !ensureProcessingAvailable(application::OperationStage::Clear))) {
         return;
     }
     auto* project = m_viewModel->projectAggregate();

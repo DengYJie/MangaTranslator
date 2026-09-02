@@ -298,7 +298,9 @@ private:
     void handlePreviewFinished();
     void invalidatePreviewAndRequestCurrentPage();
     void startThumbnail(const domain::PageId& pageId);
-    void handleThumbnailFinished(const domain::PageId& pageId);
+    void handleThumbnailFinished(const domain::PageId& pageId,
+                                 QFutureWatcher<application::Result<QImage>>* watcher,
+                                 const application::OperationContext& context);
     void pumpThumbnailQueue();
     void cancelThumbnailRequests();
     void handleSaveFinished();

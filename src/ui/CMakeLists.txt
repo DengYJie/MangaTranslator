@@ -61,6 +61,7 @@ add_library(manga_ui STATIC
     screen/editor/EditorProcessingController.cpp
     screen/editor/EditorProcessingController.h
     screen/editor/EditorState.h
+    screen/editor/EditorState.cpp
     screen/editor/EditorViewModel.cpp
     screen/editor/EditorViewModel.h
     screen/editor/ExportSnapshotBuilder.cpp

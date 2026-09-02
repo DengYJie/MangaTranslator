@@ -150,6 +150,8 @@ Q_SIGNALS:
     void proposalRejected(const domain::PageId& pageId);
 
 private:
+    bool ensureProcessingAvailable(application::OperationStage stage, bool serviceAvailable = true);
+
     struct WatcherKey {
         domain::ProjectId projectId;
         domain::PageId pageId;

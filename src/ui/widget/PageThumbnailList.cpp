@@ -232,18 +232,27 @@ void PageThumbnailList::requestVisibleThumbnails() {
 }
 
 void PageThumbnailList::insertThumbnail(const domain::PageId& pageId, const QImage& image) {
+    if (m_model->rowForPageId(pageId) < 0) {
+        return;
+    }
+    const auto pixmap = QPixmap::fromImage(image);
+    if (pixmap.isNull()) {
+        markThumbnailFailed(pageId, tr("缩略图为空，点击重试"));
+        return;
+    }
     int cost = (image.sizeInBytes() + 1023) / 1024;
     cost = std::max(1, cost);
-    m_thumbnailCache.insert(QString::fromStdString(pageId.toString()), new QPixmap(QPixmap::fromImage(image)), cost);
+    if (!m_thumbnailCache.insert(QString::fromStdString(pageId.toString()), new QPixmap(pixmap), cost)) {
+        markThumbnailFailed(pageId, tr("缩略图无法缓存，点击重试"));
+        return;
+    }
     m_model->setThumbnailStatus(pageId, ThumbnailStatus::Ready);
-    // No scheduleVisibleThumbnailRequest: the model dataChanged signal will cause a repaint,
-    // and the status is now Ready so the next scan will not re-request this row.
-    // A re-check is only needed when cache eviction drops a previously Ready row, which is
-    // detected during the next scroll- or resize-driven scan.
+    scheduleVisibleThumbnailRequest();
 }
 
 void PageThumbnailList::markThumbnailFailed(const domain::PageId& pageId, const QString& safeMessage) {
     m_model->setThumbnailStatus(pageId, ThumbnailStatus::Failed, safeMessage);
+    scheduleVisibleThumbnailRequest();
 }
 
 void PageThumbnailList::resetLoadingThumbnails() {
