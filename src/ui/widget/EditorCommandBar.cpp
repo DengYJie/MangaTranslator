@@ -361,9 +361,10 @@ void EditorCommandBar::updateResponsiveLayout() {
 }
 
 void EditorCommandBar::render(const EditorState& state) {
-    m_undoButton->setEnabled(state.canUndo);
-    m_redoButton->setEnabled(state.canRedo);
-    m_saveButton->setEnabled(state.saveState.isDirty && !state.saveState.isSaving);
+    const bool isRunning = state.processing.isRunning;
+    m_undoButton->setEnabled(state.canUndo && !isRunning);
+    m_redoButton->setEnabled(state.canRedo && !isRunning);
+    m_saveButton->setEnabled(state.saveState.isDirty && !state.saveState.isSaving && !isRunning);
 
     m_zoomValueLabel->setText(QStringLiteral("%1%").arg(qRound(state.zoomFactor * 100.0)));
 
@@ -390,7 +391,6 @@ void EditorCommandBar::render(const EditorState& state) {
     m_textButton->setEnabled(hasPage);
     m_previewSelectorButton->setEnabled(hasPage);
     const bool hasSelectedRegions = hasPage && !state.selectedRegionIds.isEmpty();
-    const bool isRunning = state.processing.isRunning;
 
     // 1. Detection: only for whole page (hidden when text boxes are selected)
     m_detectButton->setVisible(!hasSelectedRegions);
@@ -445,14 +445,28 @@ void EditorCommandBar::render(const EditorState& state) {
 
     // 5. Smart Translate (Whole-page automated pipeline)
     m_smartTranslateButton->setVisible(true);
-    m_smartTranslateButton->setEnabled(hasPage);
     if (isRunning) {
-        m_smartTranslateButton->setText(Typography::Icons::glyph(QStringLiteral("ic_fluent_pause_12_regular")));
+        m_smartTranslateButton->setEnabled(true);
+        m_smartTranslateButton->setIconGlyph(Typography::Icons::glyph(QStringLiteral("ic_fluent_pause_12_regular")),
+                                             Typography::IconSize::Standard);
         m_smartTranslateButton->setToolTip(tr("停止翻译"));
         m_smartTranslateButton->setAccessibleName(tr("停止翻译"));
     } else {
-        m_smartTranslateButton->setText(Typography::Icons::glyph(QStringLiteral("ic_fluent_play_12_regular")));
-        m_smartTranslateButton->setToolTip(tr("全页智能翻译"));
+        const bool canSmartTranslate = hasPage && hasRegions && state.isTranslationAvailable;
+        m_smartTranslateButton->setEnabled(canSmartTranslate);
+        m_smartTranslateButton->setIconGlyph(Typography::Icons::glyph(QStringLiteral("ic_fluent_play_12_regular")),
+                                             Typography::IconSize::Standard);
+        if (!hasPage) {
+            m_smartTranslateButton->setToolTip(tr("请先打开页面"));
+        } else if (!state.isTranslationAvailable) {
+            m_smartTranslateButton->setToolTip(state.translationUnavailableReason.isEmpty()
+                                                   ? tr("翻译服务不可用，请在设置中配置")
+                                                   : state.translationUnavailableReason);
+        } else if (!hasRegions) {
+            m_smartTranslateButton->setToolTip(tr("当前页面没有文字区域，请先检测或创建区域"));
+        } else {
+            m_smartTranslateButton->setToolTip(tr("全页智能翻译"));
+        }
         m_smartTranslateButton->setAccessibleName(tr("全页智能翻译"));
     }
 
