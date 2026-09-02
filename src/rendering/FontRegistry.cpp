@@ -3,7 +3,9 @@
 #include <QCoreApplication>
 #include <QDir>
 #include <QFile>
+#include <QFileInfo>
 #include <QFontDatabase>
+#include <QSet>
 
 namespace manga::rendering {
 
@@ -18,8 +20,13 @@ QStringList FontRegistry::bundledFontFamilies() {
             QCoreApplication::applicationDirPath() + QStringLiteral("/fonts"),
             QCoreApplication::applicationDirPath() + QStringLiteral("/res/fonts"),
             QDir::currentPath() + QStringLiteral("/res/fonts"),
-            QDir::currentPath() + QStringLiteral("/fonts"),
-            QStringLiteral("F:/source/MangaTranslator/res/fonts")};
+            QDir::currentPath() + QStringLiteral("/fonts")};
+
+        // In a source checkout several of these entries resolve to the same directory, and
+        // addApplicationFont parses the whole file on every call, so a repeat costs a full font
+        // load rather than a lookup. Deduplicating by canonical path keeps the family list and the
+        // registration count in step.
+        QSet<QString> registeredPaths;
         for (const auto& dirPath : searchDirs) {
             QDir dir(dirPath);
             if (!dir.exists()) {
@@ -28,7 +35,14 @@ QStringList FontRegistry::bundledFontFamilies() {
             const auto fontFiles =
                 dir.entryList({QStringLiteral("*.otf"), QStringLiteral("*.ttf"), QStringLiteral("*.ttc")}, QDir::Files);
             for (const auto& file : fontFiles) {
-                const int id = QFontDatabase::addApplicationFont(dir.filePath(file));
+                const QString filePath = dir.filePath(file);
+                const QString canonical = QFileInfo(filePath).canonicalFilePath();
+                const QString key = canonical.isEmpty() ? QDir::cleanPath(filePath) : canonical;
+                if (registeredPaths.contains(key)) {
+                    continue;
+                }
+                registeredPaths.insert(key);
+                const int id = QFontDatabase::addApplicationFont(filePath);
                 if (id != -1) {
                     const QStringList families = QFontDatabase::applicationFontFamilies(id);
                     for (const auto& f : families) {
