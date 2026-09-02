@@ -141,7 +141,7 @@ QString BpeVocab::decode(const QVector<int>& ids) const {
         }
 
         QString piece = it.value();
-        if (piece == QStringLiteral("<nl>")) {
+        if (piece == QStringLiteral("<nl>") || piece == QStringLiteral("<0x0A>")) {
             res.append(QLatin1Char('\n'));
             continue;
         }
