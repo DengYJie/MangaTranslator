@@ -164,6 +164,9 @@ public:
     [[nodiscard]] QString ocrModelUnavailableReason() const {
         return m_ocrModelError ? m_ocrModelError->safeMessage : QString();
     }
+    /// Revalidates and replaces the production OCR engine for a changed model directory.
+    /// Previous adapters remain alive until context shutdown because active workflows are non-owning.
+    [[nodiscard]] bool reconfigureOcrModel(const QString& modelDirectory);
 
     void updateProviderConfig(std::shared_ptr<const network::ProviderConfig> config);
     [[nodiscard]] std::shared_ptr<const network::ProviderConfig> providerConfig() const;
@@ -192,7 +195,9 @@ private:
     std::unique_ptr<application::CredentialOperations> m_credentialOperations;
     std::unique_ptr<application::ICredentialStore> m_credentialStore;
     std::unique_ptr<application::IOcrModelValidator> m_ocrModelValidator;
+    QString m_ocrModelDirectory;
     std::optional<application::ApplicationError> m_ocrModelError;
+    std::vector<std::unique_ptr<application::IOcrEngine>> m_retiredOcrEngines;
     std::unique_ptr<application::IDetectionModelValidator> m_detectionModelValidator;
     std::unique_ptr<application::ITextDetector> m_textDetector;
     std::vector<std::unique_ptr<application::ITextDetector>> m_retiredTextDetectors;

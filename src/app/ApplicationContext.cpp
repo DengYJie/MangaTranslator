@@ -83,6 +83,7 @@ ApplicationContext::ApplicationContext()
 
     const auto settings = application::LoadAppSettingsUseCase(m_appSettingsStore.get()).execute();
     const auto ocrModelStatus = m_ocrModelValidator->validate(settings.ocrModelDirectory);
+    m_ocrModelDirectory = settings.ocrModelDirectory.trimmed();
     if (!ocrModelStatus.has_value()) {
         m_ocrModelError = ocrModelStatus.error();
     }
@@ -362,3 +363,48 @@ void ApplicationContext::shutdown() {
 }
 
 } // namespace manga::app
+
+bool ApplicationContext::reconfigureOcrModel(const QString& modelDirectory) {
+    const QString normalizedDirectory = modelDirectory.trimmed();
+    if (normalizedDirectory == m_ocrModelDirectory) {
+        return isOcrModelAvailable();
+    }
+    m_ocrModelDirectory = normalizedDirectory;
+
+    if (m_ocrModelValidator == nullptr || m_production == nullptr || m_production->executor == nullptr ||
+        m_production->ocrEnv == nullptr) {
+        if (m_ocrEngine != nullptr) {
+            m_retiredOcrEngines.push_back(std::move(m_ocrEngine));
+        }
+        m_ocrModelError =
+            application::makeApplicationError(application::ErrorCategory::Internal,
+                                              QStringLiteral("ocr.reconfigure_unavailable"),
+                                              QStringLiteral("OCR 模型运行环境不可用，请重启应用后重试。"));
+        return false;
+    }
+
+    const auto ocrModelStatus = m_ocrModelValidator->validate(normalizedDirectory);
+    if (!ocrModelStatus.has_value()) {
+        if (m_ocrEngine != nullptr) {
+            m_retiredOcrEngines.push_back(std::move(m_ocrEngine));
+        }
+        m_ocrModelError = ocrModelStatus.error();
+        if (m_ocrModelError->safeMessage.trimmed().isEmpty()) {
+            m_ocrModelError->safeMessage = QStringLiteral("请在设置中选择有效的 OCR 模型目录。");
+        }
+        return false;
+    }
+
+    auto replacement =
+        services::createOcrEngine(m_production->ocrEnv.get(), m_production->executor.get(), normalizedDirectory);
+    if (m_ocrEngine != nullptr) {
+        m_retiredOcrEngines.push_back(std::move(m_ocrEngine));
+    }
+    m_ocrEngine = std::move(replacement);
+
+    if (m_production && m_production->ocrUseCase) {
+        m_production->ocrUseCase->setEngine(m_ocrEngine.get());
+    }
+    m_ocrModelError.reset();
+    return true;
+}

@@ -2179,3 +2179,9 @@ void EditorProcessingController::batchSmartTranslatePages(const QVector<domain::
 }
 
 } // namespace manga::ui::screen::editor
+
+void EditorProcessingController::setOcrEngine(application::IOcrEngine* engine) {
+    if (m_ownedOcrUseCase) {
+        m_ownedOcrUseCase->setEngine(engine);
+    }
+}

@@ -34,6 +34,10 @@ class RecognizeRegionUseCase {
 public:
     RecognizeRegionUseCase(IOcrEngine* engine, OperationRegistry* registry) : m_engine(engine), m_registry(registry) {}
 
+    void setEngine(IOcrEngine* engine) {
+        m_engine = engine;
+    }
+
     [[nodiscard]] QFuture<Result<OcrResponse>> execute(const OcrRequest& request,
                                                        const OperationDescriptor& descriptor,
                                                        quint64 sessionGeneration,

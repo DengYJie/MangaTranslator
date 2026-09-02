@@ -127,6 +127,7 @@ public:
     void setViewModel(EditorViewModel* vm) {
         m_viewModel = vm;
     }
+    void setOcrEngine(application::IOcrEngine* engine);
     /// Replaces the page inpainter while preserving old adapters for active workflows.
     void setPageInpainter(application::IPageInpainter* pageInpainter);
     /// Replaces the text detector while preserving old adapters for active workflows.

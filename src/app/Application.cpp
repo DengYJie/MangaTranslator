@@ -277,6 +277,12 @@ int Application::run() {
         }
         editorViewModel->setDetectionAvailability(m_context->isDetectionModelAvailable(),
                                                   m_context->detectionModelUnavailableReason());
+
+        m_context->reconfigureOcrModel(state.persisted.ocrModelDirectory);
+        if (m_processingController != nullptr) {
+            m_processingController->setOcrEngine(m_context->ocrEngine());
+        }
+        editorViewModel->setOcrAvailability(m_context->isOcrModelAvailable(), m_context->ocrModelUnavailableReason());
     });
     auto* modelsSettingsPage = ui::screen::settings::SettingsPage::createLazyPage(
         settingsViewModel, ui::screen::settings::SettingsCategory::Models);
