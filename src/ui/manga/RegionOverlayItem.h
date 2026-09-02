@@ -58,6 +58,8 @@ public:
     void setColors(const QColor& selectedStroke, const QColor& unselectedStroke, const QColor& handleFill);
 
     [[nodiscard]] QRectF boundingRect() const override;
+    [[nodiscard]] QPainterPath shape() const override;
+    [[nodiscard]] bool contains(const QPointF& point) const override;
     void paint(QPainter* painter, const QStyleOptionGraphicsItem* option, QWidget* widget) override;
 
 private:

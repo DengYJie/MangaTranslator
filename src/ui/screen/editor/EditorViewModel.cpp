@@ -488,6 +488,20 @@ void EditorViewModel::selectRegion(const domain::RegionId& regionId, RegionSelec
         return;
     }
 
+    // When clicking empty space (invalid/empty regionId), Replace mode means "deselect all".
+    if (!regionId.isValid()) {
+        if (mode == RegionSelectionMode::Replace && !m_state.selectedRegionIds.isEmpty()) {
+            sealActiveTextSession();
+            updateState([&](EditorState& s) {
+                s.selectedRegionIds.clear();
+                s.primaryRegionId = domain::RegionId{};
+                s.inspectorMode = InspectorMode::None;
+                updateInspectorProjection(s);
+            });
+        }
+        return;
+    }
+
     // Verify the region exists on the current page.
     bool found = false;
     for (const auto& rp : m_state.regions) {

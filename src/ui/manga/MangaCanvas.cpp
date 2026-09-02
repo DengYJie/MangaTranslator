@@ -759,22 +759,20 @@ void MangaCanvas::mousePressEvent(QMouseEvent* event) {
         return;
     }
 
-    // Select tool: check handle hit first, then region body.
-    // Convert press to device coords for handle hit testing.
-    for (auto it = m_overlays.constBegin(); it != m_overlays.constEnd(); ++it) {
-        auto* overlay = it.value();
-        const auto geom = overlay->currentGeometry();
-
-        if (overlay->isSelected()) {
-            const auto hitHandle = canvas::hitTestHandle(devicePt, geom, m_zoomFactor, dpr);
-            if (hitHandle.has_value()) {
-                m_gesture.active = true;
-                m_gesture.dragging = false;
-                m_gesture.pressDevicePx = devicePt;
-                m_gesture.targets = {{it.key(), geom}};
-                m_gesture.activeHandle = hitHandle;
-                event->accept();
-                return;
+    // Select tool: check handle hit first across selected regions, then region body.
+    const QList<QGraphicsItem*> itemsUnderMouse = m_scene->items(scenePt);
+    for (auto* item : itemsUnderMouse) {
+        if (auto* handleItem = dynamic_cast<SelectionHandleItem*>(item)) {
+            if (auto* overlay = dynamic_cast<RegionOverlayItem*>(handleItem->parentItem())) {
+                if (overlay->isSelected()) {
+                    m_gesture.active = true;
+                    m_gesture.dragging = false;
+                    m_gesture.pressDevicePx = devicePt;
+                    m_gesture.targets = {{overlay->regionId(), overlay->currentGeometry()}};
+                    m_gesture.activeHandle = handleItem->handlePosition();
+                    event->accept();
+                    return;
+                }
             }
         }
     }
@@ -851,31 +849,40 @@ void MangaCanvas::mouseMoveEvent(QMouseEvent* event) {
                 }
             }
 
-            if (hovered != nullptr && hovered->isSelected()) {
-                const auto handle = canvas::hitTestHandle(
-                    event->position(), hovered->currentGeometry(), m_zoomFactor, viewport()->devicePixelRatio());
-                if (handle.has_value()) {
-                    switch (*handle) {
-                        case canvas::HandlePosition::NorthWest:
-                        case canvas::HandlePosition::SouthEast:
-                            viewport()->setCursor(Qt::SizeFDiagCursor);
+            SelectionHandleItem* hoveredHandle = nullptr;
+            const QList<QGraphicsItem*> itemsUnderMouse = m_scene->items(scenePt);
+            for (auto* item : itemsUnderMouse) {
+                if (auto* h = dynamic_cast<SelectionHandleItem*>(item)) {
+                    if (auto* overlay = dynamic_cast<RegionOverlayItem*>(h->parentItem())) {
+                        if (overlay->isSelected()) {
+                            hoveredHandle = h;
                             break;
-                        case canvas::HandlePosition::NorthEast:
-                        case canvas::HandlePosition::SouthWest:
-                            viewport()->setCursor(Qt::SizeBDiagCursor);
-                            break;
-                        case canvas::HandlePosition::North:
-                        case canvas::HandlePosition::South:
-                            viewport()->setCursor(Qt::SizeVerCursor);
-                            break;
-                        case canvas::HandlePosition::East:
-                        case canvas::HandlePosition::West:
-                            viewport()->setCursor(Qt::SizeHorCursor);
-                            break;
+                        }
                     }
-                } else {
-                    viewport()->setCursor(Qt::SizeAllCursor);
                 }
+            }
+
+            if (hoveredHandle != nullptr) {
+                switch (hoveredHandle->handlePosition()) {
+                    case canvas::HandlePosition::NorthWest:
+                    case canvas::HandlePosition::SouthEast:
+                        viewport()->setCursor(Qt::SizeFDiagCursor);
+                        break;
+                    case canvas::HandlePosition::NorthEast:
+                    case canvas::HandlePosition::SouthWest:
+                        viewport()->setCursor(Qt::SizeBDiagCursor);
+                        break;
+                    case canvas::HandlePosition::North:
+                    case canvas::HandlePosition::South:
+                        viewport()->setCursor(Qt::SizeVerCursor);
+                        break;
+                    case canvas::HandlePosition::East:
+                    case canvas::HandlePosition::West:
+                        viewport()->setCursor(Qt::SizeHorCursor);
+                        break;
+                }
+            } else if (hovered != nullptr && hovered->isSelected()) {
+                viewport()->setCursor(Qt::SizeAllCursor);
             } else {
                 viewport()->setCursor(hovered != nullptr ? Qt::PointingHandCursor : Qt::ArrowCursor);
             }

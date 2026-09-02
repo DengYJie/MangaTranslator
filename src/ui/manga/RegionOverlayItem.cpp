@@ -58,6 +58,16 @@ QRectF RegionOverlayItem::boundingRect() const {
     return br;
 }
 
+QPainterPath RegionOverlayItem::shape() const {
+    QPainterPath path;
+    path.addRect(rect());
+    return path;
+}
+
+bool RegionOverlayItem::contains(const QPointF& point) const {
+    return rect().contains(point);
+}
+
 void RegionOverlayItem::paint(QPainter* painter, const QStyleOptionGraphicsItem*, QWidget*) {
     painter->save();
 
