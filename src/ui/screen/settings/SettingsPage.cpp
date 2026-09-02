@@ -454,10 +454,10 @@ QWidget* SettingsPage::buildAiTranslationView() {
     m_fieldRowMap.insert(QStringLiteral("modelName"), m_modelNameRow);
 
     // Timeout row
-    m_timeoutRow = new widget::SettingsRow(tr("请求超时"), tr("单个翻译请求的超时时间（1–300 秒）"), group);
+    m_timeoutRow = new widget::SettingsRow(tr("请求超时"), tr("单个翻译请求的超时时间（1–600 秒）"), group);
     m_timeoutBox = new fluent::textfields::NumberBox(m_timeoutRow);
     m_timeoutBox->setObjectName(QStringLiteral("timeoutBox"));
-    m_timeoutBox->setRange(1, 300);
+    m_timeoutBox->setRange(1, 600);
     m_timeoutBox->setDisplayPrecision(0);
     m_timeoutBox->setSmallChange(5);
     m_timeoutBox->setSpinButtonPlacementMode(fluent::textfields::NumberBox::SpinButtonPlacementMode::Compact);

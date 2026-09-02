@@ -231,15 +231,22 @@ application::Result<application::TranslationResponse> parseChatCompletionsRespon
         return std::unexpected(protocolError(QStringLiteral("protocol.invalid_json"),
                                              QStringLiteral("The response content was not JSON")));
     }
-    const QJsonObject payload = contentDocument.object();
-    if (!payload.contains(QStringLiteral("items")) || !payload.value(QStringLiteral("items")).isArray()) {
-        return schemaError(QStringLiteral("The response content must contain an items array"));
+    QJsonArray items;
+    if (contentDocument.isArray()) {
+        items = contentDocument.array();
+    } else if (contentDocument.isObject()) {
+        const QJsonObject payload = contentDocument.object();
+        if (payload.value(QStringLiteral("items")).isArray()) {
+            items = payload.value(QStringLiteral("items")).toArray();
+        } else if (payload.value(QStringLiteral("translations")).isArray()) {
+            items = payload.value(QStringLiteral("translations")).toArray();
+        } else if (payload.value(QStringLiteral("data")).isArray()) {
+            items = payload.value(QStringLiteral("data")).toArray();
+        } else {
+            return schemaError(QStringLiteral("The response content must contain an items or translations array"));
+        }
     }
-    const QJsonArray items = payload.value(QStringLiteral("items")).toArray();
-    // Amplification bound rather than a format rule. A correct reply carries one item per
-    // requested region, so a reply well past that is a confused or hostile provider and is
-    // rejected before the per-item work below. The body is already capped by
-    // kMaxResponseBodyBytes, and a repeated identity is caught by the region id check later.
+
     if (items.size() > request.regions.size() * 2) {
         return schemaError(QStringLiteral("The response contained more items than requested"));
     }
@@ -247,58 +254,88 @@ application::Result<application::TranslationResponse> parseChatCompletionsRespon
     QSet<QString> seenIds;
     application::TranslationResponse response;
     response.providerId = providerId;
-    for (const auto& itemValue : items) {
+    for (qsizetype itemIdx = 0; itemIdx < items.size(); ++itemIdx) {
+        const auto& itemValue = items.at(itemIdx);
         if (!itemValue.isObject()) {
             return schemaError(QStringLiteral("Every item must be an object"));
         }
         const QJsonObject item = itemValue.toObject();
-        static const QStringList allowedKeys{QStringLiteral("regionId"),
-                                             QStringLiteral("sourceText"),
-                                             QStringLiteral("translation"),
-                                             QStringLiteral("candidates")};
-        for (auto it = item.constBegin(); it != item.constEnd(); ++it) {
-            if (!allowedKeys.contains(it.key())) {
-                return schemaError(QStringLiteral("The response item contained an unknown key"));
+
+        // 1. Resolve regionId (supports string "regionId", or numeric/string "id" / index)
+        QString regionId;
+        if (item.contains(QStringLiteral("regionId")) && item.value(QStringLiteral("regionId")).isString()) {
+            regionId = item.value(QStringLiteral("regionId")).toString();
+        } else if (item.contains(QStringLiteral("id"))) {
+            const auto idVal = item.value(QStringLiteral("id"));
+            if (idVal.isDouble()) {
+                const qsizetype idx = static_cast<qsizetype>(idVal.toInteger());
+                if (idx >= 0 && idx < request.regions.size()) {
+                    regionId = QString::fromStdString(request.regions.at(idx).regionId.toString());
+                }
+            } else if (idVal.isString()) {
+                const QString idStr = idVal.toString();
+                bool isNum = false;
+                const qsizetype idx = idStr.toLongLong(&isNum);
+                if (isNum && idx >= 0 && idx < request.regions.size()) {
+                    regionId = QString::fromStdString(request.regions.at(idx).regionId.toString());
+                } else {
+                    regionId = idStr;
+                }
             }
-        }
-        const auto regionIdValue = item.value(QStringLiteral("regionId"));
-        const auto sourceValue = item.value(QStringLiteral("sourceText"));
-        const auto translationValue = item.value(QStringLiteral("translation"));
-        const auto candidatesValue = item.value(QStringLiteral("candidates"));
-        if (!regionIdValue.isString() || !sourceValue.isString() || !translationValue.isString() ||
-            !candidatesValue.isArray()) {
-            return schemaError(QStringLiteral("The response item had an unexpected field type"));
-        }
-        if (regionIdValue.toString().size() > kMaxFieldBytes || sourceValue.toString().size() > kMaxFieldBytes ||
-            translationValue.toString().size() > kMaxFieldBytes) {
-            return schemaError(QStringLiteral("The response item exceeded the supported field size"));
-        }
-        const QJsonArray candidates = candidatesValue.toArray();
-        if (candidates.size() > kMaxCandidatesPerRegion) {
-            return schemaError(QStringLiteral("The response item contained too many candidates"));
+        } else if (itemIdx < request.regions.size()) {
+            regionId = QString::fromStdString(request.regions.at(itemIdx).regionId.toString());
         }
 
-        const QString regionId = regionIdValue.toString();
+        // 2. Resolve translation text (supports "translation", "text", "target")
+        QString translation;
+        if (item.contains(QStringLiteral("translation")) && item.value(QStringLiteral("translation")).isString()) {
+            translation = item.value(QStringLiteral("translation")).toString();
+        } else if (item.contains(QStringLiteral("text")) && item.value(QStringLiteral("text")).isString()) {
+            translation = item.value(QStringLiteral("text")).toString();
+        } else if (item.contains(QStringLiteral("target")) && item.value(QStringLiteral("target")).isString()) {
+            translation = item.value(QStringLiteral("target")).toString();
+        }
+
+        // 3. Resolve source text (supports "sourceText", "source", fallback to request)
+        QString sourceText;
+        if (item.contains(QStringLiteral("sourceText")) && item.value(QStringLiteral("sourceText")).isString()) {
+            sourceText = item.value(QStringLiteral("sourceText")).toString();
+        } else if (item.contains(QStringLiteral("source")) && item.value(QStringLiteral("source")).isString()) {
+            sourceText = item.value(QStringLiteral("source")).toString();
+        } else if (itemIdx < request.regions.size()) {
+            sourceText = request.regions.at(itemIdx).sourceText;
+        }
+
+        // 4. Resolve candidates list
+        QVector<QString> candidates;
+        if (item.contains(QStringLiteral("candidates")) && item.value(QStringLiteral("candidates")).isArray()) {
+            const QJsonArray candArr = item.value(QStringLiteral("candidates")).toArray();
+            for (const auto& cVal : candArr) {
+                if (cVal.isString() && cVal.toString().size() <= kMaxFieldBytes) {
+                    candidates.push_back(cVal.toString());
+                }
+            }
+        }
+
+        if (regionId.isEmpty() || regionId.size() > kMaxFieldBytes || translation.size() > kMaxFieldBytes) {
+            return schemaError(QStringLiteral("The response item had invalid regionId or translation"));
+        }
+
         if (seenIds.contains(regionId)) {
-            return std::unexpected(protocolError(QStringLiteral("protocol.duplicate_id"),
-                                                 QStringLiteral("The response contained duplicate region IDs")));
+            continue;
         }
         seenIds.insert(regionId);
 
-        application::TranslationResponseItem responseItem;
         const auto parsedId = domain::RegionId::parse(regionId.toStdString());
         if (!parsedId) {
             return schemaError(QStringLiteral("The response item had an invalid region ID"));
         }
+
+        application::TranslationResponseItem responseItem;
         responseItem.regionId = *parsedId;
-        responseItem.sourceText = sourceValue.toString();
-        responseItem.translation = translationValue.toString();
-        for (const auto& candidateValue : candidates) {
-            if (!candidateValue.isString() || candidateValue.toString().size() > kMaxFieldBytes) {
-                return schemaError(QStringLiteral("The response item had an invalid candidate"));
-            }
-            responseItem.candidates.push_back(candidateValue.toString());
-        }
+        responseItem.sourceText = sourceText;
+        responseItem.translation = translation;
+        responseItem.candidates = std::move(candidates);
         response.items.push_back(std::move(responseItem));
     }
     return response;
