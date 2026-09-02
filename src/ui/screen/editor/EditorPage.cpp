@@ -134,6 +134,8 @@ EditorPage::EditorPage(EditorViewModel* viewModel, QWidget* parent) : base::Base
             &widget::PageThumbnailList::thumbnailRequested,
             m_viewModel,
             [this](const domain::PageId& pageId, bool force) { m_viewModel->requestThumbnail(pageId, force); });
+    connect(
+        m_pageList, &widget::PageThumbnailList::visiblePagesChanged, m_viewModel, &EditorViewModel::setVisiblePages);
 
     connect(m_viewModel, &EditorViewModel::thumbnailReady, m_pageList, &widget::PageThumbnailList::insertThumbnail);
     connect(

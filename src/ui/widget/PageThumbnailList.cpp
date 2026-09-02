@@ -13,6 +13,10 @@
 #include <QVBoxLayout>
 
 namespace manga::ui::widget {
+namespace {
+// Fallback row height used to size the visible range before the view has laid out any row.
+constexpr int kThumbnailRowHeightHint = 88;
+} // namespace
 
 PageThumbnailList::PageThumbnailList(QWidget* parent)
     : QWidget(parent), m_model(new PageListModel(this)), m_view(new QListView(this)), m_shimmerTimer(new QTimer(this)) {
@@ -69,11 +73,24 @@ PageThumbnailList::PageThumbnailList(QWidget* parent)
         Q_EMIT pagesSelected(selected);
     });
 
-    connect(m_view->verticalScrollBar(), &QScrollBar::valueChanged, this, [this]() { requestVisibleThumbnails(); });
+    connect(
+        m_view->verticalScrollBar(), &QScrollBar::valueChanged, this, [this]() { scheduleVisibleThumbnailRequest(); });
 
-    connect(m_model, &QAbstractItemModel::modelReset, this, [this]() { updateCountLabel(); });
-    connect(m_model, &QAbstractItemModel::rowsInserted, this, [this]() { updateCountLabel(); });
-    connect(m_model, &QAbstractItemModel::rowsRemoved, this, [this]() { updateCountLabel(); });
+    connect(m_model, &QAbstractItemModel::modelReset, this, [this]() {
+        // A reset clears the view index and scroll offset, so the tracked page is stale until the
+        // next setCurrentPageId re-arms it.
+        m_trackedPageId = domain::PageId();
+        updateCountLabel();
+        scheduleVisibleThumbnailRequest();
+    });
+    connect(m_model, &QAbstractItemModel::rowsInserted, this, [this]() {
+        updateCountLabel();
+        scheduleVisibleThumbnailRequest();
+    });
+    connect(m_model, &QAbstractItemModel::rowsRemoved, this, [this]() {
+        updateCountLabel();
+        scheduleVisibleThumbnailRequest();
+    });
     updateCountLabel();
 
     m_shimmerTimer->setInterval(50);
@@ -85,16 +102,28 @@ PageThumbnailList::PageThumbnailList(QWidget* parent)
         m_view->viewport()->update();
     });
 
-    m_view->viewport()->installEventFilter(this);
-
     onThemeUpdated();
 }
 
-bool PageThumbnailList::eventFilter(QObject* obj, QEvent* event) {
-    if (obj == m_view->viewport() && event->type() == QEvent::Paint) {
-        requestVisibleThumbnails();
+void PageThumbnailList::showEvent(QShowEvent* event) {
+    QWidget::showEvent(event);
+    scheduleVisibleThumbnailRequest();
+}
+
+void PageThumbnailList::resizeEvent(QResizeEvent* event) {
+    QWidget::resizeEvent(event);
+    scheduleVisibleThumbnailRequest();
+}
+
+void PageThumbnailList::scheduleVisibleThumbnailRequest() {
+    if (m_pendingThumbnailRequest) {
+        return;
     }
-    return QWidget::eventFilter(obj, event);
+    m_pendingThumbnailRequest = true;
+    QTimer::singleShot(0, this, [this]() {
+        m_pendingThumbnailRequest = false;
+        requestVisibleThumbnails();
+    });
 }
 
 void PageThumbnailList::onThemeUpdated() {
@@ -125,6 +154,9 @@ void PageThumbnailList::setCurrentPageId(const domain::PageId& pageId) {
             m_view->scrollTo(index);
         }
     }
+
+    // The target page can already sit inside the viewport, so no scroll signal fires.
+    scheduleVisibleThumbnailRequest();
 }
 
 void PageThumbnailList::updateCountLabel() {
@@ -132,16 +164,17 @@ void PageThumbnailList::updateCountLabel() {
 }
 
 void PageThumbnailList::requestVisibleThumbnails() {
-    QRect viewportRect = m_view->viewport()->rect();
-    int firstRow = m_view->indexAt(viewportRect.topLeft()).row();
-    int lastRow = m_view->indexAt(viewportRect.bottomLeft()).row();
+    const QRect viewportRect = m_view->viewport()->rect();
+    const int centerX = viewportRect.center().x();
+    int firstRow = m_view->indexAt(QPoint(centerX, viewportRect.top())).row();
+    int lastRow = m_view->indexAt(QPoint(centerX, viewportRect.bottom() - 1)).row();
 
     if (firstRow < 0) {
         firstRow = 0;
     }
 
     if (lastRow < 0) {
-        int visibleCapacity = viewportRect.height() / 88 + 1;
+        const int visibleCapacity = viewportRect.height() / kThumbnailRowHeightHint + 1;
         lastRow = firstRow + visibleCapacity;
     }
 
@@ -149,6 +182,7 @@ void PageThumbnailList::requestVisibleThumbnails() {
     lastRow = std::min(m_model->rowCount() - 1, lastRow + 2);
 
     bool hasLoading = false;
+    QVector<domain::PageId> visible;
     for (int i = firstRow; i <= lastRow; ++i) {
         auto status = static_cast<ThumbnailStatus>(m_model->index(i).data(PageListModel::ThumbnailStatusRole).toInt());
         auto pageIdOpt = m_model->pageIdAt(i);
@@ -157,6 +191,7 @@ void PageThumbnailList::requestVisibleThumbnails() {
             continue;
 
         const auto& pageId = *pageIdOpt;
+        visible.append(pageId);
         bool evicted = (status == ThumbnailStatus::Ready && !thumbnail(pageId));
 
         if (status == ThumbnailStatus::NotLoaded || evicted) {
@@ -175,6 +210,11 @@ void PageThumbnailList::requestVisibleThumbnails() {
     } else if (!hasLoading && m_shimmerTimer->isActive()) {
         m_shimmerTimer->stop();
     }
+
+    if (visible != m_lastVisiblePageIds) {
+        m_lastVisiblePageIds = visible;
+        Q_EMIT visiblePagesChanged(m_lastVisiblePageIds);
+    }
 }
 
 void PageThumbnailList::insertThumbnail(const domain::PageId& pageId, const QImage& image) {
@@ -184,7 +224,8 @@ void PageThumbnailList::insertThumbnail(const domain::PageId& pageId, const QIma
     m_model->setThumbnailStatus(pageId, ThumbnailStatus::Ready);
     qInfo().noquote() << "[ThumbnailUI] ready page=" << QString::fromStdString(pageId.toString())
                       << "size=" << image.size() << "cacheCostKiB=" << m_thumbnailCache.totalCost();
-    // requestVisibleThumbnails() will be called on paintEvent triggered by dataChanged
+    // A newly inserted thumbnail can evict a still visible row, so recheck the viewport once.
+    scheduleVisibleThumbnailRequest();
 }
 
 void PageThumbnailList::markThumbnailFailed(const domain::PageId& pageId, const QString& safeMessage) {

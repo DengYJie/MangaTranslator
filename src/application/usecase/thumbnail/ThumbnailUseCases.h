@@ -21,7 +21,7 @@ struct LoadOrGenerateThumbnailRequest {
     domain::PageId pageId;
     QString originalAssetPath;
     QSize originalSize;
-    QSize targetSize{256, 256}; // Standard thumbnail bounding box
+    QSize targetSize{128, 128}; // Square bounding box covering the list cell at device pixel ratio
 };
 
 class LoadOrGenerateThumbnailUseCase {

@@ -23,6 +23,8 @@
 #include <QFutureWatcher>
 #include <QHash>
 #include <QPointer>
+#include <QQueue>
+#include <QSet>
 #include <QUndoStack>
 #include <QVariant>
 
@@ -56,6 +58,9 @@ class EditorViewModel : public base::BaseViewModel<EditorViewModel, EditorState>
     Q_OBJECT
 public:
     static constexpr int kMaxConcurrentThumbnails = 4;
+    /// Edge length of the square bounding box requested for a thumbnail. It must
+    /// cover the list cell size at the highest supported device pixel ratio.
+    static constexpr int kThumbnailEdgePx = 128;
 
     EditorViewModel(application::IThumbnailStore* thumbnailStore,
                     application::IPageImageLoader* pageImageLoader,
@@ -70,6 +75,10 @@ public:
     void selectAdjacentPage(int offset);
     void retryPageLoad();
     void requestThumbnail(const domain::PageId& pageId, bool force);
+    /// Replaces the set of pages currently visible in the thumbnail list. Queued
+    /// pages inside the set are loaded before pages scrolled out of view. An empty
+    /// set falls back to ordering by distance from the current page.
+    void setVisiblePages(const QVector<domain::PageId>& pageIds);
     void setOcrAvailability(bool available, const QString& unavailableReason) {
         updateState([&](EditorState& s) {
             s.isOcrAvailable = available;
@@ -286,6 +295,12 @@ private:
     void handleExportFinished();
     void failExport(const application::ApplicationError& error);
     [[nodiscard]] const application::PageDescriptor* findPage(const domain::PageId& pageId) const;
+    /// Index of pageId inside m_session.pages, or -1 when the page is unknown.
+    [[nodiscard]] int pageOrder(const domain::PageId& pageId) const;
+    /// Removes one entry from the thumbnail queue, preferring visible pages and
+    /// otherwise the entry closest to the current page. Returns a default id when
+    /// the queue is empty.
+    [[nodiscard]] domain::PageId takeNextQueuedPageId();
 
     /// Rebuilds current page region projections from m_openedSession->project only.
     /// Called after openProjectSession, selectPage, and synchronous mutations.
@@ -356,7 +371,9 @@ private:
     QImage m_cachedCleaningImage;
 
     QHash<QString, ThumbnailTicket> m_thumbnailInFlight; // key: PageId string
-    QVector<domain::PageId> m_thumbnailQueue;
+    QQueue<domain::PageId> m_thumbnailQueue;
+    QSet<QString> m_thumbnailQueueSet; // key: PageId string, mirrors m_thumbnailQueue for O(1) lookup
+    QSet<QString> m_visiblePageIds;    // key: PageId string, pages visible in the thumbnail list
     QHash<QString, QFutureWatcher<application::Result<QImage>>*> m_thumbnailWatchers;
 
     QFutureWatcher<application::Result<application::SaveProjectResult>> m_saveWatcher;

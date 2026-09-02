@@ -380,6 +380,7 @@ void EditorViewModel::selectPage(const domain::PageId& pageId) {
     }
 
     m_thumbnailQueue.clear();
+    m_thumbnailQueueSet.clear();
     startPageLoad(pageId);
 }
 
@@ -435,7 +436,7 @@ void EditorViewModel::requestThumbnail(const domain::PageId& pageId, bool force)
 
     const QString key = QString::fromStdString(pageId.toString());
     const bool inFlight = m_thumbnailInFlight.contains(key);
-    const bool inQueue = m_thumbnailQueue.contains(pageId);
+    const bool inQueue = m_thumbnailQueueSet.contains(key);
 
     if ((inFlight || inQueue) && !force) {
         qInfo().noquote() << "[ThumbnailVM] duplicate suppressed page=" << key;
@@ -448,14 +449,24 @@ void EditorViewModel::requestThumbnail(const domain::PageId& pageId, bool force)
     if (!inFlight) {
         if (m_thumbnailInFlight.size() >= kMaxConcurrentThumbnails) {
             if (!inQueue) {
-                m_thumbnailQueue.append(pageId);
+                m_thumbnailQueue.enqueue(pageId);
+                m_thumbnailQueueSet.insert(key);
             }
         } else {
             if (inQueue) {
-                m_thumbnailQueue.removeAll(pageId);
+                m_thumbnailQueue.removeOne(pageId);
+                m_thumbnailQueueSet.remove(key);
             }
             startThumbnail(pageId);
         }
+    }
+}
+
+void EditorViewModel::setVisiblePages(const QVector<domain::PageId>& pageIds) {
+    m_visiblePageIds.clear();
+    m_visiblePageIds.reserve(pageIds.size());
+    for (const auto& pageId : pageIds) {
+        m_visiblePageIds.insert(QString::fromStdString(pageId.toString()));
     }
 }
 
@@ -1108,7 +1119,7 @@ void EditorViewModel::startThumbnail(const domain::PageId& pageId) {
     request.pageId = pageId;
     request.originalAssetPath = page->originalAssetPath;
     request.originalSize = QSize(page->imageSize.width, page->imageSize.height);
-    request.targetSize = QSize(256, 256); // Assuming this is standard thumbnail size
+    request.targetSize = QSize(kThumbnailEdgePx, kThumbnailEdgePx); // Must cover the list cell at device pixel ratio
 
     auto* watcher = new QFutureWatcher<application::Result<QImage>>(this);
     m_thumbnailWatchers.insert(key, watcher);
@@ -1163,9 +1174,43 @@ void EditorViewModel::handleThumbnailFinished(const domain::PageId& pageId) {
 
 void EditorViewModel::pumpThumbnailQueue() {
     while (!m_thumbnailQueue.isEmpty() && m_thumbnailInFlight.size() < kMaxConcurrentThumbnails) {
-        auto pageId = m_thumbnailQueue.takeFirst();
-        startThumbnail(pageId);
+        startThumbnail(takeNextQueuedPageId());
     }
+}
+
+domain::PageId EditorViewModel::takeNextQueuedPageId() {
+    if (m_thumbnailQueue.isEmpty()) {
+        return domain::PageId{};
+    }
+
+    const auto takeAt = [this](int index) {
+        const domain::PageId pageId = m_thumbnailQueue.takeAt(index);
+        m_thumbnailQueueSet.remove(QString::fromStdString(pageId.toString()));
+        return pageId;
+    };
+
+    for (int i = 0; i < m_thumbnailQueue.size(); ++i) {
+        const QString key = QString::fromStdString(m_thumbnailQueue.at(i).toString());
+        if (m_visiblePageIds.contains(key)) {
+            return takeAt(i);
+        }
+    }
+
+    const int currentOrder = pageOrder(m_state.currentPageId);
+    int bestIndex = 0;
+    int bestDistance = -1;
+    for (int i = 0; i < m_thumbnailQueue.size(); ++i) {
+        const int order = pageOrder(m_thumbnailQueue.at(i));
+        if (order < 0 || currentOrder < 0) {
+            continue;
+        }
+        const int distance = qAbs(order - currentOrder);
+        if (bestDistance < 0 || distance < bestDistance) {
+            bestDistance = distance;
+            bestIndex = i;
+        }
+    }
+    return takeAt(bestIndex);
 }
 
 void EditorViewModel::cancelThumbnailRequests() {
@@ -1176,6 +1221,8 @@ void EditorViewModel::cancelThumbnailRequests() {
     }
     m_thumbnailInFlight.clear();
     m_thumbnailQueue.clear();
+    m_thumbnailQueueSet.clear();
+    m_visiblePageIds.clear();
 
     for (auto* watcher : m_thumbnailWatchers) {
         watcher->disconnect();
@@ -1191,6 +1238,15 @@ const application::PageDescriptor* EditorViewModel::findPage(const domain::PageI
         }
     }
     return nullptr;
+}
+
+int EditorViewModel::pageOrder(const domain::PageId& pageId) const {
+    for (int i = 0; i < m_session.pages.size(); ++i) {
+        if (m_session.pages.at(i).id == pageId) {
+            return i;
+        }
+    }
+    return -1;
 }
 
 void EditorViewModel::detectRegionsOnCurrentPage() {

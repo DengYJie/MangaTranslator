@@ -10,6 +10,8 @@
 
 class QTimer;
 class QListView;
+class QResizeEvent;
+class QShowEvent;
 
 namespace fluent::textfields {
 class Label;
@@ -50,15 +52,20 @@ public:
     void requestThumbnailForTest(const domain::PageId& pageId, bool force);
 
 protected:
-    bool eventFilter(QObject* obj, QEvent* event) override;
+    void showEvent(QShowEvent* event) override;
+    void resizeEvent(QResizeEvent* event) override;
 
 Q_SIGNALS:
     void pageActivated(const ::manga::domain::PageId& pageId);
     void pagesSelected(const QVector<::manga::domain::PageId>& pageIds);
     void thumbnailRequested(const ::manga::domain::PageId& pageId, bool force);
+    /// Emitted when the visible row range changes. The list can be empty.
+    void visiblePagesChanged(const QVector<::manga::domain::PageId>& pageIds);
 
 private:
     void updateCountLabel();
+    /// Coalesces viewport driven thumbnail requests into one call per event loop pass.
+    void scheduleVisibleThumbnailRequest();
 
     fluent::textfields::Label* m_headerTitle{nullptr};
     fluent::textfields::Label* m_headerCount{nullptr};
@@ -71,6 +78,8 @@ private:
     fluent::status_info::ShimmerPainter::Palette m_shimmerPalette;
     // Last page id that was scrolled into view; scrollTo is only called when this changes.
     domain::PageId m_trackedPageId;
+    bool m_pendingThumbnailRequest{false};
+    QVector<domain::PageId> m_lastVisiblePageIds;
 };
 
 } // namespace manga::ui::widget

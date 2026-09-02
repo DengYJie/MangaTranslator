@@ -59,6 +59,14 @@ private:
         int processingStatus{0};
         bool operator==(const Row&) const = default;
     };
+
+    [[nodiscard]] QHash<QString, Row> snapshotRowsById() const;
+    [[nodiscard]] Row makeRow(const PageListEntry& entry, const QHash<QString, Row>& oldRows) const;
+    void insertRowsFromPages(const QVector<PageListEntry>& pages, int first, int count);
+    void syncEntriesFrom(const QVector<PageListEntry>& pages, int first);
+    void rebuildRowIndex();
+    void resetWithPreservedState(const QVector<PageListEntry>& pages);
+
     QVector<Row> m_rows;
     QHash<QString, int> m_rowByPageId; // key: PageId string
 };
