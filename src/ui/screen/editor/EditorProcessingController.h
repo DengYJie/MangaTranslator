@@ -103,6 +103,10 @@ public:
     void setViewModel(EditorViewModel* vm) {
         m_viewModel = vm;
     }
+    /// Replaces the page inpainter while preserving old adapters for active workflows.
+    void setPageInpainter(application::IPageInpainter* pageInpainter);
+    /// Replaces the text detector while preserving old adapters for active workflows.
+    void setTextDetector(application::ITextDetector* textDetector);
 
     [[nodiscard]] bool hasActiveOperation(const domain::PageId& pageId) const;
     [[nodiscard]] bool hasProposal(const domain::PageId& pageId) const;

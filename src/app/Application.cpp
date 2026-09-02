@@ -199,6 +199,20 @@ int Application::run() {
             reason = QCoreApplication::translate("Application", "请在设置中补全有效的 API 端点、模型名称和访问密钥。");
         }
         editorViewModel->setTranslationAvailability(configured, reason);
+
+        m_context->reconfigureInpaintModel(state.persisted.inpaintModelDirectory);
+        if (m_processingController != nullptr) {
+            m_processingController->setPageInpainter(m_context->pageInpainter());
+        }
+        editorViewModel->setInpaintAvailability(m_context->isInpaintModelAvailable(),
+                                                m_context->inpaintModelUnavailableReason());
+
+        m_context->reconfigureDetectionModel(state.persisted.detectionModelDirectory);
+        if (m_processingController != nullptr) {
+            m_processingController->setTextDetector(m_context->textDetector());
+        }
+        editorViewModel->setDetectionAvailability(m_context->isDetectionModelAvailable(),
+                                                  m_context->detectionModelUnavailableReason());
     });
     auto* generalSettingsPage = ui::screen::settings::SettingsPage::createLazyPage(
         settingsViewModel, ui::screen::settings::SettingsCategory::General);

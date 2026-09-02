@@ -79,6 +79,7 @@ ApplicationContext::ApplicationContext()
     }
 
     const auto detectionManifest = services::loadAndValidateDetectionManifest(settings.detectionModelDirectory);
+    m_detectionModelDirectory = settings.detectionModelDirectory.trimmed();
     if (!detectionManifest.has_value()) {
         m_detectionModelError = detectionManifest.error();
         if (m_detectionModelError->safeMessage.trimmed().isEmpty()) {
@@ -91,6 +92,7 @@ ApplicationContext::ApplicationContext()
     }
 
     const auto inpaintManifest = services::loadAndValidateManifest(settings.inpaintModelDirectory);
+    m_inpaintModelDirectory = settings.inpaintModelDirectory.trimmed();
     if (!inpaintManifest.has_value()) {
         m_inpaintModelError = inpaintManifest.error();
         if (m_inpaintModelError->safeMessage.trimmed().isEmpty()) {
@@ -179,6 +181,89 @@ void ApplicationContext::updateProviderConfig(std::shared_ptr<const network::Pro
 
 std::shared_ptr<const network::ProviderConfig> ApplicationContext::providerConfig() const {
     return m_providerConfig.load();
+}
+
+bool ApplicationContext::reconfigureInpaintModel(const QString& modelDirectory) {
+    const QString normalizedDirectory = modelDirectory.trimmed();
+    if (normalizedDirectory == m_inpaintModelDirectory) {
+        return isInpaintModelAvailable();
+    }
+    m_inpaintModelDirectory = normalizedDirectory;
+
+    const auto retireCurrent = [this]() {
+        if (m_pageInpainter != nullptr) {
+            m_retiredPageInpainters.push_back(std::move(m_pageInpainter));
+        }
+    };
+
+    if (m_inpaintModelValidator == nullptr || m_production == nullptr || m_production->executor == nullptr ||
+        m_production->ocrEnv == nullptr) {
+        retireCurrent();
+        m_inpaintModelError =
+            application::makeApplicationError(application::ErrorCategory::Internal,
+                                              QStringLiteral("inpaint.reconfigure_unavailable"),
+                                              QStringLiteral("Inpaint 模型运行环境不可用，请重启应用后重试。"));
+        return false;
+    }
+
+    const auto manifest = services::loadAndValidateManifest(normalizedDirectory);
+    if (!manifest.has_value()) {
+        retireCurrent();
+        m_inpaintModelError = manifest.error();
+        if (m_inpaintModelError->safeMessage.trimmed().isEmpty()) {
+            m_inpaintModelError->safeMessage = QStringLiteral("请在设置中选择包含 manifest.json 的 Inpaint 模型目录。");
+        }
+        return false;
+    }
+
+    auto replacement = std::make_unique<services::OnnxLamaPageInpainter>(
+        m_production->ocrEnv.get(), m_production->executor.get(), manifest.value());
+    retireCurrent();
+    m_pageInpainter = std::move(replacement);
+    m_inpaintModelError.reset();
+    return true;
+}
+
+bool ApplicationContext::reconfigureDetectionModel(const QString& modelDirectory) {
+    const QString normalizedDirectory = modelDirectory.trimmed();
+    if (normalizedDirectory == m_detectionModelDirectory) {
+        return isDetectionModelAvailable();
+    }
+    m_detectionModelDirectory = normalizedDirectory;
+
+    if (m_detectionModelValidator == nullptr || m_production == nullptr || m_production->executor == nullptr ||
+        m_production->ocrEnv == nullptr) {
+        if (m_textDetector != nullptr) {
+            m_retiredTextDetectors.push_back(std::move(m_textDetector));
+        }
+        m_detectionModelError =
+            application::makeApplicationError(application::ErrorCategory::Internal,
+                                              QStringLiteral("detection.reconfigure_unavailable"),
+                                              QStringLiteral("版面检测模型运行环境不可用，请重启应用后重试。"));
+        return false;
+    }
+
+    const auto manifest = services::loadAndValidateDetectionManifest(normalizedDirectory);
+    if (!manifest.has_value()) {
+        if (m_textDetector != nullptr) {
+            m_retiredTextDetectors.push_back(std::move(m_textDetector));
+        }
+        m_detectionModelError = manifest.error();
+        if (m_detectionModelError->safeMessage.trimmed().isEmpty()) {
+            m_detectionModelError->safeMessage =
+                QStringLiteral("请在设置中选择包含 manifest.json 的版面检测模型目录。");
+        }
+        return false;
+    }
+
+    auto replacement = std::make_unique<services::OnnxKoharuLayoutDetector>(
+        m_production->ocrEnv.get(), m_production->executor.get(), normalizedDirectory);
+    if (m_textDetector != nullptr) {
+        m_retiredTextDetectors.push_back(std::move(m_textDetector));
+    }
+    m_textDetector = std::move(replacement);
+    m_detectionModelError.reset();
+    return true;
 }
 
 void ApplicationContext::shutdown() {

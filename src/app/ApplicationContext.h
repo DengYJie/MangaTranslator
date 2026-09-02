@@ -26,6 +26,7 @@
 #include <atomic>
 #include <memory>
 #include <optional>
+#include <vector>
 
 namespace manga::data {
 class ProjectIoCoordinator;
@@ -129,6 +130,9 @@ public:
     [[nodiscard]] QString detectionModelUnavailableReason() const {
         return m_detectionModelError ? m_detectionModelError->safeMessage : QString();
     }
+    /// Revalidates and replaces the production text detector for a changed model directory.
+    /// Previous adapters remain alive until context shutdown because active workflows are non-owning.
+    [[nodiscard]] bool reconfigureDetectionModel(const QString& modelDirectory);
     [[nodiscard]] application::IPageInpainter* pageInpainter() const {
         return m_pageInpainter.get();
     }
@@ -141,6 +145,9 @@ public:
     [[nodiscard]] QString inpaintModelUnavailableReason() const {
         return m_inpaintModelError ? m_inpaintModelError->safeMessage : QString();
     }
+    /// Revalidates and replaces the production page inpainter for a changed model directory.
+    /// Previous adapters remain alive until context shutdown because active workflows are non-owning.
+    [[nodiscard]] bool reconfigureInpaintModel(const QString& modelDirectory);
     [[nodiscard]] bool isOcrModelAvailable() const noexcept {
         return !m_ocrModelError.has_value();
     }
@@ -178,9 +185,13 @@ private:
     std::optional<application::ApplicationError> m_ocrModelError;
     std::unique_ptr<application::IDetectionModelValidator> m_detectionModelValidator;
     std::unique_ptr<application::ITextDetector> m_textDetector;
+    std::vector<std::unique_ptr<application::ITextDetector>> m_retiredTextDetectors;
+    QString m_detectionModelDirectory;
     std::optional<application::ApplicationError> m_detectionModelError;
     std::unique_ptr<application::IInpaintModelValidator> m_inpaintModelValidator;
     std::unique_ptr<application::IPageInpainter> m_pageInpainter;
+    std::vector<std::unique_ptr<application::IPageInpainter>> m_retiredPageInpainters;
+    QString m_inpaintModelDirectory;
     std::optional<application::ApplicationError> m_inpaintModelError;
     std::atomic<std::shared_ptr<const network::ProviderConfig>> m_providerConfig;
     bool m_shutdown{false};

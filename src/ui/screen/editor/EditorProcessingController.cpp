@@ -87,6 +87,42 @@ EditorProcessingController::~EditorProcessingController() {
     }
 }
 
+void EditorProcessingController::setPageInpainter(application::IPageInpainter* pageInpainter) {
+    if (m_pageInpainter == pageInpainter) {
+        return;
+    }
+    for (auto it = m_activeTasks.begin(); it != m_activeTasks.end();) {
+        if (it.key().stage == application::OperationStage::Clear && !it.key().regionId.has_value()) {
+            if (m_registry != nullptr) {
+                m_registry->cancelOperation(it.value().operationId);
+            }
+            it = m_activeTasks.erase(it);
+        } else {
+            ++it;
+        }
+    }
+    m_pageInpainter = pageInpainter;
+    updateProcessingStateForCurrentPage();
+}
+
+void EditorProcessingController::setTextDetector(application::ITextDetector* textDetector) {
+    if (m_textDetector == textDetector) {
+        return;
+    }
+    for (auto it = m_activeTasks.begin(); it != m_activeTasks.end();) {
+        if (it.key().stage == application::OperationStage::Detect && !it.key().regionId.has_value()) {
+            if (m_registry != nullptr) {
+                m_registry->cancelOperation(it.value().operationId);
+            }
+            it = m_activeTasks.erase(it);
+        } else {
+            ++it;
+        }
+    }
+    m_textDetector = textDetector;
+    updateProcessingStateForCurrentPage();
+}
+
 void EditorProcessingController::cancelMatchingTask(const WatcherKey& key) {
     if (m_activeTasks.contains(key)) {
         const auto task = m_activeTasks.take(key);
