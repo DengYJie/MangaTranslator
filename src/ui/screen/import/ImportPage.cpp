@@ -180,7 +180,7 @@ void ImportPage::setupUi() {
     sourceCard->setObjectName(QStringLiteral("importSourceCard"));
     sourceCard->setAppearance(fluent::layout::Card::Layer);
     m_sourcePane = sourceCard;
-    m_sourcePane->setMinimumHeight(450);
+    m_sourcePane->setMinimumHeight(520);
     auto* sourceLayout = new QVBoxLayout(m_sourcePane);
     sourceLayout->setContentsMargins(16, 16, 16, 16);
     sourceLayout->setSpacing(12);
@@ -203,7 +203,7 @@ void ImportPage::setupUi() {
     sourceLayout->addLayout(stageLayout);
 
     m_dropZone = new FileDropZone(this);
-    m_dropZone->setMinimumHeight(120);
+    m_dropZone->setMinimumHeight(200);
 
     m_sourceModel = new PendingSourcesModel(m_viewModel, this);
     // Raw QListView: fluent ListView swallows row mouse events, which would break
