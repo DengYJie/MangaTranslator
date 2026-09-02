@@ -462,10 +462,10 @@ QWidget* InspectorPanel::buildContentHost() {
     row2Layout->addWidget(fontWeightField, 3);
 
     auto* vAlignField = new Field(row2);
-    vAlignField->setLabelText(tr("样式"));
+    vAlignField->setLabelText(tr("垂直对齐"));
     m_vAlignCombo = new ComboBox(vAlignField);
     m_vAlignCombo->setObjectName(QStringLiteral("inspectorVAlign"));
-    m_vAlignCombo->addItems({tr("常规 (顶部)"), tr("居中"), tr("底部")});
+    m_vAlignCombo->addItems({tr("顶部"), tr("居中"), tr("底部")});
     vAlignField->setEditor(m_vAlignCombo, fluent::WidgetOwnership::Owned);
     row2Layout->addWidget(vAlignField, 3);
 
@@ -646,18 +646,18 @@ QWidget* InspectorPanel::buildContentHost() {
     auto* marginsGrid = new QHBoxLayout(marginsRow);
     marginsGrid->setContentsMargins(0, 0, 0, 0);
     marginsGrid->setSpacing(6);
-    const std::pair<const char*, InspectorField> marginSpecs[4] = {
-        {"上", InspectorField::MarginTop},
-        {"右", InspectorField::MarginRight},
-        {"下", InspectorField::MarginBottom},
-        {"左", InspectorField::MarginLeft},
+    const std::pair<QString, InspectorField> marginSpecs[4] = {
+        {tr("上边距"), InspectorField::MarginTop},
+        {tr("右边距"), InspectorField::MarginRight},
+        {tr("下边距"), InspectorField::MarginBottom},
+        {tr("左边距"), InspectorField::MarginLeft},
     };
     fluent::layout::Field* marginFields[4] = {nullptr, nullptr, nullptr, nullptr};
     fluent::textfields::NumberBox* marginBoxes[4] = {nullptr, nullptr, nullptr, nullptr};
     int marginIndex = 0;
-    for (const auto& [labelKey, marginField] : marginSpecs) {
+    for (const auto& [labelText, marginField] : marginSpecs) {
         auto* field = new Field(marginsRow);
-        field->setLabelText(tr("边距%1").arg(tr(labelKey)));
+        field->setLabelText(labelText);
         auto* box = new NumberBox(field);
         box->setRange(0.0, 64.0);
         box->setDisplayPrecision(1);

@@ -9,7 +9,7 @@ ProcessingAdoptionCommand::ProcessingAdoptionCommand(EditorCommandContext* conte
                                                      application::PreparedProcessingAdoption prepared,
                                                      QUndoCommand* parent)
     : QUndoCommand(parent), m_context(context), m_prepared(std::move(prepared)) {
-    setText(QStringLiteral("Adopt Processing Results"));
+    setText(QObject::tr("应用处理结果"));
 }
 
 void ProcessingAdoptionCommand::undo() {

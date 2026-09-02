@@ -9,7 +9,7 @@ PageClearLayerCommand::PageClearLayerCommand(EditorCommandContext* context,
                                              Invalidation invalidate,
                                              QUndoCommand* parent)
     : QUndoCommand(parent), m_context(context), m_prepared(std::move(prepared)), m_invalidate(std::move(invalidate)) {
-    setText(QStringLiteral("Clear Page"));
+    setText(QObject::tr("文字消除"));
 }
 
 bool PageClearLayerCommand::applyRef(const QString& expected, const QString& target) {

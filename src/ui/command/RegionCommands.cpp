@@ -10,7 +10,7 @@ CreateTextRegionCommand::CreateTextRegionCommand(EditorCommandContext* context,
                                                  domain::RectGeometry geometry,
                                                  domain::TextLayout layout,
                                                  int orderIndex)
-    : RegionCommand(QStringLiteral("Create Text")), m_context(context), m_pageId(pageId), m_regionId(regionId),
+    : RegionCommand(QObject::tr("新建文字框")), m_context(context), m_pageId(pageId), m_regionId(regionId),
       m_geometry(geometry), m_layout(std::move(layout)), m_orderIndex(orderIndex) {}
 
 void CreateTextRegionCommand::undo() {
@@ -44,7 +44,7 @@ void CreateTextRegionCommand::redo() {
 CreateRegionsBatchCommand::CreateRegionsBatchCommand(EditorCommandContext* context,
                                                      domain::PageId pageId,
                                                      QVector<Entry> entries)
-    : RegionCommand(QStringLiteral("Auto Detect Regions")), m_context(context), m_pageId(pageId),
+    : RegionCommand(QObject::tr("自动检测文字框")), m_context(context), m_pageId(pageId),
       m_entries(std::move(entries)) {}
 
 void CreateRegionsBatchCommand::undo() {
@@ -76,8 +76,7 @@ void CreateRegionsBatchCommand::redo() {
 DeleteRegionsCommand::DeleteRegionsCommand(EditorCommandContext* context,
                                            domain::PageId pageId,
                                            QVector<RegionEntry> entries)
-    : RegionCommand(QStringLiteral("Delete Regions")), m_context(context), m_pageId(pageId),
-      m_entries(std::move(entries)) {}
+    : RegionCommand(QObject::tr("删除文字框")), m_context(context), m_pageId(pageId), m_entries(std::move(entries)) {}
 
 void DeleteRegionsCommand::undo() {
     // Reinsert in original order (ascending orderIndex).
@@ -110,7 +109,7 @@ RegionGeometryCommand::RegionGeometryCommand(EditorCommandContext* context,
                                              domain::RectGeometry before,
                                              domain::RectGeometry after,
                                              canvas::EditKind kind)
-    : RegionCommand(kind == canvas::EditKind::Move ? QStringLiteral("Move Region") : QStringLiteral("Resize Region")),
+    : RegionCommand(kind == canvas::EditKind::Move ? QObject::tr("移动文字框") : QObject::tr("调整文字框大小")),
       m_context(context), m_pageId(pageId), m_regionId(regionId), m_before(before), m_after(after), m_kind(kind) {}
 
 void RegionGeometryCommand::undo() {
@@ -141,7 +140,7 @@ RegionGeometryBatchCommand::RegionGeometryBatchCommand(EditorCommandContext* con
                                                        domain::PageId pageId,
                                                        QVector<Entry> entries,
                                                        canvas::EditKind kind)
-    : RegionCommand(kind == canvas::EditKind::Move ? QStringLiteral("Move Regions") : QStringLiteral("Resize Regions")),
+    : RegionCommand(kind == canvas::EditKind::Move ? QObject::tr("移动文字框") : QObject::tr("调整文字框大小")),
       m_context(context), m_pageId(pageId), m_entries(std::move(entries)), m_kind(kind) {}
 
 void RegionGeometryBatchCommand::undo() {

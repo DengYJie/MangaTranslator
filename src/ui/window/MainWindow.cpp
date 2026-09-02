@@ -154,13 +154,13 @@ MainWindow::MainWindow(application::IAppSettingsStore* settingsStore, QWidget* p
 
     processMenu->addSeparator();
 
-    processMenu->addAction(tr("运行检测"));
+    processMenu->addAction(tr("运行文本检测"));
 
-    processMenu->addAction(tr("运行 OCR"));
+    processMenu->addAction(tr("运行文字识别"));
 
-    processMenu->addAction(tr("运行翻译"));
+    processMenu->addAction(tr("运行 AI 翻译"));
 
-    processMenu->addAction(tr("运行修补"));
+    processMenu->addAction(tr("运行文字消除"));
 
     m_editorMenuBar->addMenu(processMenu);
 

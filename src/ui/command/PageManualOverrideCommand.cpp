@@ -9,7 +9,7 @@ PageManualOverrideCommand::PageManualOverrideCommand(EditorCommandContext* conte
                                                      Invalidation invalidate,
                                                      QUndoCommand* parent)
     : QUndoCommand(parent), m_context(context), m_prepared(std::move(prepared)), m_invalidate(std::move(invalidate)) {
-    setText(QStringLiteral("Paint / Erase"));
+    setText(QObject::tr("涂抹 / 擦除"));
 }
 
 bool PageManualOverrideCommand::applyRef(const QString& expected, const QString& target) {

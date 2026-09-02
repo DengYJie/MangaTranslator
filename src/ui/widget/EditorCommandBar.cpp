@@ -78,7 +78,7 @@ void EditorCommandBar::buildUi() {
                                    QStringLiteral("panButton"));
     m_panButton->setCheckable(true);
     m_textButton = createIconButton(Typography::Icons::glyph(QStringLiteral("ic_fluent_text_add_t_20_regular")),
-                                    tr("文本 (T)"),
+                                    tr("文字框 (T)"),
                                     QStringLiteral("textButton"));
     m_textButton->setCheckable(true);
     auto* toolGroup = new QButtonGroup(this);
@@ -94,13 +94,13 @@ void EditorCommandBar::buildUi() {
                                       tr("文本检测 (整页)"),
                                       QStringLiteral("detectButton"));
     m_ocrButton = createIconButton(Typography::Icons::glyph(QStringLiteral("ic_fluent_scan_type_20_regular")),
-                                   tr("文字识别 (整页 OCR)"),
+                                   tr("文字识别 (整页)"),
                                    QStringLiteral("ocrButton"));
     m_inpaintButton = createIconButton(Typography::Icons::glyph(QStringLiteral("ic_fluent_sparkle_action_20_regular")),
-                                       tr("文字消除 (整页 Inpaint)"),
+                                       tr("文字消除 (整页)"),
                                        QStringLiteral("inpaintButton"));
     m_translateButton = createIconButton(Typography::Icons::glyph(QStringLiteral("ic_fluent_translate_20_regular")),
-                                         tr("翻译 (Ctrl+T)"),
+                                         tr("AI 翻译 (Ctrl+T)"),
                                          QStringLiteral("translateButton"));
     m_pagePaneToggleButton =
         createIconButton(Typography::Icons::glyph(QStringLiteral("ic_fluent_panel_left_text_20_regular")),

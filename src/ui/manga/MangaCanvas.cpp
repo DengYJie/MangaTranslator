@@ -1283,10 +1283,10 @@ void MangaCanvas::contextMenuEvent(QContextMenuEvent* event) {
     Q_EMIT regionSelectionRequested(regionId, canvas::SelectionIntent::Replace);
     fluent::menus_toolbars::FluentMenu menu(QString(), this);
     auto* editAction = menu.addAction(tr("编辑译文"));
-    auto* ocrAction = menu.addAction(tr("重新 OCR"));
-    auto* translateAction = menu.addAction(tr("AI 重译"));
+    auto* ocrAction = menu.addAction(tr("重新识别"));
+    auto* translateAction = menu.addAction(tr("重新翻译"));
     menu.addSeparator();
-    auto* deleteAction = menu.addAction(tr("删除区域"));
+    auto* deleteAction = menu.addAction(tr("删除文字框"));
     const QAction* selected = menu.exec(event->globalPos());
     if (selected == editAction) {
         Q_EMIT regionTextEditRequested(regionId);

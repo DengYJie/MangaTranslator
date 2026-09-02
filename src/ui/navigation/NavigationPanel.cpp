@@ -43,7 +43,7 @@ void NavigationPanel::setupUi() {
     m_headerLayout->setSpacing(0);
 
     m_backButton = new NavigationToolButton(QString(), this);
-    m_backButton->setAccessibleItemName(QStringLiteral("Back"));
+    m_backButton->setAccessibleItemName(tr("返回"));
     m_backButton->setVisible(false);
     connect(m_backButton, &NavigationPushButton::clicked, this, &NavigationPanel::backRequested);
     m_headerLayout->addWidget(m_backButton, 0, Qt::AlignLeft);
@@ -52,7 +52,7 @@ void NavigationPanel::setupUi() {
     m_animatedBackIcon->setSource(std::make_shared<manga::ui::animation::AnimatedBackVisualSource>());
 
     m_paneToggleButton = new NavigationToolButton(QString(), this);
-    m_paneToggleButton->setAccessibleItemName(QStringLiteral("Toggle navigation pane"));
+    m_paneToggleButton->setAccessibleItemName(tr("切换导航栏"));
     connect(m_paneToggleButton, &NavigationPushButton::clicked, this, &NavigationPanel::togglePane);
     m_headerLayout->addWidget(m_paneToggleButton, 0, Qt::AlignLeft);
 

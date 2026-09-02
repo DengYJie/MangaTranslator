@@ -283,10 +283,10 @@ QWidget* SettingsPage::buildModelsView() {
     layout->addSpacing(12);
 
     auto* inpaintGroup = new widget::SettingsGroup(
-        tr("Remove 图像修复"), tr("配置用于 Remove 工具的 dynamic spatial ONNX 模型"), container);
+        tr("文字消除 (图像修复)"), tr("配置用于文字消除与底图修复的 ONNX 模型 (如 LaMa)"), container);
     m_allGroups.append(inpaintGroup);
     m_inpaintModelDirRow =
-        new widget::SettingsRow(tr("模型目录"), tr("Inpaint ONNX 模型文件所在文件夹路径"), inpaintGroup);
+        new widget::SettingsRow(tr("模型目录"), tr("包含文字消除与修复模型的文件夹路径"), inpaintGroup);
     auto* inpaintEditor = new QWidget(m_inpaintModelDirRow);
     auto* inpaintLayout = new QHBoxLayout(inpaintEditor);
     inpaintLayout->setContentsMargins(0, 0, 0, 0);
@@ -301,9 +301,9 @@ QWidget* SettingsPage::buildModelsView() {
     inpaintLayout->addWidget(m_inpaintModelDirEdit, 1);
     m_inpaintBrowseButton = new fluent::basicinput::Button(tr("浏览..."), inpaintEditor);
     m_inpaintBrowseButton->setObjectName(QStringLiteral("inpaintBrowseButton"));
-    m_inpaintBrowseButton->setAccessibleName(tr("选择 Inpaint 模型目录"));
+    m_inpaintBrowseButton->setAccessibleName(tr("选择文字消除模型目录"));
     connect(m_inpaintBrowseButton, &fluent::basicinput::Button::clicked, this, [this]() {
-        const QString dir = QFileDialog::getExistingDirectory(this, tr("选择 Inpaint 模型目录"));
+        const QString dir = QFileDialog::getExistingDirectory(this, tr("选择文字消除模型目录"));
         if (!dir.isEmpty() && m_viewModel)
             m_viewModel->setInpaintModelDirectory(dir);
     });
