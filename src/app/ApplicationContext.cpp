@@ -121,6 +121,14 @@ ApplicationContext::ApplicationContext()
         m_credentialStore.get(),
         std::move(transport),
         network::RetryPolicy(nullptr, nullptr, settings.retryCount));
+
+    // Schedule derived-asset garbage collection after successful saves. Test constructor
+    // paths never create a derived store, so the dynamic_cast simply skips there.
+    if (auto* repository = dynamic_cast<data::FileSystemProjectRepository*>(m_projectRepository.get())) {
+        if (m_derivedAssetStore != nullptr) {
+            repository->setDerivedAssetStore(m_derivedAssetStore.get());
+        }
+    }
 }
 
 ApplicationContext::ApplicationContext(std::unique_ptr<application::IProjectRepository> projectRepository,

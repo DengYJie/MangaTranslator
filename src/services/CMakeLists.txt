@@ -21,6 +21,8 @@ target_sources(manga_services
         ocr/BaberuVocab.cpp
         ocr/BaberuOcrPreprocessor.cpp
         ocr/OnnxMangaOcrEngine.cpp
+        ocr/PaddleOcrEngine.cpp
+        ocr/CompositeOcrEngine.cpp
         layout/QtTextLayouter.cpp
         services.cpp
 )

@@ -267,7 +267,7 @@ private:
         req.text = target.effectiveTranslation;
         req.bounds = target.geometry;
         req.constraints = domain::TextLayout{};
-        req.logicalDpi = 96.0;
+        req.logicalDpi = 72.0;
         req.contentRevision = target.contentRevision;
 
         OperationDescriptor desc{
