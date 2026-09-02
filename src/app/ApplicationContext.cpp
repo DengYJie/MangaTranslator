@@ -299,7 +299,14 @@ void ApplicationContext::shutdown() {
         m_production->httpTransport->shutdown();
     }
 
-    // 4. Member destruction after this point is the reverse of declaration order:
+    // 4. Drain fire-and-forget jobs scheduled on the global thread pool (e.g. the post-save
+    //    derived asset GC, whose future is deliberately dropped). Without this wait a worker
+    //    could still hold a pointer into stores that are destroyed right below; the wait is
+    //    time-bounded because cooperative cancellation above should already have drained the
+    //    tracked data operations.
+    QThreadPool::globalInstance()->waitForDone(5000);
+
+    // 5. Member destruction after this point is the reverse of declaration order:
     //    adapters/stores first, ProjectIoCoordinator (declared first) last.
 }
 

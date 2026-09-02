@@ -1,4 +1,4 @@
-﻿#include "data/import/FileSystemComicImporter.h"
+#include "data/import/FileSystemComicImporter.h"
 
 #include "application/usecase/import/ImportUseCases.h"
 #include "data/DataAsync.h"
@@ -315,19 +315,6 @@ bool writePendingBatch(const QString& canonicalRoot,
     return file.commit();
 }
 
-std::optional<QJsonObject> readPendingBatch(const QString& canonicalRoot) {
-    QFile file(pendingBatchPath(canonicalRoot));
-    if (!file.open(QIODevice::ReadOnly)) {
-        return std::nullopt;
-    }
-    const QJsonDocument document = QJsonDocument::fromJson(file.readAll());
-    file.close();
-    if (!document.isObject()) {
-        return std::nullopt;
-    }
-    return document.object();
-}
-
 } // namespace
 
 FileSystemComicImporter::FileSystemComicImporter(ProjectIoCoordinator* coordinator, CommitObserver commitObserver)
@@ -464,8 +451,10 @@ FileSystemComicImporter::importImagesBlocking(const application::ImportImagesReq
             batch.assetPaths.insert(QString::fromStdString(importedPage.page.originalAssetPath()));
         }
         // The path set must be persisted before batch is moved into the pending map.
-        (void)writePendingBatch(
-            canonicalRoot, result.batchId.toString(), request.projectId.toString(), batch.assetPaths);
+        (void)writePendingBatch(canonicalRoot,
+                                QString::fromStdString(result.batchId.toString()),
+                                QString::fromStdString(request.projectId.toString()),
+                                batch.assetPaths);
         QMutexLocker locker(&m_batchesMutex);
         m_pendingBatches.insert_or_assign(result.batchId.toString(), std::move(batch));
     }
@@ -537,8 +526,10 @@ FileSystemComicImporter::discardImportedAssets(application::DiscardImportedAsset
         if (batchConsumed) {
             QFile::remove(pendingBatchPath(canonicalRoot));
         } else if (!remainingPaths.isEmpty()) {
-            (void)writePendingBatch(
-                canonicalRoot, request.batchId.toString(), request.projectId.toString(), remainingPaths);
+            (void)writePendingBatch(canonicalRoot,
+                                    QString::fromStdString(request.batchId.toString()),
+                                    QString::fromStdString(request.projectId.toString()),
+                                    remainingPaths);
         }
         return {};
     });
