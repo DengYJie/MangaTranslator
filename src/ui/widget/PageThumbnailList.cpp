@@ -50,6 +50,10 @@ PageThumbnailList::PageThumbnailList(QWidget* parent)
     m_view->setFrameShape(QFrame::NoFrame);
     m_view->setAutoFillBackground(false);
     m_view->viewport()->setAutoFillBackground(false);
+    // The view marks the row under the pointer with State_MouseOver only while the viewport
+    // receives hover events, so the delegate can paint the Fluent hover fill.
+    m_view->viewport()->setAttribute(Qt::WA_Hover);
+    m_view->viewport()->setMouseTracking(true);
 
     m_delegate = new PageThumbnailDelegate(this, m_view);
     m_view->setItemDelegate(m_delegate);
@@ -153,10 +157,10 @@ void PageThumbnailList::setCurrentPageId(const domain::PageId& pageId) {
         if (!m_view->verticalScrollBar()->isSliderDown()) {
             m_view->scrollTo(index);
         }
+        // The target page may already be inside the viewport so no scroll signal fires;
+        // trigger a thumbnail scan once to cover that case.
+        scheduleVisibleThumbnailRequest();
     }
-
-    // The target page can already sit inside the viewport, so no scroll signal fires.
-    scheduleVisibleThumbnailRequest();
 }
 
 void PageThumbnailList::updateCountLabel() {
@@ -211,7 +215,15 @@ void PageThumbnailList::requestVisibleThumbnails() {
         m_shimmerTimer->stop();
     }
 
-    if (visible != m_lastVisiblePageIds) {
+    // Emit visiblePagesChanged only when the visible set actually changes. Using a
+    // QSet comparison avoids false positives caused by reordering within the viewport.
+    QSet<QString> visibleSet;
+    visibleSet.reserve(visible.size());
+    for (const auto& id : visible) {
+        visibleSet.insert(QString::fromStdString(id.toString()));
+    }
+    if (visibleSet != m_lastVisiblePageIdSet) {
+        m_lastVisiblePageIdSet = std::move(visibleSet);
         m_lastVisiblePageIds = visible;
         Q_EMIT visiblePagesChanged(m_lastVisiblePageIds);
     }
@@ -224,8 +236,10 @@ void PageThumbnailList::insertThumbnail(const domain::PageId& pageId, const QIma
     m_model->setThumbnailStatus(pageId, ThumbnailStatus::Ready);
     qInfo().noquote() << "[ThumbnailUI] ready page=" << QString::fromStdString(pageId.toString())
                       << "size=" << image.size() << "cacheCostKiB=" << m_thumbnailCache.totalCost();
-    // A newly inserted thumbnail can evict a still visible row, so recheck the viewport once.
-    scheduleVisibleThumbnailRequest();
+    // No scheduleVisibleThumbnailRequest: the model dataChanged signal will cause a repaint,
+    // and the status is now Ready so the next scan will not re-request this row.
+    // A re-check is only needed when cache eviction drops a previously Ready row, which is
+    // detected during the next scroll- or resize-driven scan.
 }
 
 void PageThumbnailList::markThumbnailFailed(const domain::PageId& pageId, const QString& safeMessage) {

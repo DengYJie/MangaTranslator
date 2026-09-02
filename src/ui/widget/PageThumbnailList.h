@@ -6,6 +6,7 @@
 #include <FluentQt/StatusInfo.h>
 #include <QCache>
 #include <QPixmap>
+#include <QSet>
 #include <QWidget>
 
 class QTimer;
@@ -80,6 +81,7 @@ private:
     domain::PageId m_trackedPageId;
     bool m_pendingThumbnailRequest{false};
     QVector<domain::PageId> m_lastVisiblePageIds;
+    QSet<QString> m_lastVisiblePageIdSet; // mirrors m_lastVisiblePageIds for O(1) set comparison
 };
 
 } // namespace manga::ui::widget
