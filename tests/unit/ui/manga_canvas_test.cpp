@@ -152,6 +152,20 @@ private Q_SLOTS:
         QCOMPARE(canvas.tool(), Tool::Pan);
     }
 
+    void removeDiameterClampsAndNotifies() {
+        MangaCanvas canvas;
+        QSignalSpy spy(&canvas, &MangaCanvas::removeDiameterChanged);
+
+        QCOMPARE(canvas.removeDiameter(), 48.0);
+        canvas.setRemoveDiameter(200.0);
+        QCOMPARE(canvas.removeDiameter(), 128.0);
+        QCOMPARE(spy.size(), 1);
+
+        canvas.setRemoveDiameter(-1.0);
+        QCOMPARE(canvas.removeDiameter(), 1.0);
+        QCOMPARE(spy.size(), 2);
+    }
+
     void setToolSelectSwitchesToNoDrag() {
         MangaCanvas canvas;
         canvas.setTool(Tool::Select);
@@ -476,13 +490,9 @@ private Q_SLOTS:
 
         QSignalSpy spy(&canvas, &MangaCanvas::regionGeometryCommitted);
 
-        // Compute the SE handle center in device pixels and use it directly as the
-        // mouse press position so the hit test deterministically finds the handle.
-        const double zoom = canvas.zoomFactor();
-        const double dpr = canvas.viewport()->devicePixelRatio();
-        const QRectF hitRect =
-            manga::ui::canvas::handleHitRect(manga::ui::canvas::HandlePosition::SouthEast, regionGeom, zoom, dpr);
-        const QPointF pressPos = hitRect.center();
+        // Map the SE anchor (150, 150) from scene to viewport so the press hits the handle.
+        const QPointF pressPos =
+            canvas.mapFromScene(QPointF(regionGeom.x + regionGeom.width, regionGeom.y + regionGeom.height));
 
         QWidget* vp = canvas.viewport();
 

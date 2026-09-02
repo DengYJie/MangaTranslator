@@ -5,7 +5,9 @@
 #include "services/execution/BoundedTaskExecutor.h"
 
 #include <QColorSpace>
+#include <QDebug>
 #include <QDir>
+#include <QElapsedTimer>
 #include <QMutex>
 #include <QMutexLocker>
 
@@ -63,6 +65,8 @@ OnnxLamaPageInpainter::OnnxLamaPageInpainter(Ort::Env* env, BoundedTaskExecutor*
     options.SetIntraOpNumThreads(1);
     options.SetInterOpNumThreads(1);
     options.SetExecutionMode(ExecutionMode::ORT_SEQUENTIAL);
+    qInfo().noquote() << "[InpaintEngine] loading inpaint model from dir=" << m_impl->manifest.modelDirectory
+                      << "file=" << m_impl->manifest.modelFile;
     try {
 #ifdef _WIN32
         const auto path = QDir(m_impl->manifest.modelDirectory).filePath(m_impl->manifest.modelFile).toStdWString();
@@ -71,8 +75,13 @@ OnnxLamaPageInpainter::OnnxLamaPageInpainter(Ort::Env* env, BoundedTaskExecutor*
         const auto path = QDir(m_impl->manifest.modelDirectory).filePath(m_impl->manifest.modelFile).toStdString();
         m_impl->session = std::make_unique<Ort::Session>(*env, path.c_str(), options);
 #endif
-    } catch (...) {
+        qInfo().noquote() << "[InpaintEngine] inpaint ONNX session loaded successfully";
+    } catch (const std::exception& ex) {
         // Loading is reported by inpaint rather than from a GUI-thread constructor.
+        qWarning().noquote() << "[InpaintEngine] failed to create inpaint session:" << ex.what();
+        m_impl->session.reset();
+    } catch (...) {
+        qWarning().noquote() << "[InpaintEngine] unknown failure creating inpaint session";
         m_impl->session.reset();
     }
 }
@@ -105,6 +114,12 @@ OnnxLamaPageInpainter::inpaint(application::PageInpaintRequest request, applicat
             if (!impl->session)
                 return std::unexpected(modelError(QStringLiteral("model.load_failed"),
                                                   QStringLiteral("The inpainting model could not be loaded")));
+
+            QElapsedTimer timer;
+            timer.start();
+            qInfo().noquote() << "[InpaintEngine] start inpainting page="
+                              << QString::fromStdString(request.pageId.toString()) << "imgSize=" << size
+                              << "dirtyBounds=" << request.dirtyBounds;
 
             const QImage source = request.sourceImage.convertToFormat(QImage::Format_RGBA8888);
             const QImage mask = request.mask.convertToFormat(QImage::Format_Grayscale8);
@@ -227,6 +242,7 @@ OnnxLamaPageInpainter::inpaint(application::PageInpaintRequest request, applicat
                         }
                     progress.setValue(yTile * nx + xTile + 1);
                 }
+            qInfo().noquote() << "[InpaintEngine] inpainting completed in" << timer.elapsed() << "ms";
             application::PageInpaintResponse response{
                 request.projectId, request.pageId, std::move(result), request.dirtyBounds};
             return response;

@@ -33,6 +33,8 @@ using ::manga::domain::RegionId;
 namespace {
 constexpr double kZoomLevels[] = {0.05, 0.10, 0.25, 0.50, 0.75, 1.0, 1.5, 2.0, 4.0, 8.0, 16.0};
 constexpr double kMinVisibleContentViewportPx = 64.0;
+constexpr double kMinRemoveDiameter = 1.0;
+constexpr double kMaxRemoveDiameter = 128.0;
 const QColor kDarkDocumentWorkspaceBackground(QStringLiteral("#202124"));
 
 canvas::HandlePosition arrowToPrimaryHandle(int key) noexcept {
@@ -504,6 +506,17 @@ void MangaCanvas::updateRemoveCursor() {
     viewport()->setCursor(QCursor(cursorPixmap, size / 2, size / 2));
 }
 
+void MangaCanvas::setRemoveDiameter(double diameter) {
+    const double clamped = std::clamp(diameter, kMinRemoveDiameter, kMaxRemoveDiameter);
+    if (qFuzzyCompare(m_removeDiameter, clamped)) {
+        return;
+    }
+    m_removeDiameter = clamped;
+    updateRemoveCursor();
+    viewport()->update();
+    Q_EMIT removeDiameterChanged(m_removeDiameter);
+}
+
 void MangaCanvas::applyThemeColorsToItems() {
     const auto& colors = themeColorsRef();
 
@@ -526,9 +539,7 @@ void MangaCanvas::wheelEvent(QWheelEvent* event) {
     if ((event->modifiers() & Qt::AltModifier) && m_tool == canvas::Tool::Remove && !m_spaceHeld) {
         const int steps = event->angleDelta().y() / 120;
         if (steps != 0) {
-            m_removeDiameter = std::clamp(m_removeDiameter + steps * 4.0, 1.0, 128.0);
-            updateRemoveCursor();
-            viewport()->update();
+            setRemoveDiameter(m_removeDiameter + steps * 4.0);
         }
         event->accept();
         return;
@@ -734,7 +745,6 @@ void MangaCanvas::mousePressEvent(QMouseEvent* event) {
 
     const QPointF devicePt = event->position();
     const QPointF scenePt = mapToScene(event->position().toPoint());
-    const double dpr = viewport()->devicePixelRatio();
 
     if (m_tool == canvas::Tool::Remove) {
         m_removeStroke.clear();

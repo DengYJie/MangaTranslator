@@ -2,12 +2,17 @@
 
 #include "services/detection/KoharuLayoutManifest.h"
 
+#include <QDebug>
+
 namespace manga::services {
 
 application::Result<application::DetectionModelStatus>
 DetectionModelValidator::validate(const QString& modelDirectory) {
     auto manifestResult = loadAndValidateDetectionManifest(modelDirectory);
     if (!manifestResult.has_value()) {
+        qWarning().noquote() << "[DetectValidator] invalid model directory=" << modelDirectory
+                             << "code=" << manifestResult.error().code
+                             << "message=" << manifestResult.error().safeMessage;
         return std::unexpected(manifestResult.error());
     }
 
@@ -23,6 +28,9 @@ DetectionModelValidator::validate(const QString& modelDirectory) {
     status.opset = manifest.opset;
     status.minimumOnnxRuntime = manifest.minimumOnnxRuntime;
     status.executionProvider = manifest.executionProvider;
+
+    qInfo().noquote() << "[DetectValidator] validated successfully dir=" << modelDirectory << "id=" << status.id
+                      << "version=" << status.version;
 
     return status;
 }

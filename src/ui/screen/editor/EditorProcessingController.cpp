@@ -179,6 +179,9 @@ void EditorProcessingController::detectRegions(const domain::PageId& pageId) {
     req.readingDirection = domain::ReadingDirection::RightToLeft;
     req.minConfidence = 0.35;
 
+    qInfo().noquote() << "[Detect] start page=" << QString::fromStdString(pageId.toString())
+                      << "opId=" << QString::fromStdString(opId.toString()) << "imgSize=" << image.size();
+
     auto future = m_textDetector->detect(std::move(req), operation);
     auto* watcher = new QFutureWatcher<application::Result<application::TextDetectionResponse>>(this);
     connect(watcher, &QFutureWatcherBase::finished, this, [this, watcher, key, opId, sessionGen]() {
@@ -193,9 +196,14 @@ void EditorProcessingController::detectRegions(const domain::PageId& pageId) {
             sessionGen == m_viewModel->projectSessionGeneration()) {
             auto result = watcher->result();
             if (result.has_value()) {
+                qInfo().noquote() << "[Detect] success page=" << QString::fromStdString(key.pageId.toString())
+                                  << "detected=" << result->detectedRegions.size()
+                                  << "panels=" << result->panels.size();
                 m_viewModel->applyDetectedRegions(key.pageId, result->detectedRegions);
                 Q_EMIT processingFinished(key.pageId, true);
             } else {
+                qWarning().noquote() << "[Detect] failed page=" << QString::fromStdString(key.pageId.toString())
+                                     << "code=" << result.error().code << "message=" << result.error().safeMessage;
                 Q_EMIT processingFinished(key.pageId, false);
             }
         }
@@ -661,6 +669,9 @@ void EditorProcessingController::inpaintStroke(const domain::PageId& pageId,
     request.expectedClearLayerRef =
         page->clearLayerAsset().has_value() ? QString::fromStdString(*page->clearLayerAsset()) : QString();
     request.context = operation;
+    qInfo().noquote() << "[Inpaint] start stroke page=" << QString::fromStdString(pageId.toString())
+                      << "points=" << points.size() << "diameter=" << diameter << "dirtyBounds=" << raster.dirtyBounds;
+
     const auto opId = operation.operationId;
     auto future = workflow->execute(std::move(request));
     ActiveTask active{opId, sessionGen, key, {}, {}};
@@ -692,10 +703,15 @@ void EditorProcessingController::inpaintStroke(const domain::PageId& pageId,
                     currentPageSize == result->expectedPageSize && currentClearLayerRef == result->beforeRef;
             }
             if (result.has_value() && snapshotStillCurrent && vm->applyPageInpaintChange(result.value())) {
+                qInfo().noquote() << "[Inpaint] success page=" << QString::fromStdString(key.pageId.toString())
+                                  << "layerRef="
+                                  << (result->afterRef.isEmpty() ? QStringLiteral("<empty>") : result->afterRef);
                 self->m_registry->markFinished(opId);
                 self->updateProcessingStateForCurrentPage();
                 Q_EMIT self->processingFinished(key.pageId, true);
             } else if (!result.has_value() && !result.error().isCancelled()) {
+                qWarning().noquote() << "[Inpaint] failed page=" << QString::fromStdString(key.pageId.toString())
+                                     << "code=" << result.error().code << "message=" << result.error().safeMessage;
                 self->m_registry->markFinished(opId, result.error());
                 vm->setNotice(EditorNotice{result.error().safeMessage,
                                            QString(),

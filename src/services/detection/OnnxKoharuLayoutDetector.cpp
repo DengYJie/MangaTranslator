@@ -6,7 +6,9 @@
 #include "services/detection/KoharuLayoutPreprocessor.h"
 #include "services/execution/BoundedTaskExecutor.h"
 
+#include <QDebug>
 #include <QDir>
+#include <QElapsedTimer>
 #include <QMutex>
 #include <QMutexLocker>
 #include <QPromise>
@@ -72,6 +74,7 @@ application::Result<void> OnnxKoharuLayoutDetector::ensureLoaded() {
     }
 
     const QString onnxPath = QDir(m_impl->modelDir).filePath(m_impl->manifest.modelFile);
+    qInfo().noquote() << "[DetectEngine] loading Koharu layout detection ONNX model from" << onnxPath;
 
     try {
         Ort::SessionOptions sessionOptions;
@@ -86,6 +89,7 @@ application::Result<void> OnnxKoharuLayoutDetector::ensureLoaded() {
         m_impl->session = std::make_unique<Ort::Session>(*m_impl->env, onnxPath.toStdString().c_str(), sessionOptions);
 #endif
     } catch (const Ort::Exception& ex) {
+        qWarning().noquote() << "[DetectEngine] failed to create ONNX session:" << ex.what();
         auto error =
             application::makeApplicationError(application::ErrorCategory::Model,
                                               QStringLiteral("model.corrupt"),
@@ -96,6 +100,8 @@ application::Result<void> OnnxKoharuLayoutDetector::ensureLoaded() {
     }
 
     m_impl->loaded = true;
+    qInfo().noquote() << "[DetectEngine] model loaded successfully (" << m_impl->manifest.inputWidth << "x"
+                      << m_impl->manifest.inputHeight << ")";
     return {};
 }
 
@@ -155,6 +161,13 @@ OnnxKoharuLayoutDetector::runInference(const application::TextDetectionRequest& 
                                                                  QStringLiteral("cancelled.user_requested"),
                                                                  QStringLiteral("Detection cancelled by user")));
     }
+
+    QElapsedTimer timer;
+    timer.start();
+
+    qInfo().noquote() << "[DetectEngine] start inference page=" << QString::fromStdString(request.pageId.toString())
+                      << "imgSize=" << request.image.size() << "minConf=" << request.minConfidence << "readingDir="
+                      << (request.readingDirection == domain::ReadingDirection::RightToLeft ? "RTL" : "LTR");
 
     progress.setValue(30);
     progress.setText(QStringLiteral("Preprocessing page image..."));
@@ -217,6 +230,8 @@ OnnxKoharuLayoutDetector::runInference(const application::TextDetectionRequest& 
                                                   outputNames.data(),
                                                   outputNames.size());
 
+        qInfo().noquote() << "[DetectEngine] ONNX model run completed in" << timer.elapsed() << "ms";
+
         if (context.stopToken.stop_requested()) {
             return std::unexpected(application::makeApplicationError(application::ErrorCategory::Cancelled,
                                                                      QStringLiteral("cancelled.user_requested"),
@@ -249,11 +264,16 @@ OnnxKoharuLayoutDetector::runInference(const application::TextDetectionRequest& 
         auto response = KoharuLayoutPostprocessor::process(
             request.pageId, raw, preprocessed, request.minConfidence, request.readingDirection);
 
+        qInfo().noquote() << "[DetectEngine] result page=" << QString::fromStdString(request.pageId.toString())
+                          << "regions=" << response.detectedRegions.size() << "panels=" << response.panels.size()
+                          << "totalElapsed=" << timer.elapsed() << "ms";
+
         progress.setValue(100);
         progress.setText(QStringLiteral("Detection completed"));
         return response;
 
     } catch (const Ort::Exception& ex) {
+        qWarning().noquote() << "[DetectEngine] inference failed:" << ex.what();
         auto error =
             application::makeApplicationError(application::ErrorCategory::Inference,
                                               QStringLiteral("inference.failed"),

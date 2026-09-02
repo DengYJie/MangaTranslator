@@ -6,7 +6,9 @@
 #include "services/ocr/BaberuOcrPreprocessor.h"
 #include "services/ocr/BaberuVocab.h"
 
+#include <QDebug>
 #include <QDir>
+#include <QElapsedTimer>
 #include <QMutex>
 #include <QMutexLocker>
 #include <QPromise>
@@ -91,6 +93,7 @@ application::Result<void> OnnxMangaOcrEngine::ensureLoaded() {
     options.SetInterOpNumThreads(1);
     options.SetExecutionMode(ExecutionMode::ORT_SEQUENTIAL);
 
+    qInfo().noquote() << "[OcrEngine] loading Baberu OCR model from dir=" << m_impl->modelDir;
     try {
         QString visPath, prePath, stepPath;
         for (const auto& g : m_impl->manifest.graphs) {
@@ -118,6 +121,7 @@ application::Result<void> OnnxMangaOcrEngine::ensureLoaded() {
             *m_impl->env, QDir(m_impl->modelDir).filePath(stepPath).toStdString().c_str(), options);
 #endif
     } catch (const Ort::Exception& e) {
+        qWarning().noquote() << "[OcrEngine] failed to load OCR sessions:" << e.what();
         return std::unexpected<application::ApplicationError>(application::makeApplicationError(
             application::ErrorCategory::Model, QStringLiteral("model.load_failed"), QString::fromStdString(e.what())));
     }
@@ -142,6 +146,8 @@ application::Result<void> OnnxMangaOcrEngine::ensureLoaded() {
         return r;
 
     m_impl->loaded = true;
+    qInfo().noquote() << "[OcrEngine] Baberu OCR model loaded successfully (vocabSize=" << m_impl->vocab->vocabSize()
+                      << ")";
     return {};
 }
 
@@ -187,8 +193,16 @@ OnnxMangaOcrEngine::runInference(const application::OcrRequest& request,
                                               QStringLiteral("OCR cancelled before preprocess")));
     }
 
+    QElapsedTimer timer;
+    timer.start();
+
+    qInfo().noquote() << "[OcrEngine] start OCR inference region="
+                      << QString::fromStdString(request.regionId.toString()) << "rect=" << request.rect.x
+                      << request.rect.y << request.rect.width << request.rect.height;
+
     auto preResult = BaberuOcrPreprocessor::preprocess(request, m_impl->manifest);
     if (!preResult.has_value()) {
+        qWarning().noquote() << "[OcrEngine] preprocess failed:" << preResult.error().safeMessage;
         return std::unexpected<application::ApplicationError>(preResult.error());
     }
     std::vector<float>& inputTensorValues = preResult.value();
@@ -476,6 +490,9 @@ OnnxMangaOcrEngine::runInference(const application::OcrRequest& request,
     response.regionId = request.regionId;
     response.text = decoded;
     response.confidence = 0.0;
+
+    qInfo().noquote() << "[OcrEngine] finished OCR region=" << QString::fromStdString(request.regionId.toString())
+                      << "text=\"" << decoded << "\" elapsed=" << timer.elapsed() << "ms";
 
     progress.setValue(1);
     progress.setText(QStringLiteral("OCR complete"));
