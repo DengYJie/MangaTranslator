@@ -15,6 +15,8 @@ add_library(manga_application STATIC
     ports/ITextDetector.h
     workflow/BatchPagesProcessingWorkflow.cpp
     workflow/BatchPagesProcessingWorkflow.h
+    workflow/AppendPagesWorkflow.cpp
+    workflow/AppendPagesWorkflow.h
     workflow/OperationRegistry.cpp
     workflow/SmartTranslatePageWorkflow.cpp
     usecase/export/ExportUseCases.cpp
