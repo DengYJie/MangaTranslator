@@ -102,6 +102,9 @@ void EditorCommandBar::buildUi() {
     m_translateButton = createIconButton(Typography::Icons::glyph(QStringLiteral("ic_fluent_translate_20_regular")),
                                          tr("AI 翻译 (Ctrl+T)"),
                                          QStringLiteral("translateButton"));
+    m_smartTranslateButton = createIconButton(Typography::Icons::glyph(QStringLiteral("ic_fluent_play_12_regular")),
+                                              tr("全页智能翻译"),
+                                              QStringLiteral("smartTranslateButton"));
     m_pagePaneToggleButton =
         createIconButton(Typography::Icons::glyph(QStringLiteral("ic_fluent_panel_left_text_20_regular")),
                          tr("页面列表"),
@@ -170,6 +173,7 @@ void EditorCommandBar::buildUi() {
     hasGroup = false;
     addGroup({m_pagePaneToggleButton, m_inspectorPaneToggleButton});
     addGroup({m_overflowButton});
+    addGroup({m_smartTranslateButton});
     addGroup({m_saveButton});
 
     connect(m_undoButton, &fluent::basicinput::Button::clicked, m_viewModel, &EditorViewModel::undo);
@@ -252,6 +256,18 @@ void EditorCommandBar::buildUi() {
                     ctrl->translatePage(state.currentPageId);
                 } else {
                     ctrl->translateRegions(state.currentPageId, state.selectedRegionIds);
+                }
+            }
+        }
+    });
+    connect(m_smartTranslateButton, &fluent::basicinput::Button::clicked, this, [this]() {
+        if (auto* ctrl = m_viewModel->processingController()) {
+            const auto& state = m_viewModel->state();
+            if (state.currentPageId.isValid()) {
+                if (state.processing.isRunning) {
+                    ctrl->cancelPageOperations(state.currentPageId);
+                } else {
+                    ctrl->smartTranslatePage(state.currentPageId);
                 }
             }
         }
@@ -426,6 +442,19 @@ void EditorCommandBar::render(const EditorState& state) {
         m_translateButton->setToolTip(tr("翻译整页已存在文字区域 (Ctrl+T)"));
     }
     m_translateButton->setAccessibleName(hasSelectedRegions ? tr("翻译所选文字") : tr("整页翻译"));
+
+    // 5. Smart Translate (Whole-page automated pipeline)
+    m_smartTranslateButton->setVisible(true);
+    m_smartTranslateButton->setEnabled(hasPage);
+    if (isRunning) {
+        m_smartTranslateButton->setText(Typography::Icons::glyph(QStringLiteral("ic_fluent_pause_12_regular")));
+        m_smartTranslateButton->setToolTip(tr("停止翻译"));
+        m_smartTranslateButton->setAccessibleName(tr("停止翻译"));
+    } else {
+        m_smartTranslateButton->setText(Typography::Icons::glyph(QStringLiteral("ic_fluent_play_12_regular")));
+        m_smartTranslateButton->setToolTip(tr("全页智能翻译"));
+        m_smartTranslateButton->setAccessibleName(tr("全页智能翻译"));
+    }
 
     updateResponsiveLayout();
 }
