@@ -170,6 +170,7 @@ void NavigationFlyout::cloneNode(NavigationTreeWidget* srcNode, NavigationTreeWi
                                         depth,
                                         srcItem->isSelectable(),
                                         nullptr);
+    item->setEnabled(srcItem->isEnabled());
     item->setOrientation(Qt::Vertical);
     item->setCompacted(false);
     item->setIconSize(srcItem->iconSize());

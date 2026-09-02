@@ -73,6 +73,8 @@ protected:
 
     void resizeEvent(QResizeEvent* event) override;
 
+    void changeEvent(QEvent* event) override;
+
     /// Removes the child indent as collapse progresses to fit the 48px compact bar.
     virtual int iconDrawX() const;
 

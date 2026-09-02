@@ -139,6 +139,14 @@ void NavigationPanel::setCurrentItem(const QString& routeKey) {
     dispatchIndicatorAnimation(prevOwner, curOwner);
 }
 
+void NavigationPanel::setItemEnabled(const QString& routeKey, bool enabled) {
+    if (!m_tree || routeKey.isEmpty())
+        return;
+    if (NavigationTreeWidget* node = m_tree->nodeFor(routeKey); node && node->itemWidget()) {
+        node->itemWidget()->setEnabled(enabled);
+    }
+}
+
 void NavigationPanel::setCategoryExpanded(const QString& routeKey, bool expanded, bool animated) {
     if (m_tree)
         m_tree->setCategoryExpanded(routeKey, expanded, animated);

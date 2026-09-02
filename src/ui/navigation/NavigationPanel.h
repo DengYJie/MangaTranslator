@@ -93,6 +93,14 @@ public:
     void setCurrentItem(const QString& routeKey);
 
     /**
+     * @brief Enables or disables a navigation item.
+     * @param routeKey Target route identifier.
+     * @param enabled Whether the item accepts interaction. A disabled item is
+     * painted with the disabled text token and cannot be clicked or focused.
+     */
+    void setItemEnabled(const QString& routeKey, bool enabled);
+
+    /**
      * @brief Gets the currently active route key.
      * @return Current route key string.
      */

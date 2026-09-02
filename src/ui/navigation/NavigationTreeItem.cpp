@@ -198,7 +198,7 @@ void NavigationTreeItem::paintEvent(QPaintEvent* event) {
     QPainter painter(this);
     painter.setRenderHint(QPainter::Antialiasing);
     painter.setFont(Typography::Icons::font(kChevronIconPixelSize));
-    painter.setPen(colors.textSecondary);
+    painter.setPen(isEnabled() ? colors.textSecondary : colors.textDisabled);
     painter.save();
     painter.translate(cRect.center());
     painter.rotate(m_arrowAngle);

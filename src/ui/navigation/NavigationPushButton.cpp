@@ -33,6 +33,13 @@ void NavigationPushButton::setIconGlyph(const QString& glyph) {
     update();
 }
 
+void NavigationPushButton::changeEvent(QEvent* event) {
+    if (event->type() == QEvent::EnabledChange) {
+        setCursor(isEnabled() ? Qt::PointingHandCursor : Qt::ArrowCursor);
+    }
+    NavigationWidget::changeEvent(event);
+}
+
 void NavigationPushButton::setVisualSource(std::shared_ptr<manga::ui::animation::AnimatedVisualSource> source) {
     m_visualSource = source;
     if (m_visualSource) {
@@ -153,7 +160,7 @@ void NavigationPushButton::paintEvent(QPaintEvent* /*event*/) {
 
     if (!m_visualSource && !m_iconGlyph.isEmpty()) {
         painter.setFont(Typography::Icons::font(m_iconSize));
-        painter.setPen(m_isSelected ? colors.textPrimary : colors.textSecondary);
+        painter.setPen(!isEnabled() ? colors.textDisabled : (m_isSelected ? colors.textPrimary : colors.textSecondary));
         const QString glyph = Typography::Icons::glyphForSize(m_iconGlyph, m_iconSize);
         painter.drawText(QRect(iconX, 0, m_iconSize, height()), Qt::AlignCenter, glyph);
     }
@@ -162,7 +169,7 @@ void NavigationPushButton::paintEvent(QPaintEvent* /*event*/) {
     if (alpha > 0.0f && !m_text.isEmpty() && !(m_orientation == Qt::Horizontal && isFooterItem())) {
         painter.setFont(
             themeFont(m_isSelected ? Typography::FontRole::BodyStrong : Typography::FontRole::Body).toQFont());
-        QColor textCol = colors.textPrimary;
+        QColor textCol = isEnabled() ? colors.textPrimary : colors.textDisabled;
         textCol.setAlphaF(alpha);
         painter.setPen(textCol);
 
