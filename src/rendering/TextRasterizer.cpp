@@ -113,32 +113,34 @@ void TextRasterizer::draw(QPainter& painter, const LayoutResult& layout, double 
     } else {
         // Vertical rendering with clusters
         QPainterPath path;
+        QFontMetricsF fm(font);
+        const double ascent = fm.ascent();
+
         for (const GlyphCluster& gc : layout.clusters) {
-            QPainterPath clusterPath;
             if (gc.isTateChuYoko) {
                 // Scale horizontally to fit 1 em box
                 QPainterPath tcy;
-                tcy.addText(0, QFontMetricsF(font).ascent(), font, gc.text);
-                double tcyWidth = tcy.boundingRect().width();
-                double em = gc.emBox.width();
+                tcy.addText(0, ascent, font, gc.text);
+                const double tcyWidth = tcy.boundingRect().width();
+                const double em = gc.emBox.width();
                 if (tcyWidth > 0 && tcyWidth > em) {
                     QTransform scale;
                     scale.scale(em / tcyWidth, 1.0);
                     tcy = scale.map(tcy);
                 }
-                // Center it
-                double dx = (em - tcy.boundingRect().width()) / 2.0;
-                tcy.translate(dx, 0);
-                clusterPath.addPath(tcy);
+                const double dx = (em - tcy.boundingRect().width()) / 2.0;
+                tcy.translate(gc.position.x() + dx, gc.position.y());
+                path.addPath(tcy);
+            } else if (!gc.transform.isIdentity()) {
+                QPainterPath p;
+                p.addText(0, 0, font, gc.text);
+                p = gc.transform.map(p);
+                path.addPath(p);
             } else {
-                clusterPath.addText(0, QFontMetricsF(font).ascent(), font, gc.text);
+                QPainterPath p;
+                p.addText(gc.position.x(), gc.position.y() + ascent, font, gc.text);
+                path.addPath(p);
             }
-
-            if (!gc.transform.isIdentity()) {
-                clusterPath = gc.transform.map(clusterPath);
-            }
-            clusterPath.translate(gc.position);
-            path.addPath(clusterPath);
         }
 
         if (strokeWidth > 0.0) {

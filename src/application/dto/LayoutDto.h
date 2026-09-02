@@ -21,7 +21,7 @@ struct LayoutRequest {
     QString text;
     domain::RectGeometry bounds;
     domain::TextLayout constraints;
-    double logicalDpi{96.0};
+    double logicalDpi{72.0};
     quint64 contentRevision;
 };
 

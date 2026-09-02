@@ -1,6 +1,10 @@
 #include "rendering/TextLayoutEngine.h"
 
+#include "rendering/FontRegistry.h"
+
 #include <QChar>
+#include <QCoreApplication>
+#include <QDir>
 #include <QFile>
 #include <QFontDatabase>
 #include <QFontInfo>
@@ -76,6 +80,7 @@ LayoutResult TextLayoutEngine::layoutText(const QString& text,
                                           const domain::RectGeometry& bounds,
                                           const domain::TextLayout& constraints,
                                           double logicalDpi) {
+    FontRegistry::bundledFontFamilies();
     LayoutResult result;
     result.originalText = text;
     result.resolvedLayout = constraints;
@@ -300,6 +305,8 @@ LayoutResult TextLayoutEngine::layoutVertical(const QString& text,
     result.originalText = text;
     result.resolvedLayout = constraints;
 
+    FontRegistry::bundledFontFamilies();
+
     QImage dummyDevice = createDummyDevice(logicalDpi);
     QFont font(QString::fromStdString(constraints.fontFamily));
     font.setPixelSize(qRound(pixelSize));
@@ -316,18 +323,25 @@ LayoutResult TextLayoutEngine::layoutVertical(const QString& text,
     QFontMetricsF fm(font, &dummyDevice);
     int missingGlyphs = 0;
 
-    double emSize = fm.height(); // approximation of em box
-    double colAdvance = emSize * constraints.lineSpacing;
+    const double emSize = fm.height();
+    const double colAdvance = emSize * constraints.lineSpacing;
+    const double ascent = fm.ascent();
 
-    double availW = bounds.width - constraints.margins.left - constraints.margins.right;
-    double availH = bounds.height - constraints.margins.top - constraints.margins.bottom;
+    const double availW = bounds.width - constraints.margins.left - constraints.margins.right;
+    const double availH = bounds.height - constraints.margins.top - constraints.margins.bottom;
 
-    struct Col {
-        QVector<GlyphCluster> clusters;
-        double height{0};
+    struct ColItem {
+        GlyphCluster cluster;
+        double advanceY{0.0};
     };
-    QVector<Col> columns;
-    columns.append(Col());
+
+    struct Column {
+        QVector<ColItem> items;
+        double height{0.0};
+    };
+
+    QVector<Column> columns;
+    columns.append(Column{});
 
     int i = 0;
     while (i < text.length()) {
@@ -336,11 +350,11 @@ LayoutResult TextLayoutEngine::layoutVertical(const QString& text,
             nextValid = i + 2;
         }
 
-        QString clusterStr = text.mid(i, nextValid - i);
+        const QString clusterStr = text.mid(i, nextValid - i);
         i = nextValid;
 
-        if (clusterStr == "\n") {
-            columns.append(Col());
+        if (clusterStr == QStringLiteral("\n")) {
+            columns.append(Column{});
             continue;
         }
 
@@ -348,60 +362,74 @@ LayoutResult TextLayoutEngine::layoutVertical(const QString& text,
             missingGlyphs++;
         }
 
-        bool isAsciiDigit =
-            clusterStr.length() == 1 && clusterStr.at(0).isDigit() && clusterStr.at(0).unicode() <= 0x7F;
-        bool isAsciiLetter =
-            clusterStr.length() == 1 && clusterStr.at(0).isLetter() && clusterStr.at(0).unicode() <= 0x7F;
+        const QChar ch = clusterStr.at(0);
+        const bool isAsciiDigit = clusterStr.length() == 1 && ch.isDigit() && ch.unicode() <= 0x7F;
+        const bool isAsciiLetter = clusterStr.length() == 1 && ch.isLetter() && ch.unicode() <= 0x7F;
+        const bool isAsciiPunct = clusterStr.length() == 1 && (ch.isPunct() || ch.isSymbol()) && ch.unicode() <= 0x7F;
 
-        // Tate-chu-yoko logic
-        if (isAsciiDigit) {
-            int digitsCount = 1;
-            int lookahead = i;
-            while (lookahead < text.length() && text.at(lookahead).isDigit() && text.at(lookahead).unicode() <= 0x7F) {
-                digitsCount++;
-                lookahead++;
+        QString finalStr = clusterStr;
+        bool isTateChuYoko = false;
+        bool rotate90 = false;
+
+        // Check for 2-digit Tate-chu-yoko (e.g. "12", "99") or "!?"
+        if (isAsciiDigit && i < text.length() && text.at(i).isDigit() && text.at(i).unicode() <= 0x7F) {
+            if (i + 1 >= text.length() || !text.at(i + 1).isDigit() || text.at(i + 1).unicode() > 0x7F) {
+                finalStr = text.mid(i - 1, 2);
+                i += 1;
+                isTateChuYoko = true;
             }
-            if (digitsCount == 2) {
-                clusterStr = text.mid(i - 1, 2);
-                i = lookahead;
-            }
+        } else if ((ch == '!' || ch == '?') && i < text.length() && (text.at(i) == '!' || text.at(i) == '?')) {
+            finalStr = text.mid(i - 1, 2);
+            i += 1;
+            isTateChuYoko = true;
+        } else if (isAsciiLetter || isAsciiDigit || isAsciiPunct) {
+            rotate90 = true;
+        }
+
+        const double glyphW = fm.horizontalAdvance(finalStr);
+        const double cellH = isTateChuYoko ? emSize : (rotate90 ? qMax(glyphW, emSize * 0.8) : emSize);
+
+        if (constraints.wordWrap && !columns.last().items.isEmpty() && columns.last().height + cellH > availH) {
+            columns.append(Column{});
         }
 
         GlyphCluster gc;
-        gc.text = clusterStr;
+        gc.text = finalStr;
         gc.isVertical = true;
-        gc.emBox = QRectF(0, 0, emSize, emSize);
+        gc.isTateChuYoko = isTateChuYoko;
+        gc.emBox = QRectF(0, 0, emSize, cellH);
 
-        if (clusterStr.length() == 2 && clusterStr.at(0).isDigit()) {
-            gc.isTateChuYoko = true;
-        } else if (isAsciiLetter || (clusterStr.length() == 1 && clusterStr.at(0).isDigit())) {
-            gc.transform.rotate(90);
-            gc.transform.translate(0, -emSize);
+        const double localX = (emSize - glyphW) / 2.0;
+        const double localY = columns.last().height;
+
+        if (rotate90) {
+            const double cx = emSize / 2.0;
+            const double cy = localY + cellH / 2.0;
+            QTransform t;
+            t.translate(cx, cy);
+            t.rotate(90);
+            t.translate(-glyphW / 2.0, -ascent + cellH / 2.0);
+            gc.transform = t;
+            gc.position = QPointF(0, 0);
+
+            QPainterPath path;
+            path.addText(0, 0, font, finalStr);
+            gc.inkBounds = gc.transform.mapRect(path.boundingRect());
+        } else if (isTateChuYoko) {
+            gc.position = QPointF(localX, localY);
+            QPainterPath path;
+            path.addText(0, ascent, font, finalStr);
+            gc.inkBounds = path.boundingRect().translated(gc.position);
         } else {
-            PunctuationOffset offset = PunctuationTable::instance().getOffset(clusterStr);
-            if (offset.x != 0.0 || offset.y != 0.0) {
-                gc.transform.translate(offset.x * emSize, offset.y * emSize);
-            }
+            PunctuationOffset offset = PunctuationTable::instance().getOffset(finalStr);
+            gc.position = QPointF(localX + offset.x * emSize, localY + offset.y * emSize);
+            QPainterPath path;
+            path.addText(0, ascent, font, finalStr);
+            gc.inkBounds = path.boundingRect().translated(gc.position);
         }
 
-        // Measure ink rect
-        QPainterPath path;
-        path.addText(0, fm.ascent(), font, clusterStr);
-        QRectF ink = path.boundingRect();
-        if (gc.transform.isIdentity()) {
-            gc.inkBounds = ink;
-        } else {
-            gc.inkBounds = gc.transform.mapRect(ink);
-        }
-
-        // Check column overflow
-        if (columns.last().height + emSize > availH && constraints.wordWrap && !columns.last().clusters.isEmpty()) {
-            columns.append(Col());
-        }
-
-        gc.position = QPointF(0, columns.last().height);
-        columns.last().clusters.append(gc);
-        columns.last().height += emSize;
+        columns.last().items.append(ColItem{gc, cellH});
+        columns.last().height += cellH;
     }
 
     if (missingGlyphs > 0) {
@@ -409,49 +437,58 @@ LayoutResult TextLayoutEngine::layoutVertical(const QString& text,
             LayoutWarning{"layout.missing_glyph", QString::number(missingGlyphs) + " glyph(s) missing."});
     }
 
-    double totalWidth = columns.size() * colAdvance;
-    double xOffset = bounds.x + bounds.width - constraints.margins.right - colAdvance;
+    const int numCols = columns.size();
+    const double totalBlockWidth = numCols * colAdvance;
 
+    double blockStartX = bounds.x + constraints.margins.left;
     switch (constraints.alignment.horizontal) {
-        case domain::HorizontalAlignment::Right:
-            break;
         case domain::HorizontalAlignment::Center:
-            xOffset -= (availW - totalWidth) / 2.0;
+            blockStartX += (availW - totalBlockWidth) / 2.0;
             break;
         case domain::HorizontalAlignment::Left:
-            xOffset -= (availW - totalWidth);
             break;
+        case domain::HorizontalAlignment::Right:
         case domain::HorizontalAlignment::Justify:
-            break; // not fully supported in simple columns
+            blockStartX += (availW - totalBlockWidth);
+            break;
     }
 
     QRectF unionInk;
-    for (int colIdx = 0; colIdx < columns.size(); ++colIdx) {
-        const Col& col = columns[colIdx];
-        double yOffset = bounds.y + constraints.margins.top;
+    for (int colIdx = 0; colIdx < numCols; ++colIdx) {
+        const Column& col = columns[colIdx];
+        const double colX = blockStartX + (numCols - 1 - colIdx) * colAdvance;
+
+        double colY = bounds.y + constraints.margins.top;
         switch (constraints.alignment.vertical) {
-            case domain::VerticalAlignment::Top:
-                break;
             case domain::VerticalAlignment::Middle:
-                yOffset += (availH - col.height) / 2.0;
+                colY += (availH - col.height) / 2.0;
                 break;
             case domain::VerticalAlignment::Bottom:
-                yOffset += (availH - col.height);
+                colY += (availH - col.height);
+                break;
+            case domain::VerticalAlignment::Top:
                 break;
         }
 
-        for (const GlyphCluster& gcOrig : col.clusters) {
-            GlyphCluster gc = gcOrig;
-            gc.position.rx() += xOffset - colIdx * colAdvance;
-            gc.position.ry() += yOffset;
+        for (const ColItem& item : col.items) {
+            GlyphCluster gc = item.cluster;
+            if (gc.transform.isIdentity()) {
+                gc.position.rx() += colX;
+                gc.position.ry() += colY;
+                gc.inkBounds.translate(colX, colY);
+            } else {
+                QTransform shift;
+                shift.translate(colX, colY);
+                gc.transform = gc.transform * shift;
+                gc.inkBounds.translate(colX, colY);
+            }
 
-            QRectF globalInk = gc.inkBounds.translated(gc.position);
-            unionInk = unionInk.united(globalInk);
+            unionInk = unionInk.united(gc.inkBounds);
             result.clusters.append(gc);
         }
     }
 
-    double strokeExt = constraints.strokeWidthPx / 2.0;
+    const double strokeExt = constraints.strokeWidthPx / 2.0;
     if (strokeExt > 0.0) {
         unionInk.adjust(-strokeExt, -strokeExt, strokeExt, strokeExt);
     }
@@ -460,8 +497,7 @@ LayoutResult TextLayoutEngine::layoutVertical(const QString& text,
     result.layoutBounds =
         QRectF(bounds.x + constraints.margins.left, bounds.y + constraints.margins.top, availW, availH);
 
-    QRectF availRect(bounds.x + constraints.margins.left, bounds.y + constraints.margins.top, availW, availH);
-
+    const QRectF availRect = result.layoutBounds;
     if (!unionInk.isEmpty() &&
         (unionInk.left() < availRect.left() - 0.5 || unionInk.right() > availRect.right() + 0.5 ||
          unionInk.top() < availRect.top() - 0.5 || unionInk.bottom() > availRect.bottom() + 0.5)) {

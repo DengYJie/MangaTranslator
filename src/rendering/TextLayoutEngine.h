@@ -48,7 +48,7 @@ public:
     [[nodiscard]] static LayoutResult layoutText(const QString& text,
                                                  const domain::RectGeometry& bounds,
                                                  const domain::TextLayout& constraints,
-                                                 double logicalDpi = 96.0);
+                                                 double logicalDpi = 72.0);
 
 private:
     static LayoutResult layoutHorizontal(const QString& text,
