@@ -69,6 +69,8 @@ private:
     QTimer* m_shimmerTimer{nullptr};
     qreal m_shimmerProgress{0.0};
     fluent::status_info::ShimmerPainter::Palette m_shimmerPalette;
+    // Last page id that was scrolled into view; scrollTo is only called when this changes.
+    domain::PageId m_trackedPageId;
 };
 
 } // namespace manga::ui::widget

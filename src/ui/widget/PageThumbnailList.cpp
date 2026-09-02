@@ -105,11 +105,22 @@ void PageThumbnailList::onThemeUpdated() {
 
 void PageThumbnailList::setCurrentPageId(const domain::PageId& pageId) {
     int row = m_model->rowForPageId(pageId);
-    if (row >= 0) {
+    if (row < 0) {
+        return;
+    }
+
+    const QModelIndex index = m_model->index(row);
+    {
         QSignalBlocker blocker(m_view->selectionModel());
-        const QModelIndex index = m_model->index(row);
         m_view->setCurrentIndex(index);
         m_view->selectionModel()->select(index, QItemSelectionModel::ClearAndSelect | QItemSelectionModel::Rows);
+    }
+
+    // Only scroll to the newly active page when the page actually changed and the
+    // user is not manually scrolling. Calling scrollTo on every re-render jumps the
+    // list back to the current page whenever the user has scrolled away to browse.
+    if (pageId != m_trackedPageId) {
+        m_trackedPageId = pageId;
         if (!m_view->verticalScrollBar()->isSliderDown()) {
             m_view->scrollTo(index);
         }
