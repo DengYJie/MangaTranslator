@@ -221,7 +221,7 @@ int Application::run() {
 
     ui::navigation::NavigationItemDescriptor ocrItem;
     ocrItem.routeKey = QStringLiteral("settings/ocr");
-    ocrItem.text = QCoreApplication::translate("Application", "OCR");
+    ocrItem.text = QCoreApplication::translate("Application", "OCR 与模型");
     ocrItem.iconGlyph = Typography::Icons::glyph(QStringLiteral("ic_fluent_scan_text_20_regular"));
     mainWindow->addNavigationItem(ocrItem, QStringLiteral("settings"));
     mainWindow->registerRoute(QStringLiteral("settings/ocr"), ocrSettingsPage, QStringLiteral("settings"));

@@ -270,11 +270,33 @@ QWidget* SettingsPage::buildOcrView() {
     group->addRow(m_ocrModelDirRow);
     m_fieldRowMap.insert(QStringLiteral("ocrModelDirectory"), m_ocrModelDirRow);
 
+    // Language row
+    m_ocrLanguageRow =
+        new widget::SettingsRow(tr("默认识别语言"), tr("OCR 识别使用的默认语言（仅对新建项目生效）"), group);
+    m_ocrLanguageCombo = new fluent::basicinput::ComboBox(m_ocrLanguageRow);
+    m_ocrLanguageCombo->setObjectName(QStringLiteral("ocrLanguageCombo"));
+    m_ocrLanguageCombo->addItem(tr("日语 (Japanese)"), QStringLiteral("ja"));
+    m_ocrLanguageCombo->addItem(tr("中文 (Chinese)"), QStringLiteral("zh"));
+    m_ocrLanguageCombo->addItem(tr("英语 (English)"), QStringLiteral("en"));
+    m_ocrLanguageCombo->addItem(tr("韩语 (Korean)"), QStringLiteral("ko"));
+    connect(m_ocrLanguageCombo, &QComboBox::currentIndexChanged, this, [this](int index) {
+        if (!m_isUpdatingFromState && m_viewModel && index >= 0) {
+            m_viewModel->setOcrLanguage(m_ocrLanguageCombo->itemData(index).toString());
+        }
+    });
+    m_ocrLanguageRow->setEditorWidget(m_ocrLanguageCombo, true);
+    group->addRow(m_ocrLanguageRow);
+    m_fieldRowMap.insert(QStringLiteral("ocrLanguage"), m_ocrLanguageRow);
+
+    layout->addWidget(group);
+
     // OCR Model Status InfoBar
     m_ocrStatusInfoBar = new fluent::status_info::InfoBar(container);
     m_ocrStatusInfoBar->setIsClosable(false);
     m_ocrStatusInfoBar->setIsOpen(false);
     layout->addWidget(m_ocrStatusInfoBar);
+
+    layout->addSpacing(12);
 
     auto* detectionGroup = new widget::SettingsGroup(
         tr("版面/文字检测"), tr("配置用于漫画文字框与版面检测的 ONNX 模型 (Koharu Layout)"), container);
@@ -305,10 +327,14 @@ QWidget* SettingsPage::buildOcrView() {
     m_detectionModelDirRow->setEditorWidget(detectionEditor, true);
     detectionGroup->addRow(m_detectionModelDirRow);
     m_fieldRowMap.insert(QStringLiteral("detectionModelDirectory"), m_detectionModelDirRow);
+    layout->addWidget(detectionGroup);
+
     m_detectionStatusInfoBar = new fluent::status_info::InfoBar(container);
     m_detectionStatusInfoBar->setIsClosable(false);
     m_detectionStatusInfoBar->setIsOpen(false);
     layout->addWidget(m_detectionStatusInfoBar);
+
+    layout->addSpacing(12);
 
     auto* inpaintGroup = new widget::SettingsGroup(
         tr("Remove 图像修复"), tr("配置用于 Remove 工具的 dynamic spatial ONNX 模型"), container);
@@ -339,30 +365,13 @@ QWidget* SettingsPage::buildOcrView() {
     m_inpaintModelDirRow->setEditorWidget(inpaintEditor, true);
     inpaintGroup->addRow(m_inpaintModelDirRow);
     m_fieldRowMap.insert(QStringLiteral("inpaintModelDirectory"), m_inpaintModelDirRow);
+    layout->addWidget(inpaintGroup);
+
     m_inpaintStatusInfoBar = new fluent::status_info::InfoBar(container);
     m_inpaintStatusInfoBar->setIsClosable(false);
     m_inpaintStatusInfoBar->setIsOpen(false);
     layout->addWidget(m_inpaintStatusInfoBar);
 
-    // Language row
-    m_ocrLanguageRow =
-        new widget::SettingsRow(tr("默认识别语言"), tr("OCR 识别使用的默认语言（仅对新建项目生效）"), group);
-    m_ocrLanguageCombo = new fluent::basicinput::ComboBox(m_ocrLanguageRow);
-    m_ocrLanguageCombo->setObjectName(QStringLiteral("ocrLanguageCombo"));
-    m_ocrLanguageCombo->addItem(tr("日语 (Japanese)"), QStringLiteral("ja"));
-    m_ocrLanguageCombo->addItem(tr("中文 (Chinese)"), QStringLiteral("zh"));
-    m_ocrLanguageCombo->addItem(tr("英语 (English)"), QStringLiteral("en"));
-    m_ocrLanguageCombo->addItem(tr("韩语 (Korean)"), QStringLiteral("ko"));
-    connect(m_ocrLanguageCombo, &QComboBox::currentIndexChanged, this, [this](int index) {
-        if (!m_isUpdatingFromState && m_viewModel && index >= 0) {
-            m_viewModel->setOcrLanguage(m_ocrLanguageCombo->itemData(index).toString());
-        }
-    });
-    m_ocrLanguageRow->setEditorWidget(m_ocrLanguageCombo, true);
-    group->addRow(m_ocrLanguageRow);
-    m_fieldRowMap.insert(QStringLiteral("ocrLanguage"), m_ocrLanguageRow);
-
-    layout->addWidget(group);
     layout->addStretch(1);
     return container;
 }
@@ -799,8 +808,9 @@ void SettingsPage::updateCategoryHeaders(SettingsCategory category) {
             m_categorySubtitleLabel->setText(tr("配置应用启动、恢复与项目记录等常规偏好。"));
             break;
         case SettingsCategory::Ocr:
-            m_categoryTitleLabel->setText(tr("OCR 识别"));
-            m_categorySubtitleLabel->setText(tr("配置漫画台词文字识别的 ONNX 模型路径与默认识别语言。"));
+            m_categoryTitleLabel->setText(tr("OCR 与本地模型"));
+            m_categorySubtitleLabel->setText(tr(
+                "配置漫画台词识别 (Baberu OCR)、版面与文字检测 (Koharu Layout) 以及图像修复 (Inpaint) 的 ONNX 模型。"));
             break;
         case SettingsCategory::AiTranslation:
             m_categoryTitleLabel->setText(tr("AI 翻译"));
