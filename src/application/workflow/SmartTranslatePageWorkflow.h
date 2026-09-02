@@ -6,6 +6,7 @@
 #include "application/dto/TranslationDto.h"
 #include "application/error/ApplicationError.h"
 #include "application/operation/AsyncResult.h"
+#include "application/operation/OperationContext.h"
 #include "application/operation/OperationId.h"
 #include "application/operation/OperationStage.h"
 #include "domain/model/ComicProject.h"
@@ -34,6 +35,7 @@ struct RegionProcessingTarget {
     QString effectiveTranslation;
     quint64 contentRevision{0};
     bool hasManualTranslation{false};
+    bool hasManualSource{false};
 };
 
 struct ProcessingIssue {
@@ -64,14 +66,19 @@ public:
                                QObject* parent = nullptr);
     ~SmartTranslatePageWorkflow() override;
 
-    [[nodiscard]] QFuture<Result<PageProcessingProposal>> execute(domain::ProjectId projectId,
-                                                                  domain::PageId pageId,
-                                                                  QVector<RegionProcessingTarget> targets,
-                                                                  QString sourceLanguage,
-                                                                  QString targetLanguage,
-                                                                  QImage pageImage,
-                                                                  quint64 sessionGeneration,
-                                                                  OperationId& outOperationId);
+    /// Calls and continuations run on the application thread. When outContext is supplied,
+    /// the caller retains it and settles successful proposals after adoption completes.
+    [[nodiscard]] QFuture<Result<PageProcessingProposal>>
+    execute(domain::ProjectId projectId,
+            domain::PageId pageId,
+            QVector<RegionProcessingTarget> targets,
+            QString sourceLanguage,
+            QString targetLanguage,
+            QImage pageImage,
+            quint64 sessionGeneration,
+            OperationId& outOperationId,
+            domain::ReadingDirection readingDirection = domain::ReadingDirection::RightToLeft,
+            OperationContext* outContext = nullptr);
 
     void cancel(OperationId id);
 

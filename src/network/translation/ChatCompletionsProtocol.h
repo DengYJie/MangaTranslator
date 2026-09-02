@@ -28,9 +28,10 @@ constexpr int kMaxCandidatesPerRegion = 5;
 [[nodiscard]] QByteArray buildChatCompletionsRequest(const application::TranslationRequest& request,
                                                      const ProviderConfig& config);
 
-/// Validates a Chat Completions response and projects it onto the request. Structure errors
-/// and duplicate ids fail the whole batch; unknown, missing or mismatched ids pass through so
-/// the application layer can apply partial adoption.
+/// Requires explicit regionId and sourceText fields and a non-empty translation or targetText.
+/// Rejects ambiguous fields, empty batches for non-empty requests, and duplicate ids.
+/// Preserves explicit ids and source text without inferring them from array positions.
+/// Leaves unknown ids, missing regions and source mismatches to application partial adoption.
 [[nodiscard]] application::Result<application::TranslationResponse> parseChatCompletionsResponse(
     const QByteArray& body, const application::TranslationRequest& request, const QString& providerId);
 

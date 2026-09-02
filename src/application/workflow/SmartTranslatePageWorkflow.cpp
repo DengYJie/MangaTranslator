@@ -10,6 +10,8 @@
 #include <QSet>
 #include <QSharedPointer>
 
+#include <algorithm>
+
 namespace manga::application {
 
 class WorkflowOrchestrator : public std::enable_shared_from_this<WorkflowOrchestrator> {
@@ -31,11 +33,19 @@ public:
                                                                 QString targetLanguage,
                                                                 QImage pageImage,
                                                                 quint64 sessionGeneration,
-                                                                OperationId& outOperationId) {
+                                                                OperationId& outOperationId,
+                                                                domain::ReadingDirection readingDirection,
+                                                                OperationContext* outContext) {
         m_workflowTimer.start();
         m_projectId = projectId;
         m_pageId = pageId;
         m_targets = std::move(targets);
+        for (auto& target : m_targets) {
+            if (!target.hasManualTranslation) {
+                target.effectiveTranslation.clear();
+            }
+        }
+        m_readingDirection = readingDirection;
         m_sourceLanguage = std::move(sourceLanguage);
         m_targetLanguage = std::move(targetLanguage);
         m_pageImage = std::move(pageImage);
@@ -47,6 +57,10 @@ public:
         auto context = m_registry->createOperation(rootDesc, sessionGeneration, 0);
         outOperationId = context.operationId;
         m_rootContext = std::move(context);
+        m_deferSettlement = outContext != nullptr;
+        if (outContext != nullptr) {
+            *outContext = m_rootContext;
+        }
 
         m_proposal.projectId = m_projectId;
         m_proposal.pageId = m_pageId;
@@ -88,30 +102,39 @@ private:
         return context;
     }
 
-    void finish(const Result<PageProcessingProposal>& result) {
+    void finish(Result<PageProcessingProposal> result) {
+        if (m_rootContext.stopToken.stop_requested()) {
+            result = std::unexpected(makeApplicationError(
+                ErrorCategory::Cancelled, QStringLiteral("cancelled.user_requested"), QObject::tr("智能翻译已取消")));
+        }
+        std::optional<ApplicationError> error;
+        if (!result) {
+            error = result.error();
+        } else if (!result->issues.isEmpty()) {
+            error = result->issues.first().error;
+        }
         qInfo() << "[SmartTranslatePageWorkflow] Workflow finished for page=" << m_pageId.toString()
-                << "total elapsed ms=" << m_workflowTimer.elapsed()
-                << "success count=" << m_targets.size() - m_proposal.issues.size()
+                << "total elapsed ms=" << m_workflowTimer.elapsed() << "layout count=" << m_proposal.layout.size()
                 << "issue count=" << m_proposal.issues.size();
 
-        m_promise->addResult(result);
-        m_promise->finish();
-        if (m_rootContext.progressReporter) {
-            if (result.has_value()) {
+        if (m_deferSettlement && result.has_value()) {
+            if (m_rootContext.progressReporter) {
+                m_rootContext.progressReporter->setStatusText(QObject::tr("正在应用处理结果"));
+            }
+        } else if (m_rootContext.progressReporter) {
+            if (!error.has_value()) {
                 const qint64 totalSteps = std::max(1, static_cast<int>(m_targets.size() * 3 + 1));
                 m_rootContext.progressReporter->setValue(totalSteps);
                 m_rootContext.progressReporter->setStatusText(QObject::tr("全页翻译完成"));
                 m_rootContext.progressReporter->markFinished();
             } else {
-                m_rootContext.progressReporter->markFinished(result.error());
+                m_rootContext.progressReporter->markFinished(error);
             }
         } else {
-            if (result.has_value()) {
-                m_registry->markFinished(m_rootContext.operationId);
-            } else {
-                m_registry->markFinished(m_rootContext.operationId, result.error());
-            }
+            m_registry->markFinished(m_rootContext.operationId, error);
         }
+        m_promise->addResult(std::move(result));
+        m_promise->finish();
     }
 
     void finishWithProposal() {
@@ -137,8 +160,9 @@ private:
         }
 
         auto& target = m_targets[index];
-        if (target.hasManualTranslation) {
-            runOcrStep(index + 1);
+        if (target.hasManualTranslation || target.hasManualSource) {
+            QMetaObject::invokeMethod(
+                qApp, [this, self = shared_from_this(), index]() { runOcrStep(index + 1); }, Qt::QueuedConnection);
             return;
         }
 
@@ -161,7 +185,11 @@ private:
         stepTimer.start();
 
         auto self = shared_from_this();
-        future.then([this, self, index, target, stepTimer](Result<OcrResponse> res) {
+        future.then(qApp, [this, self, index, target, stepTimer](Result<OcrResponse> res) {
+            if (!res && res.error().isCancelled()) {
+                finish(std::unexpected(res.error()));
+                return;
+            }
             if (m_rootContext.stopToken.stop_requested()) {
                 qWarning() << "[SmartTranslatePageWorkflow] Workflow cancelled during OCR step for page="
                            << m_pageId.toString();
@@ -174,14 +202,25 @@ private:
                 return;
             }
             if (res.has_value()) {
+                if (res->regionId != target.regionId || res->text.trimmed().isEmpty()) {
+                    m_proposal.issues.append({target.regionId,
+                                              QStringLiteral("Ocr"),
+                                              makeApplicationError(ErrorCategory::Protocol,
+                                                                   QStringLiteral("protocol.invalid_ocr_result"),
+                                                                   QObject::tr("未获得有效的识别文字，请重试"))});
+                    finishWithProposal();
+                    return;
+                }
                 qInfo() << "[SmartTranslatePageWorkflow] OCR step region index=" << index
                         << "elapsed ms=" << stepTimer.elapsed() << "confidence=" << res.value().confidence
-                        << "text preview=" << res.value().text.left(20);
+                        << "text length=" << res.value().text.size();
                 m_proposal.ocr.append(res.value());
                 m_targets[index].sourceText = res.value().text;
             } else {
                 qWarning() << "[SmartTranslatePageWorkflow] OCR failed for index=" << index;
                 m_proposal.issues.append({target.regionId, QStringLiteral("Ocr"), res.error()});
+                finishWithProposal();
+                return;
             }
             QMetaObject::invokeMethod(qApp, [this, self, index]() { runOcrStep(index + 1); }, Qt::QueuedConnection);
         });
@@ -198,7 +237,7 @@ private:
         TranslationRequest req;
         req.sourceLanguage = domain::LanguageCode::createUnchecked(m_sourceLanguage.toStdString());
         req.targetLanguage = domain::LanguageCode::createUnchecked(m_targetLanguage.toStdString());
-        req.readingDirection = domain::ReadingDirection::RightToLeft;
+        req.readingDirection = m_readingDirection;
 
         for (const auto& t : m_targets) {
             if (t.hasManualTranslation) {
@@ -231,7 +270,11 @@ private:
         stepTimer.start();
 
         auto self = shared_from_this();
-        future.then([this, self, stepTimer](Result<TranslationResponse> res) {
+        future.then(qApp, [this, self, stepTimer, requested = req.regions](Result<TranslationResponse> res) {
+            if (!res && res.error().isCancelled()) {
+                finish(std::unexpected(res.error()));
+                return;
+            }
             if (m_rootContext.stopToken.stop_requested()) {
                 qWarning() << "[SmartTranslatePageWorkflow] Workflow cancelled during translation step for page="
                            << m_pageId.toString();
@@ -240,6 +283,32 @@ private:
             }
             if (res.has_value()) {
                 qInfo() << "[SmartTranslatePageWorkflow] Translation completed in ms=" << stepTimer.elapsed();
+                QSet<domain::RegionId> received;
+                for (const auto& tr : res.value().items) {
+                    const auto expected = std::find_if(requested.cbegin(), requested.cend(), [&](const auto& item) {
+                        return item.regionId == tr.regionId;
+                    });
+                    if (expected == requested.cend() || received.contains(tr.regionId) ||
+                        tr.sourceText != expected->sourceText || tr.translation.trimmed().isEmpty()) {
+                        m_proposal.issues.append({tr.regionId,
+                                                  QStringLiteral("Translate"),
+                                                  makeApplicationError(ErrorCategory::Protocol,
+                                                                       QStringLiteral("protocol.invalid_translation"),
+                                                                       QObject::tr("译文与请求不匹配，请重试"))});
+                        finishWithProposal();
+                        return;
+                    }
+                    received.insert(tr.regionId);
+                }
+                if (received.size() != requested.size()) {
+                    m_proposal.issues.append({std::nullopt,
+                                              QStringLiteral("Translate"),
+                                              makeApplicationError(ErrorCategory::Protocol,
+                                                                   QStringLiteral("protocol.missing_translation"),
+                                                                   QObject::tr("翻译结果缺少部分区域，请重试"))});
+                    finishWithProposal();
+                    return;
+                }
                 m_proposal.translation = res.value();
                 for (const auto& tr : res.value().items) {
                     for (auto& t : m_targets) {
@@ -299,7 +368,15 @@ private:
         stepTimer.start();
 
         auto self = shared_from_this();
-        future.then([this, self, index, target, stepTimer](Result<ClearResponse> res) {
+        future.then(qApp, [this, self, index, target, stepTimer](Result<ClearResponse> res) {
+            if (m_rootContext.stopToken.stop_requested() || (!res && res.error().isCancelled())) {
+                if (!res) {
+                    finish(std::unexpected(res.error()));
+                } else {
+                    finishWithProposal();
+                }
+                return;
+            }
             if (res.has_value()) {
                 qInfo() << "[SmartTranslatePageWorkflow] Inpaint step completed for index=" << index
                         << "elapsed ms=" << stepTimer.elapsed();
@@ -365,7 +442,15 @@ private:
         stepTimer.start();
 
         auto self = shared_from_this();
-        future.then([this, self, index, target, stepTimer](Result<LayoutResponse> res) {
+        future.then(qApp, [this, self, index, target, stepTimer](Result<LayoutResponse> res) {
+            if (m_rootContext.stopToken.stop_requested() || (!res && res.error().isCancelled())) {
+                if (!res) {
+                    finish(std::unexpected(res.error()));
+                } else {
+                    finishWithProposal();
+                }
+                return;
+            }
             if (res.has_value()) {
                 qInfo() << "[SmartTranslatePageWorkflow] Layout step completed for index=" << index
                         << "elapsed ms=" << stepTimer.elapsed();
@@ -383,9 +468,11 @@ private:
     QVector<RegionProcessingTarget> m_targets;
     QString m_sourceLanguage;
     QString m_targetLanguage;
+    domain::ReadingDirection m_readingDirection{domain::ReadingDirection::RightToLeft};
     QImage m_pageImage;
     quint64 m_sessionGeneration;
     OperationContext m_rootContext;
+    bool m_deferSettlement{false};
 
     RecognizeRegionUseCase* m_ocrUseCase;
     TranslatePageUseCase* m_translateUseCase;
@@ -417,7 +504,9 @@ QFuture<Result<PageProcessingProposal>> SmartTranslatePageWorkflow::execute(doma
                                                                             QString targetLanguage,
                                                                             QImage pageImage,
                                                                             quint64 sessionGeneration,
-                                                                            OperationId& outOperationId) {
+                                                                            OperationId& outOperationId,
+                                                                            domain::ReadingDirection readingDirection,
+                                                                            OperationContext* outContext) {
     qInfo() << "[SmartTranslatePageWorkflow] Starting workflow for page=" << pageId.toString()
             << "target_count=" << targets.size();
 
@@ -431,7 +520,9 @@ QFuture<Result<PageProcessingProposal>> SmartTranslatePageWorkflow::execute(doma
                                std::move(targetLanguage),
                                std::move(pageImage),
                                sessionGeneration,
-                               outOperationId);
+                               outOperationId,
+                               readingDirection,
+                               outContext);
 }
 
 void SmartTranslatePageWorkflow::cancel(OperationId id) {
