@@ -1,7 +1,9 @@
 #pragma once
 
+#include <algorithm>
 #include <cmath>
 #include <optional>
+#include <vector>
 
 namespace manga::domain {
 
@@ -56,6 +58,28 @@ struct Margins {
 
     [[nodiscard]] bool approxEquals(const Margins& other, double epsilon = 1e-5) const noexcept;
     [[nodiscard]] bool operator==(const Margins& other) const noexcept;
+};
+
+/// 2D point in source image pixel coordinates.
+struct Point2D {
+    double x{0.0};
+    double y{0.0};
+
+    [[nodiscard]] constexpr bool operator==(const Point2D& other) const noexcept = default;
+};
+
+/// Polygonal boundary in source image pixel coordinates.
+struct PolygonGeometry {
+    std::vector<Point2D> points;
+
+    /// A polygon is usable when it has at least three vertices, all finite.
+    [[nodiscard]] bool isValid() const noexcept {
+        return points.size() >= 3 && std::all_of(points.begin(), points.end(), [](const Point2D& pt) {
+                   return std::isfinite(pt.x) && std::isfinite(pt.y);
+               });
+    }
+
+    [[nodiscard]] bool operator==(const PolygonGeometry& other) const noexcept = default;
 };
 
 } // namespace manga::domain

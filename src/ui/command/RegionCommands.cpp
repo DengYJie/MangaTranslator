@@ -62,7 +62,8 @@ void CreateRegionsBatchCommand::redo() {
         m_firstRedo = false;
     }
     for (const auto& entry : std::as_const(m_entries)) {
-        domain::TextRegion region(entry.regionId, entry.geometry, entry.bubbleGeometry, entry.orderIndex);
+        domain::TextRegion region(
+            entry.regionId, entry.geometry, entry.bubbleGeometry, entry.orderIndex, entry.bubblePolygon);
         const auto result = m_context->insertRegion(m_pageId, region, entry.orderIndex);
         if (!result.has_value()) {
             markFaulted();

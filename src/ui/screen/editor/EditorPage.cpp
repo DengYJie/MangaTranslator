@@ -973,6 +973,7 @@ void EditorPage::render(const EditorState& state) {
         display.id = rp.id;
         display.geometry = rp.geometry;
         display.bubbleGeometry = rp.bubbleGeometry;
+        display.bubblePolygon = rp.bubblePolygon;
         display.selected = state.selectedRegionIds.contains(rp.id);
         displayRegions.append(display);
     }

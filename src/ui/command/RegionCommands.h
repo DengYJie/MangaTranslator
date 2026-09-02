@@ -69,6 +69,7 @@ public:
         domain::RegionId regionId;
         domain::RectGeometry geometry;
         std::optional<domain::RectGeometry> bubbleGeometry;
+        std::optional<domain::PolygonGeometry> bubblePolygon;
         int orderIndex{0};
     };
 

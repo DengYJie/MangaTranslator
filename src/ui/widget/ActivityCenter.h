@@ -52,7 +52,7 @@ private:
     QVBoxLayout* m_layout{nullptr};
     QGraphicsOpacityEffect* m_opacityEffect{nullptr};
     QPropertyAnimation* m_opacityAnim{nullptr};
-    QTimer* m_debounceTimer{nullptr};
+    QTimer* m_hideTimer{nullptr};
 
     std::set<application::OperationId> m_dismissedFailedIds;
     int m_visibleItemCount{0};

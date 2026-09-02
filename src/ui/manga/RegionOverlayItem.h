@@ -48,6 +48,11 @@ public:
         return m_bubbleGeometry;
     }
 
+    /// Returns the optional bubble polygon.
+    [[nodiscard]] const std::optional<::manga::domain::PolygonGeometry>& bubblePolygon() const noexcept {
+        return m_bubblePolygon;
+    }
+
     /// Positions all handles at their anchor points for the current rect.
     void layoutHandles();
 
@@ -67,6 +72,7 @@ private:
 
     ::manga::domain::RegionId m_id;
     std::optional<::manga::domain::RectGeometry> m_bubbleGeometry;
+    std::optional<::manga::domain::PolygonGeometry> m_bubblePolygon;
     bool m_selected{false};
     bool m_hovered{false};
     int m_order{0};

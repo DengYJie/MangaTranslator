@@ -78,6 +78,7 @@ struct RegionProjection {
     domain::RegionId id;
     domain::RectGeometry geometry;
     std::optional<domain::RectGeometry> bubbleGeometry;
+    std::optional<domain::PolygonGeometry> bubblePolygon;
     QString effectiveTranslation;
     domain::TextLayout layout;
     bool isEnabled{true};

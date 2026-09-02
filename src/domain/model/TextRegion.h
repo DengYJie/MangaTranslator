@@ -19,8 +19,13 @@ public:
     explicit TextRegion(RegionId id) : m_id(id) {}
     TextRegion(RegionId id, RectGeometry geometry, int orderIndex = 0)
         : m_id(id), m_geometry(geometry), m_orderIndex(orderIndex) {}
-    TextRegion(RegionId id, RectGeometry geometry, std::optional<RectGeometry> bubbleGeometry, int orderIndex = 0)
-        : m_id(id), m_geometry(geometry), m_orderIndex(orderIndex), m_bubbleGeometry(bubbleGeometry) {}
+    TextRegion(RegionId id,
+               RectGeometry geometry,
+               std::optional<RectGeometry> bubbleGeometry,
+               int orderIndex = 0,
+               std::optional<PolygonGeometry> bubblePolygon = std::nullopt)
+        : m_id(id), m_geometry(geometry), m_bubbleGeometry(bubbleGeometry), m_orderIndex(orderIndex),
+          m_bubblePolygon(std::move(bubblePolygon)) {}
 
     [[nodiscard]] const RegionId& id() const noexcept {
         return m_id;
@@ -30,6 +35,9 @@ public:
     }
     [[nodiscard]] const std::optional<RectGeometry>& bubbleGeometry() const noexcept {
         return m_bubbleGeometry;
+    }
+    [[nodiscard]] const std::optional<PolygonGeometry>& bubblePolygon() const noexcept {
+        return m_bubblePolygon;
     }
     [[nodiscard]] int orderIndex() const noexcept {
         return m_orderIndex;
@@ -68,6 +76,7 @@ public:
     // Controlled mutators. All content modifications strictly increment m_contentRevision
     void setGeometry(RectGeometry geometry);
     void setBubbleGeometry(std::optional<RectGeometry> geometry);
+    void setBubblePolygon(std::optional<PolygonGeometry> polygon);
     void setOrderIndex(int index) noexcept {
         m_orderIndex = index;
     }
@@ -126,6 +135,7 @@ private:
     RegionId m_id;
     RectGeometry m_geometry;
     std::optional<RectGeometry> m_bubbleGeometry;
+    std::optional<PolygonGeometry> m_bubblePolygon;
     int m_orderIndex{0};
 
     TextContent m_source;

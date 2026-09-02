@@ -10,6 +10,7 @@
 #include <QJsonObject>
 #include <QJsonValue>
 
+#include <cmath>
 #include <format>
 
 namespace manga::data {
@@ -202,6 +203,25 @@ QJsonObject ProjectSerializer::serializeToJson(const domain::ComicProject& proje
             geoObj["width"] = region.geometry().width;
             geoObj["height"] = region.geometry().height;
             regionObj["geometry"] = geoObj;
+
+            if (region.bubbleGeometry().has_value()) {
+                QJsonObject bGeoObj;
+                bGeoObj["x"] = region.bubbleGeometry()->x;
+                bGeoObj["y"] = region.bubbleGeometry()->y;
+                bGeoObj["width"] = region.bubbleGeometry()->width;
+                bGeoObj["height"] = region.bubbleGeometry()->height;
+                regionObj["bubbleGeometry"] = bGeoObj;
+            }
+            if (region.bubblePolygon().has_value() && region.bubblePolygon()->isValid()) {
+                QJsonArray polyArr;
+                for (const auto& pt : region.bubblePolygon()->points) {
+                    QJsonObject ptObj;
+                    ptObj["x"] = pt.x;
+                    ptObj["y"] = pt.y;
+                    polyArr.append(ptObj);
+                }
+                regionObj["bubblePolygon"] = polyArr;
+            }
 
             // Source
             QJsonObject srcObj;
@@ -498,6 +518,37 @@ ProjectSerializer::deserializeFromJson(const QJsonObject& rawObj) {
                                           .height = geoObj["height"].toDouble()};
 
             domain::TextRegion region(*regIdRes, geometry, rObj["orderIndex"].toInt());
+
+            if (rObj.contains("bubbleGeometry") && rObj["bubbleGeometry"].isObject()) {
+                const QJsonObject bgObj = rObj["bubbleGeometry"].toObject();
+                const double bx = bgObj["x"].toDouble();
+                const double by = bgObj["y"].toDouble();
+                const double bw = bgObj["width"].toDouble();
+                const double bh = bgObj["height"].toDouble();
+                // Non-finite coordinates are dropped rather than poisoning the domain model.
+                if (std::isfinite(bx) && std::isfinite(by) && std::isfinite(bw) && std::isfinite(bh)) {
+                    region.setBubbleGeometry(domain::RectGeometry{.x = bx, .y = by, .width = bw, .height = bh});
+                }
+            }
+            if (rObj.contains("bubblePolygon") && rObj["bubblePolygon"].isArray()) {
+                domain::PolygonGeometry poly;
+                const QJsonArray polyArr = rObj["bubblePolygon"].toArray();
+                for (const auto& v : polyArr) {
+                    if (!v.isObject()) {
+                        continue;
+                    }
+                    const QJsonObject ptObj = v.toObject();
+                    const double px = ptObj["x"].toDouble();
+                    const double py = ptObj["y"].toDouble();
+                    if (!std::isfinite(px) || !std::isfinite(py)) {
+                        continue;
+                    }
+                    poly.points.push_back({px, py});
+                }
+                if (poly.isValid()) {
+                    region.setBubblePolygon(std::move(poly));
+                }
+            }
 
             // Source
             const QJsonObject srcObj = rObj["source"].toObject();

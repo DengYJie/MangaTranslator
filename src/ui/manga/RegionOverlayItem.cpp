@@ -33,6 +33,7 @@ RegionOverlayItem::RegionOverlayItem(::manga::domain::RegionId id, QGraphicsItem
 void RegionOverlayItem::updateFromDisplay(const canvas::RegionDisplay& display, bool showHandles) {
     setRect(display.geometry.x, display.geometry.y, display.geometry.width, display.geometry.height);
     m_bubbleGeometry = display.bubbleGeometry;
+    m_bubblePolygon = display.bubblePolygon;
     setSelected(display.selected, showHandles);
     layoutHandles();
 }
@@ -51,7 +52,12 @@ QRectF RegionOverlayItem::boundingRect() const {
     QRectF br = QGraphicsRectItem::boundingRect().adjusted(-8.0, -24.0, 8.0, 8.0);
     if (m_bubbleGeometry.has_value()) {
         const auto& bg = *m_bubbleGeometry;
-        br = br.united(QRectF(bg.x, bg.y, bg.width, bg.height).adjusted(-6.0, -6.0, 6.0, 6.0));
+        br = br.united(QRectF(bg.x, bg.y, bg.width, bg.height).adjusted(-24.0, -24.0, 24.0, 24.0));
+    }
+    if (m_bubblePolygon.has_value() && m_bubblePolygon->isValid()) {
+        for (const auto& pt : m_bubblePolygon->points) {
+            br = br.united(QRectF(pt.x - 24.0, pt.y - 24.0, 48.0, 48.0));
+        }
     }
     return br;
 }
@@ -75,8 +81,38 @@ void RegionOverlayItem::paint(QPainter* painter, const QStyleOptionGraphicsItem*
     painter->save();
     painter->setRenderHint(QPainter::Antialiasing, true);
 
-    // 4. Automatic / bubble region: dual-layer composite dashed outline (Koharu style)
-    if (m_bubbleGeometry.has_value()) {
+    // 2. Automatic / bubble region: dual-layer composite dashed outline (Koharu style)
+    if (m_bubblePolygon.has_value() && m_bubblePolygon->isValid()) {
+        QPainterPath bubblePath;
+        const auto& pts = m_bubblePolygon->points;
+        bubblePath.moveTo(pts[0].x, pts[0].y);
+        for (size_t i = 1; i < pts.size(); ++i) {
+            bubblePath.lineTo(pts[i].x, pts[i].y);
+        }
+        bubblePath.closeSubpath();
+
+        // Layer 1: Dark high-contrast underlay dashed stroke (10px dash, 6px gap)
+        QPen underlayPen(QColor(0, 0, 0, 150), 3.2, Qt::CustomDashLine);
+        underlayPen.setCosmetic(true);
+        underlayPen.setDashPattern({10.0, 6.0});
+        underlayPen.setCapStyle(Qt::RoundCap);
+        underlayPen.setJoinStyle(Qt::RoundJoin);
+        painter->setPen(underlayPen);
+        painter->setBrush(Qt::NoBrush);
+        painter->drawPath(bubblePath);
+
+        // Layer 2: Theme accent top layer dashed stroke (10px dash, 6px gap)
+        const QColor strokeColor =
+            m_selected ? m_selectedStroke
+                       : QColor(m_selectedStroke.red(), m_selectedStroke.green(), m_selectedStroke.blue(), 180);
+        QPen bubblePen(strokeColor, 1.4, Qt::CustomDashLine);
+        bubblePen.setCosmetic(true);
+        bubblePen.setDashPattern({10.0, 6.0});
+        bubblePen.setCapStyle(Qt::RoundCap);
+        bubblePen.setJoinStyle(Qt::RoundJoin);
+        painter->setPen(bubblePen);
+        painter->drawPath(bubblePath);
+    } else if (m_bubbleGeometry.has_value()) {
         const auto& bg = *m_bubbleGeometry;
         const QRectF bRect(bg.x, bg.y, bg.width, bg.height);
 

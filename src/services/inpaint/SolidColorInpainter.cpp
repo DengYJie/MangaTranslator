@@ -5,6 +5,7 @@
 #include <QColor>
 #include <QColorSpace>
 #include <QPainter>
+#include <QPainterPath>
 
 #include <cmath>
 #include <utility>
@@ -112,13 +113,27 @@ SolidColorInpainter::clear(application::ClearRequest request, application::Opera
             }
 
             QImage patch(width, height, QImage::Format_RGBA8888);
+            patch.fill(Qt::transparent);
             patch.setColorSpace(QColorSpace(QColorSpace::SRgb));
             const int alpha = static_cast<int>(std::lround(opacity * 255.0));
             // CompositionMode_Source sets the exact color including alpha, independent of
             // any default fill semantics.
             QPainter painter(&patch);
             painter.setCompositionMode(QPainter::CompositionMode_Source);
-            painter.fillRect(0, 0, width, height, QColor(red, green, blue, alpha));
+            painter.setRenderHint(QPainter::Antialiasing, true);
+
+            if (request.polygon.has_value() && request.polygon->isValid()) {
+                QPainterPath polyPath;
+                const auto& pts = request.polygon->points;
+                polyPath.moveTo(pts[0].x - left, pts[0].y - top);
+                for (size_t i = 1; i < pts.size(); ++i) {
+                    polyPath.lineTo(pts[i].x - left, pts[i].y - top);
+                }
+                polyPath.closeSubpath();
+                painter.fillPath(polyPath, QColor(red, green, blue, alpha));
+            } else {
+                painter.fillRect(0, 0, width, height, QColor(red, green, blue, alpha));
+            }
             painter.end();
 
             if (runContext.stopToken.stop_requested()) {

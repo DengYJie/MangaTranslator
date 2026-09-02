@@ -215,7 +215,7 @@ void EditorProcessingController::detectRegions(const domain::PageId& pageId, boo
     req.pageId = pageId;
     req.image = image;
     req.readingDirection = domain::ReadingDirection::RightToLeft;
-    req.minConfidence = 0.35;
+    req.minConfidence = 0.25;
 
     qInfo().noquote() << "[Detect] start page=" << QString::fromStdString(pageId.toString())
                       << "opId=" << QString::fromStdString(opId.toString()) << "imgSize=" << image.size()
@@ -317,6 +317,8 @@ void EditorProcessingController::smartTranslate(const domain::PageId& pageId,
         application::RegionProcessingTarget target;
         target.regionId = region.id();
         target.geometry = region.geometry();
+        target.bubbleGeometry = region.bubbleGeometry();
+        target.bubblePolygon = region.bubblePolygon();
         target.sourceText = QString::fromStdString(region.source().text);
         target.effectiveTranslation = QString::fromStdString(region.translation().effectiveText());
         target.contentRevision = region.contentRevision();
@@ -1101,11 +1103,19 @@ void EditorProcessingController::clearRegion(const domain::PageId& pageId, const
     request.pageId = pageId;
     request.regionId = regionId;
     request.region = region->geometry();
-    request.settings.enabled = true;
-    request.pageImage = QImage(page->imageSize().width > 0 ? page->imageSize().width : 800,
-                               page->imageSize().height > 0 ? page->imageSize().height : 1200,
-                               QImage::Format_RGB32);
-    request.pageImage.fill(Qt::white);
+    request.settings = region->clear();
+    if (!request.settings.enabled) {
+        request.settings.enabled = true;
+    }
+    const QImage currentImg = m_viewModel->currentPageImage();
+    if (!currentImg.isNull() && pageId == m_viewModel->state().currentPageId) {
+        request.pageImage = currentImg;
+    } else {
+        const int pw = page->imageSize().width > 0 ? page->imageSize().width : 800;
+        const int ph = page->imageSize().height > 0 ? page->imageSize().height : 1200;
+        request.pageImage = QImage(pw, ph, QImage::Format_RGB32);
+        request.pageImage.fill(Qt::white);
+    }
 
     application::OperationDescriptor desc;
     desc.projectId = projectId;

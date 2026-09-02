@@ -25,6 +25,7 @@ struct DetectedRegionItem {
     QPolygonF polygon;
     DetectedRegionClass regionClass{DetectedRegionClass::Text};
     std::optional<domain::RectGeometry> bubbleRect;
+    std::optional<domain::PolygonGeometry> bubblePolygon;
     double confidence{0.0};
     int orderIndex{0};
 
@@ -36,7 +37,7 @@ struct TextDetectionRequest {
     domain::PageId pageId;
     QImage image;
     domain::ReadingDirection readingDirection{domain::ReadingDirection::RightToLeft};
-    double minConfidence{0.35};
+    double minConfidence{0.25};
 };
 
 /// Output response containing recognized text regions and panels.

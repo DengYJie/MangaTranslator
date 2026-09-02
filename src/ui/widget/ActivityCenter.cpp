@@ -20,9 +20,9 @@ namespace manga::ui::widget {
 
 namespace {
 
-constexpr int kShortTaskDebounceMs = 350;
+constexpr int kHideGraceMs = 600;
 constexpr int kFastShowDurationMs = 120;
-constexpr int kSlowHideDurationMs = 400;
+constexpr int kSlowHideDurationMs = 300;
 
 QString stageName(application::OperationStage stage) {
     switch (stage) {
@@ -43,7 +43,7 @@ QString stageName(application::OperationStage stage) {
         case application::OperationStage::LoadImage:
             return QObject::tr("加载图片");
         case application::OperationStage::Project:
-            return QObject::tr("项目处理");
+            return QObject::tr("全页智能翻译");
         default:
             return QObject::tr("后台处理");
     }
@@ -137,7 +137,7 @@ public:
 
         QString target = op.descriptor.displayTarget;
         if (target.isEmpty()) {
-            target = tr("第 1 页");
+            target = op.descriptor.pageId.isValid() ? tr("当前页面") : tr("后台任务");
         }
         auto* titleLabel =
             new fluent::textfields::Label(QStringLiteral("%1 · %2").arg(target, stageName(op.descriptor.stage)), this);
@@ -294,11 +294,11 @@ ActivityCenter::ActivityCenter(QWidget* parent) : QWidget(parent) {
         }
     });
 
-    m_debounceTimer = new QTimer(this);
-    m_debounceTimer->setSingleShot(true);
-    connect(m_debounceTimer, &QTimer::timeout, this, [this]() {
-        if (m_visibleItemCount > 0) {
-            startShowAnimation();
+    m_hideTimer = new QTimer(this);
+    m_hideTimer->setSingleShot(true);
+    connect(m_hideTimer, &QTimer::timeout, this, [this]() {
+        if (m_visibleItemCount == 0) {
+            startHideAnimation();
         }
     });
 
@@ -353,6 +353,7 @@ void ActivityCenter::updateParentGeometry(const QSize& parentSize) {
 }
 
 void ActivityCenter::startShowAnimation() {
+    m_hideTimer->stop();
     m_isHiding = false;
     m_opacityAnim->stop();
 
@@ -365,18 +366,24 @@ void ActivityCenter::startShowAnimation() {
         m_opacityEffect->setOpacity(0.0);
         setVisible(true);
         raise();
+    } else {
+        raise();
     }
 
     // Fast fade in
-    m_opacityAnim->setDuration(kFastShowDurationMs);
-    m_opacityAnim->setStartValue(m_opacityEffect->opacity());
-    m_opacityAnim->setEndValue(1.0);
-    m_opacityAnim->setEasingCurve(QEasingCurve::OutQuad);
-    m_opacityAnim->start();
+    if (m_opacityEffect->opacity() < 0.99) {
+        m_opacityAnim->setDuration(kFastShowDurationMs);
+        m_opacityAnim->setStartValue(m_opacityEffect->opacity());
+        m_opacityAnim->setEndValue(1.0);
+        m_opacityAnim->setEasingCurve(QEasingCurve::OutQuad);
+        m_opacityAnim->start();
+    } else {
+        m_opacityEffect->setOpacity(1.0);
+    }
 }
 
 void ActivityCenter::startHideAnimation() {
-    m_debounceTimer->stop();
+    m_hideTimer->stop();
 
     if (!isVisible() || m_isHiding) {
         return;
@@ -417,12 +424,19 @@ void ActivityCenter::rebuildItems(const QVector<application::OperationSnapshot>&
 
     m_visibleItemCount = activeOps.size() + failedOps.size();
 
-    // If no active or failed operations, trigger slow fade out or cancel debounce
+    // If no active or failed operations, wait a short grace period then fade out
     if (m_visibleItemCount == 0) {
-        m_debounceTimer->stop();
-        startHideAnimation();
+        if (isVisible() && !m_isHiding) {
+            if (!m_hideTimer->isActive()) {
+                m_hideTimer->start(kHideGraceMs);
+            }
+        } else {
+            m_hideTimer->stop();
+        }
         return;
     }
+
+    m_hideTimer->stop();
 
     bool first = true;
     for (const auto& op : activeOps) {
@@ -470,19 +484,7 @@ void ActivityCenter::rebuildItems(const QVector<application::OperationSnapshot>&
         move(m_targetX, m_targetY);
     }
 
-    // Failures show immediately; running tasks wait for debounce to ignore short-lived tasks
-    if (!failedOps.isEmpty()) {
-        m_debounceTimer->stop();
-        startShowAnimation();
-    } else if (isVisible() && !m_isHiding) {
-        // Already visible: keep visible
-        m_debounceTimer->stop();
-    } else {
-        // Not yet visible: wait 350ms to ignore short tasks
-        if (!m_debounceTimer->isActive()) {
-            m_debounceTimer->start(kShortTaskDebounceMs);
-        }
-    }
+    startShowAnimation();
 }
 
 } // namespace manga::ui::widget

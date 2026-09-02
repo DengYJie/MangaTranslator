@@ -19,6 +19,10 @@ constexpr int kClassPanel = 3;
 constexpr int kClassBackground = 4;
 constexpr int kNumClasses = 5;
 
+// Koharu recommended detection thresholds per class:
+// 0: text = 0.25, 1: onomatopoeia = 0.20, 2: bubble = 0.50, 3: panel = 0.50, 4: background = 1.0
+static constexpr float kRecommendedThresholds[kNumClasses] = {0.25f, 0.20f, 0.50f, 0.50f, 1.0f};
+
 // Low-resolution mask size as emitted by the model.
 constexpr int kMaskEdge = 288;
 
@@ -35,10 +39,242 @@ struct RawDetection {
 struct InternalItem {
     domain::RectGeometry rect;
     std::optional<domain::RectGeometry> bubbleRect;
+    std::optional<domain::PolygonGeometry> bubblePolygon;
     application::DetectedRegionClass regionClass{application::DetectedRegionClass::Text};
     double confidence{0.0};
     int panelIndex{-1};
 };
+
+struct BubbleItem {
+    domain::RectGeometry rect;
+    std::optional<domain::PolygonGeometry> polygon;
+};
+
+// 8-neighborhood offsets in clockwise order starting from Left (West)
+// 0: (-1, 0) W, 1: (-1, -1) NW, 2: (0, -1) N, 3: (1, -1) NE
+// 4: (1, 0) E, 5: (1, 1) SE, 6: (0, 1) S, 7: (-1, 1) SW
+static constexpr int kDx[8] = {-1, -1, 0, 1, 1, 1, 0, -1};
+static constexpr int kDy[8] = {0, -1, -1, -1, 0, 1, 1, 1};
+
+inline bool isMaskPixel(const float* maskData, int x, int y) {
+    if (x < 0 || x >= kMaskEdge || y < 0 || y >= kMaskEdge) {
+        return false;
+    }
+    return maskData[y * kMaskEdge + x] > 0.0f;
+}
+
+// Distance from point P to line segment (A, B) squared
+double pointToSegmentDistSq(double px, double py, double ax, double ay, double bx, double by) {
+    const double l2 = (bx - ax) * (bx - ax) + (by - ay) * (by - ay);
+    if (l2 < 1e-12) {
+        return (px - ax) * (px - ax) + (py - ay) * (py - ay);
+    }
+    const double t = std::clamp(((px - ax) * (bx - ax) + (py - ay) * (by - ay)) / l2, 0.0, 1.0);
+    const double projX = ax + t * (bx - ax);
+    const double projY = ay + t * (by - ay);
+    return (px - projX) * (px - projX) + (py - projY) * (py - projY);
+}
+
+// Ramer-Douglas-Peucker simplification on the inclusive range [start, end].
+// An explicit stack bounds call depth for jagged contours.
+void rdpSimplifyRange(const std::vector<std::pair<double, double>>& pts,
+                      size_t start,
+                      size_t end,
+                      double epsSq,
+                      std::vector<bool>& keep) {
+    std::vector<std::pair<size_t, size_t>> stack;
+    stack.push_back({start, end});
+    while (!stack.empty()) {
+        const auto [s, e] = stack.back();
+        stack.pop_back();
+        if (e <= s + 1) {
+            continue;
+        }
+        double maxDistSq = 0.0;
+        size_t maxIdx = s;
+        const auto [ax, ay] = pts[s];
+        const auto [bx, by] = pts[e];
+        for (size_t i = s + 1; i < e; ++i) {
+            const double dSq = pointToSegmentDistSq(pts[i].first, pts[i].second, ax, ay, bx, by);
+            if (dSq > maxDistSq) {
+                maxDistSq = dSq;
+                maxIdx = i;
+            }
+        }
+        if (maxDistSq > epsSq) {
+            keep[maxIdx] = true;
+            stack.push_back({s, maxIdx});
+            stack.push_back({maxIdx, e});
+        }
+    }
+}
+
+// Moore-Neighbor boundary trace of one 8-connected component starting at its
+// topmost-leftmost pixel. Returns the ordered boundary pixels without repeating
+// the start pixel, or nullopt when the trace fails to close within maxSteps.
+// An unclosed contour must not be emitted: its closing chord would cut across
+// the region and corrupt downstream clearing.
+std::optional<std::vector<std::pair<int, int>>> traceBoundary(const float* maskData, int startX, int startY) {
+    constexpr int maxSteps = 4096;
+
+    std::vector<std::pair<int, int>> contour;
+    contour.reserve(1024);
+    contour.push_back({startX, startY});
+
+    int curX = startX;
+    int curY = startY;
+    int backtrackDir = 0;
+
+    for (int step = 0; step < maxSteps; ++step) {
+        int nextDir = -1;
+        for (int i = 0; i < 8; ++i) {
+            const int checkDir = (backtrackDir + i) % 8;
+            if (isMaskPixel(maskData, curX + kDx[checkDir], curY + kDy[checkDir])) {
+                nextDir = checkDir;
+                break;
+            }
+        }
+        if (nextDir < 0) {
+            return std::nullopt; // isolated pixel has no boundary loop
+        }
+        const int nx = curX + kDx[nextDir];
+        const int ny = curY + kDy[nextDir];
+        if (nx == startX && ny == startY) {
+            return contour;
+        }
+        contour.push_back({nx, ny});
+        backtrackDir = (nextDir + 5) % 8;
+        curX = nx;
+        curY = ny;
+    }
+    return std::nullopt;
+}
+
+// Marks every pixel of the 8-connected component that contains (startX, startY).
+void markComponentVisited(const float* maskData, std::vector<uint8_t>& visited, int startX, int startY) {
+    std::vector<std::pair<int, int>> stack;
+    stack.push_back({startX, startY});
+    visited[startY * kMaskEdge + startX] = 1;
+    while (!stack.empty()) {
+        const auto [cx, cy] = stack.back();
+        stack.pop_back();
+        for (int d = 0; d < 8; ++d) {
+            const int nx = cx + kDx[d];
+            const int ny = cy + kDy[d];
+            if (nx < 0 || nx >= kMaskEdge || ny < 0 || ny >= kMaskEdge) {
+                continue;
+            }
+            const int idx = ny * kMaskEdge + nx;
+            if (visited[idx] != 0 || maskData[idx] <= 0.0f) {
+                continue;
+            }
+            visited[idx] = 1;
+            stack.push_back({nx, ny});
+        }
+    }
+}
+
+// Shoelace area of a closed pixel contour in mask-grid units.
+double contourArea(const std::vector<std::pair<int, int>>& contour) {
+    double twice = 0.0;
+    for (size_t i = 0; i < contour.size(); ++i) {
+        const auto [x1, y1] = contour[i];
+        const auto [x2, y2] = contour[(i + 1) % contour.size()];
+        twice += static_cast<double>(x1) * y2 - static_cast<double>(x2) * y1;
+    }
+    return std::abs(twice) * 0.5;
+}
+
+// Extract boundary contour and simplify with RDP
+std::optional<domain::PolygonGeometry> extractBubblePolygon(const float* maskData, int origWidth, int origHeight) {
+    std::vector<uint8_t> visited(kMaskEdge * kMaskEdge, 0);
+    std::vector<std::pair<int, int>> bestContour;
+    double maxArea = -1.0;
+
+    for (int y = 0; y < kMaskEdge; ++y) {
+        for (int x = 0; x < kMaskEdge; ++x) {
+            if (maskData[y * kMaskEdge + x] > 0.0f && visited[y * kMaskEdge + x] == 0) {
+                if (auto contourOpt = traceBoundary(maskData, x, y)) {
+                    double area = contourArea(*contourOpt);
+                    if (area > maxArea) {
+                        maxArea = area;
+                        bestContour = std::move(*contourOpt);
+                    }
+                }
+                markComponentVisited(maskData, visited, x, y);
+            }
+        }
+    }
+
+    if (bestContour.size() < 4) {
+        return std::nullopt;
+    }
+
+    std::vector<std::pair<double, double>> rawContour;
+    rawContour.reserve(bestContour.size());
+    for (const auto& pt : bestContour) {
+        rawContour.push_back({static_cast<double>(pt.first), static_cast<double>(pt.second)});
+    }
+    // ensure closed loop for RDP by appending the start point at the end
+    rawContour.push_back(rawContour.front());
+
+    const double scaleX = static_cast<double>(origWidth) / static_cast<double>(kMaskEdge);
+    const double scaleY = static_cast<double>(origHeight) / static_cast<double>(kMaskEdge);
+
+    // Relative arc length tolerance (matches Koharu arc_length * 0.001)
+    double arcLength = 0.0;
+    for (size_t i = 0; i + 1 < rawContour.size(); ++i) {
+        arcLength +=
+            std::hypot(rawContour[i + 1].first - rawContour[i].first, rawContour[i + 1].second - rawContour[i].second);
+    }
+    // 0.001 relative tolerance, but minimum 1px in source image space (which is ~1/scaleX in mask space)
+    double epsilon = std::max(arcLength * 0.001, 1.0 / std::max(scaleX, 1.0));
+    double epsilonSq = epsilon * epsilon;
+
+    size_t furthestIdx = 0;
+    double maxDistSq = 0.0;
+    const auto [x0, y0] = rawContour[0];
+    for (size_t i = 1; i + 1 < rawContour.size(); ++i) {
+        const double dx = rawContour[i].first - x0;
+        const double dy = rawContour[i].second - y0;
+        const double dSq = dx * dx + dy * dy;
+        if (dSq > maxDistSq) {
+            maxDistSq = dSq;
+            furthestIdx = i;
+        }
+    }
+
+    if (furthestIdx == 0 || furthestIdx >= rawContour.size() - 1) {
+        furthestIdx = rawContour.size() / 2;
+    }
+
+    std::vector<bool> keep(rawContour.size(), false);
+    keep[0] = true;
+    keep[furthestIdx] = true;
+
+    rdpSimplifyRange(rawContour, 0, furthestIdx, epsilonSq, keep);
+    rdpSimplifyRange(rawContour, furthestIdx, rawContour.size() - 1, epsilonSq, keep);
+    const double maxW = static_cast<double>(origWidth);
+    const double maxH = static_cast<double>(origHeight);
+
+    domain::PolygonGeometry result;
+    result.points.reserve(rawContour.size());
+
+    const size_t numPoints = rawContour.size() - 1;
+    for (size_t i = 0; i < numPoints; ++i) {
+        if (keep[i]) {
+            const double imgX = std::clamp((rawContour[i].first + 0.5) * scaleX, 0.0, maxW);
+            const double imgY = std::clamp((rawContour[i].second + 0.5) * scaleY, 0.0, maxH);
+            result.points.push_back({imgX, imgY});
+        }
+    }
+
+    if (!result.isValid()) {
+        return std::nullopt;
+    }
+
+    return result;
+}
 
 // Sigmoid activation
 inline float sigmoid(float x) {
@@ -86,60 +322,11 @@ std::vector<RawDetection> nonMaximumSuppression(std::vector<RawDetection> dets, 
     return kept;
 }
 
-// Compute the tight bounding rect of positive mask pixels in original-image coordinates.
-// The raw mask is kMaskEdge x kMaskEdge floats (pre-sigmoid logits); pixel is "on" when > 0.
-// Bilinear upsampling is approximated by mapping mask pixel centers to image space.
-// Returns false (leaving rect unchanged) when the mask is entirely empty.
-bool maskTightRect(const float* maskData, int origWidth, int origHeight, float& x1, float& y1, float& x2, float& y2) {
-    // Scale factors from mask coords to original image coords (pixel center mapping)
-    const float scaleX = static_cast<float>(origWidth) / static_cast<float>(kMaskEdge);
-    const float scaleY = static_cast<float>(origHeight) / static_cast<float>(kMaskEdge);
-
-    float minX = std::numeric_limits<float>::max();
-    float minY = std::numeric_limits<float>::max();
-    float maxX = std::numeric_limits<float>::lowest();
-    float maxY = std::numeric_limits<float>::lowest();
-    bool found = false;
-
-    for (int my = 0; my < kMaskEdge; ++my) {
-        for (int mx = 0; mx < kMaskEdge; ++mx) {
-            // Threshold at 0 (matches Koharu: mask.gt(0.0), i.e. sigmoid > 0.5)
-            if (maskData[my * kMaskEdge + mx] > 0.0f) {
-                // Map mask pixel center to original image space
-                const float imgX = (static_cast<float>(mx) + 0.5f) * scaleX;
-                const float imgY = (static_cast<float>(my) + 0.5f) * scaleY;
-                if (imgX < minX)
-                    minX = imgX;
-                if (imgY < minY)
-                    minY = imgY;
-                if (imgX > maxX)
-                    maxX = imgX;
-                if (imgY > maxY)
-                    maxY = imgY;
-                found = true;
-            }
-        }
-    }
-
-    if (!found) {
-        return false;
-    }
-
-    x1 = std::clamp(minX, 0.0f, static_cast<float>(origWidth));
-    y1 = std::clamp(minY, 0.0f, static_cast<float>(origHeight));
-    x2 = std::clamp(maxX, 0.0f, static_cast<float>(origWidth));
-    y2 = std::clamp(maxY, 0.0f, static_cast<float>(origHeight));
-    return true;
-}
-
 // Decode RF-DETR native outputs: pred_logits [1,N,C] + pred_boxes [1,N,4]
-// If masks is non-null, refine each detection's bounding rect from the mask.
 std::vector<RawDetection> decodeNativeRfDetr(const float* logits,
                                              const std::vector<int64_t>& logitsShape,
                                              const float* boxes,
                                              const std::vector<int64_t>& boxesShape,
-                                             const float* masks,
-                                             const std::vector<int64_t>& masksShape,
                                              int origWidth,
                                              int origHeight,
                                              float minConfidence) {
@@ -152,13 +339,8 @@ std::vector<RawDetection> decodeNativeRfDetr(const float* logits,
         return {};
     }
 
-    // Check mask tensor: expected [1, N, kMaskEdge, kMaskEdge]
-    const bool hasMasks = masks != nullptr && masksShape.size() == 4 && masksShape[1] == numQueries &&
-                          masksShape[2] == kMaskEdge && masksShape[3] == kMaskEdge;
-
     const float W = static_cast<float>(origWidth);
     const float H = static_cast<float>(origHeight);
-    const int64_t maskPixels = kMaskEdge * kMaskEdge;
 
     std::vector<RawDetection> result;
     result.reserve(static_cast<size_t>(numQueries));
@@ -170,32 +352,27 @@ std::vector<RawDetection> decodeNativeRfDetr(const float* logits,
         // Apply sigmoid; skip background (index 4)
         for (int c = 0; c < kClassBackground; ++c) {
             const float score = sigmoid(logitRow[c]);
-            if (score < minConfidence) {
+            float threshold = kRecommendedThresholds[c];
+            if (minConfidence > 0.0f) {
+                if (c == kClassText) {
+                    threshold = minConfidence;
+                } else if (c == kClassOnomatopoeia) {
+                    threshold = std::min(minConfidence, 0.20f);
+                }
+            }
+            if (score < threshold) {
                 continue;
             }
 
-            // Fallback bounding box from pred_boxes (cx,cy,w,h normalized)
+            // Bounding box from pred_boxes (cx,cy,w,h normalized) - matches Koharu processor.rs
             const float cx = boxRow[0];
             const float cy = boxRow[1];
             const float bw = boxRow[2];
             const float bh = boxRow[3];
-            float x1 = std::clamp((cx - bw / 2.0f) * W, 0.0f, W);
-            float y1 = std::clamp((cy - bh / 2.0f) * H, 0.0f, H);
-            float x2 = std::clamp((cx + bw / 2.0f) * W, 0.0f, W);
-            float y2 = std::clamp((cy + bh / 2.0f) * H, 0.0f, H);
-
-            // Refine with mask: bilinear upsample mask → threshold at 0 → tight bounding rect
-            // This is the critical step that makes Koharu's bubbles conform to actual shape.
-            if (hasMasks) {
-                const float* maskData = masks + q * maskPixels;
-                float mx1, my1, mx2, my2;
-                if (maskTightRect(maskData, origWidth, origHeight, mx1, my1, mx2, my2)) {
-                    x1 = mx1;
-                    y1 = my1;
-                    x2 = mx2;
-                    y2 = my2;
-                }
-            }
+            const float x1 = std::clamp((cx - bw / 2.0f) * W, 0.0f, W);
+            const float y1 = std::clamp((cy - bh / 2.0f) * H, 0.0f, H);
+            const float x2 = std::clamp((cx + bw / 2.0f) * W, 0.0f, W);
+            const float y2 = std::clamp((cy + bh / 2.0f) * H, 0.0f, H);
 
             if (x2 - x1 < 3.0f || y2 - y1 < 3.0f) {
                 continue;
@@ -240,7 +417,9 @@ std::vector<RawDetection> decodeLegacyFormat(const float* dets,
         float y2 = ptr[3];
         float score = (boxDim >= 5) ? ptr[4] : 1.0f;
 
-        if (score < minConfidence) {
+        float threshold =
+            (label == kClassBubble || label == kClassPanel) ? 0.50f : (minConfidence > 0.0f ? minConfidence : 0.25f);
+        if (score < threshold) {
             continue;
         }
 
@@ -294,15 +473,8 @@ application::TextDetectionResponse KoharuLayoutPostprocessor::process(const doma
 
     std::vector<RawDetection> rawDets;
     if (raw.logits != nullptr && raw.boxes != nullptr && !raw.logitsShape.empty() && !raw.boxesShape.empty()) {
-        rawDets = decodeNativeRfDetr(raw.logits,
-                                     raw.logitsShape,
-                                     raw.boxes,
-                                     raw.boxesShape,
-                                     raw.masks,
-                                     raw.masksShape,
-                                     prep.originalWidth,
-                                     prep.originalHeight,
-                                     confF);
+        rawDets = decodeNativeRfDetr(
+            raw.logits, raw.logitsShape, raw.boxes, raw.boxesShape, prep.originalWidth, prep.originalHeight, confF);
     } else if (raw.dets != nullptr && raw.labels != nullptr && !raw.detsShape.empty()) {
         rawDets =
             decodeLegacyFormat(raw.dets, raw.detsShape, raw.labels, prep.originalWidth, prep.originalHeight, confF);
@@ -331,6 +503,10 @@ application::TextDetectionResponse KoharuLayoutPostprocessor::process(const doma
             item.rect = rect;
             item.confidence = det.score;
             item.regionClass = application::DetectedRegionClass::Bubble;
+            if (raw.masks != nullptr && det.queryIndex >= 0) {
+                const float* maskData = raw.masks + det.queryIndex * (kMaskEdge * kMaskEdge);
+                item.bubblePolygon = extractBubblePolygon(maskData, prep.originalWidth, prep.originalHeight);
+            }
             candidateItems.append(item);
         } else if (det.label == kClassText || det.label == kClassOnomatopoeia) {
             InternalItem item;
@@ -344,10 +520,13 @@ application::TextDetectionResponse KoharuLayoutPostprocessor::process(const doma
 
     // Separate bubbles from text/sfx
     QVector<InternalItem> textItems;
-    QVector<domain::RectGeometry> rawBubbles;
+    QVector<BubbleItem> rawBubbles;
     for (const auto& item : candidateItems) {
         if (item.regionClass == application::DetectedRegionClass::Bubble) {
-            rawBubbles.append(item.rect);
+            BubbleItem bItem;
+            bItem.rect = item.rect;
+            bItem.polygon = item.bubblePolygon;
+            rawBubbles.append(bItem);
         } else {
             textItems.append(item);
         }
@@ -360,10 +539,10 @@ application::TextDetectionResponse KoharuLayoutPostprocessor::process(const doma
         int bestBubbleIdx = -1;
         for (int b = 0; b < rawBubbles.size(); ++b) {
             const auto& bubble = rawBubbles.at(b);
-            const double ix1 = std::max(bubble.x, text.rect.x);
-            const double iy1 = std::max(bubble.y, text.rect.y);
-            const double ix2 = std::min(bubble.x + bubble.width, text.rect.x + text.rect.width);
-            const double iy2 = std::min(bubble.y + bubble.height, text.rect.y + text.rect.height);
+            const double ix1 = std::max(bubble.rect.x, text.rect.x);
+            const double iy1 = std::max(bubble.rect.y, text.rect.y);
+            const double ix2 = std::min(bubble.rect.x + bubble.rect.width, text.rect.x + text.rect.width);
+            const double iy2 = std::min(bubble.rect.y + bubble.rect.height, text.rect.y + text.rect.height);
             if (ix2 > ix1 && iy2 > iy1) {
                 const double intersection = (ix2 - ix1) * (iy2 - iy1);
                 const double textArea = text.rect.width * text.rect.height;
@@ -375,7 +554,8 @@ application::TextDetectionResponse KoharuLayoutPostprocessor::process(const doma
             }
         }
         if (bestBubbleIdx >= 0) {
-            text.bubbleRect = rawBubbles.at(bestBubbleIdx);
+            text.bubbleRect = rawBubbles.at(bestBubbleIdx).rect;
+            text.bubblePolygon = rawBubbles.at(bestBubbleIdx).polygon;
             bubbleHasText[bestBubbleIdx] = true;
         }
     }
@@ -384,17 +564,18 @@ application::TextDetectionResponse KoharuLayoutPostprocessor::process(const doma
     for (int b = 0; b < rawBubbles.size(); ++b) {
         if (!bubbleHasText.at(b)) {
             const auto& bubble = rawBubbles.at(b);
-            const double insetX = bubble.width * 0.12;
-            const double insetY = bubble.height * 0.12;
-            const double textW = std::max(bubble.width - 2.0 * insetX, 16.0);
-            const double textH = std::max(bubble.height - 2.0 * insetY, 16.0);
+            const double insetX = bubble.rect.width * 0.12;
+            const double insetY = bubble.rect.height * 0.12;
+            const double textW = std::max(bubble.rect.width - 2.0 * insetX, 16.0);
+            const double textH = std::max(bubble.rect.height - 2.0 * insetY, 16.0);
 
             InternalItem defaultText;
-            defaultText.rect = {.x = bubble.x + (bubble.width - textW) / 2.0,
-                                .y = bubble.y + (bubble.height - textH) / 2.0,
+            defaultText.rect = {.x = bubble.rect.x + (bubble.rect.width - textW) / 2.0,
+                                .y = bubble.rect.y + (bubble.rect.height - textH) / 2.0,
                                 .width = textW,
                                 .height = textH};
-            defaultText.bubbleRect = bubble;
+            defaultText.bubbleRect = bubble.rect;
+            defaultText.bubblePolygon = bubble.polygon;
             defaultText.regionClass = application::DetectedRegionClass::Text;
             defaultText.confidence = 0.8;
             textItems.append(defaultText);
@@ -451,6 +632,7 @@ application::TextDetectionResponse KoharuLayoutPostprocessor::process(const doma
         application::DetectedRegionItem regionItem;
         regionItem.rect = item.rect;
         regionItem.bubbleRect = item.bubbleRect;
+        regionItem.bubblePolygon = item.bubblePolygon;
         regionItem.regionClass = item.regionClass;
         regionItem.confidence = item.confidence;
         regionItem.orderIndex = order++;

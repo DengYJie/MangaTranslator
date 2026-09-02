@@ -28,6 +28,8 @@ class OperationRegistry;
 struct RegionProcessingTarget {
     domain::RegionId regionId;
     domain::RectGeometry geometry;
+    std::optional<domain::RectGeometry> bubbleGeometry;
+    std::optional<domain::PolygonGeometry> bubblePolygon;
     QString sourceText;
     QString effectiveTranslation;
     quint64 contentRevision{0};

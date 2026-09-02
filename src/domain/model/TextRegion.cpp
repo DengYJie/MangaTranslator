@@ -12,6 +12,11 @@ void TextRegion::setBubbleGeometry(std::optional<RectGeometry> geometry) {
     ++m_contentRevision;
 }
 
+void TextRegion::setBubblePolygon(std::optional<PolygonGeometry> polygon) {
+    m_bubblePolygon = std::move(polygon);
+    ++m_contentRevision;
+}
+
 void TextRegion::setSource(TextContent source) {
     m_source = std::move(source);
     ++m_contentRevision;
@@ -39,10 +44,11 @@ bool TextRegion::isValid() const noexcept {
 
 bool TextRegion::operator==(const TextRegion& other) const noexcept {
     return m_id == other.m_id && m_geometry == other.m_geometry && m_bubbleGeometry == other.m_bubbleGeometry &&
-           m_orderIndex == other.m_orderIndex && m_source == other.m_source && m_translation == other.m_translation &&
-           m_layout == other.m_layout && m_clear == other.m_clear && m_enabled == other.m_enabled &&
-           m_locked == other.m_locked && m_translationVisible == other.m_translationVisible &&
-           m_isCleared == other.m_isCleared && m_contentRevision == other.m_contentRevision;
+           m_bubblePolygon == other.m_bubblePolygon && m_orderIndex == other.m_orderIndex &&
+           m_source == other.m_source && m_translation == other.m_translation && m_layout == other.m_layout &&
+           m_clear == other.m_clear && m_enabled == other.m_enabled && m_locked == other.m_locked &&
+           m_translationVisible == other.m_translationVisible && m_isCleared == other.m_isCleared &&
+           m_contentRevision == other.m_contentRevision;
 }
 
 } // namespace manga::domain

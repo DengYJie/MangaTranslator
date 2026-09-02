@@ -54,6 +54,7 @@ struct RegionDisplay {
     domain::RectGeometry geometry;
     bool selected{false};
     std::optional<domain::RectGeometry> bubbleGeometry{std::nullopt};
+    std::optional<domain::PolygonGeometry> bubblePolygon{std::nullopt};
 
     bool operator==(const RegionDisplay&) const = default;
 };

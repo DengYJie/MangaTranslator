@@ -31,7 +31,7 @@ public:
     process(const domain::PageId& pageId,
             const RawOutputs& raw,
             const KoharuPreprocessedImage& prep,
-            double minConfidence = 0.35,
+            double minConfidence = 0.25,
             domain::ReadingDirection readingDirection = domain::ReadingDirection::RightToLeft);
 };
 

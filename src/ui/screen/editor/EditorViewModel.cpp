@@ -797,6 +797,7 @@ void EditorViewModel::rebuildCurrentPageProjection() {
         rp.id = region.id();
         rp.geometry = region.geometry();
         rp.bubbleGeometry = region.bubbleGeometry();
+        rp.bubblePolygon = region.bubblePolygon();
         rp.effectiveTranslation = QString::fromStdString(region.translation().effectiveText());
         rp.layout = region.layout();
         rp.isEnabled = region.isEnabled();
@@ -1327,6 +1328,7 @@ void EditorViewModel::applyDetectedRegions(const domain::PageId& pageId,
         entries.append(command::CreateRegionsBatchCommand::Entry{.regionId = regionId,
                                                                  .geometry = item.rect,
                                                                  .bubbleGeometry = item.bubbleRect,
+                                                                 .bubblePolygon = item.bubblePolygon,
                                                                  .orderIndex = startOrderIndex + orderOffset++});
         newRegionIds.append(regionId);
     }

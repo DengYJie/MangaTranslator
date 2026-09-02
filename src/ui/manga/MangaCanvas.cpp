@@ -775,11 +775,13 @@ void MangaCanvas::keyPressEvent(QKeyEvent* event) {
             for (auto it = m_overlays.constBegin(); it != m_overlays.constEnd(); ++it) {
                 auto geom = it.value()->currentGeometry();
                 auto bubble = it.value()->bubbleGeometry();
+                auto bubblePoly = it.value()->bubblePolygon();
                 bool sel = (it.key() == ids[nextIndex]);
                 canvas::RegionDisplay display;
                 display.id = it.key();
                 display.geometry = geom;
                 display.bubbleGeometry = bubble;
+                display.bubblePolygon = bubblePoly;
                 display.selected = sel;
                 updated.append(display);
             }

@@ -14,6 +14,7 @@ struct ClearRequest {
     domain::RegionId regionId;
     QImage pageImage;
     domain::RectGeometry region;
+    std::optional<domain::PolygonGeometry> polygon;
     domain::ClearSettings settings;
     quint64 contentRevision;
 };

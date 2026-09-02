@@ -407,6 +407,8 @@ std::expected<void, domain::ValidationError> ProjectSchemaValidator::validateFul
         static const std::unordered_set<QString> kRegionAllowed = {QStringLiteral("id"),
                                                                    QStringLiteral("orderIndex"),
                                                                    QStringLiteral("geometry"),
+                                                                   QStringLiteral("bubbleGeometry"),
+                                                                   QStringLiteral("bubblePolygon"),
                                                                    QStringLiteral("source"),
                                                                    QStringLiteral("translation"),
                                                                    QStringLiteral("layout"),
@@ -536,6 +538,73 @@ std::expected<void, domain::ValidationError> ProjectSchemaValidator::validateFul
                     domain::ValidationError{.code = domain::ProjectErrorCode::InvalidStructure,
                                             .message = "geometry requires x/y >= 0 and width/height >= 2",
                                             .path = regionPath + ".geometry"});
+            }
+
+            // Bubble geometry (optional): a plain rect without the type discriminator.
+            if (rObj.contains("bubbleGeometry")) {
+                if (!rObj["bubbleGeometry"].isObject()) {
+                    return std::unexpected(domain::ValidationError{.code = domain::ProjectErrorCode::InvalidStructure,
+                                                                   .message = "bubbleGeometry must be an object",
+                                                                   .path = regionPath + ".bubbleGeometry"});
+                }
+                const QJsonObject bgObj = rObj["bubbleGeometry"].toObject();
+                static const std::unordered_set<QString> kBubbleGeoAllowed = {
+                    QStringLiteral("x"), QStringLiteral("y"), QStringLiteral("width"), QStringLiteral("height")};
+                if (hasUnknownProperties(bgObj, kBubbleGeoAllowed)) {
+                    return std::unexpected(
+                        domain::ValidationError{.code = domain::ProjectErrorCode::InvalidStructure,
+                                                .message = "bubbleGeometry contains unknown properties",
+                                                .path = regionPath + ".bubbleGeometry"});
+                }
+                for (const auto& coord :
+                     {QStringLiteral("x"), QStringLiteral("y"), QStringLiteral("width"), QStringLiteral("height")}) {
+                    if (!bgObj.contains(coord) || !bgObj[coord].isDouble() || !std::isfinite(bgObj[coord].toDouble())) {
+                        return std::unexpected(domain::ValidationError{
+                            .code = domain::ProjectErrorCode::InvalidStructure,
+                            .message = std::format("bubbleGeometry.{} must be a finite number", coord.toStdString()),
+                            .path = regionPath + ".bubbleGeometry." + coord.toStdString()});
+                    }
+                }
+            }
+
+            // Bubble polygon (optional): an array of {x, y} points with finite coordinates.
+            if (rObj.contains("bubblePolygon")) {
+                if (!rObj["bubblePolygon"].isArray()) {
+                    return std::unexpected(
+                        domain::ValidationError{.code = domain::ProjectErrorCode::InvalidStructure,
+                                                .message = "bubblePolygon must be an array of points",
+                                                .path = regionPath + ".bubblePolygon"});
+                }
+                const QJsonArray polyArr = rObj["bubblePolygon"].toArray();
+                for (qsizetype ptIdx = 0; ptIdx < polyArr.size(); ++ptIdx) {
+                    const QJsonValue& ptVal = polyArr[ptIdx];
+                    if (!ptVal.isObject()) {
+                        return std::unexpected(domain::ValidationError{
+                            .code = domain::ProjectErrorCode::InvalidStructure,
+                            .message = std::format("bubblePolygon[{}] must be an object", ptIdx),
+                            .path = std::format("{}.bubblePolygon[{}]", regionPath, ptIdx)});
+                    }
+                    const QJsonObject ptObj = ptVal.toObject();
+                    static const std::unordered_set<QString> kBubblePtAllowed = {QStringLiteral("x"),
+                                                                                 QStringLiteral("y")};
+                    if (hasUnknownProperties(ptObj, kBubblePtAllowed)) {
+                        return std::unexpected(domain::ValidationError{
+                            .code = domain::ProjectErrorCode::InvalidStructure,
+                            .message = std::format("bubblePolygon[{}] contains unknown properties", ptIdx),
+                            .path = std::format("{}.bubblePolygon[{}]", regionPath, ptIdx)});
+                    }
+                    for (const auto& coord : {QStringLiteral("x"), QStringLiteral("y")}) {
+                        if (!ptObj.contains(coord) || !ptObj[coord].isDouble() ||
+                            !std::isfinite(ptObj[coord].toDouble())) {
+                            return std::unexpected(domain::ValidationError{
+                                .code = domain::ProjectErrorCode::InvalidStructure,
+                                .message = std::format(
+                                    "bubblePolygon[{}].{} must be a finite number", ptIdx, coord.toStdString()),
+                                .path =
+                                    std::format("{}.bubblePolygon[{}].{}", regionPath, ptIdx, coord.toStdString())});
+                        }
+                    }
+                }
             }
 
             // Source
