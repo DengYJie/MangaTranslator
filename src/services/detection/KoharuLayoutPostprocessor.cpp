@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <limits>
 #include <vector>
 
 namespace manga::services {
@@ -18,6 +19,9 @@ constexpr int kClassPanel = 3;
 constexpr int kClassBackground = 4;
 constexpr int kNumClasses = 5;
 
+// Low-resolution mask size as emitted by the model.
+constexpr int kMaskEdge = 288;
+
 struct RawDetection {
     float x1{0};
     float y1{0};
@@ -25,6 +29,7 @@ struct RawDetection {
     float y2{0};
     float score{0};
     int label{0};
+    int64_t queryIndex{-1}; // index into the masks tensor row
 };
 
 struct InternalItem {
@@ -60,7 +65,6 @@ float iou(const RawDetection& a, const RawDetection& b) {
 
 // Non-maximum suppression per class (IoU threshold 0.5, matching Koharu)
 std::vector<RawDetection> nonMaximumSuppression(std::vector<RawDetection> dets, float iouThreshold) {
-    // Sort descending by score
     std::stable_sort(
         dets.begin(), dets.end(), [](const RawDetection& a, const RawDetection& b) { return a.score > b.score; });
 
@@ -82,23 +86,63 @@ std::vector<RawDetection> nonMaximumSuppression(std::vector<RawDetection> dets, 
     return kept;
 }
 
-bool intersectsOrContains(const domain::RectGeometry& panel, const domain::RectGeometry& item) {
-    const double centerX = item.x + item.width / 2.0;
-    const double centerY = item.y + item.height / 2.0;
-    return centerX >= panel.x && centerX <= (panel.x + panel.width) && centerY >= panel.y &&
-           centerY <= (panel.y + panel.height);
+// Compute the tight bounding rect of positive mask pixels in original-image coordinates.
+// The raw mask is kMaskEdge x kMaskEdge floats (pre-sigmoid logits); pixel is "on" when > 0.
+// Bilinear upsampling is approximated by mapping mask pixel centers to image space.
+// Returns false (leaving rect unchanged) when the mask is entirely empty.
+bool maskTightRect(const float* maskData, int origWidth, int origHeight, float& x1, float& y1, float& x2, float& y2) {
+    // Scale factors from mask coords to original image coords (pixel center mapping)
+    const float scaleX = static_cast<float>(origWidth) / static_cast<float>(kMaskEdge);
+    const float scaleY = static_cast<float>(origHeight) / static_cast<float>(kMaskEdge);
+
+    float minX = std::numeric_limits<float>::max();
+    float minY = std::numeric_limits<float>::max();
+    float maxX = std::numeric_limits<float>::lowest();
+    float maxY = std::numeric_limits<float>::lowest();
+    bool found = false;
+
+    for (int my = 0; my < kMaskEdge; ++my) {
+        for (int mx = 0; mx < kMaskEdge; ++mx) {
+            // Threshold at 0 (matches Koharu: mask.gt(0.0), i.e. sigmoid > 0.5)
+            if (maskData[my * kMaskEdge + mx] > 0.0f) {
+                // Map mask pixel center to original image space
+                const float imgX = (static_cast<float>(mx) + 0.5f) * scaleX;
+                const float imgY = (static_cast<float>(my) + 0.5f) * scaleY;
+                if (imgX < minX)
+                    minX = imgX;
+                if (imgY < minY)
+                    minY = imgY;
+                if (imgX > maxX)
+                    maxX = imgX;
+                if (imgY > maxY)
+                    maxY = imgY;
+                found = true;
+            }
+        }
+    }
+
+    if (!found) {
+        return false;
+    }
+
+    x1 = std::clamp(minX, 0.0f, static_cast<float>(origWidth));
+    y1 = std::clamp(minY, 0.0f, static_cast<float>(origHeight));
+    x2 = std::clamp(maxX, 0.0f, static_cast<float>(origWidth));
+    y2 = std::clamp(maxY, 0.0f, static_cast<float>(origHeight));
+    return true;
 }
 
 // Decode RF-DETR native outputs: pred_logits [1,N,C] + pred_boxes [1,N,4]
-// Returns raw detections in original-image pixel coordinates
+// If masks is non-null, refine each detection's bounding rect from the mask.
 std::vector<RawDetection> decodeNativeRfDetr(const float* logits,
                                              const std::vector<int64_t>& logitsShape,
                                              const float* boxes,
                                              const std::vector<int64_t>& boxesShape,
+                                             const float* masks,
+                                             const std::vector<int64_t>& masksShape,
                                              int origWidth,
                                              int origHeight,
                                              float minConfidence) {
-    // Expected shapes: logits [1, N, 5], boxes [1, N, 4]
     if (logitsShape.size() < 3 || boxesShape.size() < 3) {
         return {};
     }
@@ -108,8 +152,13 @@ std::vector<RawDetection> decodeNativeRfDetr(const float* logits,
         return {};
     }
 
+    // Check mask tensor: expected [1, N, kMaskEdge, kMaskEdge]
+    const bool hasMasks = masks != nullptr && masksShape.size() == 4 && masksShape[1] == numQueries &&
+                          masksShape[2] == kMaskEdge && masksShape[3] == kMaskEdge;
+
     const float W = static_cast<float>(origWidth);
     const float H = static_cast<float>(origHeight);
+    const int64_t maskPixels = kMaskEdge * kMaskEdge;
 
     std::vector<RawDetection> result;
     result.reserve(static_cast<size_t>(numQueries));
@@ -118,28 +167,41 @@ std::vector<RawDetection> decodeNativeRfDetr(const float* logits,
         const float* logitRow = logits + q * numClasses;
         const float* boxRow = boxes + q * 4;
 
-        // cx, cy, w, h in [0,1] normalized
-        const float cx = boxRow[0];
-        const float cy = boxRow[1];
-        const float bw = boxRow[2];
-        const float bh = boxRow[3];
-
-        // Convert to pixel x1,y1,x2,y2 in original image space
-        const float x1 = std::clamp((cx - bw / 2.0f) * W, 0.0f, W);
-        const float y1 = std::clamp((cy - bh / 2.0f) * H, 0.0f, H);
-        const float x2 = std::clamp((cx + bw / 2.0f) * W, 0.0f, W);
-        const float y2 = std::clamp((cy + bh / 2.0f) * H, 0.0f, H);
-
-        if (x2 - x1 < 3.0f || y2 - y1 < 3.0f) {
-            continue;
-        }
-
         // Apply sigmoid; skip background (index 4)
         for (int c = 0; c < kClassBackground; ++c) {
             const float score = sigmoid(logitRow[c]);
-            if (score >= minConfidence) {
-                result.push_back({x1, y1, x2, y2, score, c});
+            if (score < minConfidence) {
+                continue;
             }
+
+            // Fallback bounding box from pred_boxes (cx,cy,w,h normalized)
+            const float cx = boxRow[0];
+            const float cy = boxRow[1];
+            const float bw = boxRow[2];
+            const float bh = boxRow[3];
+            float x1 = std::clamp((cx - bw / 2.0f) * W, 0.0f, W);
+            float y1 = std::clamp((cy - bh / 2.0f) * H, 0.0f, H);
+            float x2 = std::clamp((cx + bw / 2.0f) * W, 0.0f, W);
+            float y2 = std::clamp((cy + bh / 2.0f) * H, 0.0f, H);
+
+            // Refine with mask: bilinear upsample mask → threshold at 0 → tight bounding rect
+            // This is the critical step that makes Koharu's bubbles conform to actual shape.
+            if (hasMasks) {
+                const float* maskData = masks + q * maskPixels;
+                float mx1, my1, mx2, my2;
+                if (maskTightRect(maskData, origWidth, origHeight, mx1, my1, mx2, my2)) {
+                    x1 = mx1;
+                    y1 = my1;
+                    x2 = mx2;
+                    y2 = my2;
+                }
+            }
+
+            if (x2 - x1 < 3.0f || y2 - y1 < 3.0f) {
+                continue;
+            }
+
+            result.push_back({x1, y1, x2, y2, score, c, q});
         }
     }
     return result;
@@ -182,7 +244,6 @@ std::vector<RawDetection> decodeLegacyFormat(const float* dets,
             continue;
         }
 
-        // Handle normalized [0,1] coordinates
         if (x1 <= 1.0f && y1 <= 1.0f && x2 <= 1.0f && y2 <= 1.0f) {
             x1 *= W;
             y1 *= H;
@@ -190,16 +251,12 @@ std::vector<RawDetection> decodeLegacyFormat(const float* dets,
             y2 *= H;
         }
 
-        // Handle cxcywh format
         if (x2 < x1 || y2 < y1) {
-            const float cx = x1;
-            const float cy = y1;
-            const float bw = x2;
-            const float bh = y2;
-            x1 = cx - bw / 2.0f;
-            y1 = cy - bh / 2.0f;
-            x2 = cx + bw / 2.0f;
-            y2 = cy + bh / 2.0f;
+            const float bw = x2, bh = y2;
+            x1 = x1 - bw / 2.0f;
+            y1 = y1 - bh / 2.0f;
+            x2 = x1 + bw;
+            y2 = y1 + bh;
         }
 
         x1 = std::clamp(x1, 0.0f, W);
@@ -211,9 +268,16 @@ std::vector<RawDetection> decodeLegacyFormat(const float* dets,
             continue;
         }
 
-        result.push_back({x1, y1, x2, y2, score, static_cast<int>(label)});
+        result.push_back({x1, y1, x2, y2, score, static_cast<int>(label), -1});
     }
     return result;
+}
+
+bool intersectsOrContains(const domain::RectGeometry& panel, const domain::RectGeometry& item) {
+    const double centerX = item.x + item.width / 2.0;
+    const double centerY = item.y + item.height / 2.0;
+    return centerX >= panel.x && centerX <= (panel.x + panel.width) && centerY >= panel.y &&
+           centerY <= (panel.y + panel.height);
 }
 
 } // namespace
@@ -228,11 +292,17 @@ application::TextDetectionResponse KoharuLayoutPostprocessor::process(const doma
 
     const float confF = static_cast<float>(minConfidence);
 
-    // Decode raw detections, preferring native RF-DETR logits+boxes format
     std::vector<RawDetection> rawDets;
     if (raw.logits != nullptr && raw.boxes != nullptr && !raw.logitsShape.empty() && !raw.boxesShape.empty()) {
-        rawDets = decodeNativeRfDetr(
-            raw.logits, raw.logitsShape, raw.boxes, raw.boxesShape, prep.originalWidth, prep.originalHeight, confF);
+        rawDets = decodeNativeRfDetr(raw.logits,
+                                     raw.logitsShape,
+                                     raw.boxes,
+                                     raw.boxesShape,
+                                     raw.masks,
+                                     raw.masksShape,
+                                     prep.originalWidth,
+                                     prep.originalHeight,
+                                     confF);
     } else if (raw.dets != nullptr && raw.labels != nullptr && !raw.detsShape.empty()) {
         rawDets =
             decodeLegacyFormat(raw.dets, raw.detsShape, raw.labels, prep.originalWidth, prep.originalHeight, confF);
@@ -298,7 +368,6 @@ application::TextDetectionResponse KoharuLayoutPostprocessor::process(const doma
                 const double intersection = (ix2 - ix1) * (iy2 - iy1);
                 const double textArea = text.rect.width * text.rect.height;
                 const double overlapRatio = textArea > 0.0 ? (intersection / textArea) : 0.0;
-                // Koharu uses mask containment >= 0.9; box approximation uses 0.5
                 if (overlapRatio >= 0.5 && overlapRatio > bestOverlap) {
                     bestOverlap = overlapRatio;
                     bestBubbleIdx = b;
@@ -355,23 +424,16 @@ application::TextDetectionResponse KoharuLayoutPostprocessor::process(const doma
         }
     }
 
-    // Sort text items: by panel order, then Koharu-style spatial order within each panel
-    // RTL manga: detection_order = top.cmp(other_top).then_with(right_x.cmp(left_x)) i.e. top-to-bottom, right-to-left
-    // LTR comics: top-to-bottom, left-to-right
+    // Sort: panel order first, then Koharu detection_order (top asc, x desc for RTL)
     std::stable_sort(
         textItems.begin(), textItems.end(), [readingDirection](const InternalItem& a, const InternalItem& b) {
-            // Panel-scoped first
             if (a.panelIndex != b.panelIndex) {
-                if (a.panelIndex == -1) {
+                if (a.panelIndex == -1)
                     return false;
-                }
-                if (b.panelIndex == -1) {
+                if (b.panelIndex == -1)
                     return true;
-                }
                 return a.panelIndex < b.panelIndex;
             }
-
-            // Within same panel: Koharu detection_order = bbox[1] (top y) asc, then bbox[0] (left x) desc for RTL
             const double topA = a.rect.y;
             const double topB = b.rect.y;
             const double yDiff = topA - topB;
@@ -379,13 +441,11 @@ application::TextDetectionResponse KoharuLayoutPostprocessor::process(const doma
                 return topA < topB;
             }
             if (readingDirection == domain::ReadingDirection::RightToLeft) {
-                // Right-to-left: larger x comes first
                 return (a.rect.x + a.rect.width / 2.0) > (b.rect.x + b.rect.width / 2.0);
             }
             return (a.rect.x + a.rect.width / 2.0) < (b.rect.x + b.rect.width / 2.0);
         });
 
-    // Build response
     int order = 0;
     for (const auto& item : textItems) {
         application::DetectedRegionItem regionItem;
