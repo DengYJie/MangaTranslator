@@ -16,6 +16,11 @@ namespace {
 constexpr QRect retryHotspotRect(const QRect& optionRect) {
     return QRect(optionRect.right() - 32, optionRect.bottom() - 32, 24, 24);
 }
+// Translucent accent wash used for the selected and pressed row states. It stays visible on
+// the near-white pane background where neutral control fills would not contrast.
+constexpr int kSelectedFillAlpha = 26;
+constexpr int kPressedFillAlpha = 42;
+constexpr int kCurrentIndicatorWidth = 3;
 } // namespace
 
 PageThumbnailDelegate::PageThumbnailDelegate(PageThumbnailList* list, QObject* parent)
@@ -44,14 +49,25 @@ void PageThumbnailDelegate::paint(QPainter* painter,
     const bool hovered = option.state.testFlag(QStyle::State_MouseOver);
     const bool selected = option.state.testFlag(QStyle::State_Selected);
     const bool pressed = hovered && option.state.testFlag(QStyle::State_Sunken);
+
     QColor rowFill;
-    if (pressed) {
-        rowFill = colors.subtleTertiary;
-    } else if (selected || hovered) {
+    if (selected || pressed) {
+        // Selected and pressed share the accent wash so a click is visibly distinct
+        // from the neutral hover fill; the pressed frame is slightly stronger.
+        rowFill = colors.accentDefault;
+        rowFill.setAlpha(pressed ? kPressedFillAlpha : kSelectedFillAlpha);
+    } else if (hovered) {
         rowFill = colors.subtleSecondary;
     }
     if (rowFill.isValid() && rowFill.alpha() > 0) {
         painter->fillRect(option.rect, rowFill);
+    }
+
+    // The active page keeps a leading accent bar so it stays distinguishable among a
+    // multi-selection that shares the same wash.
+    if (m_list->isCurrentRow(index.row())) {
+        painter->fillRect(QRect(option.rect.left(), option.rect.top(), kCurrentIndicatorWidth, option.rect.height()),
+                          colors.accentDefault);
     }
 
     QRect thumbRect(option.rect.left() + 16, option.rect.top() + (88 - 72) / 2, 56, 72);

@@ -163,6 +163,10 @@ void PageThumbnailList::setCurrentPageId(const domain::PageId& pageId) {
     }
 }
 
+bool PageThumbnailList::isCurrentRow(int row) const {
+    return m_view != nullptr && m_view->currentIndex().row() == row;
+}
+
 void PageThumbnailList::updateCountLabel() {
     m_headerCount->setText(tr("%1 页").arg(m_model->rowCount()));
 }
