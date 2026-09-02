@@ -1,4 +1,4 @@
-﻿#include "ui/widget/EditorCommandBar.h"
+#include "ui/widget/EditorCommandBar.h"
 
 #include "ui/screen/editor/EditorProcessingController.h"
 #include "ui/screen/editor/EditorViewModel.h"
@@ -13,6 +13,7 @@
 #include <QLineEdit>
 #include <QPaintEvent>
 #include <QPainter>
+#include <QPlainTextEdit>
 #include <QShortcut>
 #include <QTextEdit>
 
@@ -39,7 +40,7 @@ bool EditorCommandBar::shouldIgnoreShortcut() const {
         return true;
     }
     QWidget* fw = QApplication::focusWidget();
-    return qobject_cast<QLineEdit*>(fw) || qobject_cast<QTextEdit*>(fw);
+    return qobject_cast<QLineEdit*>(fw) || qobject_cast<QTextEdit*>(fw) || qobject_cast<QPlainTextEdit*>(fw);
 }
 
 void EditorCommandBar::buildUi() {
@@ -393,8 +394,12 @@ void EditorCommandBar::setupShortcuts() {
     };
 
     makeGlobal(QStringLiteral("V"), [this]() { m_viewModel->setActiveTool(CanvasTool::Select); });
-    makeGlobal(QStringLiteral("R"), [this]() { m_viewModel->setActiveTool(CanvasTool::CreateRegion); });
     makeGlobal(QStringLiteral("H"), [this]() { m_viewModel->setActiveTool(CanvasTool::Pan); });
+    makeGlobal(QStringLiteral("T"), [this]() { m_viewModel->setActiveTool(CanvasTool::CreateRegion); });
+    makeGlobal(QStringLiteral("R"), [this]() { m_viewModel->setActiveTool(CanvasTool::CreateRegion); });
+    makeGlobal(QStringLiteral("B"), [this]() { m_viewModel->setActiveTool(CanvasTool::Brush); });
+    makeGlobal(QStringLiteral("E"), [this]() { m_viewModel->setActiveTool(CanvasTool::Eraser); });
+    makeGlobal(QStringLiteral("J"), [this]() { m_viewModel->setActiveTool(CanvasTool::Remove); });
 
     makeGlobal(QStringLiteral("+"), [this]() { Q_EMIT zoomInRequested(); });
     makeGlobal(QStringLiteral("="), [this]() { Q_EMIT zoomInRequested(); });
