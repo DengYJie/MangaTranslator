@@ -116,7 +116,7 @@ void OperationRowDelegate::paint(QPainter* painter,
     const QRect bottomTextRect(
         textBounds.left(), topTextRect.bottom(), textBounds.width(), textBounds.height() - topTextRect.height());
 
-    // Title: DisplayTarget · StageName
+    // Title: display target and stage name, or the stage name alone when there is no target.
     QFont titleFont = option.font;
     titleFont.setWeight(QFont::DemiBold);
     painter->setFont(titleFont);

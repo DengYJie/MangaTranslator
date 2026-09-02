@@ -81,7 +81,7 @@ void RegionOverlayItem::paint(QPainter* painter, const QStyleOptionGraphicsItem*
     painter->save();
     painter->setRenderHint(QPainter::Antialiasing, true);
 
-    // 2. Automatic / bubble region: dual-layer composite dashed outline (Koharu style)
+    // 2. Automatic / bubble region: dual-layer composite dashed outline
     if (m_bubblePolygon.has_value() && m_bubblePolygon->isValid()) {
         QPainterPath bubblePath;
         const auto& pts = m_bubblePolygon->points;

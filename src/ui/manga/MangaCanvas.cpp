@@ -1337,7 +1337,7 @@ void MangaCanvas::resizeEvent(QResizeEvent* event) {
 void MangaCanvas::drawForeground(QPainter* painter, const QRectF& rect) {
     QGraphicsView::drawForeground(painter, rect);
 
-    // Draw real-time brush circle cursor on canvas (Koharu canvas overlay style)
+    // Live brush circle cursor for the paint tools.
     if (m_mouseInsideCanvas && !m_spaceHeld && !m_removeStrokeActive &&
         (m_tool == canvas::Tool::Remove || m_tool == canvas::Tool::Brush || m_tool == canvas::Tool::Eraser)) {
         painter->save();

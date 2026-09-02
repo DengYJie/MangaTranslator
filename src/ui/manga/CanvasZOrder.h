@@ -2,8 +2,7 @@
 
 #include <QtGlobal>
 
-/// Z-order constants for the manga canvas scene.
-/// V0.1 has no Split Curtain and reserves no curtain slot.
+/// Z-order constants for the manga canvas scene. Higher values paint above lower ones.
 namespace manga::ui::canvas {
 
 inline constexpr qreal kZBackground = 0.0;

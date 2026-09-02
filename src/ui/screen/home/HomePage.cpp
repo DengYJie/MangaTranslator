@@ -41,7 +41,7 @@ void HomePage::buildUi() {
     rootLayout->setContentsMargins(32, 24, 32, 24);
     rootLayout->setSpacing(16);
 
-    // Page header: title block left, commands right (spec §2.1).
+    // Page header keeps the title block left and the commands right, per docs/ui/pages/home.md.
     auto* headerRow = new QHBoxLayout;
     auto* titleBlock = new QVBoxLayout;
     m_titleLabel = new QLabel(tr("欢迎回来"), this);
@@ -112,12 +112,12 @@ void HomePage::buildUi() {
     auto* stackContainer = new QWidget(this);
     m_stack = new QStackedLayout(stackContainer);
 
-    // Empty state (spec §5.1).
+    // Empty state shown instead of the recent projects grid, per docs/ui/pages/home.md.
     m_emptyState = new QWidget(stackContainer);
     m_emptyState->setAutoFillBackground(false);
     m_stack->addWidget(m_emptyState);
 
-    // Recent projects card grid (WinUI GridView semantics, spec §2.2).
+    // Recent projects card grid, homogeneous single-select cards per docs/ui/pages/home.md.
     m_gridView = new fluent::collections::GridView(stackContainer);
     m_model = new RecentProjectsModel(this);
     m_delegate = new RecentProjectCardDelegate(this, m_gridView);

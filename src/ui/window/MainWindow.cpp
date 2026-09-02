@@ -133,45 +133,33 @@ MainWindow::MainWindow(application::IAppSettingsStore* settingsStore, QWidget* p
     m_editorMenuBar->setBackgroundVisible(false);
     m_editorMenuBar->setFontStyle(Typography::FontRole::Caption);
 
-    // 1. File Menu ("文件")
     auto* fileMenu = new fluent::menus_toolbars::FluentMenu(tr("文件"), m_editorMenuBar);
 
-    // 导入页面 (Submenu: 文件, 文件夹)
     auto* importMenu = new fluent::menus_toolbars::FluentMenu(tr("导入页面"), fileMenu);
     importMenu->addAction(tr("文件..."));
     importMenu->addAction(tr("文件夹..."));
     fileMenu->addMenu(importMenu);
 
-    // 导出
     fileMenu->addAction(tr("导出..."));
 
-    // 分割线
     fileMenu->addSeparator();
 
-    // 关闭项目
     fileMenu->addAction(tr("关闭项目"));
 
     m_editorMenuBar->addMenu(fileMenu);
 
-    // 2. Process Menu ("处理")
     auto* processMenu = new fluent::menus_toolbars::FluentMenu(tr("处理"), m_editorMenuBar);
 
-    // 处理项目
     processMenu->addAction(tr("处理项目"));
 
-    // 分割线
     processMenu->addSeparator();
 
-    // 运行检测
     processMenu->addAction(tr("运行检测"));
 
-    // 运行 OCR
     processMenu->addAction(tr("运行 OCR"));
 
-    // 运行翻译
     processMenu->addAction(tr("运行翻译"));
 
-    // 运行修补
     processMenu->addAction(tr("运行修补"));
 
     m_editorMenuBar->addMenu(processMenu);
@@ -198,7 +186,8 @@ void MainWindow::setNavigationController(navigation::NavigationController* contr
         }
         const auto cur = m_controller->currentRoute();
         if (cur && cur->startsWith(QLatin1String("settings"))) {
-            // 在设置界面点击返回：直接回到离开主 surface 前记录的页面
+            // Back on the settings surface goes straight to the route last shown on the main
+            // surface instead of stepping back through the navigation history.
             const QString target = m_lastMainRoute.isEmpty() ? QStringLiteral("home") : m_lastMainRoute;
             m_controller->navigate(target);
         } else {

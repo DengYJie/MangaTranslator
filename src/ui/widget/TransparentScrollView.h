@@ -4,9 +4,9 @@
 
 namespace manga::ui::widget {
 
-/// ScrollView 变体：viewport 始终保持透明，不绘制 fluent 默认的画布背景色
-/// （ScrollView::updateViewportPalette 会把 viewport 涂成 bgCanvas）。
-/// 适合承载页面级内容（如设置页），让背景透出宿主页面。
+/// ScrollView variant whose viewport stays transparent instead of painting the FluentQt canvas color.
+/// ScrollView::updateViewportPalette repaints the viewport with bgCanvas on every theme change, so the
+/// transparent palette is restored afterwards. Use it for page-level content that shows the host surface.
 class TransparentScrollView : public fluent::scrolling::ScrollView {
     Q_OBJECT
 public:

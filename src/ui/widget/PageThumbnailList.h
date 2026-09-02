@@ -37,7 +37,7 @@ public:
     }
     void setCurrentPageId(const domain::PageId& pageId);
 
-    /// True when the row carries the view's current index, i.e. the active page.
+    /// True when the row carries the view's current index, that is, the active page.
     [[nodiscard]] bool isCurrentRow(int row) const;
 
     /// Requests thumbnails for visible rows plus two rows of lookahead. Loading rows

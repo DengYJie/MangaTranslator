@@ -82,7 +82,7 @@ Application::Application(int& argc, char** argv, std::unique_ptr<ApplicationCont
         return;
     }
 
-    // Register and discover bundled fonts (NotoSansCJK-VF, etc.)
+    // Register and discover bundled fonts such as NotoSansCJK-VF.
     rendering::FontRegistry::bundledFontFamilies();
 
     const QIcon appIcon(QStringLiteral(":/icons/manga-translator-app.svg"));
@@ -175,9 +175,9 @@ int Application::run() {
                                                                          m_context->textDetector(),
                                                                          m_context->batchPagesWorkflow(),
                                                                          nullptr);
-    // 默认同意：候选结果就绪后自动采用，不再需要手动点击“接受”。
-    // 若没有可应用的变更（例如区域为手动内容而被跳过），直接清除候选，
-    // 避免产生空的撤销条目。
+    // Auto-adopts each proposal as soon as it is ready, so no manual accept is needed. A proposal
+    // with no applicable change, for example one whose regions were skipped because they hold
+    // manual content, is discarded instead because adopting it would add an empty undo entry.
     auto* processingController = m_processingController.get();
     QObject::connect(processingController,
                      &ui::screen::editor::EditorProcessingController::proposalReady,

@@ -256,7 +256,7 @@ void EditorViewModel::closeProjectSession() {
     cancelExport();
     invalidateRequests();
 
-    // P5-D 项目任务取消钩子
+    // Project-owned tasks are stopped here, before the session is torn down below.
     cancelProjectTasks();
 
     // Keep the aggregate alive until repository close completes. The repository
@@ -1764,7 +1764,8 @@ EditorViewModel::adoptProcessingProposal(const application::PreparedProcessingAd
             application::ErrorCategory::Internal, "internal.no_session", "No active session"));
     }
 
-    // push 前在同一 GUI event 再做最终 snapshot 校验
+    // The proposal is revalidated against the live aggregate inside this same GUI event, immediately
+    // before the command is pushed, so no other edit can land between the check and the push.
     domain::PageId targetPageId;
     QVector<domain::RegionId> targetRegionIds;
     if (!prepared.changes.isEmpty()) {
@@ -1792,7 +1793,8 @@ EditorViewModel::adoptProcessingProposal(const application::PreparedProcessingAd
                 application::ErrorCategory::Input, "input.manual_override", "Region is locked"));
         }
 
-        // Wait, checking contentRevision is the best way to verify if it has changed since Prepare UseCase.
+        // A moved content revision means the region was edited after the prepare step, so the
+        // prepared before state no longer describes it.
         if (region->contentRevision() != change.expectedRevision) {
             return std::unexpected(application::detail::applyError(
                 application::ErrorCategory::Input, "input.stale_revision", "Stale revision"));
@@ -1807,8 +1809,8 @@ EditorViewModel::adoptProcessingProposal(const application::PreparedProcessingAd
                 application::ErrorCategory::Project, "project.page_not_found", "Page not found"));
         }
         const auto* region = page->findRegion(c.regionId);
-        // Is region valid? Wait, before state is enough?
-        // Wait, if contentRevision didn't change, we are good.
+        // The recorded cleared flag and the content revision must both still match the prepared
+        // before state, or the clear no longer applies to this region.
         if (!region || region->isLocked() || region->isCleared() != c.beforeState ||
             region->contentRevision() != c.expectedRevision) {
             return std::unexpected(application::detail::applyError(

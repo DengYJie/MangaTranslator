@@ -27,6 +27,8 @@ namespace manga::ui::widget {
 EditorCommandBar::EditorCommandBar(EditorViewModel* viewModel, QWidget* parent)
     : QWidget(parent), m_viewModel(viewModel) {
     setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+    // docs/ui/pages/editor.md keeps the command bar on a single row at every width, so the height is
+    // fixed here.
     setFixedHeight(40);
     m_outputDirProvider = [this]() { return QFileDialog::getExistingDirectory(this, tr("选择导出目录")); };
     buildUi();
@@ -46,6 +48,7 @@ bool EditorCommandBar::shouldIgnoreShortcut() const {
 
 void EditorCommandBar::buildUi() {
     auto* layout = new QHBoxLayout(this);
+    // Insets and gaps use the 4 px micro spacing step from docs/ui/foundations.md.
     layout->setContentsMargins(4, 4, 4, 4);
     layout->setSpacing(4);
 

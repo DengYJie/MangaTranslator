@@ -62,7 +62,8 @@ private:
     bool m_firstRedo{true};
 };
 
-/// Creates a batch of regions (e.g. from automatic layout detection) on first redo; removes them on undo.
+/// Creates a batch of regions on the first redo, for example the regions produced by automatic layout
+/// detection, and removes them again on undo.
 class CreateRegionsBatchCommand : public RegionCommand {
 public:
     struct Entry {

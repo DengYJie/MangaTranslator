@@ -341,7 +341,7 @@ void ApplicationContext::shutdown() {
         m_production->httpTransport->shutdown();
     }
 
-    // 4. Drain fire-and-forget jobs scheduled on the global thread pool (e.g. the post-save
+    // 4. Drain fire-and-forget jobs scheduled on the global thread pool, such as the post-save
     //    derived asset GC, whose future is deliberately dropped). Without this wait a worker
     //    could still hold a pointer into stores that are destroyed right below; the wait is
     //    time-bounded because cooperative cancellation above should already have drained the

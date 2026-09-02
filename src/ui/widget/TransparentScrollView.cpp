@@ -11,7 +11,7 @@ TransparentScrollView::TransparentScrollView(QWidget* parent) : fluent::scrollin
 }
 
 void TransparentScrollView::onThemeUpdated() {
-    // 基类会把 viewport 重新涂成 bgCanvas，随后立即恢复透明。
+    // The base implementation overwrites the viewport palette, so transparency is restored after it.
     fluent::scrolling::ScrollView::onThemeUpdated();
     keepViewportTransparent();
 }

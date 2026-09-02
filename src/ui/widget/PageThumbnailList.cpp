@@ -20,7 +20,7 @@ constexpr int kThumbnailRowHeightHint = 88;
 
 PageThumbnailList::PageThumbnailList(QWidget* parent)
     : QWidget(parent), m_model(new PageListModel(this)), m_view(new QListView(this)), m_shimmerTimer(new QTimer(this)) {
-    m_thumbnailCache.setMaxCost(64 * 1024);
+    m_thumbnailCache.setMaxCost(64 * 1024); // Costs are in KiB (insertThumbnail), so 64 MiB of pixmaps.
     setFocusPolicy(Qt::StrongFocus);
     setFocusProxy(m_view);
     m_view->setFocusPolicy(Qt::StrongFocus);

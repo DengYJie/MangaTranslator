@@ -24,7 +24,7 @@ namespace manga::ui::screen::settings {
 
 namespace {
 
-// ForgeAI SettingsNavigationModule responsive constants
+// Content column width and symmetric page margins per docs/ui/pages/settings.md.
 constexpr int kMaxContentWidth = 1064;
 constexpr int kMarginWide = 36;
 constexpr int kMarginNarrow = 20;
@@ -721,7 +721,8 @@ void SettingsPage::updateResponsiveLayout(int availableWidth) {
         m_scrollContent->setMinimumWidth(qMax(0, viewportWidth));
     }
 
-    // Match ForgeAI's full-width scroll content with a centered, max-width column.
+    // The content spans the viewport and the space beyond the maximum width is split evenly on both
+    // sides, per docs/ui/pages/settings.md.
     const bool narrow = viewportWidth < kBreakpointWide;
     const int marginH = narrow ? kMarginNarrow : kMarginWide;
     const int marginV = narrow ? kMarginTopNarrow : kMarginTopWide;

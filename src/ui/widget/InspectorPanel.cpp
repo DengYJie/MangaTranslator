@@ -210,6 +210,8 @@ void InspectorPanel::buildUi() {
     setFocusPolicy(Qt::StrongFocus);
 
     auto* root = new QVBoxLayout(this);
+    // Layout metrics use the panel defaults in src/ui/AGENTS.md and the spacing scale in
+    // docs/ui/foundations.md.
     root->setContentsMargins(12, 12, 12, 12);
     root->setSpacing(4);
 
@@ -272,6 +274,7 @@ QWidget* InspectorPanel::buildContentHost() {
 
     auto* host = new QWidget();
     auto* layout = new QVBoxLayout(host);
+    // Section insets and gaps come from the spacing scale in docs/ui/foundations.md.
     layout->setContentsMargins(0, 8, 0, 8);
     layout->setSpacing(12);
 
@@ -380,7 +383,6 @@ QWidget* InspectorPanel::buildContentHost() {
     typesetLayout->setContentsMargins(12, 6, 12, 8);
     typesetLayout->setSpacing(6);
 
-    // Row 1: 字体 (Font Family) + 颜色 (Text Color)
     auto* row1 = new QWidget(typesetContent);
     auto* row1Layout = new QHBoxLayout(row1);
     row1Layout->setContentsMargins(0, 0, 0, 0);
@@ -431,7 +433,8 @@ QWidget* InspectorPanel::buildContentHost() {
         openColorFlyout(m_textColorSwatch, m_textColorHexEdit, InspectorField::TextColorHex);
     });
 
-    // Row 2: 字号 (Font Size) + 字重 (Font Weight) + 样式 (Vertical Alignment)
+    // The third field is labelled as style but selects vertical alignment, and its first entry
+    // means top aligned.
     auto* row2 = new QWidget(typesetContent);
     auto* row2Layout = new QHBoxLayout(row2);
     row2Layout->setContentsMargins(0, 0, 0, 0);
@@ -484,7 +487,6 @@ QWidget* InspectorPanel::buildContentHost() {
         }
     });
 
-    // Row 3: 对齐 (Alignment) + 方向 (Direction)
     auto* row3 = new QWidget(typesetContent);
     auto* row3Layout = new QHBoxLayout(row3);
     row3Layout->setContentsMargins(0, 0, 0, 0);
@@ -528,7 +530,7 @@ QWidget* InspectorPanel::buildContentHost() {
         btn->setFluentStyle(Button::Subtle);
         btn->setFluentLayout(Button::IconOnly);
         btn->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
-        btn->setFixedHeight(32);
+        btn->setFixedHeight(32); // Minimum click target height per docs/ui/foundations.md.
         m_hAlignGroup->addButton(btn, static_cast<int>(spec.align));
         hAlignLayout->addWidget(btn);
     }
@@ -557,7 +559,6 @@ QWidget* InspectorPanel::buildContentHost() {
         }
     });
 
-    // Row 4: 描边 (Stroke Color) + 宽度 (Stroke Width)
     auto* row4 = new QWidget(typesetContent);
     auto* row4Layout = new QHBoxLayout(row4);
     row4Layout->setContentsMargins(0, 0, 0, 0);
@@ -602,7 +603,8 @@ QWidget* InspectorPanel::buildContentHost() {
         }
     });
 
-    // Row 5: 行距 (Line Spacing) + 字距 (Letter Spacing)
+    // Line spacing is a factor of the measured line height and letter spacing an em fraction, so
+    // both boxes hold unitless values.
     auto* row5 = new QWidget(typesetContent);
     auto* row5Layout = new QHBoxLayout(row5);
     row5Layout->setContentsMargins(0, 0, 0, 0);
@@ -639,7 +641,7 @@ QWidget* InspectorPanel::buildContentHost() {
         }
     });
 
-    // Row 6: 边距 (Margins: 上 / 右 / 下 / 左)
+    // The four margin fields are built in top, right, bottom, left order.
     auto* marginsRow = new QWidget(typesetContent);
     auto* marginsGrid = new QHBoxLayout(marginsRow);
     marginsGrid->setContentsMargins(0, 0, 0, 0);

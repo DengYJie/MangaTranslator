@@ -75,7 +75,7 @@ void SelectionHandleItem::paint(QPainter* painter, const QStyleOptionGraphicsIte
     // White surface fill
     painter->setBrush(Qt::white);
 
-    // Crisp 1.2px accent border (Koharu style)
+    // Crisp 1.2px accent border.
     QPen borderPen(m_accentColor.isValid() ? m_accentColor : QColor(0, 120, 215), 1.2);
     borderPen.setCosmetic(true);
     painter->setPen(borderPen);

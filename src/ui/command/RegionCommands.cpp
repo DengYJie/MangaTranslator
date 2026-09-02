@@ -24,8 +24,8 @@ void CreateTextRegionCommand::redo() {
     if (m_firstRedo) {
         m_firstRedo = false;
     } else {
-        // Reinsertion appends at end; V0.1 has no command that reorders pages, so the
-        // recreated region keeps a valid contiguous order.
+        // Reinsertion appends at the end of the region list. No command reorders regions, so the
+        // recreated region keeps the contiguous order the domain requires.
         const auto* page = m_context->project()->findPage(m_pageId);
         if (page != nullptr) {
             m_orderIndex = static_cast<int>(page->regions().size());

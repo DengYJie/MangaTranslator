@@ -19,8 +19,8 @@ namespace manga::ui::screen::editor {
 
 /// Builds immutable ExportPageSnapshots from the open session: source images via
 /// LoadPageImageUseCase, committed derived layers via IDerivedAssetStore, and translation
-/// layers rasterized with rendering::TextLayoutEngine + TextRasterizer — the same rendering
-/// entry points the canvas preview uses, so preview and export share one result.
+/// layers rasterized with rendering::TextLayoutEngine + TextRasterizer. Canvas preview uses the
+/// same rendering entry points, so preview and export share one result.
 class ExportSnapshotBuilder {
 public:
     ExportSnapshotBuilder(domain::ComicProject* project,

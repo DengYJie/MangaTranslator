@@ -532,7 +532,7 @@ void ActivityCenter::syncOperations(const QVector<application::OperationSnapshot
     QVector<application::OperationSnapshot> failedOps;
 
     for (const auto& op : operations) {
-        // Filter silent background cache/I/O tasks (e.g. thumbnail, page image load, preview, import)
+        // Filter silent background cache and I/O tasks such as thumbnail, page image load, preview, and import
         if (op.descriptor.stage == application::OperationStage::LoadImage ||
             op.descriptor.stage == application::OperationStage::Import) {
             continue;
@@ -665,7 +665,7 @@ void ActivityCenter::syncOperations(const QVector<application::OperationSnapshot
             if (!first) {
                 auto* sep = new QFrame(this);
                 sep->setFrameShape(QFrame::HLine);
-                sep->setFixedHeight(1);
+                sep->setFixedHeight(1); // Hairline divider, the 1 px separator in docs/ui/foundations.md.
                 m_separators.push_back(sep);
                 m_layout->addWidget(sep);
             }

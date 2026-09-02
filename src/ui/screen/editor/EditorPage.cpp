@@ -50,7 +50,7 @@ constexpr int kInspectorStandardWidth = 328;
 constexpr int kInspectorCompactWidth = 320;
 constexpr int kInspectorMaxWidth = 380;
 
-/// ToolRail color swatch button inspired by Koharu's ColorWell control.
+/// Tool rail swatch mirroring the canvas brush color, clicked to open the brush color picker.
 class ToolRailColorWellButton : public QAbstractButton {
 public:
     explicit ToolRailColorWellButton(QWidget* parent = nullptr) : QAbstractButton(parent) {

@@ -295,10 +295,12 @@ void ImportViewModel::handleImportFinished() {
     }
 
     // Apply
+    // The use case rejects a mismatch between the two generations as a stale result. This aggregate
+    // was constructed by the create step above and never opened as a session, so it is still zero.
     application::ApplyImportResultRequest applyReq;
     applyReq.projectId = m_project.id();
     applyReq.result = m_importResult;
-    applyReq.sessionGeneration = 0; // The brief specifies "gen, gen", i.e. we use 0 since we just created it
+    applyReq.sessionGeneration = 0;
     applyReq.currentSessionGeneration = 0;
 
     application::ApplyImportResultUseCase applyUseCase(&m_project);

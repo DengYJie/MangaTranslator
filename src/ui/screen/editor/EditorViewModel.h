@@ -143,9 +143,11 @@ public:
     void commitRegionGeometries(const QVector<domain::RegionId>& regionIds,
                                 const QVector<domain::RectGeometry>& newGeometries,
                                 canvas::EditKind kind);
-    /// P5-D hook: pushes an external command to the project undo stack.
+    /// Takes ownership of `cmd` and pushes it onto the project undo stack, sealing any active text
+    /// session first. Deletes the command when no session is open.
     void pushPreparedCommand(QUndoCommand* cmd);
-    /// P5-D hook: cancels all ongoing background project tasks.
+    /// Cancels the background tasks owned by the open project session and invalidates thumbnail
+    /// state for the current view generation.
     void cancelProjectTasks();
     /// Adopts a project save performed outside the editor, such as the end of a batch run.
     void markProjectCleanAtRevision(quint64 savedRevision);

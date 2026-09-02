@@ -40,7 +40,7 @@ constexpr int TitleBarTitleMarginRight = 8;
 constexpr int TitleBarSubtitleMarginRight = 16;
 // Minimum guaranteed drag buffer (Col 10 Min Drag Region).
 constexpr int TitleBarMinDragRegionWidth = 48;
-// Spec safe spacing.
+// Gap kept between adjacent title bar content elements.
 constexpr int ElementSpacing = 16;
 // Standard icon pixel size.
 constexpr int IconSize = 16;
