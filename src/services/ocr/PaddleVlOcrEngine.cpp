@@ -19,6 +19,7 @@
 #include <cstring>
 #include <onnxruntime_cxx_api.h>
 #include <optional>
+#include <unordered_set>
 #include <vector>
 
 namespace manga::services {
@@ -317,14 +318,11 @@ PaddleVlOcrEngine::runInference(const application::OcrRequest& request,
 
     // "User: "
     int uId = m_impl->vocab->tokenToId(QStringLiteral("User"));
-    if (uId >= 0)
-        promptTokens.push_back(uId);
+    promptTokens.push_back(uId >= 0 ? uId : 2969);
     int colonId = m_impl->vocab->tokenToId(QStringLiteral(":"));
-    if (colonId >= 0)
-        promptTokens.push_back(colonId);
+    promptTokens.push_back(colonId >= 0 ? colonId : 93963);
     int spaceId = m_impl->vocab->tokenToId(QStringLiteral(" "));
-    if (spaceId >= 0)
-        promptTokens.push_back(spaceId);
+    promptTokens.push_back(spaceId >= 0 ? spaceId : 93946);
 
     promptTokens.push_back(101305); // <|IMAGE_START|>
     const size_t imagePlaceholderStartIndex = promptTokens.size();
@@ -333,23 +331,20 @@ PaddleVlOcrEngine::runInference(const application::OcrRequest& request,
     }
     promptTokens.push_back(101306); // <|IMAGE_END|>
 
-    // "OCR:\nAssistant:\n"
-    int ocrId = m_impl->vocab->tokenToId(QStringLiteral("OCR"));
-    if (ocrId >= 0)
-        promptTokens.push_back(ocrId);
-    if (colonId >= 0)
-        promptTokens.push_back(colonId);
-    int nlId = m_impl->vocab->tokenToId(QStringLiteral("<nl>"));
-    if (nlId >= 0)
-        promptTokens.push_back(nlId);
+    // "OCR:\n"
+    int oId = m_impl->vocab->tokenToId(QStringLiteral("O"));
+    int crId = m_impl->vocab->tokenToId(QStringLiteral("CR"));
+    promptTokens.push_back(oId >= 0 ? oId : 93972);
+    promptTokens.push_back(crId >= 0 ? crId : 2497);
+    promptTokens.push_back(colonId >= 0 ? colonId : 93963);
+    int nlId = m_impl->vocab->tokenToId(QStringLiteral("<0x0A>"));
+    promptTokens.push_back(nlId >= 0 ? nlId : 23);
 
+    // "Assistant:\n"
     int asstId = m_impl->vocab->tokenToId(QStringLiteral("Assistant"));
-    if (asstId >= 0)
-        promptTokens.push_back(asstId);
-    if (colonId >= 0)
-        promptTokens.push_back(colonId);
-    if (nlId >= 0)
-        promptTokens.push_back(nlId);
+    promptTokens.push_back(asstId >= 0 ? asstId : 92267);
+    promptTokens.push_back(colonId >= 0 ? colonId : 93963);
+    promptTokens.push_back(nlId >= 0 ? nlId : 23);
 
     const int64_t seqLen = static_cast<int64_t>(promptTokens.size());
     const std::vector<int64_t> promptShape = {1, seqLen};
@@ -470,7 +465,7 @@ PaddleVlOcrEngine::runInference(const application::OcrRequest& request,
 
     QVector<int> generatedTokens;
     constexpr int maxNewTokens = 256;
-    constexpr float repetitionPenalty = 1.2f;
+    constexpr float repetitionPenalty = 1.0f;
     int64_t totalLen = seqLen;
 
     QElapsedTimer genTimer;
@@ -481,11 +476,14 @@ PaddleVlOcrEngine::runInference(const application::OcrRequest& request,
             break;
         }
 
-        // Apply repetition penalty
-        for (int tok : generatedTokens) {
-            if (tok >= 0 && tok < static_cast<int>(currentLogits.size())) {
-                float v = currentLogits[tok];
-                currentLogits[tok] = (v > 0.0f) ? (v / repetitionPenalty) : (v * repetitionPenalty);
+        // Apply repetition penalty on unique generated tokens only if penalty is enabled (> 1.0)
+        if (repetitionPenalty > 1.0f) {
+            std::unordered_set<int> uniqueTokens(generatedTokens.cbegin(), generatedTokens.cend());
+            for (int tok : uniqueTokens) {
+                if (tok >= 0 && tok < static_cast<int>(currentLogits.size())) {
+                    float v = currentLogits[tok];
+                    currentLogits[tok] = (v > 0.0f) ? (v / repetitionPenalty) : (v * repetitionPenalty);
+                }
             }
         }
 

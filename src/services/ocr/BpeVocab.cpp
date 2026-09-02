@@ -129,6 +129,14 @@ application::Result<BpeVocab> BpeVocab::load(const QString& vocabPath, int bosId
 QString BpeVocab::decode(const QVector<int>& ids) const {
     QString res;
     res.reserve(ids.size() * 2);
+    QByteArray rawBytes;
+
+    const auto flushBytes = [&res, &rawBytes]() {
+        if (!rawBytes.isEmpty()) {
+            res.append(QString::fromUtf8(rawBytes));
+            rawBytes.clear();
+        }
+    };
 
     for (int id : ids) {
         if (m_specialIds.contains(id) || id == m_bosId || id == m_eosId || id == m_padId) {
@@ -141,15 +149,30 @@ QString BpeVocab::decode(const QVector<int>& ids) const {
         }
 
         QString piece = it.value();
-        if (piece == QStringLiteral("<nl>") || piece == QStringLiteral("<0x0A>")) {
+        if (piece == QStringLiteral("<nl>")) {
+            flushBytes();
             res.append(QLatin1Char('\n'));
             continue;
         }
+
+        // Byte fallback tokens: <0xXX>
+        if (piece.length() == 6 && piece.startsWith(QStringLiteral("<0x")) && piece.endsWith(QLatin1Char('>'))) {
+            bool ok = false;
+            int byteVal = piece.mid(3, 2).toInt(&ok, 16);
+            if (ok) {
+                rawBytes.append(static_cast<char>(byteVal));
+                continue;
+            }
+        }
+
+        flushBytes();
 
         // SentencePiece prefix replacement (U+2581 Lower One Eighth Block)
         piece.replace(QChar(0x2581), QStringLiteral(" "));
         res.append(piece);
     }
+
+    flushBytes();
 
     return res.trimmed();
 }
