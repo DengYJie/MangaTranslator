@@ -34,10 +34,10 @@ int BoundedTaskExecutor::defaultWorkerCount() {
     if (cores <= 0) {
         cores = 1;
     }
-    return std::clamp(cores - 1, 1, 4);
+    return std::clamp(cores >= 4 ? 2 : 1, 1, 2);
 }
 
-BoundedTaskExecutor::BoundedTaskExecutor(int workerCount) : m_workerCount(std::clamp(workerCount, 1, 4)) {
+BoundedTaskExecutor::BoundedTaskExecutor(int workerCount) : m_workerCount(std::clamp(workerCount, 1, 2)) {
     m_state = std::make_shared<SharedState>();
     m_pool.setMaxThreadCount(m_workerCount);
 }

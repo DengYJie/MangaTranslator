@@ -40,6 +40,7 @@ struct OnnxMangaOcrEngine::Impl {
     std::optional<BaberuVocab> vocab;
 
     bool loaded{false};
+    int activeInferences{0};
     QMutex loadMutex;
     QSemaphore concurrencyGate{1}; // concurrency gate = 1
 };
@@ -60,6 +61,18 @@ OnnxMangaOcrEngine::OnnxMangaOcrEngine(std::unique_ptr<Ort::Env> env, BoundedTas
 }
 
 OnnxMangaOcrEngine::~OnnxMangaOcrEngine() = default;
+
+void OnnxMangaOcrEngine::release() {
+    QMutexLocker locker(&m_impl->loadMutex);
+    if (m_impl->activeInferences == 0 && m_impl->loaded) {
+        m_impl->visSession.reset();
+        m_impl->preSession.reset();
+        m_impl->stepSession.reset();
+        m_impl->vocab.reset();
+        m_impl->loaded = false;
+        qInfo().noquote() << "[OcrEngine] Baberu OCR sessions released from memory";
+    }
+}
 
 application::Result<void> OnnxMangaOcrEngine::ensureLoaded() {
     QMutexLocker locker(&m_impl->loadMutex);
@@ -89,7 +102,7 @@ application::Result<void> OnnxMangaOcrEngine::ensureLoaded() {
     // Autoregressive decoding amplifies small kernel differences, so deterministic
     // implementations are required whenever ONNX Runtime provides them.
     options.SetDeterministicCompute(true);
-    options.SetIntraOpNumThreads(std::clamp(QThread::idealThreadCount() - 1, 1, 4));
+    options.SetIntraOpNumThreads(2);
     options.SetInterOpNumThreads(1);
     options.SetExecutionMode(ExecutionMode::ORT_SEQUENTIAL);
 
@@ -182,6 +195,18 @@ OnnxMangaOcrEngine::runInference(const application::OcrRequest& request,
     if (!loadRes.has_value()) {
         return std::unexpected<application::ApplicationError>(loadRes.error());
     }
+
+    {
+        QMutexLocker locker(&m_impl->loadMutex);
+        ++m_impl->activeInferences;
+    }
+    struct InferenceGuard {
+        OnnxMangaOcrEngine::Impl* impl;
+        ~InferenceGuard() {
+            QMutexLocker locker(&impl->loadMutex);
+            --impl->activeInferences;
+        }
+    } guard{m_impl.get()};
 
     m_impl->concurrencyGate.acquire(1);
     QSemaphoreReleaser releaser(&m_impl->concurrencyGate, 1);

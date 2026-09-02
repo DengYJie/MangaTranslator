@@ -35,6 +35,7 @@ struct PaddleOcrEngine::Impl {
 
     bool loaded{false};
     bool available{false};
+    int activeInferences{0};
     QMutex loadMutex;
     QSemaphore concurrencyGate{1};
 };
@@ -55,6 +56,15 @@ PaddleOcrEngine::PaddleOcrEngine(std::unique_ptr<Ort::Env> env, BoundedTaskExecu
 }
 
 PaddleOcrEngine::~PaddleOcrEngine() = default;
+
+void PaddleOcrEngine::release() {
+    QMutexLocker locker(&m_impl->loadMutex);
+    if (m_impl->activeInferences == 0 && m_impl->loaded) {
+        m_impl->session.reset();
+        m_impl->loaded = false;
+        qInfo().noquote() << "[PaddleOcrEngine] session released from memory";
+    }
+}
 
 bool PaddleOcrEngine::isAvailable() const {
     if (m_impl->modelDir.trimmed().isEmpty()) {
@@ -135,7 +145,7 @@ application::Result<void> PaddleOcrEngine::ensureLoaded() {
 
     Ort::SessionOptions options;
     options.SetGraphOptimizationLevel(GraphOptimizationLevel::ORT_ENABLE_ALL);
-    options.SetIntraOpNumThreads(std::clamp(QThread::idealThreadCount() - 1, 1, 4));
+    options.SetIntraOpNumThreads(2);
     options.SetInterOpNumThreads(1);
     options.SetExecutionMode(ExecutionMode::ORT_SEQUENTIAL);
 
@@ -202,6 +212,18 @@ PaddleOcrEngine::runInference(const application::OcrRequest& request,
     if (!loadRes.has_value()) {
         return std::unexpected(loadRes.error());
     }
+
+    {
+        QMutexLocker locker(&m_impl->loadMutex);
+        ++m_impl->activeInferences;
+    }
+    struct InferenceGuard {
+        PaddleOcrEngine::Impl* impl;
+        ~InferenceGuard() {
+            QMutexLocker locker(&impl->loadMutex);
+            --impl->activeInferences;
+        }
+    } guard{m_impl.get()};
 
     m_impl->concurrencyGate.acquire(1);
     QSemaphoreReleaser releaser(&m_impl->concurrencyGate, 1);

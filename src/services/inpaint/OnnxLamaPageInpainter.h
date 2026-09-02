@@ -20,6 +20,8 @@ public:
     [[nodiscard]] QFuture<application::Result<application::PageInpaintResponse>>
     inpaint(application::PageInpaintRequest request, application::OperationContext context) override;
 
+    void release() override;
+
 private:
     struct Impl;
     std::shared_ptr<Impl> m_impl;

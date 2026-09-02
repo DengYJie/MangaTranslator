@@ -32,6 +32,7 @@ public:
     recognize(application::OcrRequest request, application::OperationContext context) override;
 
     [[nodiscard]] bool isAvailable() const;
+    void release() override;
 
 private:
     struct Impl;

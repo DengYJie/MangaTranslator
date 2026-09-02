@@ -64,6 +64,16 @@ OnnxLamaPageInpainter::OnnxLamaPageInpainter(Ort::Env* env, BoundedTaskExecutor*
 
 OnnxLamaPageInpainter::~OnnxLamaPageInpainter() = default;
 
+void OnnxLamaPageInpainter::release() {
+    QMutexLocker locker(&m_impl->loadMutex);
+    QMutexLocker runLocker(&m_impl->runMutex);
+    if (m_impl->loaded) {
+        m_impl->session.reset();
+        m_impl->loaded = false;
+        qInfo().noquote() << "[InpaintEngine] inpaint ONNX session released from memory";
+    }
+}
+
 application::Result<void> OnnxLamaPageInpainter::ensureLoaded() {
     QMutexLocker locker(&m_impl->loadMutex);
     if (m_impl->loaded) {

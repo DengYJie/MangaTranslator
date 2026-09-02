@@ -14,6 +14,9 @@ public:
 
     [[nodiscard]] virtual QFuture<Result<PageInpaintResponse>> inpaint(PageInpaintRequest request,
                                                                        OperationContext context) = 0;
+
+    /// Releases loaded model sessions and weights if no tasks are actively running.
+    virtual void release() {}
 };
 
 } // namespace manga::application

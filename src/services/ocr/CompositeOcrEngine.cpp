@@ -41,6 +41,15 @@ CompositeOcrEngine::CompositeOcrEngine(std::unique_ptr<Ort::Env> env, BoundedTas
 
 CompositeOcrEngine::~CompositeOcrEngine() = default;
 
+void CompositeOcrEngine::release() {
+    if (m_impl->baberuEngine) {
+        m_impl->baberuEngine->release();
+    }
+    if (m_impl->paddleEngine) {
+        m_impl->paddleEngine->release();
+    }
+}
+
 QFuture<application::Result<application::OcrResponse>>
 CompositeOcrEngine::recognize(application::OcrRequest request, application::OperationContext context) {
     const std::string lang = request.language.toString();

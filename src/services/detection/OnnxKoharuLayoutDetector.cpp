@@ -31,6 +31,7 @@ struct OnnxKoharuLayoutDetector::Impl {
     KoharuLayoutManifest manifest;
 
     bool loaded{false};
+    int activeInferences{0};
     QMutex loadMutex;
     QSemaphore concurrencyGate{1};
 };
@@ -53,6 +54,15 @@ OnnxKoharuLayoutDetector::OnnxKoharuLayoutDetector(std::unique_ptr<Ort::Env> env
 }
 
 OnnxKoharuLayoutDetector::~OnnxKoharuLayoutDetector() = default;
+
+void OnnxKoharuLayoutDetector::release() {
+    QMutexLocker locker(&m_impl->loadMutex);
+    if (m_impl->activeInferences == 0 && m_impl->loaded) {
+        m_impl->session.reset();
+        m_impl->loaded = false;
+        qInfo().noquote() << "[DetectEngine] ONNX layout detection session released from memory";
+    }
+}
 
 application::Result<void> OnnxKoharuLayoutDetector::ensureLoaded() {
     QMutexLocker locker(&m_impl->loadMutex);
@@ -78,7 +88,7 @@ application::Result<void> OnnxKoharuLayoutDetector::ensureLoaded() {
 
     try {
         Ort::SessionOptions sessionOptions;
-        sessionOptions.SetIntraOpNumThreads(std::clamp(QThread::idealThreadCount() - 1, 1, 4));
+        sessionOptions.SetIntraOpNumThreads(2);
         sessionOptions.SetInterOpNumThreads(1);
         sessionOptions.SetExecutionMode(ExecutionMode::ORT_SEQUENTIAL);
         sessionOptions.SetGraphOptimizationLevel(GraphOptimizationLevel::ORT_ENABLE_ALL);
@@ -155,6 +165,18 @@ OnnxKoharuLayoutDetector::runInference(const application::TextDetectionRequest& 
     if (!loadResult.has_value()) {
         return std::unexpected(loadResult.error());
     }
+
+    {
+        QMutexLocker locker(&m_impl->loadMutex);
+        ++m_impl->activeInferences;
+    }
+    struct InferenceGuard {
+        OnnxKoharuLayoutDetector::Impl* impl;
+        ~InferenceGuard() {
+            QMutexLocker locker(&impl->loadMutex);
+            --impl->activeInferences;
+        }
+    } guard{m_impl.get()};
 
     if (context.stopToken.stop_requested()) {
         return std::unexpected(application::makeApplicationError(application::ErrorCategory::Cancelled,
