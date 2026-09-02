@@ -16,7 +16,9 @@ enum class Tool {
     Select,
     Pan,
     CreateRegion,
-    Remove
+    Remove,
+    Brush,
+    Eraser
 };
 
 /// Selection behavior when clicking a region.

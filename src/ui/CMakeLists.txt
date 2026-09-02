@@ -12,6 +12,8 @@ add_library(manga_ui STATIC
     command/EditorCommandContext.h
     command/PageClearLayerCommand.cpp
     command/PageClearLayerCommand.h
+    command/PageManualOverrideCommand.cpp
+    command/PageManualOverrideCommand.h
     command/RegionCommands.cpp
     command/RegionCommands.h
     command/RegionPropertyCommand.cpp

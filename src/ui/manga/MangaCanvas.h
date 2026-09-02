@@ -97,6 +97,16 @@ public:
         return m_tool;
     }
 
+    [[nodiscard]] double removeDiameter() const noexcept {
+        return m_removeDiameter;
+    }
+    void setRemoveDiameter(double diameter);
+
+    [[nodiscard]] QColor brushColor() const noexcept {
+        return m_brushColor;
+    }
+    void setBrushColor(const QColor& color);
+
     /// Reconciles overlay items with the given region projections. Creates, updates,
     /// or removes items to match. Items hold geometry and selection state only.
     void setRegions(const QVector<CanvasRegionDisplay>& regions);
@@ -141,6 +151,11 @@ Q_SIGNALS:
 
     /// Emitted once when a Remove stroke is released.
     void removeStrokeCommitted(QVector<QPointF> points, double diameter);
+    void removeDiameterChanged(double diameter);
+
+    /// Emitted once when a manual Brush or Eraser stroke is released.
+    void manualStrokeCommitted(QVector<QPointF> points, CanvasTool tool, QColor color, double diameter);
+    void brushColorChanged(QColor color);
 
 protected:
     void wheelEvent(QWheelEvent* event) override;
@@ -220,6 +235,7 @@ private:
     QVector<QPointF> m_removeStroke;
     bool m_removeStrokeActive{false};
     double m_removeDiameter{48.0};
+    QColor m_brushColor{17, 17, 17, 255};
     bool m_spaceHeld{false};
     SourceRegionId m_hoveredRegionId{};
 };

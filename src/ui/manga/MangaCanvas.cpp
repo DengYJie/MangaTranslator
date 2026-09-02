@@ -370,9 +370,21 @@ void MangaCanvas::setTool(canvas::Tool tool) {
             setDragMode(NoDrag);
             break;
         case canvas::Tool::Remove:
+        case canvas::Tool::Brush:
+        case canvas::Tool::Eraser:
             setDragMode(NoDrag);
             updateRemoveCursor();
             break;
+    }
+}
+
+void MangaCanvas::setBrushColor(const QColor& color) {
+    if (m_brushColor != color) {
+        m_brushColor = color;
+        Q_EMIT brushColorChanged(m_brushColor);
+        if (m_tool == canvas::Tool::Brush) {
+            viewport()->update();
+        }
     }
 }
 
@@ -489,7 +501,8 @@ void MangaCanvas::cancelRemoveStroke() {
 }
 
 void MangaCanvas::updateRemoveCursor() {
-    if (m_tool != canvas::Tool::Remove || m_spaceHeld || !viewport()) {
+    if ((m_tool != canvas::Tool::Remove && m_tool != canvas::Tool::Brush && m_tool != canvas::Tool::Eraser) ||
+        m_spaceHeld || !viewport()) {
         viewport()->unsetCursor();
         return;
     }
@@ -536,10 +549,13 @@ void MangaCanvas::applyThemeColorsToItems() {
 }
 
 void MangaCanvas::wheelEvent(QWheelEvent* event) {
-    if ((event->modifiers() & Qt::AltModifier) && m_tool == canvas::Tool::Remove && !m_spaceHeld) {
-        const int steps = event->angleDelta().y() / 120;
-        if (steps != 0) {
-            setRemoveDiameter(m_removeDiameter + steps * 4.0);
+    if ((event->modifiers() & Qt::AltModifier) &&
+        (m_tool == canvas::Tool::Remove || m_tool == canvas::Tool::Brush || m_tool == canvas::Tool::Eraser) &&
+        !m_spaceHeld) {
+        const int verticalDelta = event->angleDelta().y() != 0 ? event->angleDelta().y() : event->pixelDelta().y();
+        if (verticalDelta != 0) {
+            const double direction = verticalDelta > 0 ? 1.0 : -1.0;
+            setRemoveDiameter(m_removeDiameter + direction * 4.0);
         }
         event->accept();
         return;
@@ -555,6 +571,7 @@ void MangaCanvas::wheelEvent(QWheelEvent* event) {
             if (!qFuzzyCompare(m_zoomFactor, factor)) {
                 m_zoomFactor = factor;
                 setTransform(QTransform::fromScale(m_zoomFactor, m_zoomFactor));
+                updateRemoveCursor();
                 updateNavigationSceneRect();
                 Q_EMIT zoomChanged(m_zoomFactor);
                 emitViewTransform();
@@ -746,7 +763,7 @@ void MangaCanvas::mousePressEvent(QMouseEvent* event) {
     const QPointF devicePt = event->position();
     const QPointF scenePt = mapToScene(event->position().toPoint());
 
-    if (m_tool == canvas::Tool::Remove) {
+    if (m_tool == canvas::Tool::Remove || m_tool == canvas::Tool::Brush || m_tool == canvas::Tool::Eraser) {
         m_removeStroke.clear();
         m_removeStroke.append(scenePt);
         m_removeStrokeActive = true;
@@ -968,9 +985,15 @@ void MangaCanvas::mouseMoveEvent(QMouseEvent* event) {
 }
 
 void MangaCanvas::mouseReleaseEvent(QMouseEvent* event) {
-    if (event->button() == Qt::LeftButton && m_tool == canvas::Tool::Remove && m_removeStrokeActive) {
+    if (event->button() == Qt::LeftButton &&
+        (m_tool == canvas::Tool::Remove || m_tool == canvas::Tool::Brush || m_tool == canvas::Tool::Eraser) &&
+        m_removeStrokeActive) {
         if (!m_spaceHeld && !m_removeStroke.isEmpty()) {
-            Q_EMIT removeStrokeCommitted(m_removeStroke, m_removeDiameter);
+            if (m_tool == canvas::Tool::Remove) {
+                Q_EMIT removeStrokeCommitted(m_removeStroke, m_removeDiameter);
+            } else {
+                Q_EMIT manualStrokeCommitted(m_removeStroke, m_tool, m_brushColor, m_removeDiameter);
+            }
         }
         cancelRemoveStroke();
         event->accept();
@@ -1088,11 +1111,21 @@ void MangaCanvas::resizeEvent(QResizeEvent* event) {
 void MangaCanvas::drawForeground(QPainter* painter, const QRectF& rect) {
     QGraphicsView::drawForeground(painter, rect);
 
-    if (m_removeStrokeActive && m_tool == canvas::Tool::Remove && !m_removeStroke.isEmpty()) {
+    if (m_removeStrokeActive &&
+        (m_tool == canvas::Tool::Remove || m_tool == canvas::Tool::Brush || m_tool == canvas::Tool::Eraser) &&
+        !m_removeStroke.isEmpty()) {
         painter->save();
         painter->setRenderHint(QPainter::Antialiasing);
-        QColor strokeColor = themeColorsRef().accentDefault;
-        strokeColor.setAlpha(100);
+        QColor strokeColor;
+        if (m_tool == canvas::Tool::Remove) {
+            strokeColor = themeColorsRef().accentDefault;
+            strokeColor.setAlpha(100);
+        } else if (m_tool == canvas::Tool::Brush) {
+            strokeColor = m_brushColor;
+            strokeColor.setAlpha(180);
+        } else if (m_tool == canvas::Tool::Eraser) {
+            strokeColor = QColor(255, 100, 100, 120);
+        }
         painter->setPen(QPen(strokeColor, m_removeDiameter, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
         if (m_removeStroke.size() == 1) {
             painter->setBrush(strokeColor);
