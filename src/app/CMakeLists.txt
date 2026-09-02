@@ -23,7 +23,7 @@ target_link_libraries(manga_app
         FluentQt::FluentQt
 )
 
-qt_add_executable(MangaTranslatorApp
+qt_add_executable(MangaTranslatorApp WIN32
     main.cpp
 )
 manga_apply_project_options(MangaTranslatorApp)
