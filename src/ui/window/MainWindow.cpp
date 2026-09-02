@@ -109,7 +109,19 @@ void MainWindow::setNavigationController(navigation::NavigationController* contr
     if (m_controller == nullptr) {
         return;
     }
-    connect(this, &NavigationWindow::backRequested, m_controller, &navigation::NavigationController::goBack);
+    connect(this, &NavigationWindow::backRequested, this, [this]() {
+        if (m_controller == nullptr) {
+            return;
+        }
+        const auto cur = m_controller->currentRoute();
+        if (cur && cur->startsWith(QLatin1String("settings"))) {
+            // 在设置界面点击返回：直接回到离开主 surface 前记录的页面
+            const QString target = m_lastMainRoute.isEmpty() ? QStringLiteral("home") : m_lastMainRoute;
+            m_controller->navigate(target);
+        } else {
+            m_controller->goBack();
+        }
+    });
     connect(this, &NavigationWindow::navigationRequested, this, [this](const QString& routeKey) {
         if (isSignalConnected(QMetaMethod::fromSignal(&MainWindow::navigationInterceptRequested))) {
             Q_EMIT navigationInterceptRequested(routeKey);
@@ -118,7 +130,18 @@ void MainWindow::setNavigationController(navigation::NavigationController* contr
         }
     });
     connect(m_controller, &navigation::NavigationController::routeChanged, this, [this](const QString& routeKey) {
+        const bool isSettings = routeKey.startsWith(QLatin1String("settings"));
         const bool isEditor = (routeKey == QLatin1String("editor"));
+
+        if (!isSettings) {
+            m_lastMainRoute = routeKey;
+        }
+
+        if (titleBar()) {
+            titleBar()->setBackButtonVisible(isSettings);
+            titleBar()->updateLayout();
+        }
+
         if (m_editorMenuBar) {
             m_editorMenuBar->setVisible(isEditor);
             if (titleBar()) {
@@ -126,10 +149,33 @@ void MainWindow::setNavigationController(navigation::NavigationController* contr
             }
         }
     });
-    titleBar()->setBackButtonVisible(false);
+
+    const auto cur = m_controller->currentRoute();
+    const bool isSettings = cur && cur->startsWith(QLatin1String("settings"));
+    const bool isEditor = cur && (*cur == QLatin1String("editor"));
+    if (!isSettings && cur) {
+        m_lastMainRoute = *cur;
+    }
+    if (titleBar()) {
+        titleBar()->setBackButtonVisible(isSettings);
+    }
+    if (m_editorMenuBar) {
+        m_editorMenuBar->setVisible(isEditor);
+    }
 
     auto* backShortcut = new QShortcut(QKeySequence::Back, this);
-    connect(backShortcut, &QShortcut::activated, m_controller, &navigation::NavigationController::goBack);
+    connect(backShortcut, &QShortcut::activated, this, [this]() {
+        if (m_controller == nullptr) {
+            return;
+        }
+        const auto curRoute = m_controller->currentRoute();
+        if (curRoute && curRoute->startsWith(QLatin1String("settings"))) {
+            const QString target = m_lastMainRoute.isEmpty() ? QStringLiteral("home") : m_lastMainRoute;
+            m_controller->navigate(target);
+        } else {
+            m_controller->goBack();
+        }
+    });
 
     auto* forwardShortcut = new QShortcut(QKeySequence::Forward, this);
     connect(forwardShortcut, &QShortcut::activated, m_controller, &navigation::NavigationController::goForward);

@@ -67,6 +67,7 @@ private:
     widget::AppStatusTaskStrip* m_statusStrip{nullptr};
     fluent::textfields::Label* m_projectTitleLabel{nullptr};
     fluent::menus_toolbars::FluentMenuBar* m_editorMenuBar{nullptr};
+    QString m_lastMainRoute{QStringLiteral("home")};
     bool m_forceClose{false};
 };
 

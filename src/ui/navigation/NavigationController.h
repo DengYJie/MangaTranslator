@@ -25,6 +25,9 @@ public:
     [[nodiscard]] bool canGoForward() const {
         return m_history.canGoForward();
     }
+    [[nodiscard]] std::optional<QString> currentRoute() const {
+        return m_history.current();
+    }
 
 Q_SIGNALS:
     void routeChanged(const QString& routeKey);
