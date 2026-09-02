@@ -213,6 +213,7 @@ private Q_SLOTS:
                                                std::make_unique<StubAppSettingsStore>());
         context.shutdown();
         context.shutdown(); // The second call must not crash.
+        // TODO(Defect 10): Replace QVERIFY(true) placeholder with actual verifiable assertions.
         QVERIFY(true);
     }
 

@@ -62,11 +62,9 @@ constexpr int kMaxTimeoutMs = 300000;
             ErrorCategory::Input, std::move(code), std::move(message), application::RecoveryAction::OpenSettings));
     };
 
-    // The pattern belongs to isValidProviderId and this message quotes it a second time, so the
-    // two spellings have to move together.
     if (!isValidProviderId(config.providerId)) {
         return invalid(QStringLiteral("input.invalid_provider"),
-                       QStringLiteral("Provider ID must match [a-z0-9][a-z0-9._-]{0,63}"));
+                       QStringLiteral("Provider ID must match %1").arg(kProviderIdPatternDisplay.toString()));
     }
     if (!config.endpoint.isValid() || config.endpoint.isEmpty() || config.endpoint.isRelative()) {
         return invalid(QStringLiteral("input.invalid_endpoint"), QStringLiteral("A full endpoint URL is required"));

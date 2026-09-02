@@ -82,6 +82,7 @@ private Q_SLOTS:
         window->show();
         QCoreApplication::processEvents();
         delete window; // must not crash
+        // TODO(Defect 10): Replace QVERIFY(true) placeholder with actual verifiable assertions.
         QVERIFY(true);
     }
 };

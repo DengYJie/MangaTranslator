@@ -8,6 +8,7 @@
 #include <QTimer>
 
 #include <optional>
+#include <stop_token>
 #include <utility>
 
 namespace manga::network {

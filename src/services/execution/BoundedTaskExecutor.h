@@ -290,23 +290,7 @@ application::Result<QFuture<application::Result<T>>> BoundedTaskExecutor::submit
             } else {
                 m_state->background.push_back(std::move(pending));
             }
-            // Mirrors pumpLocked from the implementation, so the two drains have to stay in sync.
-            while (m_state->active < m_workerCount && (!m_state->interactive.empty() || !m_state->background.empty())) {
-                PendingTask next;
-                const bool preferBackground = m_state->interactiveSinceBackground >= 8 && !m_state->background.empty();
-                if (!m_state->background.empty() && (preferBackground || m_state->interactive.empty())) {
-                    next = std::move(m_state->background.front());
-                    m_state->background.pop_front();
-                    m_state->interactiveSinceBackground = 0;
-                } else {
-                    next = std::move(m_state->interactive.front());
-                    m_state->interactive.pop_front();
-                    m_state->interactiveSinceBackground =
-                        m_state->background.empty() ? 0 : m_state->interactiveSinceBackground + 1;
-                }
-                ++m_state->active;
-                toStart.push_back(std::move(next));
-            }
+            BoundedTaskExecutor::pumpLocked(m_state, toStart, m_workerCount);
         }
     }
 

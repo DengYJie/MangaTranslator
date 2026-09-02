@@ -14,11 +14,6 @@ KoharuLayoutPreprocessor::process(const QImage& sourceImage, int targetWidth, in
     result.originalHeight = sourceImage.height();
     result.targetWidth = targetWidth;
     result.targetHeight = targetHeight;
-    result.scale = 1.0;
-    result.padX = 0.0;
-    result.padY = 0.0;
-    result.scaledWidth = targetWidth;
-    result.scaledHeight = targetHeight;
 
     const size_t planeSize = static_cast<size_t>(targetWidth) * targetHeight;
     result.tensorData.resize(3 * planeSize);

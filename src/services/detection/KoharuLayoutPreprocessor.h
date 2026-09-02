@@ -13,13 +13,6 @@ struct KoharuPreprocessedImage {
     int originalHeight{0};
     int targetWidth{1152};
     int targetHeight{1152};
-    double scale{1.0};
-    double padX{0.0};
-    double padY{0.0};
-    int scaledWidth{0};
-    int scaledHeight{0};
-
-    // The stretch path never pads, so the scale and pad fields keep their identity defaults.
 };
 
 class KoharuLayoutPreprocessor {

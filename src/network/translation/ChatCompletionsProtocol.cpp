@@ -1,5 +1,7 @@
 #include "network/translation/ChatCompletionsProtocol.h"
 
+#include "network/translation/RetryPolicy.h"
+
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -270,7 +272,7 @@ std::optional<int> parseRetryAfterSeconds(const QByteArray& headerValue, const Q
     bool isInteger = false;
     const int seconds = value.toInt(&isInteger);
     if (isInteger) {
-        return std::clamp(seconds, 0, 60);
+        return std::clamp(seconds, 0, kMaxRetryAfterSeconds);
     }
     QDateTime retryAt = QDateTime::fromString(value, Qt::RFC2822Date);
     if (!retryAt.isValid()) {
@@ -281,7 +283,7 @@ std::optional<int> parseRetryAfterSeconds(const QByteArray& headerValue, const Q
         return std::nullopt;
     }
     const qint64 delta = now.secsTo(retryAt);
-    return std::clamp(static_cast<int>(delta), 0, 60);
+    return std::clamp(static_cast<int>(delta), 0, kMaxRetryAfterSeconds);
 }
 
 HttpFailure classifyHttpStatus(int status) {

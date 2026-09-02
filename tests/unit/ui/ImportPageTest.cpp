@@ -1,5 +1,6 @@
 #include "ui/screen/import/ImportPage.h"
 
+// TODO(Defect 2): FakeComicImporter.h is located in tests/unit/application/, ui target missing include path.
 #include "FakeComicImporter.h"
 #include "application/workflow/OperationRegistry.h"
 #include "fakes/FakeProjectPorts.h"

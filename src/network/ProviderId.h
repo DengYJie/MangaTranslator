@@ -6,9 +6,12 @@
 
 namespace manga::network {
 
+inline constexpr QLatin1String kProviderIdPattern("^[a-z0-9][a-z0-9._-]{0,63}$");
+inline constexpr QLatin1String kProviderIdPatternDisplay("[a-z0-9][a-z0-9._-]{0,63}");
+
 /// Stable lowercase provider identity used by configuration, credential targets and logs.
 [[nodiscard]] inline bool isValidProviderId(const QString& providerId) {
-    static const QRegularExpression pattern(QStringLiteral("^[a-z0-9][a-z0-9._-]{0,63}$"));
+    static const QRegularExpression pattern(kProviderIdPattern);
     return pattern.match(providerId).hasMatch();
 }
 

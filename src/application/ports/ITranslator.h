@@ -13,15 +13,15 @@ class ITranslator {
 public:
     virtual ~ITranslator() = default;
 
-    /// Starts one provider request and fulfills the returned future when the provider answers or the
+    /// starts one provider request and fulfills the returned future when the provider answers or the
     /// transport fails. Dependency presence and the provider configuration are checked on the
     /// calling thread, and a missing credential store, transport, or configuration fulfills the
     /// future on that same thread with internal.unavailable_dependency. A fulfilled request carries
     /// the provider category codes the transport maps, and a rejected payload carries a model
-    /// category code. The implementation observes no stop token, so a started request runs to its
-    /// network completion and the caller can only discard the result. The request and context are
-    /// taken by value, the translator does not own the credential store it reads, and every in-flight
-    /// job must finish before that store is destroyed.
+    /// category code. The implementation observes the operation context's stop token, aborting the
+    /// network request and fulfilling the future with a cancelled error if a stop is requested.
+    /// The request and context are taken by value, the translator does not own the credential
+    /// store it reads, and every in-flight job must finish before that store is destroyed.
     virtual QFuture<Result<TranslationResponse>> translate(TranslationRequest request, OperationContext context) = 0;
 };
 

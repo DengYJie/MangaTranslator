@@ -98,7 +98,8 @@ public:
     /// Updates region geometry with safe boundary clamping to image bounds.
     /// Returns the geometry clamped to the page, or nothing when the region is absent, the page image size
     /// is not positive, or a clamped side falls below kMinDimension.
-    std::optional<RectGeometry> updateRegionGeometry(const RegionId& regionId, const RectGeometry& newGeometry);
+    [[nodiscard]] std::optional<RectGeometry> updateRegionGeometry(const RegionId& regionId,
+                                                                   const RectGeometry& newGeometry);
 
     /// Updates region OCR/manual source text and bumps contentRevision.
     [[nodiscard]] std::expected<void, ProjectEditError> updateRegionSource(const RegionId& regionId,

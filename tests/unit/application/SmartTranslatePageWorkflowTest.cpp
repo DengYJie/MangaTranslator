@@ -52,6 +52,7 @@ void SmartTranslatePageWorkflowTest::testSuccessfulPipeline() {
 
     SmartTranslatePageWorkflow workflow(&ocr, &tr, &cl, &la, registry.get());
 
+    // TODO(Defect 1): Update RegionProcessingTarget initialization to include bubbleGeometry and bubblePolygon.
     QVector<RegionProcessingTarget> targets;
     targets.append({manga::domain::RegionId::generate(),
                     manga::domain::RectGeometry{0, 0, 10, 10},

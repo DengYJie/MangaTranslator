@@ -48,6 +48,7 @@ private Q_SLOTS:
         static_assert(manga::ui::canvas::kZRegionNormal < manga::ui::canvas::kZSelectionHandles);
         static_assert(manga::ui::canvas::kZSelectionHandles < manga::ui::canvas::kZToolCreation);
         static_assert(manga::ui::canvas::kZToolCreation < manga::ui::canvas::kZTextLayer);
+        // TODO(Defect 10): Replace QVERIFY(true) placeholder with actual verifiable assertions.
         QVERIFY(true);
     }
 

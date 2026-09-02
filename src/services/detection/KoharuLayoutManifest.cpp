@@ -95,7 +95,7 @@ application::Result<KoharuLayoutManifest> loadAndValidateDetectionManifest(const
         return std::unexpected(incompatible(QStringLiteral("Missing runtime object")));
     }
     result.minimumOnnxRuntime = stringValue(runtime, QStringLiteral("minimumOnnxRuntime"));
-    result.opset = runtime.value(QStringLiteral("opset")).toInt(0);
+    result.opset = runtime.value(QStringLiteral("opset")).toInt(result.opset);
     result.executionProvider = stringValue(runtime, QStringLiteral("executionProvider"));
 
     if (!versionAtLeast120(result.minimumOnnxRuntime)) {

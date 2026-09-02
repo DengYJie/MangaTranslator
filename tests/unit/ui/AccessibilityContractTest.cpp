@@ -223,6 +223,7 @@ private Q_SLOTS:
         // (to satisfy architectural contract: unverified for environments where native IME cannot be tested).
         qInfo(
             "Accessibility Contract: Native OS IME platform input methods marked UNVERIFIED for headless offscreen test.");
+        // TODO(Defect 10): Replace QVERIFY(true) placeholder with actual verifiable assertions.
         QVERIFY(true);
     }
 };

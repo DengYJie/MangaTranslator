@@ -23,7 +23,6 @@ namespace {
 // path verbatim, a read rejects any stored prefix these helpers no longer produce, and the prune
 // walk starts from this root. Renaming the root, a kind directory or the version segment strands
 // the assets of every existing project rather than migrating them.
-constexpr QLatin1String kDerivedRoot("assets/derived"); // Must stay identical to kAssetsDerived.
 constexpr QLatin1String kVersionSegment("v1");
 
 QString layerKindDirectory(application::DerivedLayerKind kind) {
@@ -56,17 +55,16 @@ application::ApplicationError makeStorageError(const QString& code, const QStrin
     return QString::fromLatin1(hash.result().toHex());
 }
 
-[[nodiscard]] /// Prefix that owns every layer version of one page and kind. Requests may only reach paths
+/// Prefix that owns every layer version of one page and kind. Requests may only reach paths
 /// under their own page and kind directory.
-[[nodiscard]] QString
-layerDirectoryPrefix(const domain::PageId& pageId, application::DerivedLayerKind kind) {
+[[nodiscard]] QString layerDirectoryPrefix(const domain::PageId& pageId, application::DerivedLayerKind kind) {
     return QStringLiteral("%1/%2/%3/")
-        .arg(kDerivedRoot.toString(), QString::fromStdString(pageId.toString()), layerKindDirectory(kind));
+        .arg(kAssetsDerived.toString(), QString::fromStdString(pageId.toString()), layerKindDirectory(kind));
 }
 
 QString layerRelativePath(const domain::PageId& pageId, const QString& kindDir, const QString& hash) {
     return QStringLiteral("%1/%2/%3/%4/%5.png")
-        .arg(kDerivedRoot.toString(),
+        .arg(kAssetsDerived.toString(),
              QString::fromStdString(pageId.toString()),
              kindDir,
              kVersionSegment.toString(),
@@ -252,7 +250,7 @@ FileSystemDerivedAssetStore::pruneUnusedAssets(application::PruneAssetsRequest r
                 m_leases = std::move(retained);
             }
 
-            const QString derivedRoot = canonicalRoot + QLatin1Char('/') + kDerivedRoot.toString();
+            const QString derivedRoot = canonicalRoot + QLatin1Char('/') + kAssetsDerived.toString();
             if (!QDir(derivedRoot).exists()) {
                 application::PruneAssetsResponse response;
                 return response;
