@@ -12,7 +12,7 @@ struct RecentProject {
 };
 
 /// Narrow port for managing the recent projects list.
-/// This abstracts the persistence mechanism (e.g. QSettings, database, JSON) for recent projects.
+/// This abstracts the persistence mechanism, for example QSettings, a database, or JSON.
 class IRecentProjectsStore {
 public:
     virtual ~IRecentProjectsStore() = default;
@@ -26,7 +26,7 @@ public:
     /// Removes a project from the recent list by its path.
     virtual void removeRecentProject(const QString& path) = 0;
 
-    /// Clears the entire list of recent projects.
+    /// Discards every stored entry at once so a later loadRecentProjects returns an empty list.
     virtual void clearRecentProjects() = 0;
 };
 

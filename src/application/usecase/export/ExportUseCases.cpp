@@ -112,7 +112,8 @@ QFuture<Result<ExportResponse>> ExportPagesUseCase::execute(const ExportPagesReq
             ErrorCategory::Input, "input.missing_page_snapshot", "A project page snapshot is missing"));
     }
 
-    // Preserve natural project order
+    // The snapshot lookup is a hash keyed by page id, so the port request is rebuilt by walking the
+    // project pages. That keeps exported page order independent of the caller's snapshot order.
     for (const auto& page : m_project->pages()) {
         const auto key = QString::fromStdString(page.id().toString());
         if (snapshotMap.contains(key)) {

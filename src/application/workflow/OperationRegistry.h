@@ -34,8 +34,9 @@ public:
     [[nodiscard]] OperationContext
     createOperation(OperationDescriptor descriptor, quint64 sessionGeneration, quint64 viewGeneration);
 
-    /// Backward-compatible overload for callers that have not yet adopted descriptors.
-    /// The resulting snapshot uses a placeholder descriptor; Task 3 will migrate callers.
+    /// Creates an operation whose descriptor is a fixed placeholder, not a caller value. The
+    /// snapshot reports stage Project with the untranslated display target Task and a nil project
+    /// id, so it never matches cancelProject, which selects on the descriptor project id.
     [[nodiscard]] OperationContext createOperation(quint64 sessionGeneration, quint64 viewGeneration);
 
     /// Returns a consistent snapshot of all known operations.

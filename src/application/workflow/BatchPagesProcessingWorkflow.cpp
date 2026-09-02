@@ -184,8 +184,8 @@ private:
             ErrorCategory::Cancelled, QStringLiteral("cancelled.user_requested"), QStringLiteral("批量处理已被取消"))});
     }
 
-    /// Derived page assets are content-addressed files already written per page, so only the
-    /// project metadata is deferred to one batch-end write.
+    // Derived page assets are content-addressed files already written per page, so only the
+    // project metadata is deferred to one batch-end write.
     void finishWithSave(const std::optional<ApplicationError>& abortError) {
         const auto abortOrFinish = [this, abortError]() {
             if (abortError.has_value()) {
@@ -226,8 +226,8 @@ private:
         });
     }
 
-    /// Records the first failing stage for the page in flight. The page is still committed so that
-    /// successful regions keep their results, but it reports as failed rather than as a clean run.
+    // Records the first failing stage for the page in flight. The page is still committed so that
+    // successful regions keep their results, but it reports as failed rather than as a clean run.
     void noteStageFailure(const QString& reason) {
         if (m_currentPageFailure.isEmpty()) {
             m_currentPageFailure = reason;

@@ -35,7 +35,7 @@ public:
         zeroize();
     }
 
-    /// Exposes the plaintext bytes for immediate consumption (e.g. building an
+    /// Exposes the plaintext bytes for immediate consumption, such as building an
     /// Authorization header). The reference must not be retained, copied, or logged; the
     /// buffer is scrubbed when this container is destroyed or moved from.
     [[nodiscard]] const QByteArray& bytes() const noexcept {

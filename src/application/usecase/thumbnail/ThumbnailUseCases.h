@@ -73,7 +73,8 @@ public:
                 return;
             }
 
-            // Generate thumbnail
+            // Any failed read takes this path, including a closed session, and the write result is
+            // ignored because the scaled image is returned whether or not the cache accepted it.
             LoadPageImageRequest loadReq{
                 request.projectId,
                 request.projectRoot.trimmed(),

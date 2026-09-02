@@ -7,8 +7,9 @@
 
 namespace manga::application {
 
-/// Throttled, monotonic progress facade handed to task workers. Publication policy is
-/// injected at construction (the P4 scheduler installs the 50 ms throttle); a value equal
+/// Monotonic progress facade handed to task workers. The publication policy is injected at
+/// construction, and BoundedTaskExecutor injects one that always publishes, so the minimum
+/// interval between registry publications belongs to OperationProgressReporter. A value equal
 /// to the range maximum is always published so the final successful value equals total.
 /// Decreasing values are clamped away.
 class TaskProgress {

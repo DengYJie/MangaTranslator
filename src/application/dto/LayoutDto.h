@@ -11,7 +11,7 @@ namespace manga::application {
 
 /// Non-blocking warning attached to a successful layout result.
 struct LayoutWarning {
-    QString code; // layout.font_missing / layout.missing_glyph / layout.vertical_fallback
+    QString code; // layout.font_missing or layout.missing_glyph
     QString safeMessage;
 };
 

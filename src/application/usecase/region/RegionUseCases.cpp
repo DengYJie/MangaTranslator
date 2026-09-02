@@ -111,8 +111,6 @@ Result<void> ReorderRegionUseCase::execute(const ReorderRegionRequest& request) 
     return {};
 }
 
-// Use case validation produces user-facing Input error messages. The domain layer remains the authoritative invariant
-// source.
 Result<void> InsertRegionUseCase::execute(InsertRegionRequest request) {
     if (m_project == nullptr) {
         return std::unexpected(regionError(ErrorCategory::Internal, "internal.null_project", "Project is unavailable"));

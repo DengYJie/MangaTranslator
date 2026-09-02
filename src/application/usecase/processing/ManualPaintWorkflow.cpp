@@ -34,7 +34,8 @@ void ManualPaintWorkflow::rasterizeStroke(
     const uchar colorB = static_cast<uchar>(color.blue());
     const uchar colorA = static_cast<uchar>(color.alpha());
 
-    // Iterate through consecutive point pairs, plus the terminal point
+    // Each consecutive point pair is one segment and the last point repeats as a zero-length
+    // segment, so a stroke of a single point still paints and every stroke end keeps its cap.
     struct Segment {
         QPointF start;
         QPointF end;
@@ -178,7 +179,8 @@ QFuture<Result<PreparedPageManualOverrideChange>> ManualPaintWorkflow::execute(M
         }
         layer.setColorSpace(QColorSpace(QColorSpace::SRgb));
 
-        // Execute deterministic distance field rasterization
+        // The stroke compositing reads each pixel as straight alpha, which the RGBA8888 and sRGB
+        // normalization above establishes.
         rasterizeStroke(layer, job->request.mode, job->request.color, job->request.diameter, job->request.points);
 
         CommitDerivedLayerRequest commitReq{job->request.projectId,
