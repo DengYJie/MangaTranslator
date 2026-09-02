@@ -35,23 +35,6 @@ application::ApplicationError protocolError(QString code, QString message) {
     return application::makeApplicationError(application::ErrorCategory::Protocol, std::move(code), std::move(message));
 }
 
-QUrl normalizeChatCompletionsEndpoint(QUrl endpoint) {
-    QString path = endpoint.path();
-    if (path.endsWith(QStringLiteral("/chat/completions"))) {
-        return endpoint;
-    }
-    if (path.endsWith(QStringLiteral("/v1"))) {
-        endpoint.setPath(path + QStringLiteral("/chat/completions"));
-        return endpoint;
-    }
-    if (path.isEmpty() || path == QStringLiteral("/")) {
-        endpoint.setPath(QStringLiteral("/v1/chat/completions"));
-    } else {
-        endpoint.setPath(path + QStringLiteral("/chat/completions"));
-    }
-    return endpoint;
-}
-
 [[nodiscard]] QJsonObject responseSchema() {
     QJsonObject item;
     item.insert(QStringLiteral("type"), QStringLiteral("object"));
@@ -83,6 +66,23 @@ QUrl normalizeChatCompletionsEndpoint(QUrl endpoint) {
 }
 
 } // namespace
+
+QUrl normalizeChatCompletionsEndpoint(QUrl endpoint) {
+    QString path = endpoint.path();
+    if (path.endsWith(QStringLiteral("/chat/completions"))) {
+        return endpoint;
+    }
+    if (path.endsWith(QStringLiteral("/v1"))) {
+        endpoint.setPath(path + QStringLiteral("/chat/completions"));
+        return endpoint;
+    }
+    if (path.isEmpty() || path == QStringLiteral("/")) {
+        endpoint.setPath(QStringLiteral("/v1/chat/completions"));
+    } else {
+        endpoint.setPath(path + QStringLiteral("/chat/completions"));
+    }
+    return endpoint;
+}
 
 QByteArray buildChatCompletionsRequest(const application::TranslationRequest& request, const ProviderConfig& config) {
     QJsonArray regions;
