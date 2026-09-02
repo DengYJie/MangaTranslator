@@ -86,16 +86,18 @@ void EditorCommandBar::buildUi() {
         createIconButton(Typography::Icons::View, tr("预览模式"), QStringLiteral("previewSelectorButton"));
     m_previewSelectorButton->setFluentLayout(fluent::basicinput::Button::IconAfter);
     m_previewSelectorButton->setFixedWidth(84);
-    m_ocrButton = createIconButton(Typography::Icons::glyph(QStringLiteral("ic_fluent_scan_text_20_regular")),
-                                   tr("重新 OCR"),
+    m_detectButton = createIconButton(Typography::Icons::glyph(QStringLiteral("ic_fluent_scan_text_20_regular")),
+                                      tr("文本检测 (整页)"),
+                                      QStringLiteral("detectButton"));
+    m_ocrButton = createIconButton(Typography::Icons::glyph(QStringLiteral("ic_fluent_scan_type_20_regular")),
+                                   tr("文字识别 (整页 OCR)"),
                                    QStringLiteral("ocrButton"));
-    m_smartTranslateButton =
-        createIconButton(Typography::Icons::glyph(QStringLiteral("ic_fluent_translate_20_regular")),
-                         tr("运行智能翻译 (Ctrl+T)"),
-                         QStringLiteral("smartTranslateButton"));
-    m_smartTranslateButton->setFluentStyle(fluent::basicinput::Button::Accent);
-    m_smartTranslateButton->setFluentLayout(fluent::basicinput::Button::IconBefore);
-    m_smartTranslateButton->setMinimumWidth(112);
+    m_inpaintButton = createIconButton(Typography::Icons::glyph(QStringLiteral("ic_fluent_sparkle_action_20_regular")),
+                                       tr("文字消除 (整页 Inpaint)"),
+                                       QStringLiteral("inpaintButton"));
+    m_translateButton = createIconButton(Typography::Icons::glyph(QStringLiteral("ic_fluent_translate_20_regular")),
+                                         tr("翻译 (Ctrl+T)"),
+                                         QStringLiteral("translateButton"));
     m_pagePaneToggleButton =
         createIconButton(Typography::Icons::glyph(QStringLiteral("ic_fluent_panel_left_text_20_regular")),
                          tr("页面列表"),
@@ -133,14 +135,14 @@ void EditorCommandBar::buildUi() {
     const auto addGroup = [this, layout, &hasGroup](std::initializer_list<QWidget*> widgets) {
         QFrame* separator = nullptr;
         if (hasGroup) {
-            layout->addSpacing(8);
+            layout->addSpacing(6);
             separator = new QFrame(layout->parentWidget());
             separator->setObjectName(QStringLiteral("editorCommandBarSeparator%1").arg(m_commandSeparators.size()));
-            separator->setFrameShape(QFrame::VLine);
-            separator->setFrameShadow(QFrame::Sunken);
-            separator->setFixedSize(1, 20);
+            separator->setFrameShape(QFrame::NoFrame);
+            separator->setFixedSize(1, 16);
+            separator->setStyleSheet(QStringLiteral("background-color: rgba(128, 128, 128, 0.25);"));
             layout->addWidget(separator, 0, Qt::AlignVCenter);
-            layout->addSpacing(8);
+            layout->addSpacing(6);
         }
         auto* group = new QWidget(layout->parentWidget());
         auto* groupLayout = new QHBoxLayout(group);
@@ -158,11 +160,11 @@ void EditorCommandBar::buildUi() {
     addGroup({m_undoButton, m_redoButton});
     m_previewSelectorButton->hide();
     m_previewOverflowAction->setVisible(false);
-    addGroup({m_ocrButton, m_smartTranslateButton});
+    addGroup({m_detectButton, m_ocrButton, m_inpaintButton, m_translateButton});
+    addGroup({m_saveButton});
     layout->addStretch();
     addGroup({m_pagePaneToggleButton, m_inspectorPaneToggleButton});
     addGroup({m_overflowButton});
-    addGroup({m_saveButton});
 
     connect(m_undoButton, &fluent::basicinput::Button::clicked, m_viewModel, &EditorViewModel::undo);
     connect(m_redoButton, &fluent::basicinput::Button::clicked, m_viewModel, &EditorViewModel::redo);
@@ -186,22 +188,38 @@ void EditorCommandBar::buildUi() {
                               : (current == PreviewMode::Translated ? PreviewMode::Compare : PreviewMode::Original);
         m_viewModel->setPreviewMode(mode);
     });
-    connect(m_ocrButton, &fluent::basicinput::Button::clicked, this, [this]() {
+    connect(m_detectButton, &fluent::basicinput::Button::clicked, this, [this]() {
         if (auto* ctrl = m_viewModel->processingController()) {
             const auto& state = m_viewModel->state();
-            if (state.currentPageId.isValid() && !state.selectedRegionIds.isEmpty()) {
-                ctrl->recognizeSelectedRegions();
+            if (!state.processing.isRunning && state.currentPageId.isValid()) {
+                ctrl->detectRegions(state.currentPageId);
             }
         }
     });
-    connect(m_smartTranslateButton, &fluent::basicinput::Button::clicked, this, [this]() {
+    connect(m_ocrButton, &fluent::basicinput::Button::clicked, this, [this]() {
+        if (auto* ctrl = m_viewModel->processingController()) {
+            const auto& state = m_viewModel->state();
+            if (!state.processing.isRunning && state.currentPageId.isValid() && !state.regions.isEmpty()) {
+                ctrl->recognizePage(state.currentPageId);
+            }
+        }
+    });
+    connect(m_inpaintButton, &fluent::basicinput::Button::clicked, this, [this]() {
+        if (auto* ctrl = m_viewModel->processingController()) {
+            const auto& state = m_viewModel->state();
+            if (!state.processing.isRunning && state.currentPageId.isValid() && !state.regions.isEmpty()) {
+                ctrl->clearPage(state.currentPageId);
+            }
+        }
+    });
+    connect(m_translateButton, &fluent::basicinput::Button::clicked, this, [this]() {
         if (auto* ctrl = m_viewModel->processingController()) {
             const auto& state = m_viewModel->state();
             if (!state.processing.isRunning && state.currentPageId.isValid()) {
                 if (state.selectedRegionIds.isEmpty()) {
-                    ctrl->smartTranslatePage(state.currentPageId);
+                    ctrl->translatePage(state.currentPageId);
                 } else {
-                    ctrl->smartTranslateRegions(state.currentPageId, state.selectedRegionIds);
+                    ctrl->translateRegions(state.currentPageId, state.selectedRegionIds);
                 }
             }
         }
@@ -222,7 +240,7 @@ EditorCommandBar::createIconButton(const QString& glyph, const QString& tooltip,
     btn->setFluentStyle(fluent::basicinput::Button::Subtle);
     btn->setFluentSize(fluent::basicinput::Button::StandardSize);
     btn->setFluentLayout(fluent::basicinput::Button::IconOnly);
-    btn->setFixedHeight(32);
+    btn->setFixedSize(32, 32);
     btn->setIconGlyph(glyph, Typography::IconSize::Standard);
     btn->setToolTip(tooltip);
     btn->setAccessibleName(tooltip);
@@ -321,43 +339,58 @@ void EditorCommandBar::render(const EditorState& state) {
     m_textButton->setEnabled(hasPage);
     m_previewSelectorButton->setEnabled(hasPage);
     const bool hasSelectedRegions = hasPage && !state.selectedRegionIds.isEmpty();
-    m_ocrButton->setVisible(hasSelectedRegions);
-    m_ocrButton->setEnabled(hasSelectedRegions && state.isOcrAvailable);
-    m_ocrButton->setToolTip(state.isOcrAvailable ? tr("重新识别选中区域的文字")
-                                                 : tr("OCR 模型不可用，请先在设置 > OCR 中配置模型"));
-    m_ocrButton->setAccessibleName(state.isOcrAvailable ? tr("重新 OCR") : tr("重新 OCR（不可用）"));
+    const bool isRunning = state.processing.isRunning;
 
-    const QString defaultTranslateText = state.selectedRegionIds.isEmpty() ? tr("运行当前页") : tr("运行所选区域");
+    // 1. Detection: only for whole page (hidden when text boxes are selected)
+    m_detectButton->setVisible(!hasSelectedRegions);
+    m_detectButton->setEnabled(hasPage && !isRunning);
+    m_detectButton->setToolTip(isRunning ? tr("正在执行处理任务...") : tr("检测整页文字区域"));
+    m_detectButton->setAccessibleName(tr("文本检测 (整页)"));
 
-    if (state.processing.isRunning) {
-        m_smartTranslateButton->setEnabled(false);
-        m_smartTranslateButton->setText(tr("处理中..."));
-        m_smartTranslateButton->setIconGlyph(Typography::Icons::glyph(QStringLiteral("ic_fluent_translate_20_regular")),
-                                             Typography::IconSize::Standard);
-        m_smartTranslateButton->setToolTip(tr("正在处理中，可在右下角查看进度"));
-        m_smartTranslateButton->setAccessibleName(tr("处理中"));
-    } else if (!state.isTranslationAvailable) {
-        m_smartTranslateButton->setEnabled(false);
-        m_smartTranslateButton->setText(defaultTranslateText);
-        m_smartTranslateButton->setIconGlyph(Typography::Icons::glyph(QStringLiteral("ic_fluent_translate_20_regular")),
-                                             Typography::IconSize::Standard);
-        m_smartTranslateButton->setToolTip(state.translationUnavailableReason);
-        m_smartTranslateButton->setAccessibleName(tr("智能翻译（未配置）"));
-    } else if (hasPage && !hasRegions) {
-        m_smartTranslateButton->setEnabled(false);
-        m_smartTranslateButton->setText(defaultTranslateText);
-        m_smartTranslateButton->setIconGlyph(Typography::Icons::glyph(QStringLiteral("ic_fluent_translate_20_regular")),
-                                             Typography::IconSize::Standard);
-        m_smartTranslateButton->setToolTip(tr("当前页无文本区域，请先创建或检测区域"));
-        m_smartTranslateButton->setAccessibleName(tr("智能翻译 (当前页无文本区域)"));
+    // 2. OCR: only for whole page (hidden when text boxes are selected)
+    m_ocrButton->setVisible(!hasSelectedRegions);
+    m_ocrButton->setEnabled(hasPage && hasRegions && !isRunning && state.isOcrAvailable);
+    if (isRunning) {
+        m_ocrButton->setToolTip(tr("正在执行处理任务..."));
+    } else if (!state.isOcrAvailable) {
+        m_ocrButton->setToolTip(tr("OCR 模型不可用，请先在设置中配置模型"));
+    } else if (!hasRegions) {
+        m_ocrButton->setToolTip(tr("当前页面没有文字区域，请先检测或创建区域"));
     } else {
-        m_smartTranslateButton->setEnabled(hasPage && hasRegions);
-        m_smartTranslateButton->setText(defaultTranslateText);
-        m_smartTranslateButton->setIconGlyph(Typography::Icons::glyph(QStringLiteral("ic_fluent_translate_20_regular")),
-                                             Typography::IconSize::Standard);
-        m_smartTranslateButton->setToolTip(tr("智能翻译 (Ctrl+T)"));
-        m_smartTranslateButton->setAccessibleName(tr("智能翻译"));
+        m_ocrButton->setToolTip(tr("识别整页文字 (OCR)"));
     }
+    m_ocrButton->setAccessibleName(tr("文字识别 (整页)"));
+
+    // 3. Inpaint: only for whole page (hidden when text boxes are selected)
+    m_inpaintButton->setVisible(!hasSelectedRegions);
+    m_inpaintButton->setEnabled(hasPage && hasRegions && !isRunning);
+    if (isRunning) {
+        m_inpaintButton->setToolTip(tr("正在执行处理任务..."));
+    } else if (!hasRegions) {
+        m_inpaintButton->setToolTip(tr("当前页面没有文字区域"));
+    } else {
+        m_inpaintButton->setToolTip(tr("消除整页文字背景 (Inpaint)"));
+    }
+    m_inpaintButton->setAccessibleName(tr("文字消除 (整页)"));
+
+    // 4. Translate: dual mode (always visible, whole page vs selected)
+    m_translateButton->setVisible(true);
+    m_translateButton->setEnabled(hasPage && (hasSelectedRegions || hasRegions) && !isRunning &&
+                                  state.isTranslationAvailable);
+    if (isRunning) {
+        m_translateButton->setToolTip(tr("正在执行处理任务..."));
+    } else if (!state.isTranslationAvailable) {
+        m_translateButton->setToolTip(state.translationUnavailableReason.isEmpty()
+                                          ? tr("翻译服务不可用，请在设置中配置")
+                                          : state.translationUnavailableReason);
+    } else if (hasSelectedRegions) {
+        m_translateButton->setToolTip(tr("翻译所选文字区域 (%1 个) (Ctrl+T)").arg(state.selectedRegionIds.size()));
+    } else if (!hasRegions) {
+        m_translateButton->setToolTip(tr("当前页无文字区域，请先创建或检测区域"));
+    } else {
+        m_translateButton->setToolTip(tr("翻译整页已存在文字区域 (Ctrl+T)"));
+    }
+    m_translateButton->setAccessibleName(hasSelectedRegions ? tr("翻译所选文字") : tr("整页翻译"));
 
     updateResponsiveLayout();
 }
@@ -394,9 +427,9 @@ void EditorCommandBar::setupShortcuts() {
             if (state.isTranslationAvailable && !state.processing.isRunning && state.currentPageId.isValid() &&
                 !state.regions.isEmpty()) {
                 if (state.selectedRegionIds.isEmpty()) {
-                    ctrl->smartTranslatePage(state.currentPageId);
+                    ctrl->translatePage(state.currentPageId);
                 } else {
-                    ctrl->smartTranslateRegions(state.currentPageId, state.selectedRegionIds);
+                    ctrl->translateRegions(state.currentPageId, state.selectedRegionIds);
                 }
             }
         }

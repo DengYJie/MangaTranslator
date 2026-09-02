@@ -76,9 +76,12 @@ public:
     void smartTranslatePage(const domain::PageId& pageId);
     void smartTranslateRegions(const domain::PageId& pageId, const QVector<domain::RegionId>& regionIds);
     void detectRegions(const domain::PageId& pageId);
+    void recognizePage(const domain::PageId& pageId);
     void recognizeSelectedRegions();
     void recognizeRegion(const domain::PageId& pageId, const domain::RegionId& regionId);
     void translatePage(const domain::PageId& pageId);
+    void translateRegions(const domain::PageId& pageId, const QVector<domain::RegionId>& regionIds);
+    void clearPage(const domain::PageId& pageId);
     void clearSelectedRegions();
     void clearRegion(const domain::PageId& pageId, const domain::RegionId& regionId);
     void inpaintStroke(const domain::PageId& pageId, const QVector<QPointF>& points, double diameter);

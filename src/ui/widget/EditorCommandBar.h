@@ -42,8 +42,20 @@ public:
     [[nodiscard]] fluent::basicinput::Button* redoButtonForTest() const noexcept {
         return m_redoButton;
     }
+    [[nodiscard]] fluent::basicinput::Button* detectButtonForTest() const noexcept {
+        return m_detectButton;
+    }
+    [[nodiscard]] fluent::basicinput::Button* ocrButtonForTest() const noexcept {
+        return m_ocrButton;
+    }
+    [[nodiscard]] fluent::basicinput::Button* inpaintButtonForTest() const noexcept {
+        return m_inpaintButton;
+    }
+    [[nodiscard]] fluent::basicinput::Button* translateButtonForTest() const noexcept {
+        return m_translateButton;
+    }
     [[nodiscard]] fluent::basicinput::Button* smartTranslateButtonForTest() const noexcept {
-        return m_smartTranslateButton;
+        return m_translateButton;
     }
     [[nodiscard]] fluent::basicinput::Button* saveButtonForTest() const noexcept {
         return m_saveButton;
@@ -99,8 +111,10 @@ private:
     fluent::basicinput::Button* m_panButton{nullptr};
     fluent::basicinput::Button* m_textButton{nullptr};
     fluent::basicinput::Button* m_previewSelectorButton{nullptr};
+    fluent::basicinput::Button* m_detectButton{nullptr};
     fluent::basicinput::Button* m_ocrButton{nullptr};
-    fluent::basicinput::Button* m_smartTranslateButton{nullptr};
+    fluent::basicinput::Button* m_inpaintButton{nullptr};
+    fluent::basicinput::Button* m_translateButton{nullptr};
     fluent::basicinput::Button* m_pagePaneToggleButton{nullptr};
     fluent::basicinput::Button* m_inspectorPaneToggleButton{nullptr};
     fluent::basicinput::Button* m_saveButton{nullptr};

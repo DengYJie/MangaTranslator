@@ -615,8 +615,71 @@ void EditorProcessingController::recognizeRegion(const domain::PageId& pageId, c
     Q_EMIT processingStarted(pageId, opId);
 }
 
+void EditorProcessingController::recognizePage(const domain::PageId& pageId) {
+    if (m_viewModel == nullptr || !m_viewModel->hasSession() || !pageId.isValid()) {
+        return;
+    }
+    auto* project = m_viewModel->projectAggregate();
+    if (project == nullptr) {
+        return;
+    }
+    const auto* page = project->findPage(pageId);
+    if (page == nullptr) {
+        return;
+    }
+    for (const auto& r : page->regions()) {
+        if (r.isEnabled()) {
+            recognizeRegion(pageId, r.id());
+        }
+    }
+}
+
 void EditorProcessingController::translatePage(const domain::PageId& pageId) {
-    smartTranslatePage(pageId);
+    if (m_viewModel == nullptr || !m_viewModel->hasSession() || !pageId.isValid()) {
+        return;
+    }
+    auto* project = m_viewModel->projectAggregate();
+    if (project == nullptr) {
+        return;
+    }
+    const auto* page = project->findPage(pageId);
+    if (page == nullptr) {
+        return;
+    }
+    QVector<domain::RegionId> regionIds;
+    for (const auto& r : page->regions()) {
+        if (r.isEnabled()) {
+            regionIds.append(r.id());
+        }
+    }
+    translateRegions(pageId, regionIds);
+}
+
+void EditorProcessingController::translateRegions(const domain::PageId& pageId,
+                                                  const QVector<domain::RegionId>& regionIds) {
+    if (regionIds.isEmpty()) {
+        return;
+    }
+    smartTranslate(pageId, regionIds);
+}
+
+void EditorProcessingController::clearPage(const domain::PageId& pageId) {
+    if (m_viewModel == nullptr || !m_viewModel->hasSession() || !pageId.isValid()) {
+        return;
+    }
+    auto* project = m_viewModel->projectAggregate();
+    if (project == nullptr) {
+        return;
+    }
+    const auto* page = project->findPage(pageId);
+    if (page == nullptr) {
+        return;
+    }
+    for (const auto& r : page->regions()) {
+        if (r.isEnabled()) {
+            clearRegion(pageId, r.id());
+        }
+    }
 }
 
 void EditorProcessingController::clearSelectedRegions() {
