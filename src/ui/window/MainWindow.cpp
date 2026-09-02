@@ -22,6 +22,83 @@ constexpr auto kKeyMaximized = "ui/mainWindow/maximized";
 constexpr int kDefaultWidth = 1280;
 constexpr int kDefaultHeight = 800;
 constexpr int kMinVisiblePx = 64;
+
+class AppTitleMenuBar : public fluent::menus_toolbars::FluentMenuBar {
+public:
+    explicit AppTitleMenuBar(QWidget* parent = nullptr) : FluentMenuBar(parent) {
+        setBackgroundVisible(false);
+    }
+
+    QSize sizeHint() const override {
+        const QSize s = FluentMenuBar::sizeHint();
+        return QSize(s.width() + 8, s.height());
+    }
+
+protected:
+    void mousePressEvent(QMouseEvent* event) override {
+        if (!isEnabled() || event->button() != Qt::LeftButton) {
+            event->ignore();
+            return;
+        }
+
+        setFocus(Qt::MouseFocusReason);
+        QAction* targetAction = nullptr;
+        for (QAction* action : actions()) {
+            if (!action || !action->isVisible() || !action->isEnabled())
+                continue;
+            QRect r = fluentActionGeometry(action);
+            r.setTop(0);
+            r.setBottom(height());
+            if (r.contains(event->pos())) {
+                targetAction = action;
+                break;
+            }
+        }
+
+        if (targetAction && targetAction->menu()) {
+            QMenu* menu = targetAction->menu();
+            const QRect r = fluentActionGeometry(targetAction);
+            menu->popup(mapToGlobal(QPoint(r.left(), height())));
+            event->accept();
+            return;
+        }
+
+        event->accept();
+    }
+
+    void mouseReleaseEvent(QMouseEvent* event) override {
+        event->accept();
+    }
+
+    void mouseMoveEvent(QMouseEvent* event) override {
+        QAction* targetAction = nullptr;
+        for (QAction* action : actions()) {
+            if (!action || !action->isVisible() || !action->isEnabled())
+                continue;
+            QRect r = fluentActionGeometry(action);
+            r.setTop(0);
+            r.setBottom(height());
+            if (r.contains(event->pos())) {
+                targetAction = action;
+                break;
+            }
+        }
+
+        for (QAction* a : actions()) {
+            if (a && a->menu() && a->menu()->isVisible()) {
+                if (a != targetAction && targetAction && targetAction->menu()) {
+                    a->menu()->hide();
+                    const QRect r = fluentActionGeometry(targetAction);
+                    targetAction->menu()->popup(mapToGlobal(QPoint(r.left(), height())));
+                }
+                break;
+            }
+        }
+
+        FluentMenuBar::mouseMoveEvent(event);
+    }
+};
+
 } // namespace
 
 MainWindow::MainWindow(application::IAppSettingsStore* settingsStore, QWidget* parent)
@@ -46,11 +123,12 @@ MainWindow::MainWindow(application::IAppSettingsStore* settingsStore, QWidget* p
     m_projectTitleLabel->hide();
 
     if (titleBar()) {
+        titleBar()->setHeightOption(TitleBar::HeightOption::Tall);
         titleBar()->setIcon(appIcon);
         titleBar()->setContentWidget(m_projectTitleLabel, TitleBar::ContentAlignment::Center);
     }
 
-    m_editorMenuBar = new fluent::menus_toolbars::FluentMenuBar(this);
+    m_editorMenuBar = new AppTitleMenuBar(this);
     m_editorMenuBar->setObjectName(QStringLiteral("mainWindowEditorMenuBar"));
     m_editorMenuBar->setBackgroundVisible(false);
     m_editorMenuBar->setFontStyle(Typography::FontRole::Caption);
