@@ -58,13 +58,22 @@ Format only files touched by the change; do not create unrelated formatting chur
 
 Use Qt's non-keyword macros in C++: `Q_SIGNALS`, `Q_SLOTS`, and `Q_EMIT`. Do not write the keyword-style aliases
 `signals`, `slots`, or `emit`. A function connected through typed `connect()` remains an ordinary member function
-unless Qt meta-object invocation specifically requires a slot declaration. New targets should define
-`QT_NO_KEYWORDS`; existing targets may enable it only after their owned sources and tests have been migrated.
+unless Qt meta-object invocation specifically requires a slot declaration.
 
-Comments state non-obvious constraints and invariants only. Do not write narrative asides that reference the current
-task, fix, or history; persistence and similar rules belong in the owning code or docs, not in story-telling comments.
-Write comments as plain declarative sentences: no hyphens as sentence separators, no em dashes, and no decorative
-punctuation.
+Comments are English and ASCII only. Do not write em dashes, en dashes, arrows, `×`, `§`, `·`, typographic quotes, CJK
+text, decorative banners, or hand-aligned comment tables in a comment. Choose the marker by content: `///` states a
+contract a caller must trust, including a contract on a file-local helper, and `//` states an implementation note. A
+declaration is documented once, in its header.
+
+A comment may cite a repository path on the required reading list or name the system a constant comes from. It may not
+cite a file or line range in another repository, a phase label, a deleted plan document, a numbered section of an
+unnamed specification, a product version, or the task, fix, or review that prompted the change. Persistence literals,
+tensor contracts, and coordinate rules are documented where they are produced.
+
+Every asynchronous method in `application/ports` documents four facts in its own `///` block: thread affinity for the
+call and the completion, ownership of what it accepts and returns, how cancellation is observed and reported, and the
+stable error codes it can produce. Write comments as plain declarative sentences: no hyphens as sentence separators, no
+em dashes, and no decorative punctuation.
 
 For UI work, also follow `src/ui/AGENTS.md` and start from `docs/ui/README.md`. Read `docs/ui/foundations.md`,
 `docs/ui/control-reference.md`, and the relevant page/component specifications before implementation. UI draft images
