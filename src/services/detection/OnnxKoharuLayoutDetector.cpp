@@ -288,14 +288,26 @@ OnnxKoharuLayoutDetector::runInference(const application::TextDetectionRequest& 
                     raw.masksShape = std::move(shape);
                 }
             } else if (name == m_impl->manifest.detsOutputName || name.contains(QStringLiteral("det"))) {
-                // Legacy pre-processed format
-                if (elemType == ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT) {
+                // Some koharu ONNX exports rename pred_boxes to "dets" ([1, N, 4] cxcywh
+                // normalized float). Detect that by shape before treating the output as the
+                // legacy pre-processed format [N, 5+] with score at index 4.
+                if (elemType == ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT && shape.size() == 3 && shape[1] > 0 &&
+                    shape[2] == 4) {
+                    raw.boxes = outputTensors[i].GetTensorData<float>();
+                    raw.boxesShape = std::move(shape);
+                } else if (elemType == ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT) {
                     raw.dets = outputTensors[i].GetTensorData<float>();
                     raw.detsShape = std::move(shape);
                 }
             } else if (name == m_impl->manifest.labelsOutputName || name.contains(QStringLiteral("label")) ||
                        name.contains(QStringLiteral("class"))) {
-                if (elemType == ONNX_TENSOR_ELEMENT_DATA_TYPE_INT64) {
+                // The same koharu ONNX exports pred_logits as "labels" ([1, N, 5] class
+                // logits float), not as int64 class ids.
+                if (elemType == ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT && shape.size() == 3 && shape[1] > 0 &&
+                    shape[2] == 5) {
+                    raw.logits = outputTensors[i].GetTensorData<float>();
+                    raw.logitsShape = std::move(shape);
+                } else if (elemType == ONNX_TENSOR_ELEMENT_DATA_TYPE_INT64) {
                     raw.labels = outputTensors[i].GetTensorData<int64_t>();
                     raw.labelsShape = std::move(shape);
                 }
