@@ -46,7 +46,9 @@ enum class CanvasTool {
     Select,
     Pan,
     CreateRegion,
-    Remove
+    Remove,
+    Brush,
+    Eraser
 };
 
 /// Page preview mode for comparing original and translated content.
@@ -170,6 +172,9 @@ struct EditorState {
     domain::RegionId primaryRegionId{};
     /// Active canvas tool.
     CanvasTool activeTool{CanvasTool::Select};
+    /// Current brush color and diameter.
+    QColor brushColor{17, 17, 17, 255};
+    double brushDiameter{48.0};
     /// Page preview mode.
     PreviewMode previewMode{PreviewMode::Original};
     /// Inspector mode derived from selection count.

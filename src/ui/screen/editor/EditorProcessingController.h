@@ -2,6 +2,7 @@
 
 #include "application/dto/ClearDto.h"
 #include "application/dto/LayoutDto.h"
+#include "application/dto/ManualPaintDto.h"
 #include "application/dto/OcrDto.h"
 #include "application/dto/TranslationDto.h"
 #include "application/operation/OperationId.h"
@@ -81,6 +82,11 @@ public:
     void clearSelectedRegions();
     void clearRegion(const domain::PageId& pageId, const domain::RegionId& regionId);
     void inpaintStroke(const domain::PageId& pageId, const QVector<QPointF>& points, double diameter);
+    void paintStroke(const domain::PageId& pageId,
+                     const QVector<QPointF>& points,
+                     application::ManualStrokeMode mode,
+                     const QColor& color,
+                     double diameter);
     void layoutSelectedRegions();
     void layoutRegion(const domain::PageId& pageId, const domain::RegionId& regionId);
 

@@ -2,6 +2,7 @@
 
 #include "application/ports/ITextDetector.h"
 #include "application/usecase/apply/PrepareProcessingAdoptionUseCases.h"
+#include "application/usecase/processing/ManualPaintWorkflow.h"
 #include "application/usecase/processing/ProcessingUseCases.h"
 #include "application/workflow/OperationRegistry.h"
 #include "application/workflow/SmartTranslatePageWorkflow.h"
@@ -725,6 +726,117 @@ void EditorProcessingController::inpaintStroke(const domain::PageId& pageId,
                     application::makeApplicationError(application::ErrorCategory::Cancelled,
                                                       QStringLiteral("cancelled.stale_clear_layer"),
                                                       QStringLiteral("Clear layer changed before commit")));
+            }
+        }
+        watcher->deleteLater();
+    });
+    watcher->setFuture(future);
+    updateProcessingStateForCurrentPage();
+    Q_EMIT processingStarted(pageId, opId);
+}
+
+void EditorProcessingController::paintStroke(const domain::PageId& pageId,
+                                             const QVector<QPointF>& points,
+                                             application::ManualStrokeMode mode,
+                                             const QColor& color,
+                                             double diameter) {
+    if (m_viewModel == nullptr || m_assetStore == nullptr || m_registry == nullptr || points.isEmpty() ||
+        diameter < 1.0) {
+        return;
+    }
+    auto* project = m_viewModel->projectAggregate();
+    if (project == nullptr || pageId != m_viewModel->state().currentPageId) {
+        return;
+    }
+    const auto* page = project->findPage(pageId);
+    const QImage source = m_viewModel->currentPageImage();
+    if (page == nullptr || source.isNull()) {
+        return;
+    }
+
+    const WatcherKey key{project->id(), pageId, std::nullopt, application::OperationStage::Clear};
+    if (m_activeTasks.contains(key)) {
+        return;
+    }
+    application::OperationDescriptor descriptor;
+    descriptor.projectId = project->id();
+    descriptor.pageId = pageId;
+    descriptor.stage = application::OperationStage::Clear;
+    const quint64 sessionGen = m_viewModel->projectSessionGeneration();
+    auto operation = m_registry->createOperation(descriptor, sessionGen, m_viewModel->viewGeneration());
+    auto workflow = std::make_shared<application::ManualPaintWorkflow>(m_assetStore);
+    application::ManualPagePaintRequest request;
+    request.mode = mode;
+    request.projectId = project->id();
+    request.pageId = pageId;
+    request.points = points;
+    request.color = color;
+    request.diameter = diameter;
+    request.projectRoot = m_viewModel->projectRootPath();
+    request.expectedSessionGeneration = sessionGen;
+    request.currentSessionGeneration = sessionGen;
+    request.expectedPageSize = source.size();
+    request.expectedManualLayerRef = page->manualOverrideLayerAsset().has_value()
+                                         ? QString::fromStdString(*page->manualOverrideLayerAsset())
+                                         : QString();
+    request.context = operation;
+    qInfo().noquote() << "[ManualPaint] start stroke page=" << QString::fromStdString(pageId.toString())
+                      << "mode=" << (request.mode == application::ManualStrokeMode::Erase ? "Erase" : "Paint")
+                      << "points=" << points.size() << "diameter=" << diameter << "color=" << color.name();
+
+    const auto opId = operation.operationId;
+    auto future = workflow->execute(std::move(request));
+    ActiveTask active{opId, sessionGen, key, {}, {}};
+    m_activeTasks.insert(key, active);
+    auto* watcher = new QFutureWatcher<application::Result<application::PreparedPageManualOverrideChange>>(this);
+    QPointer<EditorProcessingController> self(this);
+    connect(watcher, &QFutureWatcherBase::finished, this, [self, watcher, key, opId, sessionGen]() {
+        if (self == nullptr) {
+            return;
+        }
+        auto* vm = self->m_viewModel;
+        if (vm != nullptr && vm->hasSession() && sessionGen == vm->projectSessionGeneration() &&
+            self->m_activeTasks.contains(key) && self->m_activeTasks.value(key).operationId == opId) {
+            self->m_activeTasks.remove(key);
+            const auto result = watcher->result();
+            bool snapshotStillCurrent = false;
+            if (result.has_value()) {
+                const auto* currentProject = vm->projectAggregate();
+                const auto* currentPage = currentProject != nullptr ? currentProject->findPage(key.pageId) : nullptr;
+                const QSize currentPageSize =
+                    currentPage != nullptr ? QSize(currentPage->imageSize().width, currentPage->imageSize().height)
+                                           : QSize();
+                const QString currentRef = currentPage != nullptr && currentPage->manualOverrideLayerAsset().has_value()
+                                               ? QString::fromStdString(*currentPage->manualOverrideLayerAsset())
+                                               : QString();
+                snapshotStillCurrent = currentProject != nullptr && currentProject->id() == key.projectId &&
+                                       currentPage != nullptr && sessionGen == vm->projectSessionGeneration() &&
+                                       key.pageId == vm->state().currentPageId &&
+                                       currentPageSize == result->expectedPageSize && currentRef == result->beforeRef;
+            }
+            if (result.has_value() && snapshotStillCurrent && vm->applyPageManualOverrideChange(result.value())) {
+                qInfo().noquote() << "[ManualPaint] success page=" << QString::fromStdString(key.pageId.toString())
+                                  << "layerRef="
+                                  << (result->afterRef.isEmpty() ? QStringLiteral("<empty>") : result->afterRef);
+                self->m_registry->markFinished(opId);
+                self->updateProcessingStateForCurrentPage();
+                Q_EMIT self->processingFinished(key.pageId, true);
+            } else if (!result.has_value() && !result.error().isCancelled()) {
+                qWarning().noquote() << "[ManualPaint] failed page=" << QString::fromStdString(key.pageId.toString())
+                                     << "code=" << result.error().code << "message=" << result.error().safeMessage;
+                self->m_registry->markFinished(opId, result.error());
+                vm->setNotice(EditorNotice{result.error().safeMessage,
+                                           QString(),
+                                           application::RecoveryAction::None,
+                                           result.error().retryable});
+                self->updateProcessingStateForCurrentPage();
+                Q_EMIT self->processingFinished(key.pageId, false);
+            } else if (result.has_value() && !snapshotStillCurrent) {
+                self->m_registry->markFinished(
+                    opId,
+                    application::makeApplicationError(application::ErrorCategory::Cancelled,
+                                                      QStringLiteral("cancelled.stale_manual_override_layer"),
+                                                      QStringLiteral("Manual override layer changed before commit")));
             }
         }
         watcher->deleteLater();

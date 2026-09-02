@@ -4,7 +4,9 @@
 #include "ui/manga/MangaCanvas.h"
 
 class QPaintEvent;
+class QFrame;
 class QSplitter;
+class QAbstractButton;
 
 namespace manga::ui::manga {
 class MangaCanvas;
@@ -17,6 +19,9 @@ class PaneSplitter;
 } // namespace manga::ui::widget
 namespace fluent::textfields {
 class Label;
+}
+namespace fluent::basicinput {
+class Button;
 }
 
 namespace manga::ui::screen::editor {
@@ -104,6 +109,9 @@ private:
     ui::widget::PageThumbnailList* m_pageList{nullptr};
     ui::manga::MangaCanvas* m_canvas{nullptr};
     QWidget* m_canvasToolRail{nullptr};
+    QFrame* m_removeBrushSeparator{nullptr};
+    fluent::basicinput::Button* m_removeBrushSizeButton{nullptr};
+    QAbstractButton* m_brushColorButton{nullptr};
     QWidget* m_canvasStatusBar{nullptr};
     fluent::textfields::Label* m_canvasZoomValueLabel{nullptr};
     fluent::textfields::Label* m_canvasPageSizeLabel{nullptr};

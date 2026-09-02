@@ -2059,6 +2059,38 @@ bool EditorViewModel::applyPageInpaintChange(const application::PreparedPageInpa
     return true;
 }
 
+bool EditorViewModel::applyPageManualOverrideChange(const application::PreparedPageManualOverrideChange& change) {
+    if (!m_hasSession || !m_undoStack || !m_commandContext || change.projectId != m_state.projectId ||
+        change.expectedSessionGeneration != m_state.projectSessionGeneration ||
+        change.pageId != m_state.currentPageId) {
+        return false;
+    }
+    auto* command =
+        new command::PageManualOverrideCommand(m_commandContext.get(), change, [this](const domain::PageId& pageId) {
+            if (pageId == m_state.currentPageId)
+                rebuildCurrentPageProjection();
+        });
+    m_undoStack->push(command);
+    if (command->hasFaulted()) {
+        m_undoHistoryFaulted = true;
+        refreshUndoState();
+        return false;
+    }
+    rebuildCurrentPageProjection();
+    refreshUndoState();
+    invalidatePreviewAndRequestCurrentPage();
+    return true;
+}
+
+void EditorViewModel::setBrushColor(const QColor& color) {
+    updateState([&color](EditorState& s) { s.brushColor = color; });
+}
+
+void EditorViewModel::setBrushDiameter(double diameter) {
+    const double clamped = std::clamp(diameter, 1.0, 128.0);
+    updateState([clamped](EditorState& s) { s.brushDiameter = clamped; });
+}
+
 void EditorViewModel::updateProcessingState(const EditorProcessingState& processingState) {
     updateState([&](EditorState& s) { s.processing = processingState; });
 }

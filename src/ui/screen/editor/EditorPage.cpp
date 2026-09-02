@@ -13,12 +13,15 @@
 #include "ui/widget/PaneSplitter.h"
 
 #include <FluentQt/BasicInput.h>
+#include <FluentQt/DialogsFlyouts.h>
 #include <FluentQt/FluentQt.h>
 #include <FluentQt/Layout.h>
 #include <FluentQt/TextFields.h>
 #include <QApplication>
 #include <QButtonGroup>
+#include <QColorDialog>
 #include <QDebug>
+#include <QFrame>
 #include <QGridLayout>
 #include <QHBoxLayout>
 #include <QKeyEvent>
@@ -45,6 +48,55 @@ constexpr int kInspectorWideWidth = 352;
 constexpr int kInspectorStandardWidth = 328;
 constexpr int kInspectorCompactWidth = 320;
 constexpr int kInspectorMaxWidth = 380;
+
+/// ToolRail color swatch button inspired by Koharu's ColorWell control.
+class ToolRailColorWellButton : public QAbstractButton {
+public:
+    explicit ToolRailColorWellButton(QWidget* parent = nullptr) : QAbstractButton(parent) {
+        setFixedSize(44, 32);
+        setCursor(Qt::PointingHandCursor);
+    }
+
+    void setColor(const QColor& color) {
+        if (m_color != color) {
+            m_color = color;
+            update();
+        }
+    }
+
+    [[nodiscard]] QColor color() const noexcept {
+        return m_color;
+    }
+
+    void setBorderColor(const QColor& color) {
+        if (m_borderColor != color) {
+            m_borderColor = color;
+            update();
+        }
+    }
+
+protected:
+    void paintEvent(QPaintEvent*) override {
+        QPainter painter(this);
+        painter.setRenderHint(QPainter::Antialiasing);
+
+        if (isDown()) {
+            painter.fillRect(rect(), QColor(0, 0, 0, 40));
+        } else if (underMouse()) {
+            painter.fillRect(rect(), QColor(255, 255, 255, 25));
+        }
+
+        const QRectF swatchRect(12.0, 6.0, 20.0, 20.0);
+        painter.setPen(QPen(m_borderColor.isValid() ? m_borderColor : QColor(128, 128, 128, 120), 1.0));
+        painter.setBrush(m_color.isValid() ? QBrush(m_color) : Qt::NoBrush);
+        painter.drawRoundedRect(swatchRect, 4.0, 4.0);
+    }
+
+private:
+    QColor m_color{17, 17, 17, 255};
+    QColor m_borderColor{128, 128, 128, 120};
+};
+
 } // namespace
 
 QSplitter* EditorPage::splitterForTest() const {
@@ -63,6 +115,16 @@ void EditorPage::paintEvent(QPaintEvent* event) {
 
 EditorPage::EditorPage(EditorViewModel* viewModel, QWidget* parent) : base::BasePage(parent), m_viewModel(viewModel) {
     buildUi();
+
+    connect(m_canvas, &ui::manga::MangaCanvas::removeDiameterChanged, this, [this](double diameter) {
+        if (m_removeBrushSizeButton == nullptr) {
+            return;
+        }
+        const QString size = QString::number(qRound(diameter));
+        m_removeBrushSizeButton->setText(size);
+        m_removeBrushSizeButton->setAccessibleName(tr("%1 像素").arg(size));
+        m_removeBrushSizeButton->setToolTip(tr("%1 像素").arg(size));
+    });
 
     connect(m_pageList, &widget::PageThumbnailList::pageActivated, m_viewModel, &EditorViewModel::selectPage);
     connect(m_pageList, &widget::PageThumbnailList::pagesSelected, m_viewModel, &EditorViewModel::setSelectedPages);
@@ -97,6 +159,20 @@ EditorPage::EditorPage(EditorViewModel* viewModel, QWidget* parent) : base::Base
                                                         QStringLiteral("打开设置"),
                                                         application::RecoveryAction::OpenSettings,
                                                         false});
+                }
+            });
+    connect(m_canvas,
+            &ui::manga::MangaCanvas::manualStrokeCommitted,
+            this,
+            [this](const QVector<QPointF>& points, ui::manga::CanvasTool tool, const QColor& color, double diameter) {
+                const auto& state = m_viewModel->state();
+                if (state.processing.isRunning) {
+                    return;
+                }
+                if (auto* controller = m_viewModel->processingController()) {
+                    const auto mode = (tool == ui::manga::CanvasTool::Eraser) ? application::ManualStrokeMode::Erase
+                                                                              : application::ManualStrokeMode::Paint;
+                    controller->paintStroke(state.currentPageId, points, mode, color, diameter);
                 }
             });
 
@@ -349,20 +425,115 @@ void EditorPage::buildUi() {
     };
     addCanvasTool(QStringLiteral("canvasSelectButton"),
                   Typography::Icons::glyph(QStringLiteral("ic_fluent_cursor_20_regular")),
-                  tr("选择区域"),
+                  tr("选择区域 (V)"),
                   CanvasTool::Select);
     addCanvasTool(QStringLiteral("canvasPanButton"),
                   Typography::Icons::glyph(QStringLiteral("ic_fluent_hand_left_20_regular")),
-                  tr("平移画布"),
+                  tr("平移画布 (H)"),
                   CanvasTool::Pan);
     addCanvasTool(QStringLiteral("canvasCreateRegionButton"),
                   Typography::Icons::glyph(QStringLiteral("ic_fluent_scan_text_20_regular")),
-                  tr("创建文本区域"),
+                  tr("创建文本区域 (T)"),
                   CanvasTool::CreateRegion);
+    addCanvasTool(QStringLiteral("canvasBrushButton"),
+                  Typography::Icons::glyph(QStringLiteral("ic_fluent_paint_brush_20_regular")),
+                  tr("画笔 (B)"),
+                  CanvasTool::Brush);
+    addCanvasTool(QStringLiteral("canvasEraserButton"),
+                  Typography::Icons::glyph(QStringLiteral("ic_fluent_delete_20_regular")),
+                  tr("橡皮擦 (E)"),
+                  CanvasTool::Eraser);
     addCanvasTool(QStringLiteral("canvasRemoveButton"),
                   Typography::Icons::glyph(QStringLiteral("ic_fluent_square_hint_sparkles_16_regular")),
-                  tr("移除内容"),
+                  tr("移除内容 (J)"),
                   CanvasTool::Remove);
+
+    m_removeBrushSeparator = new QFrame(toolRail);
+    m_removeBrushSeparator->setObjectName(QStringLiteral("canvasRemoveBrushSeparator"));
+    m_removeBrushSeparator->setFrameShape(QFrame::HLine);
+    m_removeBrushSeparator->setFrameShadow(QFrame::Plain);
+    m_removeBrushSeparator->setFixedHeight(1);
+    m_removeBrushSeparator->setVisible(false);
+    toolLayout->addWidget(m_removeBrushSeparator);
+
+    m_removeBrushSizeButton = new fluent::basicinput::Button(QStringLiteral("48"), toolRail);
+    m_removeBrushSizeButton->setObjectName(QStringLiteral("canvasRemoveBrushSizeButton"));
+    m_removeBrushSizeButton->setAccessibleName(tr("%1 像素").arg(48));
+    m_removeBrushSizeButton->setToolTip(tr("%1 像素").arg(48));
+    m_removeBrushSizeButton->setFluentStyle(fluent::basicinput::Button::Subtle);
+    m_removeBrushSizeButton->setFixedSize(44, 32);
+    m_removeBrushSizeButton->setVisible(false);
+    toolLayout->addWidget(m_removeBrushSizeButton);
+    connect(m_removeBrushSizeButton, &fluent::basicinput::Button::clicked, this, [this]() {
+        auto* flyout = new fluent::dialogs_flyouts::Flyout(this);
+        flyout->setAttribute(Qt::WA_DeleteOnClose);
+        flyout->setFixedWidth(240);
+
+        auto* layout = new QVBoxLayout(flyout);
+        layout->setContentsMargins(16, 14, 16, 16);
+        layout->setSpacing(10);
+
+        auto* title = new fluent::textfields::Label(tr("笔刷大小（像素）"), flyout);
+        title->setFluentTypography(Typography::FontRole::Subtitle);
+        title->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Fixed);
+        layout->addWidget(title);
+
+        auto* box = new fluent::textfields::NumberBox();
+        box->setRange(1.0, 128.0);
+        box->setDisplayPrecision(0);
+        box->setSmallChange(1.0);
+        box->setSpinButtonPlacementMode(fluent::textfields::NumberBox::SpinButtonPlacementMode::Compact);
+        box->setFixedHeight(36);
+        box->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+        box->setAccessibleName(tr("笔刷大小（像素）"));
+        box->setValue(m_canvas->removeDiameter());
+        layout->addWidget(box);
+
+        connect(box, &fluent::textfields::NumberBox::valueChanged, this, [this](double diameter) {
+            m_canvas->setRemoveDiameter(diameter);
+        });
+        flyout->showAt(m_removeBrushSizeButton);
+    });
+
+    auto* colorWell = new ToolRailColorWellButton(toolRail);
+    m_brushColorButton = colorWell;
+    m_brushColorButton->setObjectName(QStringLiteral("canvasBrushColorButton"));
+    m_brushColorButton->setAccessibleName(tr("画笔颜色"));
+    m_brushColorButton->setToolTip(tr("画笔颜色"));
+    m_brushColorButton->setVisible(false);
+    toolLayout->addWidget(m_brushColorButton);
+    connect(m_brushColorButton, &QAbstractButton::clicked, this, [this]() {
+        auto* flyout = new fluent::dialogs_flyouts::Flyout(this);
+        flyout->setAttribute(Qt::WA_DeleteOnClose);
+
+        auto* picker = new fluent::basicinput::ColorPicker(flyout);
+        picker->setColor(m_canvas->brushColor());
+        picker->setAlphaEnabled(false);
+
+        auto* flyoutLayout = new QVBoxLayout(flyout);
+        flyoutLayout->setContentsMargins(12, 12, 12, 12);
+        flyoutLayout->setSpacing(8);
+
+        auto* title = new fluent::textfields::Label(tr("画笔颜色"), flyout);
+        title->setFluentTypography(Typography::FontRole::Subtitle);
+        flyoutLayout->addWidget(title);
+        flyoutLayout->addWidget(picker);
+
+        connect(picker, &fluent::basicinput::ColorPicker::colorChanged, this, [this](const QColor& color) {
+            if (color.isValid()) {
+                m_canvas->setBrushColor(color);
+                m_viewModel->setBrushColor(color);
+                if (auto* btn = dynamic_cast<ToolRailColorWellButton*>(m_brushColorButton)) {
+                    btn->setColor(color);
+                    const QString hex = color.name(QColor::HexRgb).toUpper();
+                    btn->setAccessibleName(tr("画笔颜色：%1").arg(hex));
+                    btn->setToolTip(tr("画笔颜色：%1").arg(hex));
+                }
+            }
+        });
+        flyout->showAt(m_brushColorButton);
+    });
+
     toolRail->move(12, 12);
 
     m_canvasStatusBar = new QWidget(canvasPaneCard);
@@ -643,6 +814,37 @@ void EditorPage::keyPressEvent(QKeyEvent* event) {
         event->accept();
         return;
     }
+
+    const auto* fw = QApplication::focusWidget();
+    const bool isEditingText =
+        fw != nullptr && (fw->inherits("QLineEdit") || fw->inherits("QTextEdit") || fw->inherits("QPlainTextEdit"));
+    if (!isEditingText && !(event->modifiers() & (Qt::ControlModifier | Qt::AltModifier))) {
+        if (event->key() == Qt::Key_V) {
+            m_viewModel->setActiveTool(CanvasTool::Select);
+            event->accept();
+            return;
+        } else if (event->key() == Qt::Key_H) {
+            m_viewModel->setActiveTool(CanvasTool::Pan);
+            event->accept();
+            return;
+        } else if (event->key() == Qt::Key_T) {
+            m_viewModel->setActiveTool(CanvasTool::CreateRegion);
+            event->accept();
+            return;
+        } else if (event->key() == Qt::Key_B) {
+            m_viewModel->setActiveTool(CanvasTool::Brush);
+            event->accept();
+            return;
+        } else if (event->key() == Qt::Key_E) {
+            m_viewModel->setActiveTool(CanvasTool::Eraser);
+            event->accept();
+            return;
+        } else if (event->key() == Qt::Key_J) {
+            m_viewModel->setActiveTool(CanvasTool::Remove);
+            event->accept();
+            return;
+        }
+    }
     base::BasePage::keyPressEvent(event);
 }
 
@@ -680,14 +882,20 @@ void EditorPage::render(const EditorState& state) {
         case CanvasTool::CreateRegion:
             canvasTool = ui::manga::CanvasTool::CreateRegion;
             break;
+        case CanvasTool::Brush:
+            canvasTool = ui::manga::CanvasTool::Brush;
+            break;
+        case CanvasTool::Eraser:
+            canvasTool = ui::manga::CanvasTool::Eraser;
+            break;
         case CanvasTool::Remove:
             canvasTool = ui::manga::CanvasTool::Remove;
             break;
     }
-    // A render in progress invalidates any in-flight Remove gesture. Selecting
-    // Select here also cancels the uncommitted stroke in MangaCanvas itself;
-    // disabling the rail button alone would leave the gesture active.
-    if (state.processing.isRunning && canvasTool == ui::manga::CanvasTool::Remove) {
+    // A render in progress invalidates any in-flight Remove/Brush/Eraser gesture.
+    if (state.processing.isRunning &&
+        (canvasTool == ui::manga::CanvasTool::Remove || canvasTool == ui::manga::CanvasTool::Brush ||
+         canvasTool == ui::manga::CanvasTool::Eraser)) {
         canvasTool = ui::manga::CanvasTool::Select;
     }
     m_canvas->setTool(canvasTool);
@@ -705,11 +913,48 @@ void EditorPage::render(const EditorState& state) {
             button->setChecked(state.activeTool == CanvasTool::CreateRegion);
         }
         if (auto* button =
+                m_canvasToolRail->findChild<fluent::basicinput::Button*>(QStringLiteral("canvasBrushButton"))) {
+            button->setChecked(state.activeTool == CanvasTool::Brush);
+            button->setEnabled(state.currentPageId.isValid() && !state.processing.isRunning);
+        }
+        if (auto* button =
+                m_canvasToolRail->findChild<fluent::basicinput::Button*>(QStringLiteral("canvasEraserButton"))) {
+            button->setChecked(state.activeTool == CanvasTool::Eraser);
+            button->setEnabled(state.currentPageId.isValid() && !state.processing.isRunning);
+        }
+        if (auto* button =
                 m_canvasToolRail->findChild<fluent::basicinput::Button*>(QStringLiteral("canvasRemoveButton"))) {
             button->setChecked(state.activeTool == CanvasTool::Remove);
             button->setEnabled(state.isInpaintAvailable && state.currentPageId.isValid() &&
                                !state.processing.isRunning);
         }
+        const bool isBrushMode =
+            (canvasTool == ui::manga::CanvasTool::Remove || canvasTool == ui::manga::CanvasTool::Brush ||
+             canvasTool == ui::manga::CanvasTool::Eraser);
+        const bool showBrushControls = isBrushMode && state.currentPageId.isValid() && !state.processing.isRunning;
+        if (m_removeBrushSeparator != nullptr) {
+            m_removeBrushSeparator->setVisible(showBrushControls);
+        }
+        if (m_removeBrushSizeButton != nullptr) {
+            m_removeBrushSizeButton->setVisible(showBrushControls);
+            const QString size = QString::number(qRound(m_canvas->removeDiameter()));
+            m_removeBrushSizeButton->setText(size);
+            m_removeBrushSizeButton->setAccessibleName(tr("%1 像素").arg(size));
+            m_removeBrushSizeButton->setToolTip(tr("%1 像素").arg(size));
+        }
+        if (m_brushColorButton != nullptr) {
+            const bool showColor = canvasTool == ui::manga::CanvasTool::Brush && showBrushControls;
+            m_brushColorButton->setVisible(showColor);
+            if (showColor) {
+                if (auto* btn = dynamic_cast<ToolRailColorWellButton*>(m_brushColorButton)) {
+                    btn->setColor(m_canvas->brushColor());
+                    const QString hex = m_canvas->brushColor().name(QColor::HexRgb).toUpper();
+                    btn->setAccessibleName(tr("画笔颜色：%1").arg(hex));
+                    btn->setToolTip(tr("画笔颜色：%1").arg(hex));
+                }
+            }
+        }
+        m_canvasToolRail->adjustSize();
     }
 
     QVector<ui::manga::CanvasRegionDisplay> displayRegions;

@@ -2,6 +2,7 @@
 
 #include "application/dto/ExportDto.h"
 #include "application/dto/ImportDto.h"
+#include "application/dto/ManualPaintDto.h"
 #include "application/dto/ProjectDto.h"
 #include "application/dto/TextDetectionDto.h"
 #include "application/operation/AsyncResult.h"
@@ -11,6 +12,7 @@
 #include "ui/base/BaseViewModel.h"
 #include "ui/command/EditorCommandContext.h"
 #include "ui/command/PageClearLayerCommand.h"
+#include "ui/command/PageManualOverrideCommand.h"
 #include "ui/command/RegionPropertyCommand.h"
 #include "ui/error/RecoveryPresenter.h"
 #include "ui/manga/RegionInteraction.h"
@@ -225,6 +227,10 @@ public:
 
     /// Pushes one page-level clear-layer change onto the session undo stack.
     bool applyPageInpaintChange(const application::PreparedPageInpaintChange& change);
+    /// Pushes one page-level manual override (paint/erase) change onto the session undo stack.
+    bool applyPageManualOverrideChange(const application::PreparedPageManualOverrideChange& change);
+    void setBrushColor(const QColor& color);
+    void setBrushDiameter(double diameter);
 
 Q_SIGNALS:
     void stateChanged(const EditorState& state);
