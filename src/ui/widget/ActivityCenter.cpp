@@ -527,8 +527,9 @@ void ActivityCenter::syncOperations(const QVector<application::OperationSnapshot
     QVector<application::OperationSnapshot> failedOps;
 
     for (const auto& op : operations) {
-        // Filter silent background cache tasks (e.g. thumbnail generation)
-        if (op.descriptor.stage == application::OperationStage::LoadImage) {
+        // Filter silent background cache/I/O tasks (e.g. thumbnail, page image load, preview, import)
+        if (op.descriptor.stage == application::OperationStage::LoadImage ||
+            op.descriptor.stage == application::OperationStage::Import) {
             continue;
         }
 

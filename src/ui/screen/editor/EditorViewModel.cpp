@@ -262,7 +262,14 @@ void EditorViewModel::closeProjectSession() {
     // Keep the aggregate alive until repository close completes. The repository
     // task may still access its session-owned paths and data during close.
     if (m_projectRepository && m_operationRegistry) {
-        auto context = m_operationRegistry->createOperation(m_state.projectSessionGeneration, m_state.viewGeneration);
+        application::OperationDescriptor descriptor{
+            .stage = application::OperationStage::LoadImage,
+            .projectId = m_session.projectId,
+            .displayTarget = tr("关闭项目"),
+            .cancellable = false,
+        };
+        auto context = m_operationRegistry->createOperation(
+            std::move(descriptor), m_state.projectSessionGeneration, m_state.viewGeneration);
         application::CloseProjectUseCase useCase(m_projectRepository);
         application::CloseProjectRequest request;
         request.projectId = m_session.projectId;
@@ -690,7 +697,15 @@ void EditorViewModel::requestPreview(const domain::PageId& pageId) {
         m_operationRegistry->cancelOperation(m_previewOperation);
     }
     ++m_previewToken;
-    const auto context = m_operationRegistry->createOperation(sessionGeneration, m_state.viewGeneration);
+    application::OperationDescriptor descriptor{
+        .stage = application::OperationStage::LoadImage,
+        .projectId = m_session.projectId,
+        .pageId = pageId,
+        .displayTarget = tr("预览渲染"),
+        .cancellable = true,
+    };
+    const auto context =
+        m_operationRegistry->createOperation(std::move(descriptor), sessionGeneration, m_state.viewGeneration);
     m_previewOperation = context.operationId;
     m_previewPageId = pageId;
     m_previewSessionGeneration = sessionGeneration;
@@ -1037,7 +1052,15 @@ void EditorViewModel::startPageLoad(const domain::PageId& pageId) {
         return;
     }
 
-    auto context = m_operationRegistry->createOperation(m_state.projectSessionGeneration, m_state.viewGeneration);
+    application::OperationDescriptor descriptor{
+        .stage = application::OperationStage::LoadImage,
+        .projectId = m_session.projectId,
+        .pageId = pageId,
+        .displayTarget = tr("页面图像"),
+        .cancellable = true,
+    };
+    auto context = m_operationRegistry->createOperation(
+        std::move(descriptor), m_state.projectSessionGeneration, m_state.viewGeneration);
     m_pageLoadOperation = context.operationId;
 
     application::LoadPageImageRequest request;
@@ -1958,7 +1981,14 @@ void EditorViewModel::saveProject() {
 
     updateState([this](EditorState& s) { s.saveState.isSaving = true; });
 
-    auto context = m_operationRegistry->createOperation(m_state.projectSessionGeneration, m_state.viewGeneration);
+    application::OperationDescriptor descriptor{
+        .stage = application::OperationStage::LoadImage,
+        .projectId = m_session.projectId,
+        .displayTarget = tr("保存项目"),
+        .cancellable = false,
+    };
+    auto context = m_operationRegistry->createOperation(
+        std::move(descriptor), m_state.projectSessionGeneration, m_state.viewGeneration);
     m_saveOperation = context.operationId;
     m_saveToken = beginRequest();
 
