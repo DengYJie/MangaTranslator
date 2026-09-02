@@ -1882,6 +1882,9 @@ void EditorProcessingController::batchProcessPages(const QVector<domain::PageId>
         if (ownsTask && m_viewModel != nullptr && m_viewModel->hasSession() &&
             sessionGen == m_viewModel->projectSessionGeneration()) {
             auto result = watcher->result();
+            if (result.has_value() && result->projectSaved) {
+                m_viewModel->markProjectCleanAtRevision(result->savedRevision);
+            }
             const bool success = result.has_value() && result->failedPages == 0;
             Q_EMIT processingFinished(domain::PageId{}, success);
         }

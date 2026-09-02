@@ -1865,6 +1865,11 @@ void EditorViewModel::cancelProjectTasks() {
     if (!m_hasSession) {
         return;
     }
+    // Session-owned workflows hold non-owning pointers into the aggregate. Requesting stop here is
+    // what makes it safe for completeProjectClose to destroy the aggregate afterwards.
+    if (m_operationRegistry != nullptr && m_session.projectId.isValid()) {
+        m_operationRegistry->cancelProject(m_session.projectId);
+    }
     const auto viewGen = m_state.viewGeneration + 1;
     updateState([&](EditorState& s) { s.viewGeneration = viewGen; });
     Q_EMIT thumbnailsInvalidated();
@@ -2023,6 +2028,20 @@ void EditorViewModel::handleSaveFinished() {
         updateState([this](EditorState& s) { s.saveState.isSaving = false; });
         Q_EMIT saveFailed(result.error());
     }
+}
+
+void EditorViewModel::markProjectCleanAtRevision(quint64 savedRevision) {
+    if (!m_openedSession) {
+        return;
+    }
+    if (!m_openedSession->project.markCleanIfRevision(savedRevision)) {
+        return;
+    }
+    if (m_undoStack) {
+        m_undoStack->setClean();
+    }
+    refreshUndoState();
+    Q_EMIT saveCompleted(QString::number(savedRevision));
 }
 
 void EditorViewModel::setExportDependencies(application::IComicExporter* exporter,

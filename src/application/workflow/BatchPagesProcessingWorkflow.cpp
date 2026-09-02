@@ -118,15 +118,15 @@ private:
                     m_pageIds.append(p.id());
                     break;
                 case BatchScopeType::SelectedPages:
-                    // Handled above when pageIds is supplied
+                    // An empty selection resolves to no work. It never falls back to the project.
                     break;
                 case BatchScopeType::Unprocessed:
+                case BatchScopeType::FailedOnly:
+                    // No per-run failure history reaches the workflow, so a retry reprocesses the
+                    // pages still missing detection output or a committed clear layer.
                     if (p.regions().empty() || !p.clearLayerAsset().has_value()) {
                         m_pageIds.append(p.id());
                     }
-                    break;
-                case BatchScopeType::FailedOnly:
-                    m_pageIds.append(p.id());
                     break;
             }
         }
@@ -154,6 +154,11 @@ private:
     }
 
     void finish(const Result<BatchProcessingReport>& result) {
+        if (m_settled) {
+            return;
+        }
+        m_settled = true;
+
         m_promise->addResult(result);
         m_promise->finish();
 
@@ -175,8 +180,50 @@ private:
     }
 
     void finishCancelled() {
-        finish(std::unexpected(makeApplicationError(
-            ErrorCategory::Cancelled, QStringLiteral("cancelled.user_requested"), QStringLiteral("批量处理已被取消"))));
+        finishWithSave(std::optional<ApplicationError>{makeApplicationError(
+            ErrorCategory::Cancelled, QStringLiteral("cancelled.user_requested"), QStringLiteral("批量处理已被取消"))});
+    }
+
+    /// Derived page assets are content-addressed files already written per page, so only the
+    /// project metadata is deferred to one batch-end write.
+    void finishWithSave(const std::optional<ApplicationError>& abortError) {
+        const auto abortOrFinish = [this, abortError]() {
+            if (abortError.has_value()) {
+                finish(std::unexpected(*abortError));
+            } else {
+                finish(m_report);
+            }
+        };
+
+        if (!m_projectDirty || m_projectRepository == nullptr || m_request.project == nullptr) {
+            abortOrFinish();
+            return;
+        }
+
+        m_projectDirty = false;
+        if (m_context.progressReporter) {
+            m_context.progressReporter->setStatusText(QObject::tr("保存项目"));
+        }
+
+        SaveProjectRequest saveReq;
+        saveReq.project = *m_request.project;
+        auto saveFuture = m_projectRepository->saveProject(saveReq, m_context);
+        auto self = shared_from_this();
+        saveFuture.then([this, self, abortError, abortOrFinish](Result<SaveProjectResult> saveRes) {
+            postStep([this, self, abortError, abortOrFinish, saveRes]() {
+                if (!saveRes.has_value()) {
+                    if (abortError.has_value()) {
+                        abortOrFinish();
+                    } else {
+                        finish(std::unexpected(saveRes.error()));
+                    }
+                    return;
+                }
+                m_report.projectSaved = true;
+                m_report.savedRevision = saveRes->savedRevision;
+                abortOrFinish();
+            });
+        });
     }
 
     /// Records the first failing stage for the page in flight. The page is still committed so that
@@ -194,7 +241,7 @@ private:
         }
 
         if (pageIndex >= m_pageIds.size()) {
-            finish(m_report);
+            finishWithSave(std::nullopt);
             return;
         }
 
@@ -655,7 +702,7 @@ private:
             return;
         }
 
-        updateProgress(6, QObject::tr("保存页面"));
+        updateProgress(6, QObject::tr("提交页面结果"));
 
         if (m_request.project == nullptr) {
             completeCurrentPage(false, QObject::tr("项目不可用"));
@@ -692,8 +739,8 @@ private:
 
         auto prepFuture = prepUseCase->execute(prepReq);
         auto self = shared_from_this();
-        prepFuture.then([this, self, pageId, clearHelper, prepUseCase](Result<PreparedProcessingAdoption> prepRes) {
-            postStep([this, self, pageId, clearHelper, prepUseCase, prepRes]() {
+        prepFuture.then([this, self, clearHelper, prepUseCase](Result<PreparedProcessingAdoption> prepRes) {
+            postStep([this, self, clearHelper, prepUseCase, prepRes]() {
                 if (m_context.stopToken.stop_requested()) {
                     finishCancelled();
                     return;
@@ -732,26 +779,8 @@ private:
                     noteStageFailure(prepared.skipped.first().error.safeMessage);
                 }
 
-                if (m_projectRepository != nullptr) {
-                    SaveProjectRequest saveReq;
-                    saveReq.project = *m_request.project;
-                    auto saveFuture = m_projectRepository->saveProject(saveReq, m_context);
-                    saveFuture.then([this, self, pageId](Result<SaveProjectResult> saveRes) {
-                        postStep([this, self, pageId, saveRes]() {
-                            if (m_context.stopToken.stop_requested()) {
-                                finishCancelled();
-                                return;
-                            }
-                            if (!saveRes.has_value()) {
-                                completeCurrentPage(false, saveRes.error().safeMessage);
-                                return;
-                            }
-                            completeCurrentPage(m_currentPageFailure.isEmpty(), m_currentPageFailure);
-                        });
-                    });
-                } else {
-                    completeCurrentPage(m_currentPageFailure.isEmpty(), m_currentPageFailure);
-                }
+                m_projectDirty = true;
+                completeCurrentPage(m_currentPageFailure.isEmpty(), m_currentPageFailure);
             });
         });
     }
@@ -783,6 +812,8 @@ private:
     QVector<LayoutResponse> m_currentLayout;
     QSet<domain::RegionId> m_currentClearFailedRegions;
     QString m_currentPageFailure;
+    bool m_projectDirty{false};
+    bool m_settled{false};
 
     std::shared_ptr<QPromise<Result<BatchProcessingReport>>> m_promise;
     BatchProcessingReport m_report;

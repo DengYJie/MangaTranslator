@@ -70,6 +70,11 @@ struct BatchProcessingReport {
     int failedPages{0};
     QVector<BatchPageSummary> pageSummaries;
 
+    /// Project metadata persisted once at the end of the run. The revision lets the editor clear
+    /// its dirty state only when nothing changed after the write.
+    bool projectSaved{false};
+    quint64 savedRevision{0};
+
     friend bool operator==(const BatchProcessingReport&, const BatchProcessingReport&) = default;
 };
 

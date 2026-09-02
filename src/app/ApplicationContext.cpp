@@ -134,7 +134,7 @@ ApplicationContext::ApplicationContext()
     m_production->translateUseCase =
         std::make_unique<application::TranslatePageUseCase>(m_translator.get(), m_operationRegistry.get());
     m_production->clearUseCase =
-        std::make_unique<application::ClearRegionUseCase>(m_inpainter.get(), m_operationRegistry.get());
+        std::make_unique<application::ClearRegionUseCase>(inpainter(), m_operationRegistry.get());
     m_production->layoutUseCase =
         std::make_unique<application::LayoutRegionUseCase>(m_textLayouter.get(), m_operationRegistry.get());
 
@@ -230,10 +230,16 @@ bool ApplicationContext::reconfigureInpaintModel(const QString& modelDirectory) 
             m_retiredPageInpainters.push_back(std::move(m_pageInpainter));
         }
     };
+    const auto rebindClearUseCase = [this]() {
+        if (m_production != nullptr && m_production->clearUseCase != nullptr) {
+            m_production->clearUseCase->setInpainter(inpainter());
+        }
+    };
 
     if (m_inpaintModelValidator == nullptr || m_production == nullptr || m_production->executor == nullptr ||
         m_production->ocrEnv == nullptr) {
         retireCurrent();
+        rebindClearUseCase();
         m_inpaintModelError =
             application::makeApplicationError(application::ErrorCategory::Internal,
                                               QStringLiteral("inpaint.reconfigure_unavailable"),
@@ -244,6 +250,7 @@ bool ApplicationContext::reconfigureInpaintModel(const QString& modelDirectory) 
     const auto manifest = services::loadAndValidateManifest(normalizedDirectory);
     if (!manifest.has_value()) {
         retireCurrent();
+        rebindClearUseCase();
         m_inpaintModelError = manifest.error();
         if (m_inpaintModelError->safeMessage.trimmed().isEmpty()) {
             m_inpaintModelError->safeMessage = QStringLiteral("请在设置中选择包含 manifest.json 的 Inpaint 模型目录。");
@@ -255,6 +262,7 @@ bool ApplicationContext::reconfigureInpaintModel(const QString& modelDirectory) 
         m_production->ocrEnv.get(), m_production->executor.get(), manifest.value());
     retireCurrent();
     m_pageInpainter = std::move(replacement);
+    rebindClearUseCase();
     m_inpaintModelError.reset();
     return true;
 }

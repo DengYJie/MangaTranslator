@@ -147,6 +147,8 @@ public:
     void pushPreparedCommand(QUndoCommand* cmd);
     /// P5-D hook: cancels all ongoing background project tasks.
     void cancelProjectTasks();
+    /// Adopts a project save performed outside the editor, such as the end of a batch run.
+    void markProjectCleanAtRevision(quint64 savedRevision);
     /// Undoes the last command. No-op when faulted or stack empty.
     void undo();
     /// Redoes the last undone command. No-op when faulted or stack empty.

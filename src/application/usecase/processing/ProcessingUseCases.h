@@ -138,6 +138,11 @@ public:
     ClearRegionUseCase(IInpainter* inpainter, OperationRegistry* registry)
         : m_inpainter(inpainter), m_registry(registry) {}
 
+    /// Non-owning rebinding used after the production inpaint model is reconfigured.
+    void setInpainter(IInpainter* inpainter) {
+        m_inpainter = inpainter;
+    }
+
     [[nodiscard]] QFuture<Result<ClearResponse>> execute(const ClearRequest& request,
                                                          const OperationDescriptor& descriptor,
                                                          quint64 sessionGeneration,
