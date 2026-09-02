@@ -23,6 +23,8 @@ public:
 private:
     struct Impl;
     std::shared_ptr<Impl> m_impl;
+
+    [[nodiscard]] application::Result<void> ensureLoaded();
 };
 
 } // namespace manga::services

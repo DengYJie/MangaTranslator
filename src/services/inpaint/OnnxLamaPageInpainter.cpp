@@ -50,6 +50,8 @@ struct OnnxLamaPageInpainter::Impl {
     BoundedTaskExecutor* executor{};
     InpaintManifest manifest;
     std::unique_ptr<Ort::Session> session;
+    bool loaded{false};
+    QMutex loadMutex;
     QMutex runMutex;
 };
 
@@ -58,8 +60,21 @@ OnnxLamaPageInpainter::OnnxLamaPageInpainter(Ort::Env* env, BoundedTaskExecutor*
     m_impl->env = env;
     m_impl->executor = executor;
     m_impl->manifest = std::move(manifest);
-    if (env == nullptr)
-        return;
+}
+
+OnnxLamaPageInpainter::~OnnxLamaPageInpainter() = default;
+
+application::Result<void> OnnxLamaPageInpainter::ensureLoaded() {
+    QMutexLocker locker(&m_impl->loadMutex);
+    if (m_impl->loaded) {
+        return {};
+    }
+
+    if (m_impl->env == nullptr) {
+        return std::unexpected(modelError(QStringLiteral("model.load_failed"),
+                                          QStringLiteral("The inpainting model could not be loaded")));
+    }
+
     Ort::SessionOptions options;
     options.SetGraphOptimizationLevel(GraphOptimizationLevel::ORT_ENABLE_ALL);
     options.SetIntraOpNumThreads(1);
@@ -70,23 +85,28 @@ OnnxLamaPageInpainter::OnnxLamaPageInpainter(Ort::Env* env, BoundedTaskExecutor*
     try {
 #ifdef _WIN32
         const auto path = QDir(m_impl->manifest.modelDirectory).filePath(m_impl->manifest.modelFile).toStdWString();
-        m_impl->session = std::make_unique<Ort::Session>(*env, path.c_str(), options);
+        m_impl->session = std::make_unique<Ort::Session>(*m_impl->env, path.c_str(), options);
 #else
         const auto path = QDir(m_impl->manifest.modelDirectory).filePath(m_impl->manifest.modelFile).toStdString();
-        m_impl->session = std::make_unique<Ort::Session>(*env, path.c_str(), options);
+        m_impl->session = std::make_unique<Ort::Session>(*m_impl->env, path.c_str(), options);
 #endif
         qInfo().noquote() << "[InpaintEngine] inpaint ONNX session loaded successfully";
     } catch (const std::exception& ex) {
-        // Loading is reported by inpaint rather than from a GUI-thread constructor.
         qWarning().noquote() << "[InpaintEngine] failed to create inpaint session:" << ex.what();
-        m_impl->session.reset();
+        auto error = application::makeApplicationError(application::ErrorCategory::Model,
+                                                       QStringLiteral("model.corrupt"),
+                                                       QStringLiteral("Failed to load the inpainting ONNX session"),
+                                                       application::RecoveryAction::LocateModel);
+        error.diagnostic = QString::fromUtf8(ex.what());
+        return std::unexpected(error);
     } catch (...) {
         qWarning().noquote() << "[InpaintEngine] unknown failure creating inpaint session";
-        m_impl->session.reset();
+        return std::unexpected(
+            modelError(QStringLiteral("model.corrupt"), QStringLiteral("Failed to load the inpainting ONNX session")));
     }
+    m_impl->loaded = true;
+    return {};
 }
-
-OnnxLamaPageInpainter::~OnnxLamaPageInpainter() = default;
 
 QFuture<Result<application::PageInpaintResponse>>
 OnnxLamaPageInpainter::inpaint(application::PageInpaintRequest request, application::OperationContext context) {
@@ -98,10 +118,13 @@ OnnxLamaPageInpainter::inpaint(application::PageInpaintRequest request, applicat
         application::OperationStage::Clear,
         TaskQueue::Interactive,
         context,
-        [impl, request = std::move(request)](
+        [this, impl, request = std::move(request)](
             const application::OperationContext& ctx,
             application::TaskProgress& progress) -> Result<application::PageInpaintResponse> {
             if (auto r = checkpoint(ctx); !r)
+                return std::unexpected(r.error());
+            progress.setText(QStringLiteral("Loading inpainting model..."));
+            if (auto r = ensureLoaded(); !r)
                 return std::unexpected(r.error());
             if (request.sourceImage.isNull() || request.mask.isNull() ||
                 request.sourceImage.size() != request.mask.size())
