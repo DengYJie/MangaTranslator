@@ -12,12 +12,16 @@
 namespace manga::network {
 
 enum class ProviderApiFlavor {
-    /// Standard OpenAI Chat Completions (api.openai.com).
-    /// Uses max_completion_tokens and response_format json_schema with strict:true.
+    /// Defaults to JSON Schema output when no output mode is selected explicitly.
     OpenAiNative,
-    /// OpenAI-compatible API subset used by DeepSeek, Ollama, LM Studio, and other local servers.
-    /// Uses max_tokens and response_format json_object.
+    /// Defaults to JSON object output when no output mode is selected explicitly.
     OpenAiCompatible,
+};
+
+enum class StructuredOutputMode {
+    ProviderDefault,
+    JsonSchema,
+    JsonObject,
 };
 
 enum class EndpointPolicy {
@@ -36,6 +40,8 @@ struct ProviderConfig {
     int timeoutMs{300000};
     ProviderApiFlavor apiFlavor{ProviderApiFlavor::OpenAiCompatible};
     double temperature{0.2};
+    /// Overrides the API flavor default to match the configured provider and model capabilities.
+    StructuredOutputMode structuredOutputMode{StructuredOutputMode::ProviderDefault};
 
     [[nodiscard]] bool operator==(const ProviderConfig& other) const noexcept = default;
 };
