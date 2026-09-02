@@ -57,19 +57,20 @@ CompositeOcrEngine::recognize(application::OcrRequest request, application::Oper
     qInfo().noquote() << "[CompositeOcrEngine] routing request lang=" << QString::fromStdString(lang)
                       << "paddleAvailable=" << (m_impl->paddleEngine && m_impl->paddleEngine->isAvailable());
 
-    // 1. Japanese manga text -> prefer Baberu OCR
+    // Japanese always reaches the Baberu engine.
     if (lang == "ja" || lang == "jpn" || lang == "Japanese") {
         return m_impl->baberuEngine->recognize(std::move(request), std::move(context));
     }
 
-    // 2. Chinese / English / Korean -> prefer PaddleOCR
+    // Chinese, English, and Korean prefer PaddleOCR, but only when its model is on disk.
     if (lang == "zh" || lang == "zh-CN" || lang == "zh-TW" || lang == "en" || lang == "ko" || lang == "kor") {
         if (m_impl->paddleEngine && m_impl->paddleEngine->isAvailable()) {
             return m_impl->paddleEngine->recognize(std::move(request), std::move(context));
         }
     }
 
-    // 3. Auto / Fallback:
+    // Any other language, an unset one included, takes PaddleOCR when its model is present. Baberu is the
+    // last resort because no availability probe guards it.
     if (m_impl->paddleEngine && m_impl->paddleEngine->isAvailable()) {
         return m_impl->paddleEngine->recognize(std::move(request), std::move(context));
     }

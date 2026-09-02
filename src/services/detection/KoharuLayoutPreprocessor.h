@@ -6,9 +6,9 @@
 
 namespace manga::services {
 
-/// Parameters and tensor buffer resulting from Letterbox preprocessing.
+/// Geometry and tensor buffer produced by the stretch preprocessor.
 struct KoharuPreprocessedImage {
-    std::vector<float> tensorData; // NCHW [1, 3, targetHeight, targetWidth]
+    std::vector<float> tensorData; // NCHW [1, 3, targetHeight, targetWidth], ImageNet normalized
     int originalWidth{0};
     int originalHeight{0};
     int targetWidth{1152};
@@ -18,11 +18,15 @@ struct KoharuPreprocessedImage {
     double padY{0.0};
     int scaledWidth{0};
     int scaledHeight{0};
+
+    // The stretch path never pads, so the scale and pad fields keep their identity defaults.
 };
 
 class KoharuLayoutPreprocessor {
 public:
-    /// Prepares a full page image into a 1152x1152 float32 RGB NCHW tensor with Letterbox padding.
+    /// Stretches a full page image into a float32 RGB NCHW tensor of the target size. The aspect ratio is
+    /// discarded and nothing is padded, so geometry restores with a per-axis scale of the source size
+    /// against the target size.
     [[nodiscard]] static KoharuPreprocessedImage
     process(const QImage& sourceImage, int targetWidth = 1152, int targetHeight = 1152);
 };

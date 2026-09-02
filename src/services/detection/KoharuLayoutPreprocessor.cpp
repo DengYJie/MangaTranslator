@@ -28,7 +28,8 @@ KoharuLayoutPreprocessor::process(const QImage& sourceImage, int targetWidth, in
         return result;
     }
 
-    // Direct bilinear resize matching RF-DETR Albumentations training
+    // Bilinear stretch to the graph input, as in the RF-DETR Albumentations training pipeline. The page
+    // is never padded or aspect preserved, so a per-axis scale alone restores coordinates.
     QImage rgbSource = sourceImage.format() == QImage::Format_RGB888
                            ? sourceImage
                            : sourceImage.convertToFormat(QImage::Format_RGB888);
@@ -38,7 +39,8 @@ KoharuLayoutPreprocessor::process(const QImage& sourceImage, int targetWidth, in
     float* gChannel = result.tensorData.data() + planeSize;
     float* bChannel = result.tensorData.data() + 2 * planeSize;
 
-    // ImageNet normalization constants matching Koharu
+    // ImageNet channel means and standard deviations. The detector was trained with these, so
+    // normalizing differently shifts every confidence threshold downstream.
     constexpr float meanR = 0.485f;
     constexpr float meanG = 0.456f;
     constexpr float meanB = 0.406f;

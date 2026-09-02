@@ -8,7 +8,7 @@ namespace manga::rendering {
 /// Centralized registry for discovering and querying bundled and available fonts.
 class FontRegistry {
 public:
-    /// Ensures bundled font files (NotoSansCJK-VF, etc.) are discovered and registered
+    /// Ensures Bundled font files such as NotoSansCJK-VF are discovered and registered
     /// with QFontDatabase. Returns the list of family names provided by the bundled font files.
     static QStringList bundledFontFamilies();
 

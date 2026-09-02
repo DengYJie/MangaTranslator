@@ -118,7 +118,6 @@ application::Result<void> PaddleOcrEngine::ensureLoaded() {
                                               application::RecoveryAction::LocateModel));
     }
 
-    // Load vocabulary / dictionary keys
     QString dictPath;
     const QStringList candidateDicts = {QStringLiteral("ppocr_keys_v1.txt"),
                                         QStringLiteral("keys.txt"),
@@ -240,7 +239,6 @@ PaddleOcrEngine::runInference(const application::OcrRequest& request,
                                                                  QStringLiteral("Invalid crop region")));
     }
 
-    // 1. Crop image
     const QRect cropRect(std::clamp(qRound(request.rect.x), 0, request.image.width() - 1),
                          std::clamp(qRound(request.rect.y), 0, request.image.height() - 1),
                          std::clamp(qRound(request.rect.width), 1, request.image.width()),
@@ -253,14 +251,16 @@ PaddleOcrEngine::runInference(const application::OcrRequest& request,
                                                                  QStringLiteral("Cropped image is empty")));
     }
 
-    // 2. Preprocess: resize to height 48, aspect ratio maintained
+    // A fixed row height with a width derived from the crop's own aspect ratio, clamped to the accepted
+    // range and rounded up to a multiple of 4. The scaling below may ignore the aspect ratio because this
+    // width already carries it.
     constexpr int targetH = 48;
     int targetW = std::clamp(qRound(cropped.width() * (static_cast<double>(targetH) / cropped.height())), 16, 960);
     targetW = ((targetW + 3) / 4) * 4;
 
     QImage scaled = cropped.scaled(targetW, targetH, Qt::IgnoreAspectRatio, Qt::SmoothTransformation);
 
-    // 3. Normalize into NCHW float buffer: (x / 255.0 - 0.5) / 0.5
+    // Channels-first float buffer with each pixel normalized as (value / 255.0 - 0.5) / 0.5.
     std::vector<float> inputData(1 * 3 * targetH * targetW);
     for (int y = 0; y < targetH; ++y) {
         const uchar* line = scaled.scanLine(y);

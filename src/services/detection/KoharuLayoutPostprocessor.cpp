@@ -10,8 +10,9 @@ namespace manga::services {
 
 namespace {
 
-// Class index constants matching Koharu RF-DETR label order:
-// 0: text, 1: onomatopoeia, 2: bubble, 3: panel, 4: background (suppressed)
+// Class indices in the order the detection checkpoint's trained head emits logits, so they follow the
+// exported model rather than this file. Background is never decoded as a region.
+// 0: text, 1: onomatopoeia, 2: bubble, 3: panel, 4: background
 constexpr int kClassText = 0;
 constexpr int kClassOnomatopoeia = 1;
 constexpr int kClassBubble = 2;
@@ -19,7 +20,8 @@ constexpr int kClassPanel = 3;
 constexpr int kClassBackground = 4;
 constexpr int kNumClasses = 5;
 
-// Koharu recommended detection thresholds per class:
+// Confidence floor per class, indexed by the constants above and carried over from the Koharu
+// reference detector. Text and onomatopoeia yield to the caller's minConfidence when it is set.
 // 0: text = 0.25, 1: onomatopoeia = 0.20, 2: bubble = 0.50, 3: panel = 0.50, 4: background = 1.0
 static constexpr float kRecommendedThresholds[kNumClasses] = {0.25f, 0.20f, 0.50f, 0.50f, 1.0f};
 
@@ -63,7 +65,7 @@ inline bool isMaskPixel(const float* maskData, int x, int y) {
     return maskData[y * kMaskEdge + x] > 0.0f;
 }
 
-// Distance from point P to line segment (A, B) squared
+/// Squared distance from (px, py) to the segment running from (ax, ay) to (bx, by).
 double pointToSegmentDistSq(double px, double py, double ax, double ay, double bx, double by) {
     const double l2 = (bx - ax) * (bx - ax) + (by - ay) * (by - ay);
     if (l2 < 1e-12) {
@@ -75,7 +77,7 @@ double pointToSegmentDistSq(double px, double py, double ax, double ay, double b
     return (px - projX) * (px - projX) + (py - projY) * (py - projY);
 }
 
-// Ramer-Douglas-Peucker simplification on the inclusive range [start, end].
+/// Ramer-Douglas-Peucker simplification over the inclusive range [start, end], marking survivors in keep.
 // An explicit stack bounds call depth for jagged contours.
 void rdpSimplifyRange(const std::vector<std::pair<double, double>>& pts,
                       size_t start,
@@ -109,12 +111,13 @@ void rdpSimplifyRange(const std::vector<std::pair<double, double>>& pts,
     }
 }
 
-// Moore-Neighbor boundary trace of one 8-connected component starting at its
-// topmost-leftmost pixel. Returns the ordered boundary pixels without repeating
-// the start pixel, or nullopt when the trace fails to close within maxSteps.
-// An unclosed contour must not be emitted: its closing chord would cut across
-// the region and corrupt downstream clearing.
+/// Moore-Neighbor boundary trace of the 8-connected component containing (startX, startY), started at
+/// its topmost-leftmost pixel. Returns the ordered boundary pixels without repeating the start pixel,
+/// or nothing when the walk exceeds its step cap before closing.
+/// An unclosed contour must not be emitted: its closing chord would cut across the region and corrupt
+/// downstream clearing.
 std::optional<std::vector<std::pair<int, int>>> traceBoundary(const float* maskData, int startX, int startY) {
+    // Step cap that fails the trace, so a boundary that never returns to its start cannot spin forever.
     constexpr int maxSteps = 4096;
 
     std::vector<std::pair<int, int>> contour;
@@ -150,7 +153,7 @@ std::optional<std::vector<std::pair<int, int>>> traceBoundary(const float* maskD
     return std::nullopt;
 }
 
-// Marks every pixel of the 8-connected component that contains (startX, startY).
+/// Marks every pixel of the 8-connected component that contains (startX, startY) in visited.
 void markComponentVisited(const float* maskData, std::vector<uint8_t>& visited, int startX, int startY) {
     std::vector<std::pair<int, int>> stack;
     stack.push_back({startX, startY});
@@ -174,7 +177,7 @@ void markComponentVisited(const float* maskData, std::vector<uint8_t>& visited, 
     }
 }
 
-// Shoelace area of a closed pixel contour in mask-grid units.
+/// Shoelace area of a closed pixel contour, in mask-grid units rather than source-image pixels.
 double contourArea(const std::vector<std::pair<int, int>>& contour) {
     double twice = 0.0;
     for (size_t i = 0; i < contour.size(); ++i) {
@@ -185,7 +188,8 @@ double contourArea(const std::vector<std::pair<int, int>>& contour) {
     return std::abs(twice) * 0.5;
 }
 
-// Extract boundary contour and simplify with RDP
+/// Largest traced contour of the mask, simplified and scaled into source-image pixels because the mask
+/// grid is a fixed low resolution. Returns nothing when no contour is large enough to simplify.
 std::optional<domain::PolygonGeometry> extractBubblePolygon(const float* maskData, int origWidth, int origHeight) {
     std::vector<uint8_t> visited(kMaskEdge * kMaskEdge, 0);
     std::vector<std::pair<int, int>> bestContour;
@@ -221,13 +225,15 @@ std::optional<domain::PolygonGeometry> extractBubblePolygon(const float* maskDat
     const double scaleX = static_cast<double>(origWidth) / static_cast<double>(kMaskEdge);
     const double scaleY = static_cast<double>(origHeight) / static_cast<double>(kMaskEdge);
 
-    // Relative arc length tolerance (matches Koharu arc_length * 0.001)
+    // Epsilon proportional to the contour perimeter, Koharu's relative arc-length tolerance, so
+    // simplification removes the same share of detail at any bubble size.
     double arcLength = 0.0;
     for (size_t i = 0; i + 1 < rawContour.size(); ++i) {
         arcLength +=
             std::hypot(rawContour[i + 1].first - rawContour[i].first, rawContour[i + 1].second - rawContour[i].second);
     }
-    // 0.001 relative tolerance, but minimum 1px in source image space (which is ~1/scaleX in mask space)
+    // Floored at one source pixel, which is one over scaleX in mask space, so an upscaled mask keeps
+    // the detail the source image actually resolved.
     double epsilon = std::max(arcLength * 0.001, 1.0 / std::max(scaleX, 1.0));
     double epsilonSq = epsilon * epsilon;
 
@@ -281,7 +287,7 @@ inline float sigmoid(float x) {
     return 1.0f / (1.0f + std::exp(-x));
 }
 
-// Intersection over union on [x1,y1,x2,y2] absolute coords
+/// Intersection over union of two boxes held as x1, y1, x2, y2 corners in source-image pixels.
 float iou(const RawDetection& a, const RawDetection& b) {
     const float ix1 = std::max(a.x1, b.x1);
     const float iy1 = std::max(a.y1, b.y1);
@@ -299,7 +305,8 @@ float iou(const RawDetection& a, const RawDetection& b) {
     return unionArea > 0.0f ? intersection / unionArea : 0.0f;
 }
 
-// Non-maximum suppression per class (IoU threshold 0.5, matching Koharu)
+/// Keeps the highest scoring detection of each label and drops the rest of that label's detections whose
+/// box overlaps a kept one by at least iouThreshold.
 std::vector<RawDetection> nonMaximumSuppression(std::vector<RawDetection> dets, float iouThreshold) {
     std::stable_sort(
         dets.begin(), dets.end(), [](const RawDetection& a, const RawDetection& b) { return a.score > b.score; });
@@ -322,7 +329,8 @@ std::vector<RawDetection> nonMaximumSuppression(std::vector<RawDetection> dets, 
     return kept;
 }
 
-// Decode RF-DETR native outputs: pred_logits [1,N,C] + pred_boxes [1,N,4]
+/// Decodes the native graph outputs pred_logits [1, N, C] and pred_boxes [1, N, 4] into boxes already
+/// restored to source-image pixels.
 std::vector<RawDetection> decodeNativeRfDetr(const float* logits,
                                              const std::vector<int64_t>& logitsShape,
                                              const float* boxes,
@@ -364,7 +372,8 @@ std::vector<RawDetection> decodeNativeRfDetr(const float* logits,
                 continue;
             }
 
-            // Bounding box from pred_boxes (cx,cy,w,h normalized) - matches Koharu processor.rs
+            // A pred_boxes row is a center plus a size normalized against the graph input, so restoring
+            // coordinates scales by the source dimensions and clamps them to the page.
             const float cx = boxRow[0];
             const float cy = boxRow[1];
             const float bw = boxRow[2];
@@ -374,6 +383,7 @@ std::vector<RawDetection> decodeNativeRfDetr(const float* logits,
             const float x2 = std::clamp((cx + bw / 2.0f) * W, 0.0f, W);
             const float y2 = std::clamp((cy + bh / 2.0f) * H, 0.0f, H);
 
+            // Side floor in source-image pixels. It also removes any box the clamp above collapsed.
             if (x2 - x1 < 3.0f || y2 - y1 < 3.0f) {
                 continue;
             }
@@ -384,7 +394,8 @@ std::vector<RawDetection> decodeNativeRfDetr(const float* logits,
     return result;
 }
 
-// Decode pre-processed legacy format: dets [N, 5+] with score at index 4, labels int64
+/// Decodes the pre-processed fallback shape, a [N, 5] or wider row per detection holding x1, y1, x2, y2
+/// and a score at index 4, with the class id carried separately as int64 labels.
 std::vector<RawDetection> decodeLegacyFormat(const float* dets,
                                              const std::vector<int64_t>& detsShape,
                                              const int64_t* labelData,
@@ -423,6 +434,8 @@ std::vector<RawDetection> decodeLegacyFormat(const float* dets,
             continue;
         }
 
+        // Exports disagree on the row's space, so a row that still fits the unit square is read as
+        // normalized and scaled to the page, otherwise it is already in source-image pixels.
         if (x1 <= 1.0f && y1 <= 1.0f && x2 <= 1.0f && y2 <= 1.0f) {
             x1 *= W;
             y1 *= H;
@@ -443,6 +456,7 @@ std::vector<RawDetection> decodeLegacyFormat(const float* dets,
         x2 = std::clamp(x2, 0.0f, W);
         y2 = std::clamp(y2, 0.0f, H);
 
+        // Same source-image side floor as the native path.
         if (x2 - x1 < 3.0f || y2 - y1 < 3.0f) {
             continue;
         }
@@ -482,10 +496,9 @@ application::TextDetectionResponse KoharuLayoutPostprocessor::process(const doma
         return response;
     }
 
-    // NMS with IoU threshold 0.5 (matching Koharu non_maximum_suppression)
+    // Suppression overlap of 0.5 IoU, carried over from the Koharu reference detector.
     rawDets = nonMaximumSuppression(std::move(rawDets), 0.5f);
 
-    // Split by class
     QVector<domain::RectGeometry> rawPanels;
     QVector<InternalItem> candidateItems;
 
@@ -518,7 +531,6 @@ application::TextDetectionResponse KoharuLayoutPostprocessor::process(const doma
         }
     }
 
-    // Separate bubbles from text/sfx
     QVector<InternalItem> textItems;
     QVector<BubbleItem> rawBubbles;
     for (const auto& item : candidateItems) {
@@ -560,7 +572,9 @@ application::TextDetectionResponse KoharuLayoutPostprocessor::process(const doma
         }
     }
 
-    // For bubbles with no associated text, synthesize a default centered text box
+    // A bubble that no text landed in still needs a region to typeset into, so one is synthesized: the
+    // bubble rect inset by a fixed fraction of its own size and floored so a small bubble still yields a
+    // usable box.
     for (int b = 0; b < rawBubbles.size(); ++b) {
         if (!bubbleHasText.at(b)) {
             const auto& bubble = rawBubbles.at(b);
@@ -577,12 +591,13 @@ application::TextDetectionResponse KoharuLayoutPostprocessor::process(const doma
             defaultText.bubbleRect = bubble.rect;
             defaultText.bubblePolygon = bubble.polygon;
             defaultText.regionClass = application::DetectedRegionClass::Text;
-            defaultText.confidence = 0.8;
+            defaultText.confidence = 0.8; // Fixed stand-in, not a measured model score.
             textItems.append(defaultText);
         }
     }
 
-    // Sort panels: top-to-bottom, then RTL or LTR
+    // Panels are ordered by row, topmost first. Two tops inside the same row band fall back to the
+    // reading direction, right to left for manga.
     std::sort(rawPanels.begin(),
               rawPanels.end(),
               [readingDirection](const domain::RectGeometry& a, const domain::RectGeometry& b) {
@@ -605,7 +620,9 @@ application::TextDetectionResponse KoharuLayoutPostprocessor::process(const doma
         }
     }
 
-    // Sort: panel order first, then Koharu detection_order (top asc, x desc for RTL)
+    // Reading order: the owning panel first, then the top edge ascending within the panel row band, then
+    // horizontal position, right to left for manga. A region outside every panel sorts after the panelled
+    // ones.
     std::stable_sort(
         textItems.begin(), textItems.end(), [readingDirection](const InternalItem& a, const InternalItem& b) {
             if (a.panelIndex != b.panelIndex) {

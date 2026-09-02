@@ -43,8 +43,8 @@ public:
     TextLayoutEngine();
     ~TextLayoutEngine();
 
-    // The main entry point for computing layout.
-    // logicalDpi determines how fontSizePt translates to pixel sizes.
+    /// Lays text out inside bounds, returning clusters, ink bounds, warnings, and the overflow flag.
+    /// logicalDpi converts a point size to pixels, so its default treats one point as one pixel.
     [[nodiscard]] static LayoutResult layoutText(const QString& text,
                                                  const domain::RectGeometry& bounds,
                                                  const domain::TextLayout& constraints,

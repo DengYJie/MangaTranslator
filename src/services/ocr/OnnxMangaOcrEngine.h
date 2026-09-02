@@ -10,7 +10,7 @@
 
 #include <memory>
 
-// Forward declare Ort::Env so we don't need onnxruntime in the header
+// Ort::Env is forward declared so this header stays free of the ONNX Runtime API.
 namespace Ort {
 struct Env;
 }

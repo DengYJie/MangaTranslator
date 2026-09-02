@@ -85,7 +85,7 @@ application::Result<std::vector<float>> BaberuOcrPreprocessor::preprocess(const 
     return tensor;
 }
 
-// PIL uses a = -0.5 ("antialias" bicubic keys)
+// Bicubic kernel with keys a = -0.5, matching PIL Image.BICUBIC, so the golden tensor test holds at 1e-6.
 float BaberuOcrPreprocessor::bicubicWeight(float t) noexcept {
     const float a = -0.5f;
     t = std::abs(t);
@@ -108,7 +108,9 @@ QImage BaberuOcrPreprocessor::bicubicResize(const QImage& src, int dstW, int dst
 
     for (int dy = 0; dy < dstH; ++dy) {
         uchar* dstLine = dst.scanLine(dy);
-        // PIL coordinate transform
+        // Maps the destination pixel center back into source space so the four taps stay symmetric about
+        // the sampled point. A plain ratio scale anchors them at the pixel corner instead and shifts
+        // every weight by half a pixel.
         float sy = (dy + 0.5f) * srcH / dstH - 0.5f;
         int iy = static_cast<int>(std::floor(sy));
 

@@ -60,12 +60,15 @@ enum class TaskQueue {
     Background,
 };
 
-/// Bounded CPU task scheduler over a QThreadPool + QRunnable pair, per the P4 contract.
+/// Bounded CPU task scheduler over a QThreadPool + QRunnable pair. Both TaskQueue lanes share the same
+/// worker count of running slots, and a task's stop token is observed before its work starts and again
+/// before its result is published.
 /// Write operations per canonical project root are not the executor's concern, and the
 /// executor never reads the Domain or interprets generation.
 class BoundedTaskExecutor final {
 public:
-    /// clamp(hardware_concurrency - 1, 1, 4); hardware_concurrency()==0 counts as 1.
+    /// Reports two workers once Qt's ideal thread count reaches four, and one below that, treating a
+    /// non-positive count as one. The constructor clamps any explicit count into that same range.
     [[nodiscard]] static int defaultWorkerCount();
 
     explicit BoundedTaskExecutor(int workerCount = defaultWorkerCount());
@@ -269,11 +272,13 @@ application::Result<QFuture<application::Result<T>>> BoundedTaskExecutor::submit
             cancelComplete();
             return future;
         }
+        // The queue and yield literals below mirror kMaxPendingTasks and kInteractiveRunBeforeBackground,
+        // which are file-local to the implementation and unreachable from this header.
         if (m_state->shutdown) {
             rejection = application::makeApplicationError(application::ErrorCategory::Internal,
                                                           QStringLiteral("internal.executor_shutdown"),
                                                           QStringLiteral("The task executor is shutting down"));
-        } else if (m_state->interactive.size() + m_state->background.size() >= 32) { // kMaxPendingTasks = 32
+        } else if (m_state->interactive.size() + m_state->background.size() >= 32) {
             rejection = application::makeApplicationError(application::ErrorCategory::Inference,
                                                           QStringLiteral("inference.queue_full"),
                                                           QStringLiteral("The task queue is full"),
@@ -285,7 +290,7 @@ application::Result<QFuture<application::Result<T>>> BoundedTaskExecutor::submit
             } else {
                 m_state->background.push_back(std::move(pending));
             }
-            // Inline pumpLocked logic to avoid circular headers/dependencies
+            // Mirrors pumpLocked from the implementation, so the two drains have to stay in sync.
             while (m_state->active < m_workerCount && (!m_state->interactive.empty() || !m_state->background.empty())) {
                 PendingTask next;
                 const bool preferBackground = m_state->interactiveSinceBackground >= 8 && !m_state->background.empty();

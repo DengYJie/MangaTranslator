@@ -194,7 +194,6 @@ LayoutResult TextLayoutEngine::layoutHorizontal(const QString& text,
         result.warnings.append(LayoutWarning{"layout.font_missing", "Requested font family not found."});
     }
 
-    // Missing glyph check
     QFontMetricsF fm(font, &dummyDevice);
     int missingGlyphs = 0;
     for (int i = 0; i < text.length(); ++i) {
@@ -251,7 +250,6 @@ LayoutResult TextLayoutEngine::layoutHorizontal(const QString& text,
 
     double textHeight = y;
 
-    // Vertical alignment offset
     const QRectF availableRect(bounds.x + constraints.margins.left, bounds.y + constraints.margins.top, availW, availH);
     double yOffset = availableRect.top();
     switch (constraints.alignment.vertical) {
@@ -277,7 +275,6 @@ LayoutResult TextLayoutEngine::layoutHorizontal(const QString& text,
         }
     }
 
-    // Add stroke expansion
     double strokeExt = constraints.strokeWidthPx / 2.0;
     if (strokeExt > 0.0) {
         unionInk.adjust(-strokeExt, -strokeExt, strokeExt, strokeExt);
@@ -371,7 +368,7 @@ LayoutResult TextLayoutEngine::layoutVertical(const QString& text,
         bool isTateChuYoko = false;
         bool rotate90 = false;
 
-        // Check for 2-digit Tate-chu-yoko (e.g. "12", "99") or "!?"
+        // Check for 2-digit Tate-chu-yoko such as "12" or "99", and "!?"
         if (isAsciiDigit && i < text.length() && text.at(i).isDigit() && text.at(i).unicode() <= 0x7F) {
             if (i + 1 >= text.length() || !text.at(i + 1).isDigit() || text.at(i + 1).unicode() > 0x7F) {
                 finalStr = text.mid(i - 1, 2);
@@ -387,6 +384,8 @@ LayoutResult TextLayoutEngine::layoutVertical(const QString& text,
         }
 
         const double glyphW = fm.horizontalAdvance(finalStr);
+        // A rotated cluster turns its horizontal advance into its vertical extent, so the cell takes that
+        // advance, floored at a share of the em so a narrow glyph cannot collapse the column.
         const double cellH = isTateChuYoko ? emSize : (rotate90 ? qMax(glyphW, emSize * 0.8) : emSize);
 
         if (constraints.wordWrap && !columns.last().items.isEmpty() && columns.last().height + cellH > availH) {

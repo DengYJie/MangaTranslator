@@ -236,7 +236,7 @@ OnnxKoharuLayoutDetector::runInference(const application::TextDetectionRequest& 
         std::vector<Ort::Value> inputTensors;
         inputTensors.push_back(std::move(inputTensor));
 
-        // If second input exists (e.g. orig_target_sizes), populate it
+        // A second input such as orig_target_sizes is populated when present
         int64_t targetSizesData[2] = {request.image.height(), request.image.width()};
         if (inputCount >= 2) {
             const int64_t targetSizesDims[] = {1, 2};

@@ -42,7 +42,7 @@ struct OnnxMangaOcrEngine::Impl {
     bool loaded{false};
     int activeInferences{0};
     QMutex loadMutex;
-    QSemaphore concurrencyGate{1}; // concurrency gate = 1
+    QSemaphore concurrencyGate{1};
 };
 
 OnnxMangaOcrEngine::OnnxMangaOcrEngine(Ort::Env* env, BoundedTaskExecutor* executor, QString modelDir)
@@ -139,7 +139,7 @@ application::Result<void> OnnxMangaOcrEngine::ensureLoaded() {
             application::ErrorCategory::Model, QStringLiteral("model.load_failed"), QString::fromStdString(e.what())));
     }
 
-    // Verify names
+    // A usable graph exposes at least one input and one output; names are matched at run time.
     auto checkSession = [](Ort::Session& session, const char* name) -> application::Result<void> {
         size_t inCount = session.GetInputCount();
         size_t outCount = session.GetOutputCount();
@@ -311,7 +311,8 @@ OnnxMangaOcrEngine::runInference(const application::OcrRequest& request,
 
     std::vector<Ort::Value> kvCache;
 
-    // We use std::optional to hold the Ort::Value which doesn't have a default constructor in all versions
+    // std::optional holds the logits because Ort::Value has no default constructor and every decoding
+    // step reassigns it.
     std::optional<Ort::Value> logitsTensorOpt;
 
     try {

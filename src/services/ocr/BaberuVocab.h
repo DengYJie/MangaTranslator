@@ -8,9 +8,9 @@
 
 namespace manga::services {
 
-// Character-level vocabulary for Baberu OCR.
-// Token IDs 0-3 are special: 0=pad, 1=bos, 2=eos, 3=unk.
-// IDs >= 4 map to charset[id-4].
+/// Character-level vocabulary for Baberu OCR.
+/// Token ids 0 to 3 are special: 0 pad, 1 bos, 2 eos, 3 unk.
+/// Ids from 4 up map to the charset at id minus 4.
 class BaberuVocab final {
 public:
     static constexpr int kPadId = 0;
@@ -19,15 +19,15 @@ public:
     static constexpr int kUnkId = 3;
     static constexpr int kOffset = 4;
 
-    // Loads from a vocab JSON file (array of single characters).
+    /// Loads a vocab JSON file holding an array of single characters.
     [[nodiscard]] static application::Result<BaberuVocab>
     load(const QString& vocabPath, int bosId, int eosId, int padId, int unkId);
 
-    // Decodes token IDs to a UTF-8 QString; IDs < kOffset are skipped.
+    /// Decodes token ids into a string, skipping the special ids and any id outside the loaded charset.
     [[nodiscard]] QString decode(const QVector<int>& ids) const;
 
-    // Returns the set of content token IDs: single-char tokens that are letter or
-    // digit (Unicode category starts with L or N), excluding wave/dash characters.
+    /// Content token ids, the single-character letters and digits, excluding the prolonged sound mark,
+    /// the wave dash, and the tilde.
     [[nodiscard]] const QSet<int>& contentIds() const noexcept {
         return m_contentIds;
     }
