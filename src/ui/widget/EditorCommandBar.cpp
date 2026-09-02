@@ -73,15 +73,15 @@ void EditorCommandBar::buildUi() {
                                    tr("平移工具 (H)"),
                                    QStringLiteral("panButton"));
     m_panButton->setCheckable(true);
-    m_createRegionButton = createIconButton(Typography::Icons::glyph(QStringLiteral("ic_fluent_scan_text_20_regular")),
-                                            tr("创建文本区域 (R)"),
-                                            QStringLiteral("createRegionButton"));
-    m_createRegionButton->setCheckable(true);
+    m_textButton = createIconButton(Typography::Icons::glyph(QStringLiteral("ic_fluent_scan_text_20_regular")),
+                                    tr("文本 (T)"),
+                                    QStringLiteral("textButton"));
+    m_textButton->setCheckable(true);
     auto* toolGroup = new QButtonGroup(this);
     toolGroup->setExclusive(true);
     toolGroup->addButton(m_selectButton);
     toolGroup->addButton(m_panButton);
-    toolGroup->addButton(m_createRegionButton);
+    toolGroup->addButton(m_textButton);
     m_previewSelectorButton =
         createIconButton(Typography::Icons::View, tr("预览模式"), QStringLiteral("previewSelectorButton"));
     m_previewSelectorButton->setFluentLayout(fluent::basicinput::Button::IconAfter);
@@ -163,7 +163,8 @@ void EditorCommandBar::buildUi() {
     };
 
     addGroup({m_undoButton, m_redoButton});
-    addGroup({m_previewSelectorButton});
+    m_previewSelectorButton->hide();
+    m_previewOverflowAction->setVisible(false);
     addGroup({m_ocrButton, m_smartTranslateButton, m_adoptButton, m_rejectButton});
     layout->addStretch();
     addGroup({m_pagePaneToggleButton, m_inspectorPaneToggleButton});
@@ -182,8 +183,8 @@ void EditorCommandBar::buildUi() {
     connect(m_panButton, &fluent::basicinput::Button::clicked, this, [this]() {
         m_viewModel->setActiveTool(CanvasTool::Pan);
     });
-    connect(m_createRegionButton, &fluent::basicinput::Button::clicked, this, [this]() {
-        m_viewModel->setActiveTool(CanvasTool::CreateRegion);
+    connect(m_textButton, &fluent::basicinput::Button::clicked, this, [this]() {
+        m_viewModel->setActiveTool(CanvasTool::Text);
     });
     connect(m_previewSelectorButton, &fluent::basicinput::Button::clicked, this, [this]() {
         const auto current = m_viewModel->state().previewMode;
@@ -272,7 +273,7 @@ void EditorCommandBar::updateResponsiveLayout() {
 
     const bool narrow = width() < 720;
     Q_UNUSED(narrow);
-    m_previewSelectorButton->setVisible(true);
+    m_previewSelectorButton->setVisible(false);
     m_adoptButton->setVisible(m_hasProposal);
     m_rejectButton->setVisible(m_hasProposal);
     m_overflowButton->setVisible(overflowActive);
@@ -281,7 +282,7 @@ void EditorCommandBar::updateResponsiveLayout() {
     m_zoomInOverflowAction->setVisible(narrow);
     m_fitToPageOverflowAction->setVisible(overflowActive);
     m_actualSizeOverflowAction->setVisible(overflowActive);
-    m_previewOverflowAction->setVisible(overflowActive);
+    m_previewOverflowAction->setVisible(false);
     m_adoptOverflowAction->setVisible(overflowActive && m_hasProposal);
     m_rejectOverflowAction->setVisible(overflowActive && m_hasProposal);
 
@@ -293,7 +294,7 @@ void EditorCommandBar::updateResponsiveLayout() {
     m_actualSizeButton->hide();
     m_selectButton->hide();
     m_panButton->hide();
-    m_createRegionButton->hide();
+    m_textButton->hide();
 
     bool previousGroupVisible = false;
     for (int i = 0; i < m_commandGroups.size(); ++i) {
@@ -329,7 +330,7 @@ void EditorCommandBar::render(const EditorState& state) {
 
     m_selectButton->setChecked(state.activeTool == CanvasTool::Select);
     m_panButton->setChecked(state.activeTool == CanvasTool::Pan);
-    m_createRegionButton->setChecked(state.activeTool == CanvasTool::CreateRegion);
+    m_textButton->setChecked(state.activeTool == CanvasTool::Text);
 
     // Disable viewport and canvas tools if no page is active
     const bool hasPage = state.currentPageId.isValid();
@@ -340,7 +341,7 @@ void EditorCommandBar::render(const EditorState& state) {
     m_actualSizeButton->setEnabled(hasPage);
     m_selectButton->setEnabled(hasPage);
     m_panButton->setEnabled(hasPage);
-    m_createRegionButton->setEnabled(hasPage);
+    m_textButton->setEnabled(hasPage);
     m_previewSelectorButton->setEnabled(hasPage);
     const bool hasSelectedRegions = hasPage && !state.selectedRegionIds.isEmpty();
     m_ocrButton->setVisible(hasSelectedRegions);
@@ -395,8 +396,7 @@ void EditorCommandBar::setupShortcuts() {
 
     makeGlobal(QStringLiteral("V"), [this]() { m_viewModel->setActiveTool(CanvasTool::Select); });
     makeGlobal(QStringLiteral("H"), [this]() { m_viewModel->setActiveTool(CanvasTool::Pan); });
-    makeGlobal(QStringLiteral("T"), [this]() { m_viewModel->setActiveTool(CanvasTool::CreateRegion); });
-    makeGlobal(QStringLiteral("R"), [this]() { m_viewModel->setActiveTool(CanvasTool::CreateRegion); });
+    makeGlobal(QStringLiteral("T"), [this]() { m_viewModel->setActiveTool(CanvasTool::Text); });
     makeGlobal(QStringLiteral("B"), [this]() { m_viewModel->setActiveTool(CanvasTool::Brush); });
     makeGlobal(QStringLiteral("E"), [this]() { m_viewModel->setActiveTool(CanvasTool::Eraser); });
     makeGlobal(QStringLiteral("J"), [this]() { m_viewModel->setActiveTool(CanvasTool::Remove); });

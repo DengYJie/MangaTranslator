@@ -54,6 +54,8 @@ static QPointF handleAnchorPoint(HandlePosition pos, const domain::RectGeometry&
             return {left, bottom};
         case HandlePosition::West:
             return {left, cy};
+        case HandlePosition::Rotate:
+            return {cx, top - 16.0};
     }
     Q_UNREACHABLE();
 }
@@ -80,7 +82,8 @@ std::optional<HandlePosition> hitTestHandle(const QPointF& devicePoint,
                                                     HandlePosition::SouthEast,
                                                     HandlePosition::South,
                                                     HandlePosition::SouthWest,
-                                                    HandlePosition::West};
+                                                    HandlePosition::West,
+                                                    HandlePosition::Rotate};
 
     for (const auto pos : allHandles) {
         if (handleHitRect(pos, geometry, zoom, devicePixelRatio).contains(devicePoint)) {
@@ -109,6 +112,10 @@ std::optional<domain::RectGeometry> resizeRegion(const domain::RectGeometry& ori
                                                  HandlePosition handle,
                                                  QPointF deltaSourcePx,
                                                  const domain::ImageSize& pageBounds) noexcept {
+    if (handle == HandlePosition::Rotate) {
+        return original;
+    }
+
     double left = original.x;
     double top = original.y;
     double right = original.x + original.width;
@@ -145,6 +152,8 @@ std::optional<domain::RectGeometry> resizeRegion(const domain::RectGeometry& ori
             break;
         case HandlePosition::West:
             left += dx;
+            break;
+        case HandlePosition::Rotate:
             break;
     }
 

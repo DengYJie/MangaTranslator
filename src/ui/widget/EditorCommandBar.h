@@ -97,7 +97,7 @@ private:
     fluent::basicinput::Button* m_actualSizeButton{nullptr};
     fluent::basicinput::Button* m_selectButton{nullptr};
     fluent::basicinput::Button* m_panButton{nullptr};
-    fluent::basicinput::Button* m_createRegionButton{nullptr};
+    fluent::basicinput::Button* m_textButton{nullptr};
     fluent::basicinput::Button* m_previewSelectorButton{nullptr};
     fluent::basicinput::Button* m_ocrButton{nullptr};
     fluent::basicinput::Button* m_smartTranslateButton{nullptr};

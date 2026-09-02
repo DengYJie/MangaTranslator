@@ -15,7 +15,7 @@ namespace domain = ::manga::domain;
 enum class Tool {
     Select,
     Pan,
-    CreateRegion,
+    Text,
     Remove,
     Brush,
     Eraser
@@ -43,7 +43,8 @@ enum class HandlePosition {
     SouthEast,
     South,
     SouthWest,
-    West
+    West,
+    Rotate
 };
 
 /// Renderable projection of one region on the canvas. Items hold this data only;

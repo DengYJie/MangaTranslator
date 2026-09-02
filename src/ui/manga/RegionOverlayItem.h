@@ -35,7 +35,7 @@ public:
     void setHovered(bool hovered);
 
     /// Updates position, size, and handle visibility from a display projection.
-    void updateFromDisplay(const canvas::RegionDisplay& display);
+    void updateFromDisplay(const canvas::RegionDisplay& display, bool showHandles = true);
 
     /// Sets the geometry directly during an in-progress drag gesture.
     void setTransientGeometry(const ::manga::domain::RectGeometry& geometry);
@@ -48,7 +48,7 @@ public:
         return m_bubbleGeometry;
     }
 
-    /// Positions all eight handles at their anchor points for the current rect.
+    /// Positions all handles at their anchor points for the current rect.
     void layoutHandles();
 
     /// Sets the 1-based display order used for the accessible name.
@@ -63,7 +63,7 @@ public:
     void paint(QPainter* painter, const QStyleOptionGraphicsItem* option, QWidget* widget) override;
 
 private:
-    void setSelected(bool selected);
+    void setSelected(bool selected, bool showHandles = true);
 
     ::manga::domain::RegionId m_id;
     std::optional<::manga::domain::RectGeometry> m_bubbleGeometry;
@@ -73,7 +73,7 @@ private:
     QColor m_selectedStroke{0, 120, 215};
     QColor m_unselectedStroke{180, 180, 180, 160};
     QColor m_handleFill{0, 120, 215};
-    std::array<SelectionHandleItem*, 8> m_handles{};
+    std::array<SelectionHandleItem*, 9> m_handles{};
 };
 
 } // namespace manga::ui::manga

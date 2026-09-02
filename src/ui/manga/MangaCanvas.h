@@ -3,6 +3,7 @@
 #include "ui/base/DomainMetaTypes.h"
 #include "ui/manga/CanvasZOrder.h"
 #include "ui/manga/RegionInteraction.h"
+#include "ui/manga/TextLayerDisplay.h"
 
 #include <FluentQt/Foundation.h>
 #include <QGraphicsView>
@@ -32,6 +33,7 @@ class Label;
 namespace manga::ui::manga {
 
 class RegionOverlayItem;
+class MangaTextItem;
 
 // Type aliases for MOC-compatible signal parameter types.
 using CanvasTool = canvas::Tool;
@@ -67,6 +69,7 @@ public:
 
     /// Replaces the page image and switches to the Image state. GUI thread only.
     void setPageImage(const QImage& image);
+    void setCleaningImage(const QImage& image);
     void setTranslatedPreview(const QImage& image);
     void setPreviewMode(int mode);
     void clearPageImage();
@@ -91,7 +94,7 @@ public:
     void centerOnPage(const QPointF& scenePos);
 
     /// Sets the active canvas tool. Pan keeps ScrollHandDrag; Select switches to
-    /// NoDrag for item interaction; CreateRegion enables creation gesture.
+    /// NoDrag for item interaction; Text enables text creation gesture.
     void setTool(CanvasTool tool);
     [[nodiscard]] CanvasTool tool() const noexcept {
         return m_tool;
@@ -111,6 +114,9 @@ public:
     /// or removes items to match. Items hold geometry and selection state only.
     void setRegions(const QVector<CanvasRegionDisplay>& regions);
 
+    /// Reconciles independently rendered text items with the current region projections.
+    void setTextLayers(const QVector<TextLayerDisplay>& layers);
+
     /// Sets the page bounds used for clamping region geometry during move/resize.
     void setPageBounds(SourceImageSize bounds) noexcept {
         m_pageBounds = bounds;
@@ -126,8 +132,11 @@ Q_SIGNALS:
     void viewTransformChanged(double zoom, const QPointF& centerOnPage);
     void placeholderActionActivated();
 
-    /// Emitted when a create-region gesture completes with a valid rectangle.
-    void regionCreateCommitted(SourceRectGeometry geometry);
+    /// Emitted when a point-text gesture completes.
+    void pointTextCreateCommitted(QPointF anchor);
+
+    /// Emitted when a paragraph-text gesture completes with its source-space frame.
+    void textBoxCreateCommitted(SourceRectGeometry geometry);
 
     /// Emitted when a region is clicked to request selection change.
     void regionSelectionRequested(SourceRegionId id, CanvasSelectionIntent intent);
@@ -193,9 +202,11 @@ private:
 
     /// Propagates resolved FluentQt semantic colors to overlay items and the creation box.
     void applyThemeColorsToItems();
+    void syncTextItemVisibility();
 
     QGraphicsScene* m_scene{nullptr};                // owned via QGraphicsView::setScene
     QGraphicsPixmapItem* m_pageItem{nullptr};        // scene-owned
+    QGraphicsPixmapItem* m_cleaningItem{nullptr};    // scene-owned
     QGraphicsPixmapItem* m_translationItem{nullptr}; // scene-owned
     fluent::layout::Card* m_placeholderCard{nullptr};
     fluent::textfields::Label* m_placeholderIcon{nullptr};
@@ -203,8 +214,9 @@ private:
     fluent::textfields::Label* m_placeholderDescription{nullptr};
     fluent::basicinput::Button* m_placeholderAction{nullptr};
     QPixmap m_pagePixmap;
+    QPixmap m_cleaningPixmap;
     QPixmap m_translationPixmap;
-    int m_previewMode{0};
+    int m_previewMode{1};
     ContentState m_contentState{ContentState::NoProject};
     QString m_placeholderMessage;
     double m_zoomFactor{1.0};
@@ -214,11 +226,12 @@ private:
     CanvasTool m_tool{CanvasTool::Pan};
     SourceImageSize m_pageBounds{};
     QMap<SourceRegionId, RegionOverlayItem*> m_overlays;
+    QMap<domain::RegionId, MangaTextItem*> m_textItems;
 
-    /// Transient creation box shown during a create-region drag.
+    /// Transient text draft frame shown during a Text gesture.
     QGraphicsRectItem* m_creationBox{nullptr}; // scene-owned
 
-    /// Gesture tracking state for move/resize/create drags.
+    /// Gesture tracking state for move/resize/text drags.
     struct GestureState {
         struct Target {
             SourceRegionId id;
@@ -228,6 +241,7 @@ private:
         bool active{false};
         bool dragging{false};
         QPointF pressDevicePx;
+        QPointF pressSourcePx;
         QVector<Target> targets;
         std::optional<CanvasHandlePosition> activeHandle;
     };

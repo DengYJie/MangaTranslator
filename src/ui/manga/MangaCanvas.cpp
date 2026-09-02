@@ -1,5 +1,6 @@
 #include "ui/manga/MangaCanvas.h"
 
+#include "ui/manga/MangaTextItem.h"
 #include "ui/manga/RegionOverlayItem.h"
 
 #include <FluentQt/BasicInput.h>
@@ -22,6 +23,7 @@
 #include <QWheelEvent>
 
 #include <algorithm>
+#include <cmath>
 #include <limits>
 
 namespace manga::ui::manga {
@@ -106,11 +108,13 @@ MangaCanvas::MangaCanvas(QWidget* parent) : QGraphicsView(parent) {
 
     m_creationBox = new QGraphicsRectItem();
     m_creationBox->setZValue(canvas::kZToolCreation);
-    QPen creationPen(QColor(0, 120, 215), 0);
+    QPen creationPen(colors.accentDefault, 0);
     creationPen.setCosmetic(true);
     creationPen.setStyle(Qt::DashLine);
     m_creationBox->setPen(creationPen);
-    m_creationBox->setBrush(QColor(0, 120, 215, 40));
+    QColor creationFill = colors.accentDefault;
+    creationFill.setAlpha(40);
+    m_creationBox->setBrush(creationFill);
     m_creationBox->setVisible(false);
     m_scene->addItem(m_creationBox);
 
@@ -132,6 +136,9 @@ void MangaCanvas::onThemeUpdated() {
 }
 
 void MangaCanvas::setPageImage(const QImage& image) {
+    if (m_gesture.active) {
+        cancelGesture();
+    }
     cancelRemoveStroke();
     m_pagePixmap = QPixmap::fromImage(image);
     if (!m_pageItem) {
@@ -143,11 +150,29 @@ void MangaCanvas::setPageImage(const QImage& image) {
     m_pageItem->setVisible(true);
 
     m_pageItem->setPos(0, 0);
+    if (m_cleaningItem) {
+        m_cleaningItem->setPos(0, 0);
+    }
     if (m_translationItem && m_previewMode == 2) {
         m_translationItem->setPos(m_pagePixmap.width() + 32.0, 0);
     }
     updateNavigationSceneRect();
     setContentStateInternal(ContentState::Image, QString(), QString(), false);
+}
+
+void MangaCanvas::setCleaningImage(const QImage& image) {
+    m_cleaningPixmap = image.isNull() ? QPixmap() : QPixmap::fromImage(image);
+    if (!m_cleaningItem) {
+        m_cleaningItem = new QGraphicsPixmapItem();
+        m_cleaningItem->setZValue(canvas::kZCleaningLayer);
+        m_scene->addItem(m_cleaningItem);
+    }
+    m_cleaningItem->setPixmap(m_cleaningPixmap);
+    m_cleaningItem->setPos(0, 0);
+    m_cleaningItem->setVisible(!m_cleaningPixmap.isNull());
+    if (viewport()) {
+        viewport()->update();
+    }
 }
 
 void MangaCanvas::setTranslatedPreview(const QImage& image) {
@@ -162,16 +187,19 @@ void MangaCanvas::setTranslatedPreview(const QImage& image) {
     const bool compare = m_previewMode == 2;
     if (m_pageItem == nullptr) {
         m_translationItem->setVisible(false);
+        syncTextItemVisibility();
         return;
     }
     m_pageItem->setPos(0, 0);
     m_translationItem->setPos(compare ? m_pagePixmap.width() + gap : 0, 0);
     m_translationItem->setVisible(m_previewMode != 0 && !m_translationPixmap.isNull());
     updateNavigationSceneRect();
+    syncTextItemVisibility();
 }
 
 void MangaCanvas::setPreviewMode(int mode) {
     if (m_previewMode == mode) {
+        syncTextItemVisibility();
         return;
     }
     m_previewMode = mode;
@@ -183,19 +211,33 @@ void MangaCanvas::setPreviewMode(int mode) {
         m_translationItem->setVisible(mode != 0 && !m_translationPixmap.isNull());
         updateNavigationSceneRect();
     }
+    syncTextItemVisibility();
 }
 
 void MangaCanvas::clearPageImage() {
+    if (m_gesture.active) {
+        cancelGesture();
+    }
     cancelRemoveStroke();
     m_pagePixmap = QPixmap();
+    m_cleaningPixmap = QPixmap();
     m_translationPixmap = QPixmap();
     if (m_pageItem) {
         m_pageItem->setPixmap(m_pagePixmap);
         m_pageItem->setVisible(false);
     }
+    if (m_cleaningItem) {
+        m_cleaningItem->setPixmap(QPixmap());
+        m_cleaningItem->setVisible(false);
+    }
     if (m_translationItem) {
         m_translationItem->setPixmap(QPixmap());
         m_translationItem->setVisible(false);
+    }
+    // Keep the reconciled displays so the next state reconciliation can reveal them again,
+    // but never allow text from the previous page to remain visible while clearing.
+    for (auto it = m_textItems.cbegin(); it != m_textItems.cend(); ++it) {
+        it.value()->setVisible(false);
     }
 }
 
@@ -366,7 +408,7 @@ void MangaCanvas::setTool(canvas::Tool tool) {
         case canvas::Tool::Select:
             setDragMode(NoDrag);
             break;
-        case canvas::Tool::CreateRegion:
+        case canvas::Tool::Text:
             setDragMode(NoDrag);
             break;
         case canvas::Tool::Remove:
@@ -403,6 +445,14 @@ void MangaCanvas::setRegions(const QVector<canvas::RegionDisplay>& regions) {
         }
     }
 
+    int selectedCount = 0;
+    for (const auto& rd : regions) {
+        if (rd.selected) {
+            ++selectedCount;
+        }
+    }
+    const bool singleSelected = (selectedCount == 1);
+
     int order = 1;
     for (const auto& rd : regions) {
         auto it = m_overlays.find(rd.id);
@@ -416,14 +466,14 @@ void MangaCanvas::setRegions(const QVector<canvas::RegionDisplay>& regions) {
                     }
                 }
             }
-            it.value()->updateFromDisplay(rd);
+            it.value()->updateFromDisplay(rd, singleSelected);
             if (transientGeometry.has_value()) {
                 it.value()->setTransientGeometry(*transientGeometry);
             }
             it.value()->setOrder(order);
         } else {
             auto* item = new RegionOverlayItem(rd.id);
-            item->updateFromDisplay(rd);
+            item->updateFromDisplay(rd, singleSelected);
             item->setOrder(order);
             const auto& colors = themeColorsRef();
             item->setColors(colors.accentDefault, colors.strokeDefault, colors.accentDefault);
@@ -445,6 +495,51 @@ void MangaCanvas::setRegions(const QVector<canvas::RegionDisplay>& regions) {
     }
 
     updateAccessibleDescription();
+}
+
+void MangaCanvas::setTextLayers(const QVector<TextLayerDisplay>& layers) {
+    QSet<domain::RegionId> incomingIds;
+    incomingIds.reserve(layers.size());
+    for (const auto& display : layers) {
+        incomingIds.insert(display.id);
+        auto it = m_textItems.find(display.id);
+        if (it != m_textItems.end()) {
+            it.value()->setDisplay(display);
+        } else {
+            auto* item = new MangaTextItem(display.id);
+            item->setAcceptedMouseButtons(Qt::NoButton);
+            item->setFlag(QGraphicsItem::ItemIsSelectable, false);
+            item->setFlag(QGraphicsItem::ItemIsFocusable, false);
+            item->setZValue(canvas::kZTextLayer);
+            item->setDisplay(display);
+            m_scene->addItem(item);
+            m_textItems.insert(display.id, item);
+        }
+    }
+
+    auto it = m_textItems.begin();
+    while (it != m_textItems.end()) {
+        if (!incomingIds.contains(it.key())) {
+            m_scene->removeItem(it.value());
+            delete it.value();
+            it = m_textItems.erase(it);
+        } else {
+            ++it;
+        }
+    }
+    syncTextItemVisibility();
+}
+
+void MangaCanvas::syncTextItemVisibility() {
+    const bool translated = m_previewMode == 1;
+    for (auto it = m_textItems.cbegin(); it != m_textItems.cend(); ++it) {
+        auto* item = it.value();
+        const auto& display = item->display();
+        item->setVisible(translated && display.enabled && display.visible && !display.text.isEmpty());
+    }
+    if (m_translationItem != nullptr) {
+        m_translationItem->setVisible(m_previewMode != 0 && !m_translationPixmap.isNull() && m_previewMode != 1);
+    }
 }
 
 QWidget* MangaCanvas::placeholderActionButtonForTest() const {
@@ -590,6 +685,9 @@ void MangaCanvas::keyPressEvent(QKeyEvent* event) {
     if (event->key() == Qt::Key_Space) {
         if (!event->isAutoRepeat() && !m_spaceHeld) {
             m_spaceHeld = true;
+            if (m_tool == canvas::Tool::Text && m_gesture.active) {
+                cancelGesture();
+            }
             cancelRemoveStroke();
             setDragMode(ScrollHandDrag);
         }
@@ -764,23 +862,38 @@ void MangaCanvas::mousePressEvent(QMouseEvent* event) {
     const QPointF scenePt = mapToScene(event->position().toPoint());
 
     if (m_tool == canvas::Tool::Remove || m_tool == canvas::Tool::Brush || m_tool == canvas::Tool::Eraser) {
+        const double pageWidth = static_cast<double>(m_pageBounds.width);
+        const double pageHeight = static_cast<double>(m_pageBounds.height);
+        const QPointF clampedPt{
+            std::clamp(scenePt.x(), 0.0, std::max(0.0, pageWidth)),
+            std::clamp(scenePt.y(), 0.0, std::max(0.0, pageHeight)),
+        };
         m_removeStroke.clear();
-        m_removeStroke.append(scenePt);
+        m_removeStroke.append(clampedPt);
         m_removeStrokeActive = true;
         viewport()->update();
         event->accept();
         return;
     }
 
-    if (m_tool == canvas::Tool::CreateRegion) {
+    if (m_tool == canvas::Tool::Text) {
+        const QRectF pageRect(
+            0.0, 0.0, static_cast<double>(m_pageBounds.width), static_cast<double>(m_pageBounds.height));
+        if (!pageRect.contains(scenePt)) {
+            event->ignore();
+            return;
+        }
         m_gesture.active = true;
         m_gesture.dragging = false;
         m_gesture.pressDevicePx = devicePt;
+        m_gesture.pressSourcePx = scenePt;
         m_gesture.targets.clear();
-        m_gesture.targets.append({{}, {scenePt.x(), scenePt.y(), 0, 0}});
+        m_gesture.targets.append(
+            {{}, {scenePt.x(), scenePt.y(), domain::RectGeometry::kMinDimension, domain::RectGeometry::kMinDimension}});
         m_gesture.activeHandle = std::nullopt;
 
-        m_creationBox->setRect(scenePt.x(), scenePt.y(), 0, 0);
+        m_creationBox->setRect(
+            scenePt.x(), scenePt.y(), domain::RectGeometry::kMinDimension, domain::RectGeometry::kMinDimension);
         m_creationBox->setVisible(true);
         event->accept();
         return;
@@ -855,8 +968,25 @@ void MangaCanvas::mousePressEvent(QMouseEvent* event) {
 }
 
 void MangaCanvas::mouseMoveEvent(QMouseEvent* event) {
-    if (m_tool == canvas::Tool::Remove && m_removeStrokeActive && !m_spaceHeld) {
-        m_removeStroke.append(mapToScene(event->position().toPoint()));
+    if ((m_tool == canvas::Tool::Remove || m_tool == canvas::Tool::Brush || m_tool == canvas::Tool::Eraser) &&
+        m_removeStrokeActive && !m_spaceHeld) {
+        const double pageWidth = static_cast<double>(m_pageBounds.width);
+        const double pageHeight = static_cast<double>(m_pageBounds.height);
+        const QPointF scenePt = mapToScene(event->position().toPoint());
+        const QPointF clampedPt{
+            std::clamp(scenePt.x(), 0.0, std::max(0.0, pageWidth)),
+            std::clamp(scenePt.y(), 0.0, std::max(0.0, pageHeight)),
+        };
+        if (!m_removeStroke.isEmpty()) {
+            const QPointF prev = m_removeStroke.last();
+            const double dx = clampedPt.x() - prev.x();
+            const double dy = clampedPt.y() - prev.y();
+            if (std::hypot(dx, dy) < 0.25 / std::max(0.01, m_zoomFactor)) {
+                event->accept();
+                return;
+            }
+        }
+        m_removeStroke.append(clampedPt);
         viewport()->update();
         event->accept();
         return;
@@ -907,6 +1037,9 @@ void MangaCanvas::mouseMoveEvent(QMouseEvent* event) {
                     case canvas::HandlePosition::West:
                         viewport()->setCursor(Qt::SizeHorCursor);
                         break;
+                    case canvas::HandlePosition::Rotate:
+                        viewport()->setCursor(Qt::PointingHandCursor);
+                        break;
                 }
             } else if (hovered != nullptr && hovered->isSelected()) {
                 viewport()->setCursor(Qt::SizeAllCursor);
@@ -921,6 +1054,26 @@ void MangaCanvas::mouseMoveEvent(QMouseEvent* event) {
     const QPointF devicePt = event->position();
     const QPointF deviceDelta = devicePt - m_gesture.pressDevicePx;
 
+    if (m_tool == canvas::Tool::Text) {
+        const QPointF rawScenePt = mapToScene(event->position().toPoint());
+        const double pageWidth = static_cast<double>(m_pageBounds.width);
+        const double pageHeight = static_cast<double>(m_pageBounds.height);
+        const QPointF scenePt{std::clamp(rawScenePt.x(), 0.0, pageWidth), std::clamp(rawScenePt.y(), 0.0, pageHeight)};
+        const double left = std::min(m_gesture.pressSourcePx.x(), scenePt.x());
+        const double top = std::min(m_gesture.pressSourcePx.y(), scenePt.y());
+        const double minDimension = domain::RectGeometry::kMinDimension;
+        const double width = std::max(minDimension, std::abs(scenePt.x() - m_gesture.pressSourcePx.x()));
+        const double height = std::max(minDimension, std::abs(scenePt.y() - m_gesture.pressSourcePx.y()));
+        const double clampedWidth = std::min(width, pageWidth);
+        const double clampedHeight = std::min(height, pageHeight);
+        const double clampedX = std::clamp(left, 0.0, std::max(0.0, pageWidth - clampedWidth));
+        const double clampedY = std::clamp(top, 0.0, std::max(0.0, pageHeight - clampedHeight));
+        m_creationBox->setRect(clampedX, clampedY, clampedWidth, clampedHeight);
+        m_gesture.dragging = true;
+        event->accept();
+        return;
+    }
+
     if (!m_gesture.dragging && !canvas::exceedsDragThreshold(deviceDelta)) {
         event->accept();
         return;
@@ -930,18 +1083,6 @@ void MangaCanvas::mouseMoveEvent(QMouseEvent* event) {
     const double dpr = viewport()->devicePixelRatio();
     const QPointF viewDelta = canvas::deviceToView(deviceDelta, dpr);
     const QPointF sourceDelta = canvas::viewToSource(viewDelta, m_zoomFactor);
-
-    if (m_tool == canvas::Tool::CreateRegion) {
-        const QPointF scenePt = mapToScene(event->position().toPoint());
-        const auto& startGeometry = m_gesture.targets.first().startGeometry;
-        const double x = std::min(startGeometry.x, scenePt.x());
-        const double y = std::min(startGeometry.y, scenePt.y());
-        const double w = std::abs(scenePt.x() - startGeometry.x);
-        const double h = std::abs(scenePt.y() - startGeometry.y);
-        m_creationBox->setRect(x, y, w, h);
-        event->accept();
-        return;
-    }
 
     if (m_gesture.activeHandle.has_value()) {
         const auto result = canvas::resizeRegion(
@@ -1004,14 +1145,31 @@ void MangaCanvas::mouseReleaseEvent(QMouseEvent* event) {
         return;
     }
 
-    if (m_tool == canvas::Tool::CreateRegion) {
-        if (m_gesture.dragging && m_creationBox) {
+    if (m_tool == canvas::Tool::Text) {
+        const QPointF releaseViewPx = event->position();
+        const QPointF viewDelta = releaseViewPx - m_gesture.pressDevicePx;
+        const bool pointText = std::abs(viewDelta.x()) < canvas::kDragThresholdDevicePx &&
+                               std::abs(viewDelta.y()) < canvas::kDragThresholdDevicePx;
+        if (!pointText && m_creationBox) {
+            const QPointF rawScenePt = mapToScene(event->position().toPoint());
+            const double pageWidth = static_cast<double>(m_pageBounds.width);
+            const double pageHeight = static_cast<double>(m_pageBounds.height);
+            const QPointF scenePt{std::clamp(rawScenePt.x(), 0.0, pageWidth),
+                                  std::clamp(rawScenePt.y(), 0.0, pageHeight)};
+            const double minDimension = domain::RectGeometry::kMinDimension;
+            const double width =
+                std::min(std::max(minDimension, std::abs(scenePt.x() - m_gesture.pressSourcePx.x())), pageWidth);
+            const double height =
+                std::min(std::max(minDimension, std::abs(scenePt.y() - m_gesture.pressSourcePx.y())), pageHeight);
+            const double x =
+                std::clamp(std::min(m_gesture.pressSourcePx.x(), scenePt.x()), 0.0, std::max(0.0, pageWidth - width));
+            const double y =
+                std::clamp(std::min(m_gesture.pressSourcePx.y(), scenePt.y()), 0.0, std::max(0.0, pageHeight - height));
+            m_creationBox->setRect(x, y, width, height);
             const QRectF r = m_creationBox->rect();
-            const domain::RectGeometry geom{r.x(), r.y(), r.width(), r.height()};
-            if (geom.width >= canvas::kMinRegionDimension && geom.height >= canvas::kMinRegionDimension) {
-                Q_EMIT regionCreateCommitted(geom);
-            }
-            // Below minimum size discards silently.
+            Q_EMIT textBoxCreateCommitted(SourceRectGeometry{r.x(), r.y(), r.width(), r.height()});
+        } else if (pointText) {
+            Q_EMIT pointTextCreateCommitted(m_gesture.pressSourcePx);
         }
         m_creationBox->setVisible(false);
         m_gesture = {};
@@ -1089,7 +1247,7 @@ void MangaCanvas::leaveEvent(QEvent* event) {
         previous.value()->setHovered(false);
     }
     m_hoveredRegionId = {};
-    if (m_tool == canvas::Tool::Remove) {
+    if (m_tool == canvas::Tool::Remove || m_tool == canvas::Tool::Brush || m_tool == canvas::Tool::Eraser) {
         updateRemoveCursor();
     } else {
         viewport()->setCursor(Qt::ArrowCursor);

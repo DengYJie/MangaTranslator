@@ -15,27 +15,25 @@ static constexpr canvas::HandlePosition kHandleOrder[] = {canvas::HandlePosition
                                                           canvas::HandlePosition::SouthEast,
                                                           canvas::HandlePosition::South,
                                                           canvas::HandlePosition::SouthWest,
-                                                          canvas::HandlePosition::West};
+                                                          canvas::HandlePosition::West,
+                                                          canvas::HandlePosition::Rotate};
 
 RegionOverlayItem::RegionOverlayItem(::manga::domain::RegionId id, QGraphicsItem* parent)
     : QGraphicsRectItem(parent), m_id(id) {
     setZValue(canvas::kZRegionNormal);
-
-    QPen pen(QColor(0, 120, 215), 0);
-    pen.setCosmetic(true);
-    setPen(pen);
+    setPen(Qt::NoPen);
     setBrush(Qt::NoBrush);
 
-    for (int i = 0; i < 8; ++i) {
+    for (size_t i = 0; i < std::size(kHandleOrder); ++i) {
         m_handles[i] = new SelectionHandleItem(kHandleOrder[i], this);
         m_handles[i]->setVisible(false);
     }
 }
 
-void RegionOverlayItem::updateFromDisplay(const canvas::RegionDisplay& display) {
+void RegionOverlayItem::updateFromDisplay(const canvas::RegionDisplay& display, bool showHandles) {
     setRect(display.geometry.x, display.geometry.y, display.geometry.width, display.geometry.height);
     m_bubbleGeometry = display.bubbleGeometry;
-    setSelected(display.selected);
+    setSelected(display.selected, showHandles);
     layoutHandles();
 }
 
@@ -50,10 +48,10 @@ void RegionOverlayItem::setTransientGeometry(const ::manga::domain::RectGeometry
 }
 
 QRectF RegionOverlayItem::boundingRect() const {
-    QRectF br = QGraphicsRectItem::boundingRect().adjusted(-2.0, -2.0, 2.0, 2.0);
+    QRectF br = QGraphicsRectItem::boundingRect().adjusted(-8.0, -24.0, 8.0, 8.0);
     if (m_bubbleGeometry.has_value()) {
         const auto& bg = *m_bubbleGeometry;
-        br = br.united(QRectF(bg.x, bg.y, bg.width, bg.height).adjusted(-2.0, -2.0, 2.0, 2.0));
+        br = br.united(QRectF(bg.x, bg.y, bg.width, bg.height).adjusted(-6.0, -6.0, 6.0, 6.0));
     }
     return br;
 }
@@ -69,44 +67,60 @@ bool RegionOverlayItem::contains(const QPointF& point) const {
 }
 
 void RegionOverlayItem::paint(QPainter* painter, const QStyleOptionGraphicsItem*, QWidget*) {
-    painter->save();
+    // 1. Unselected & normal: completely invisible
+    if (!m_selected && !m_hovered) {
+        return;
+    }
 
-    // If selected or hovered and an associated bubble exists, draw its outline
-    if ((m_selected || m_hovered) && m_bubbleGeometry.has_value()) {
+    painter->save();
+    painter->setRenderHint(QPainter::Antialiasing, true);
+
+    // 4. Automatic / bubble region: dual-layer composite dashed outline (Koharu style)
+    if (m_bubbleGeometry.has_value()) {
         const auto& bg = *m_bubbleGeometry;
         const QRectF bRect(bg.x, bg.y, bg.width, bg.height);
 
-        // Subtle dark underlay for contrast
-        QPen bubbleHalo(QColor(0, 0, 0, 160), 2.5);
-        bubbleHalo.setCosmetic(true);
-        painter->setPen(bubbleHalo);
+        // Layer 1: Dark high-contrast underlay dashed stroke (10px dash, 6px gap)
+        QPen underlayPen(QColor(0, 0, 0, 150), 3.2, Qt::CustomDashLine);
+        underlayPen.setCosmetic(true);
+        underlayPen.setDashPattern({10.0, 6.0});
+        underlayPen.setCapStyle(Qt::RoundCap);
+        underlayPen.setJoinStyle(Qt::RoundJoin);
+        painter->setPen(underlayPen);
         painter->setBrush(Qt::NoBrush);
         painter->drawRoundedRect(bRect, 6.0, 6.0);
 
-        // Dashed accent outline
-        QColor strokeColor = m_selected ? m_selectedStroke : QColor(0, 120, 215, 180);
-        QPen bubblePen(strokeColor, 1.2, Qt::DashLine);
+        // Layer 2: Theme accent top layer dashed stroke (10px dash, 6px gap)
+        const QColor strokeColor =
+            m_selected ? m_selectedStroke
+                       : QColor(m_selectedStroke.red(), m_selectedStroke.green(), m_selectedStroke.blue(), 180);
+        QPen bubblePen(strokeColor, 1.4, Qt::CustomDashLine);
         bubblePen.setCosmetic(true);
+        bubblePen.setDashPattern({10.0, 6.0});
+        bubblePen.setCapStyle(Qt::RoundCap);
+        bubblePen.setJoinStyle(Qt::RoundJoin);
         painter->setPen(bubblePen);
         painter->drawRoundedRect(bRect, 6.0, 6.0);
     }
 
-    QColor fill = m_selectedStroke;
-    fill.setAlpha(m_selected ? 22 : (m_hovered ? 14 : 0));
-    painter->setBrush(fill.alpha() > 0 ? QBrush(fill) : Qt::NoBrush);
+    // 2 & 3. Hovered vs Selected state background
+    if (m_selected) {
+        // Selected: light transparent tint
+        QColor fill = m_selectedStroke;
+        fill.setAlpha(18);
+        painter->setBrush(QBrush(fill));
+    } else {
+        // Hovered: completely transparent background
+        painter->setBrush(Qt::NoBrush);
+    }
 
-    QPen halo(QColor(0, 0, 0, 220), 3.0);
-    halo.setCosmetic(true);
-    halo.setJoinStyle(Qt::MiterJoin);
-    painter->setPen(halo);
-    painter->drawRect(rect());
-
-    const QColor foreground = m_selected ? m_selectedStroke : (m_hovered ? m_selectedStroke : QColor(Qt::white));
-    QPen outline(foreground, m_hovered && !m_selected ? 1.5 : 1.0);
+    // 1px pure theme accent cosmetic border
+    QPen outline(m_selectedStroke, 1.0);
     outline.setCosmetic(true);
     outline.setJoinStyle(Qt::MiterJoin);
     painter->setPen(outline);
     painter->drawRect(rect());
+
     painter->restore();
 }
 
@@ -128,9 +142,18 @@ void RegionOverlayItem::layoutHandles() {
     const double cy = r.center().y();
 
     const QPointF positions[] = {
-        {left, top}, {cx, top}, {right, top}, {right, cy}, {right, bottom}, {cx, bottom}, {left, bottom}, {left, cy}};
+        {left, top},     // NW
+        {cx, top},       // N
+        {right, top},    // NE
+        {right, cy},     // E
+        {right, bottom}, // SE
+        {cx, bottom},    // S
+        {left, bottom},  // SW
+        {left, cy},      // W
+        {cx, top - 16.0} // Rotate
+    };
 
-    for (int i = 0; i < 8; ++i) {
+    for (size_t i = 0; i < std::size(kHandleOrder); ++i) {
         m_handles[i]->setPos(positions[i]);
     }
 }
@@ -144,21 +167,13 @@ void RegionOverlayItem::setOrder(int order) {
     setData(Qt::AccessibleDescriptionRole, name);
 }
 
-void RegionOverlayItem::setSelected(bool selected) {
+void RegionOverlayItem::setSelected(bool selected, bool showHandles) {
     m_selected = selected;
     for (auto* handle : m_handles) {
-        handle->setVisible(selected);
+        handle->setVisible(selected && showHandles);
     }
-
-    if (selected) {
-        QPen pen(m_selectedStroke, 0);
-        pen.setCosmetic(true);
-        setPen(pen);
-    } else {
-        QPen pen(m_unselectedStroke, 0);
-        pen.setCosmetic(true);
-        setPen(pen);
-    }
+    setZValue(selected ? canvas::kZRegionNormal + 5.0 : canvas::kZRegionNormal);
+    update();
 
     if (m_order > 0) {
         QString name = QStringLiteral("Region %1").arg(m_order);
@@ -177,7 +192,7 @@ void RegionOverlayItem::setColors(const QColor& selectedStroke,
     m_handleFill = handleFill;
     setSelected(m_selected);
     for (auto* handle : m_handles) {
-        handle->setFillColor(handleFill);
+        handle->setFillColor(selectedStroke);
     }
 }
 
