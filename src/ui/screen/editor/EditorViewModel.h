@@ -17,6 +17,7 @@
 #include "ui/error/RecoveryPresenter.h"
 #include "ui/manga/RegionInteraction.h"
 #include "ui/screen/editor/EditorState.h"
+#include "ui/screen/editor/ExportSnapshotBuilder.h"
 #include "ui/screen/editor/TextEditSession.h"
 
 #include <QFutureWatcher>
@@ -116,9 +117,10 @@ public:
     /// Pushes a batch of detected text regions into undo history and selects them.
     void applyDetectedRegions(const domain::PageId& pageId, const QVector<application::DetectedRegionItem>& detected);
 
-    /// Creates a region on the current page. Validates geometry (>= 8x8 inside page bounds)
-    /// and generates RegionId before pushing the command.
-    void createRegion(const domain::RectGeometry& geometry);
+    /// Creates point text anchored at a page coordinate.
+    void createPointText(QPointF anchor);
+    /// Creates paragraph text using an in-bounds normalized frame.
+    void createTextBox(const domain::RectGeometry& geometry);
     /// Deletes the given regions from the current page as one undo step.
     void deleteRegions(const QVector<domain::RegionId>& regionIds);
     /// Commits a geometry change for one region. No-op if delta is zero or geometry invalid.
@@ -235,6 +237,7 @@ public:
 Q_SIGNALS:
     void stateChanged(const EditorState& state);
     void pageImageReady(const PageImageDelivery& delivery);
+    void cleaningImageReady(const PageImageDelivery& delivery);
     void previewImageReady(const PageImageDelivery& delivery);
     void thumbnailReady(const domain::PageId& pageId, const QImage& image);
     void thumbnailFailed(const domain::PageId& pageId, const QString& safeMessage);
@@ -245,6 +248,7 @@ Q_SIGNALS:
     void saveCompleted(const QString& revisionId);
     void saveFailed(const application::ApplicationError& error);
     void projectClosed();
+    void textRegionCreated(const domain::RegionId& regionId);
 
     void exportCompleted(const application::ExportResponse& response);
     void exportFailed(const application::ApplicationError& error);
@@ -305,6 +309,7 @@ private:
                          const QVector<domain::RegionId>& regionIds,
                          InspectorField field,
                          const QVariant& value);
+    void createTextRegion(const domain::RectGeometry& geometry, domain::TextLayout layout);
 
     /// Refreshes canUndo/canRedo/undoText/redoText and undoHistoryFaulted into State from the stack.
     void refreshUndoState();
@@ -339,13 +344,14 @@ private:
     quint64 m_pageLoadToken{0};
     application::OperationId m_pageLoadOperation{};
 
-    QFutureWatcher<application::Result<QImage>> m_previewWatcher;
+    QFutureWatcher<application::Result<ExportSnapshotBuilder::PreviewResult>> m_previewWatcher;
     quint64 m_previewToken{0};
     quint64 m_previewContentRevision{0};
     quint64 m_previewSessionGeneration{0};
     domain::PageId m_previewPageId;
     application::OperationId m_previewOperation{};
     QImage m_cachedPreviewImage;
+    QImage m_cachedCleaningImage;
 
     QHash<QString, ThumbnailTicket> m_thumbnailInFlight; // key: PageId string
     QVector<domain::PageId> m_thumbnailQueue;

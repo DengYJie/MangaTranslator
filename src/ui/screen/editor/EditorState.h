@@ -5,6 +5,7 @@
 #include "application/operation/OperationId.h"
 #include "application/operation/OperationStage.h"
 #include "domain/model/Geometry.h"
+#include "domain/model/TextLayout.h"
 #include "domain/model/Uuid.h"
 #include "ui/base/DomainMetaTypes.h"
 #include "ui/screen/editor/InspectorState.h"
@@ -45,7 +46,7 @@ struct EditorNotice {
 enum class CanvasTool {
     Select,
     Pan,
-    CreateRegion,
+    Text,
     Remove,
     Brush,
     Eraser
@@ -77,6 +78,10 @@ struct RegionProjection {
     domain::RegionId id;
     domain::RectGeometry geometry;
     std::optional<domain::RectGeometry> bubbleGeometry;
+    QString effectiveTranslation;
+    domain::TextLayout layout;
+    bool isEnabled{true};
+    bool isTranslationVisible{true};
     int orderIndex{0};
     quint64 contentRevision{0};
     bool isLocked{false};
@@ -176,7 +181,7 @@ struct EditorState {
     QColor brushColor{17, 17, 17, 255};
     double brushDiameter{48.0};
     /// Page preview mode.
-    PreviewMode previewMode{PreviewMode::Original};
+    PreviewMode previewMode{PreviewMode::Translated};
     /// Inspector mode derived from selection count.
     InspectorMode inspectorMode{InspectorMode::None};
     /// Inspector surface projection driven by selectedRegionIds.

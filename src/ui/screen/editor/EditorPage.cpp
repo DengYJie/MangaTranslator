@@ -117,6 +117,7 @@ EditorPage::EditorPage(EditorViewModel* viewModel, QWidget* parent) : base::Base
     buildUi();
 
     connect(m_canvas, &ui::manga::MangaCanvas::removeDiameterChanged, this, [this](double diameter) {
+        m_viewModel->setBrushDiameter(diameter);
         if (m_removeBrushSizeButton == nullptr) {
             return;
         }
@@ -148,9 +149,6 @@ EditorPage::EditorPage(EditorViewModel* viewModel, QWidget* parent) : base::Base
             this,
             [this](const QVector<QPointF>& points, double diameter) {
                 const auto& state = m_viewModel->state();
-                if (state.processing.isRunning) {
-                    return;
-                }
                 if (state.isInpaintAvailable) {
                     if (auto* controller = m_viewModel->processingController())
                         controller->inpaintStroke(state.currentPageId, points, diameter);
@@ -166,9 +164,6 @@ EditorPage::EditorPage(EditorViewModel* viewModel, QWidget* parent) : base::Base
             this,
             [this](const QVector<QPointF>& points, ui::manga::CanvasTool tool, const QColor& color, double diameter) {
                 const auto& state = m_viewModel->state();
-                if (state.processing.isRunning) {
-                    return;
-                }
                 if (auto* controller = m_viewModel->processingController()) {
                     const auto mode = (tool == ui::manga::CanvasTool::Eraser) ? application::ManualStrokeMode::Erase
                                                                               : application::ManualStrokeMode::Paint;
@@ -176,10 +171,17 @@ EditorPage::EditorPage(EditorViewModel* viewModel, QWidget* parent) : base::Base
                 }
             });
 
+    connect(m_canvas, &ui::manga::MangaCanvas::pointTextCreateCommitted, m_viewModel, [this](const QPointF& anchor) {
+        m_viewModel->createPointText(anchor);
+    });
     connect(m_canvas,
-            &ui::manga::MangaCanvas::regionCreateCommitted,
+            &ui::manga::MangaCanvas::textBoxCreateCommitted,
             m_viewModel,
-            [this](const domain::RectGeometry& geometry) { m_viewModel->createRegion(geometry); });
+            [this](const domain::RectGeometry& geometry) { m_viewModel->createTextBox(geometry); });
+    connect(m_viewModel, &EditorViewModel::textRegionCreated, this, [this](const domain::RegionId&) {
+        QMetaObject::invokeMethod(
+            m_inspector, [this]() { m_inspector->focusTranslationEditor(); }, Qt::QueuedConnection);
+    });
     connect(m_canvas,
             &ui::manga::MangaCanvas::regionSelectionRequested,
             m_viewModel,
@@ -239,6 +241,9 @@ EditorPage::EditorPage(EditorViewModel* viewModel, QWidget* parent) : base::Base
             });
 
     connect(m_viewModel, &EditorViewModel::pageImageReady, this, &EditorPage::handlePageImageReady);
+    connect(m_viewModel, &EditorViewModel::cleaningImageReady, this, [this](const PageImageDelivery& delivery) {
+        m_canvas->setCleaningImage(delivery.image);
+    });
     connect(m_viewModel, &EditorViewModel::previewImageReady, this, [this](const PageImageDelivery& delivery) {
         m_canvas->setTranslatedPreview(delivery.image);
     });
@@ -431,10 +436,10 @@ void EditorPage::buildUi() {
                   Typography::Icons::glyph(QStringLiteral("ic_fluent_hand_left_20_regular")),
                   tr("平移画布 (H)"),
                   CanvasTool::Pan);
-    addCanvasTool(QStringLiteral("canvasCreateRegionButton"),
+    addCanvasTool(QStringLiteral("canvasTextButton"),
                   Typography::Icons::glyph(QStringLiteral("ic_fluent_scan_text_20_regular")),
-                  tr("创建文本区域 (T)"),
-                  CanvasTool::CreateRegion);
+                  tr("文本 (T)"),
+                  CanvasTool::Text);
     addCanvasTool(QStringLiteral("canvasBrushButton"),
                   Typography::Icons::glyph(QStringLiteral("ic_fluent_paint_brush_20_regular")),
                   tr("画笔 (B)"),
@@ -828,7 +833,7 @@ void EditorPage::keyPressEvent(QKeyEvent* event) {
             event->accept();
             return;
         } else if (event->key() == Qt::Key_T) {
-            m_viewModel->setActiveTool(CanvasTool::CreateRegion);
+            m_viewModel->setActiveTool(CanvasTool::Text);
             event->accept();
             return;
         } else if (event->key() == Qt::Key_B) {
@@ -879,8 +884,8 @@ void EditorPage::render(const EditorState& state) {
         case CanvasTool::Pan:
             canvasTool = ui::manga::CanvasTool::Pan;
             break;
-        case CanvasTool::CreateRegion:
-            canvasTool = ui::manga::CanvasTool::CreateRegion;
+        case CanvasTool::Text:
+            canvasTool = ui::manga::CanvasTool::Text;
             break;
         case CanvasTool::Brush:
             canvasTool = ui::manga::CanvasTool::Brush;
@@ -892,13 +897,9 @@ void EditorPage::render(const EditorState& state) {
             canvasTool = ui::manga::CanvasTool::Remove;
             break;
     }
-    // A render in progress invalidates any in-flight Remove/Brush/Eraser gesture.
-    if (state.processing.isRunning &&
-        (canvasTool == ui::manga::CanvasTool::Remove || canvasTool == ui::manga::CanvasTool::Brush ||
-         canvasTool == ui::manga::CanvasTool::Eraser)) {
-        canvasTool = ui::manga::CanvasTool::Select;
-    }
     m_canvas->setTool(canvasTool);
+    m_canvas->setRemoveDiameter(state.brushDiameter);
+    m_canvas->setBrushColor(state.brushColor);
     if (m_canvasToolRail != nullptr) {
         if (auto* button =
                 m_canvasToolRail->findChild<fluent::basicinput::Button*>(QStringLiteral("canvasSelectButton"))) {
@@ -909,29 +910,28 @@ void EditorPage::render(const EditorState& state) {
             button->setChecked(state.activeTool == CanvasTool::Pan);
         }
         if (auto* button =
-                m_canvasToolRail->findChild<fluent::basicinput::Button*>(QStringLiteral("canvasCreateRegionButton"))) {
-            button->setChecked(state.activeTool == CanvasTool::CreateRegion);
+                m_canvasToolRail->findChild<fluent::basicinput::Button*>(QStringLiteral("canvasTextButton"))) {
+            button->setChecked(state.activeTool == CanvasTool::Text);
         }
         if (auto* button =
                 m_canvasToolRail->findChild<fluent::basicinput::Button*>(QStringLiteral("canvasBrushButton"))) {
             button->setChecked(state.activeTool == CanvasTool::Brush);
-            button->setEnabled(state.currentPageId.isValid() && !state.processing.isRunning);
+            button->setEnabled(state.currentPageId.isValid());
         }
         if (auto* button =
                 m_canvasToolRail->findChild<fluent::basicinput::Button*>(QStringLiteral("canvasEraserButton"))) {
             button->setChecked(state.activeTool == CanvasTool::Eraser);
-            button->setEnabled(state.currentPageId.isValid() && !state.processing.isRunning);
+            button->setEnabled(state.currentPageId.isValid());
         }
         if (auto* button =
                 m_canvasToolRail->findChild<fluent::basicinput::Button*>(QStringLiteral("canvasRemoveButton"))) {
             button->setChecked(state.activeTool == CanvasTool::Remove);
-            button->setEnabled(state.isInpaintAvailable && state.currentPageId.isValid() &&
-                               !state.processing.isRunning);
+            button->setEnabled(state.isInpaintAvailable && state.currentPageId.isValid());
         }
         const bool isBrushMode =
             (canvasTool == ui::manga::CanvasTool::Remove || canvasTool == ui::manga::CanvasTool::Brush ||
              canvasTool == ui::manga::CanvasTool::Eraser);
-        const bool showBrushControls = isBrushMode && state.currentPageId.isValid() && !state.processing.isRunning;
+        const bool showBrushControls = isBrushMode && state.currentPageId.isValid();
         if (m_removeBrushSeparator != nullptr) {
             m_removeBrushSeparator->setVisible(showBrushControls);
         }
@@ -968,6 +968,21 @@ void EditorPage::render(const EditorState& state) {
         displayRegions.append(display);
     }
     m_canvas->setRegions(displayRegions);
+
+    QVector<ui::manga::TextLayerDisplay> textLayers;
+    textLayers.reserve(state.regions.size());
+    for (const auto& rp : state.regions) {
+        ui::manga::TextLayerDisplay display;
+        display.id = rp.id;
+        display.geometry = rp.geometry;
+        display.text = rp.effectiveTranslation;
+        display.layout = rp.layout;
+        display.enabled = rp.isEnabled;
+        display.visible = rp.isTranslationVisible;
+        display.logicalDpi = 96.0;
+        textLayers.append(display);
+    }
+    m_canvas->setTextLayers(textLayers);
     m_canvas->setPreviewMode(static_cast<int>(state.previewMode));
     m_viewModel->requestPreview(state.currentPageId);
 

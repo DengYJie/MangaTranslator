@@ -1,5 +1,6 @@
 #pragma once
 
+#include "domain/model/TextLayout.h"
 #include "ui/command/EditorCommandContext.h"
 #include "ui/manga/RegionInteraction.h"
 
@@ -30,15 +31,16 @@ private:
     bool m_faulted{false};
 };
 
-/// Creates a single region on first redo; removes it on undo.
+/// Creates a single text region on first redo; removes it on undo.
 /// The RegionId is generated before construction so undo/redo keeps the same identity.
-class CreateRegionCommand : public RegionCommand {
+class CreateTextRegionCommand : public RegionCommand {
 public:
-    CreateRegionCommand(EditorCommandContext* context,
-                        domain::PageId pageId,
-                        domain::RegionId regionId,
-                        domain::RectGeometry geometry,
-                        int orderIndex);
+    CreateTextRegionCommand(EditorCommandContext* context,
+                            domain::PageId pageId,
+                            domain::RegionId regionId,
+                            domain::RectGeometry geometry,
+                            domain::TextLayout layout,
+                            int orderIndex);
 
     void undo() override;
     void redo() override;
@@ -55,6 +57,7 @@ private:
     domain::PageId m_pageId;
     domain::RegionId m_regionId;
     domain::RectGeometry m_geometry;
+    domain::TextLayout m_layout;
     int m_orderIndex{0};
     bool m_firstRedo{true};
 };

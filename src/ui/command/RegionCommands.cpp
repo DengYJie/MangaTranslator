@@ -2,24 +2,25 @@
 
 namespace manga::ui::command {
 
-// CreateRegionCommand
+// CreateTextRegionCommand
 
-CreateRegionCommand::CreateRegionCommand(EditorCommandContext* context,
-                                         domain::PageId pageId,
-                                         domain::RegionId regionId,
-                                         domain::RectGeometry geometry,
-                                         int orderIndex)
-    : RegionCommand(QStringLiteral("Create Region")), m_context(context), m_pageId(pageId), m_regionId(regionId),
-      m_geometry(geometry), m_orderIndex(orderIndex) {}
+CreateTextRegionCommand::CreateTextRegionCommand(EditorCommandContext* context,
+                                                 domain::PageId pageId,
+                                                 domain::RegionId regionId,
+                                                 domain::RectGeometry geometry,
+                                                 domain::TextLayout layout,
+                                                 int orderIndex)
+    : RegionCommand(QStringLiteral("Create Text")), m_context(context), m_pageId(pageId), m_regionId(regionId),
+      m_geometry(geometry), m_layout(std::move(layout)), m_orderIndex(orderIndex) {}
 
-void CreateRegionCommand::undo() {
+void CreateTextRegionCommand::undo() {
     const auto result = m_context->removeRegion(m_pageId, m_regionId);
     if (!result.has_value()) {
         markFaulted();
     }
 }
 
-void CreateRegionCommand::redo() {
+void CreateTextRegionCommand::redo() {
     if (m_firstRedo) {
         m_firstRedo = false;
     } else {
@@ -31,6 +32,7 @@ void CreateRegionCommand::redo() {
         }
     }
     domain::TextRegion region(m_regionId, m_geometry, m_orderIndex);
+    region.setLayout(m_layout);
     const auto result = m_context->insertRegion(m_pageId, region, m_orderIndex);
     if (!result.has_value()) {
         markFaulted();

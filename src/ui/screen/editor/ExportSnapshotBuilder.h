@@ -33,11 +33,16 @@ public:
         double logicalDpi{96.0};
     };
 
+    struct PreviewResult {
+        QImage compositeImage;
+        QImage cleaningImage;
+    };
+
     [[nodiscard]] QFuture<application::Result<QVector<application::ExportPageSnapshot>>>
     execute(const Request& request, const application::OperationContext& context);
 
-    [[nodiscard]] QFuture<application::Result<QImage>> executePreview(const Request& request,
-                                                                      const application::OperationContext& context);
+    [[nodiscard]] QFuture<application::Result<PreviewResult>>
+    executePreview(const Request& request, const application::OperationContext& context);
 
 private:
     domain::ComicProject* m_project;

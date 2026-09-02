@@ -44,6 +44,10 @@ bool applyStyleFieldValue(domain::TextLayout& layout, InspectorField field, cons
             return true;
         case InspectorField::FontSizePt:
             layout.fontSizePt = value.toDouble();
+            layout.autoFit = false;
+            return true;
+        case InspectorField::AutoFit:
+            layout.autoFit = value.toBool();
             return true;
         case InspectorField::LetterSpacingEm:
             layout.letterSpacingEm = value.toDouble();
@@ -221,7 +225,7 @@ void EditorViewModel::openProjectSession(application::OpenedProjectSession sessi
         s.selectedRegionIds.clear();
         s.primaryRegionId = domain::RegionId{};
         s.activeTool = CanvasTool::Select;
-        s.previewMode = PreviewMode::Original;
+        s.previewMode = PreviewMode::Translated;
         s.inspectorMode = InspectorMode::None;
         updateInspectorProjection(s);
         s.canUndo = false;
@@ -654,6 +658,16 @@ void EditorViewModel::requestPreview(const domain::PageId& pageId) {
     for (const auto& region : m_state.regions) {
         contentRevision = contentRevision * 1315423911u + region.contentRevision;
     }
+    const auto* page = m_openedSession->project.findPage(pageId);
+    if (page != nullptr) {
+        if (page->clearLayerAsset().has_value()) {
+            contentRevision = contentRevision * 1315423911u + qHash(QString::fromStdString(*page->clearLayerAsset()));
+        }
+        if (page->manualOverrideLayerAsset().has_value()) {
+            contentRevision =
+                contentRevision * 1315423911u + qHash(QString::fromStdString(*page->manualOverrideLayerAsset()));
+        }
+    }
     const quint64 sessionGeneration = m_state.projectSessionGeneration;
     if (m_previewPageId == pageId && m_previewSessionGeneration == sessionGeneration &&
         m_previewContentRevision == contentRevision &&
@@ -671,6 +685,7 @@ void EditorViewModel::requestPreview(const domain::PageId& pageId) {
     m_previewSessionGeneration = sessionGeneration;
     m_previewContentRevision = contentRevision;
     m_cachedPreviewImage = QImage{};
+    m_cachedCleaningImage = QImage{};
     Q_EMIT previewImageReady(PageImageDelivery{pageId, QImage{}});
 
     ExportSnapshotBuilder builder(&m_openedSession->project, m_pageImageLoader, m_derivedAssetStore);
@@ -690,6 +705,7 @@ void EditorViewModel::invalidatePreviewAndRequestCurrentPage() {
     m_previewSessionGeneration = 0;
     m_previewContentRevision = 0;
     m_cachedPreviewImage = QImage{};
+    m_cachedCleaningImage = QImage{};
     if (m_hasSession && m_state.currentPageId.isValid()) {
         requestPreview(m_state.currentPageId);
     }
@@ -707,14 +723,27 @@ void EditorViewModel::handlePreviewFinished() {
         for (const auto& region : m_state.regions) {
             currentRevision = currentRevision * 1315423911u + region.contentRevision;
         }
+        const auto* page = m_openedSession->project.findPage(m_previewPageId);
+        if (page != nullptr) {
+            if (page->clearLayerAsset().has_value()) {
+                currentRevision =
+                    currentRevision * 1315423911u + qHash(QString::fromStdString(*page->clearLayerAsset()));
+            }
+            if (page->manualOverrideLayerAsset().has_value()) {
+                currentRevision =
+                    currentRevision * 1315423911u + qHash(QString::fromStdString(*page->manualOverrideLayerAsset()));
+            }
+        }
     }
     if (!result.has_value() || token != m_previewToken || !m_hasSession ||
         m_state.projectSessionGeneration != m_previewSessionGeneration || m_state.currentPageId != m_previewPageId ||
         currentRevision != m_previewContentRevision) {
         return;
     }
-    m_cachedPreviewImage = result.value();
+    m_cachedPreviewImage = result.value().compositeImage;
+    m_cachedCleaningImage = result.value().cleaningImage;
     Q_EMIT previewImageReady(PageImageDelivery{m_previewPageId, m_cachedPreviewImage});
+    Q_EMIT cleaningImageReady(PageImageDelivery{m_previewPageId, m_cachedCleaningImage});
 }
 
 bool EditorViewModel::removeRegionForTest(const domain::RegionId& regionId) {
@@ -757,6 +786,10 @@ void EditorViewModel::rebuildCurrentPageProjection() {
         rp.id = region.id();
         rp.geometry = region.geometry();
         rp.bubbleGeometry = region.bubbleGeometry();
+        rp.effectiveTranslation = QString::fromStdString(region.translation().effectiveText());
+        rp.layout = region.layout();
+        rp.isEnabled = region.isEnabled();
+        rp.isTranslationVisible = region.isTranslationVisible();
         rp.orderIndex = region.orderIndex();
         rp.contentRevision = region.contentRevision();
         rp.isLocked = region.isLocked();
@@ -853,6 +886,7 @@ void EditorViewModel::updateInspectorProjection(EditorState& s) const {
                 multi.textColorHex = textColorHex;
                 multi.strokeColorHex = strokeColorHex;
                 multi.strokeWidthPx = layout.strokeWidthPx;
+                multi.autoFit = layout.autoFit;
                 first = false;
             } else {
                 if (multi.fontFamily.has_value() && *multi.fontFamily != fontFamily) {
@@ -900,6 +934,9 @@ void EditorViewModel::updateInspectorProjection(EditorState& s) const {
                 }
                 if (multi.strokeWidthPx.has_value() && *multi.strokeWidthPx != layout.strokeWidthPx) {
                     multi.strokeWidthPx.reset();
+                }
+                if (multi.autoFit.has_value() && *multi.autoFit != layout.autoFit) {
+                    multi.autoFit.reset();
                 }
             }
             multi.allLocked = multi.allLocked && region->isLocked();
@@ -964,6 +1001,7 @@ void EditorViewModel::updateInspectorProjection(EditorState& s) const {
     single.textColorHex = QString::fromStdString(layout.textColorHex);
     single.strokeColorHex = QString::fromStdString(layout.strokeColorHex);
     single.strokeWidthPx = layout.strokeWidthPx;
+    single.autoFit = layout.autoFit;
 
     s.inspector = single;
     s.inspectorMode = InspectorMode::Single;
@@ -1025,6 +1063,7 @@ void EditorViewModel::handlePageLoadFinished() {
         }
         updateState([&](EditorState& s) { s.isPageLoading = false; });
         Q_EMIT pageImageReady(delivery);
+        requestPreview(m_state.currentPageId);
     } else {
         const auto& error = result.error();
         updateState([&](EditorState& s) {
@@ -1217,17 +1256,55 @@ void EditorViewModel::applyDetectedRegions(const domain::PageId& pageId,
     refreshUndoState();
 }
 
-void EditorViewModel::createRegion(const domain::RectGeometry& geometry) {
-    if (!m_hasSession || !m_undoStack || !m_commandContext || !m_state.currentPageId.isValid()) {
+void EditorViewModel::createPointText(QPointF anchor) {
+    if (!m_hasSession || !m_commandContext || !m_state.currentPageId.isValid()) {
+        return;
+    }
+    const auto pageSize = m_commandContext->pageSize(m_state.currentPageId);
+    if (!pageSize.isValid() || anchor.x() < 0.0 || anchor.y() < 0.0 || anchor.x() >= pageSize.width ||
+        anchor.y() >= pageSize.height) {
         return;
     }
 
-    // Validate geometry: >= 8x8 inside page bounds.
+    constexpr double maxWidth = 320.0;
+    constexpr double maxHeight = 120.0;
+    const double width = std::min(maxWidth, static_cast<double>(pageSize.width) - anchor.x());
+    const double height = std::min(maxHeight, static_cast<double>(pageSize.height) - anchor.y());
+    if (width < domain::RectGeometry::kMinDimension || height < domain::RectGeometry::kMinDimension) {
+        return;
+    }
+    domain::RectGeometry geometry{anchor.x(), anchor.y(), width, height};
+    domain::TextLayout layout;
+    layout.autoFit = true;
+    layout.alignment.horizontal = domain::HorizontalAlignment::Left;
+    layout.alignment.vertical = domain::VerticalAlignment::Top;
+    createTextRegion(geometry, std::move(layout));
+}
+
+void EditorViewModel::createTextBox(const domain::RectGeometry& geometry) {
+    if (!m_hasSession || !m_commandContext || !m_state.currentPageId.isValid()) {
+        return;
+    }
     const auto pageSize = m_commandContext->pageSize(m_state.currentPageId);
     if (!geometry.isValid() || !geometry.isWithinBounds(pageSize)) {
         return;
     }
-    if (geometry.width < canvas::kMinRegionDimension || geometry.height < canvas::kMinRegionDimension) {
+    domain::TextLayout layout;
+    layout.autoFit = true;
+    createTextRegion(geometry, std::move(layout));
+}
+
+void EditorViewModel::createTextRegion(const domain::RectGeometry& geometry, domain::TextLayout layout) {
+    if (!m_hasSession || !m_undoStack || !m_commandContext || !m_state.currentPageId.isValid()) {
+        return;
+    }
+
+    const auto pageSize = m_commandContext->pageSize(m_state.currentPageId);
+    if (!geometry.isValid() || !geometry.isWithinBounds(pageSize)) {
+        return;
+    }
+    if (geometry.width < domain::RectGeometry::kMinDimension || geometry.height < domain::RectGeometry::kMinDimension ||
+        !layout.isValid()) {
         return;
     }
 
@@ -1236,15 +1313,25 @@ void EditorViewModel::createRegion(const domain::RectGeometry& geometry) {
     const int orderIndex = page ? static_cast<int>(page->regions().size()) : 0;
 
     sealActiveTextSession();
-    auto* cmd =
-        new command::CreateRegionCommand(m_commandContext.get(), m_state.currentPageId, regionId, geometry, orderIndex);
+    auto* cmd = new command::CreateTextRegionCommand(
+        m_commandContext.get(), m_state.currentPageId, regionId, geometry, std::move(layout), orderIndex);
     m_undoStack->push(cmd);
     if (cmd->hasFaulted()) {
         m_undoHistoryFaulted = true;
+        rebuildCurrentPageProjection();
+        refreshUndoState();
+        return;
     }
 
+    updateState([&](EditorState& s) {
+        s.selectedRegionIds = {regionId};
+        s.primaryRegionId = regionId;
+        s.inspectorMode = InspectorMode::Single;
+        updateInspectorProjection(s);
+    });
     rebuildCurrentPageProjection();
     refreshUndoState();
+    Q_EMIT textRegionCreated(regionId);
 }
 
 void EditorViewModel::deleteRegions(const QVector<domain::RegionId>& regionIds) {
