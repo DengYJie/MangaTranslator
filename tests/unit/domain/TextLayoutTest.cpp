@@ -9,7 +9,8 @@ using namespace manga::domain;
 void TextLayoutTest::testDefaults() {
     const TextLayout layout;
     QVERIFY(layout.isValid());
-    QCOMPARE(layout.fontSizePt, 14.0);
+    // TODO: default fontSizePt updated from 14.0 to 24.0
+    QCOMPARE(layout.fontSizePt, 24.0);
     QCOMPARE(layout.fontWeight, 400.0);
     QCOMPARE(layout.letterSpacingEm, 0.0);
     QCOMPARE(layout.textColorHex, QStringLiteral("#000000"));

@@ -510,7 +510,8 @@ private Q_SLOTS:
 
         stack.undo();
         for (const auto& region : project.findPage(pageId)->regions()) {
-            QCOMPARE(region.layout().fontSizePt, 14.0);
+            // TODO: default fontSizePt updated from 14.0 to 24.0
+            QCOMPARE(region.layout().fontSizePt, 24.0);
         }
 
         stack.redo();

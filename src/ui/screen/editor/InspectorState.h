@@ -68,7 +68,7 @@ struct SingleRegionInspectorState {
     int orderIndex{0};
 
     QString fontFamily;
-    double fontSizePt{14.0};
+    double fontSizePt{24.0};
     int fontWeight{400};
     double letterSpacingEm{0.0};
     domain::TextOrientation orientation{domain::TextOrientation::Horizontal};

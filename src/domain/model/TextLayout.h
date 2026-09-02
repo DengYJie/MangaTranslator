@@ -37,7 +37,7 @@ struct TextAlignment {
 /// Text layout configuration for rendering translated text within a region.
 struct TextLayout {
     std::string fontFamily{"Noto Sans CJK SC"};
-    double fontSizePt{14.0};
+    double fontSizePt{24.0};
     int fontWeight{400};
     double letterSpacingEm{0.0};
 
