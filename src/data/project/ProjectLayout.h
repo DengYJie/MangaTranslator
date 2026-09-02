@@ -12,6 +12,7 @@ inline constexpr QLatin1String kProjectFileName("project.json");
 inline constexpr QLatin1String kBackupSuffix(".bak");
 inline constexpr QLatin1String kLockFileName(".mangatranslator.lock");
 inline constexpr QLatin1String kStagingDirName(".mangatranslator-staging");
+inline constexpr QLatin1String kPendingBatchFileName("pending-batch.json");
 inline constexpr QLatin1String kAssetsOriginal("assets/original");
 inline constexpr QLatin1String kAssetsDerived("assets/derived");
 

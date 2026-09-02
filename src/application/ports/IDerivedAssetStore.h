@@ -6,6 +6,7 @@
 
 #include <QFuture>
 #include <QImage>
+#include <QSet>
 #include <QString>
 
 namespace manga::application {
@@ -37,10 +38,22 @@ struct CommitDerivedLayerResponse {
     QString relativePath;
 };
 
-/// Narrow port for reading and atomically committing page derived layers. Implementations
-/// must bind the request to the canonical project root and PageId, derive the output path
-/// themselves (content-addressed, never caller supplied), and reuse the P3 session and path
-/// containment rules. Source images are never modified.
+struct PruneAssetsRequest {
+    domain::ProjectId projectId;
+    QString projectRoot;                   // runtime absolute path, never persisted
+    QSet<QString> referencedRelativePaths; // project-root relative paths to keep
+};
+
+struct PruneAssetsResponse {
+    int removedFiles{0};
+    qint64 freedBytes{0};
+};
+
+/// Narrow port for reading and atomically committing page derived layers, plus pruning
+/// unreferenced committed layers. Implementations must bind the request to the canonical
+/// project root and PageId, derive the output path themselves (content-addressed, never
+/// caller supplied), and reuse the P3 session and path containment rules. Source images
+/// are never modified.
 class IDerivedAssetStore {
 public:
     virtual ~IDerivedAssetStore() = default;
@@ -52,6 +65,11 @@ public:
     /// existing file and different content never overwrites an existing file.
     [[nodiscard]] virtual QFuture<Result<CommitDerivedLayerResponse>>
     commitDerivedLayer(CommitDerivedLayerRequest request, OperationContext context) = 0;
+    /// Removes committed layers whose project-relative paths are neither referenced by the
+    /// request nor protected by an active asset lease. Removing a file never aborts the
+    /// prune; empty parent directories are removed best effort.
+    [[nodiscard]] virtual QFuture<Result<PruneAssetsResponse>> pruneUnusedAssets(PruneAssetsRequest request,
+                                                                                 OperationContext context) = 0;
 };
 
 } // namespace manga::application

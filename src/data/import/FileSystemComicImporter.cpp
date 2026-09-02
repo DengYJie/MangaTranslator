@@ -11,8 +11,12 @@
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QPromise>
 #include <QRegularExpression>
+#include <QSaveFile>
 #include <QSet>
 #include <QThreadPool>
 #include <QUuid>
@@ -276,6 +280,54 @@ SingleImportOutcome importOneFile(const ImportCandidate& candidate,
     return outcome;
 }
 
+QString pendingBatchPath(const QString& canonicalRoot) {
+    return canonicalRoot + QLatin1Char('/') + kStagingDirName + QLatin1Char('/') + kPendingBatchFileName;
+}
+
+// Persists the unacknowledged import batch so openProject can remove orphaned originals after
+// an interrupted session. Failure is best-effort and never changes the import result.
+bool writePendingBatch(const QString& canonicalRoot,
+                       const QString& batchId,
+                       const QString& projectId,
+                       const QSet<QString>& assetPaths) {
+    const QString path = pendingBatchPath(canonicalRoot);
+    if (!QDir().mkpath(QFileInfo(path).absolutePath())) {
+        return false;
+    }
+    QJsonObject batch;
+    batch.insert(QStringLiteral("batchId"), batchId);
+    batch.insert(QStringLiteral("projectId"), projectId);
+    QJsonArray paths;
+    for (const QString& assetPath : assetPaths) {
+        paths.append(assetPath);
+    }
+    batch.insert(QStringLiteral("assetPaths"), paths);
+
+    QSaveFile file(path);
+    if (!file.open(QIODevice::WriteOnly)) {
+        return false;
+    }
+    const QByteArray bytes = QJsonDocument(batch).toJson(QJsonDocument::Compact);
+    if (file.write(bytes) != bytes.size() || file.error() != QFileDevice::NoError) {
+        file.cancelWriting();
+        return false;
+    }
+    return file.commit();
+}
+
+std::optional<QJsonObject> readPendingBatch(const QString& canonicalRoot) {
+    QFile file(pendingBatchPath(canonicalRoot));
+    if (!file.open(QIODevice::ReadOnly)) {
+        return std::nullopt;
+    }
+    const QJsonDocument document = QJsonDocument::fromJson(file.readAll());
+    file.close();
+    if (!document.isObject()) {
+        return std::nullopt;
+    }
+    return document.object();
+}
+
 } // namespace
 
 FileSystemComicImporter::FileSystemComicImporter(ProjectIoCoordinator* coordinator, CommitObserver commitObserver)
@@ -411,6 +463,9 @@ FileSystemComicImporter::importImagesBlocking(const application::ImportImagesReq
         for (const auto& importedPage : result.importedPages) {
             batch.assetPaths.insert(QString::fromStdString(importedPage.page.originalAssetPath()));
         }
+        // The path set must be persisted before batch is moved into the pending map.
+        (void)writePendingBatch(
+            canonicalRoot, result.batchId.toString(), request.projectId.toString(), batch.assetPaths);
         QMutexLocker locker(&m_batchesMutex);
         m_pendingBatches.insert_or_assign(result.batchId.toString(), std::move(batch));
     }
@@ -463,6 +518,8 @@ FileSystemComicImporter::discardImportedAssets(application::DiscardImportedAsset
                 return std::unexpected(toPersistenceError(QFileDevice::PermissionsError));
             }
         }
+        bool batchConsumed = false;
+        QSet<QString> remainingPaths;
         {
             QMutexLocker locker(&m_batchesMutex);
             auto it = m_pendingBatches.find(request.batchId.toString());
@@ -470,10 +527,18 @@ FileSystemComicImporter::discardImportedAssets(application::DiscardImportedAsset
                 for (const QString& assetPath : request.assetPaths) {
                     it->second.assetPaths.remove(assetPath);
                 }
-                if (it->second.assetPaths.isEmpty()) {
+                remainingPaths = it->second.assetPaths;
+                if (remainingPaths.isEmpty()) {
                     m_pendingBatches.erase(it);
+                    batchConsumed = true;
                 }
             }
+        }
+        if (batchConsumed) {
+            QFile::remove(pendingBatchPath(canonicalRoot));
+        } else if (!remainingPaths.isEmpty()) {
+            (void)writePendingBatch(
+                canonicalRoot, request.batchId.toString(), request.projectId.toString(), remainingPaths);
         }
         return {};
     });
@@ -505,6 +570,8 @@ FileSystemComicImporter::acknowledgeImportedAssets(application::AcknowledgeImpor
                                                   QStringLiteral("The import acknowledgement is invalid")));
         }
         m_pendingBatches.erase(it);
+        // Adopted assets must not be treated as orphans by the next openProject.
+        QFile::remove(pendingBatchPath(canonicalRoot));
         return {};
     });
 }

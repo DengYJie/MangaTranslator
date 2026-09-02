@@ -53,6 +53,20 @@ public:
         promise.finish();
         return future;
     }
+
+    [[nodiscard]] QFuture<Result<PruneAssetsResponse>> pruneUnusedAssets([[maybe_unused]] PruneAssetsRequest request,
+                                                                         OperationContext context) override {
+        QPromise<Result<PruneAssetsResponse>> promise;
+        auto future = promise.future();
+        if (context.stopToken.stop_requested()) {
+            promise.addResult(std::unexpected(
+                makeApplicationError(ErrorCategory::Cancelled, "cancelled.layer_prune", "Layer prune was cancelled")));
+        } else {
+            promise.addResult(PruneAssetsResponse{});
+        }
+        promise.finish();
+        return future;
+    }
 };
 
 } // namespace manga::application::test

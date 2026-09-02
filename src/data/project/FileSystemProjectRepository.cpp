@@ -1,5 +1,6 @@
 #include "data/project/FileSystemProjectRepository.h"
 
+#include "application/ports/IDerivedAssetStore.h"
 #include "data/DataAsync.h"
 #include "data/DataErrorMapping.h"
 #include "data/project/PathSafety.h"
@@ -9,12 +10,18 @@
 #include <QCryptographicHash>
 #include <QDir>
 #include <QDirIterator>
+#include <QFile>
 #include <QFileInfo>
 #include <QImageReader>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QLockFile>
 #include <QMutexLocker>
 #include <QSaveFile>
+#include <QSet>
 #include <QStorageInfo>
+#include <QThreadPool>
 
 #include <limits>
 #include <optional>
@@ -25,6 +32,23 @@ namespace {
 
 constexpr qint64 kWriteMarginBytes = 64 * 1024;
 constexpr int kProjectCloseTimeoutMs = 10'000;
+
+// Collects every derived layer reference that project.json still points at; paths are
+// project-root relative and form the keep-set when pruning unused derived assets.
+QSet<QString> collectReferencedLayerPaths(const domain::ComicProject& project) {
+    QSet<QString> paths;
+    for (const auto& page : project.pages()) {
+        const auto addLayer = [&paths](const std::optional<std::string>& layerPath) {
+            if (layerPath.has_value() && !layerPath->empty()) {
+                paths.insert(QString::fromStdString(*layerPath));
+            }
+        };
+        addLayer(page.clearLayerAsset());
+        addLayer(page.translationLayerAsset());
+        addLayer(page.manualOverrideLayerAsset());
+    }
+    return paths;
+}
 
 application::ApplicationError makeDiskFullError() {
     auto error = application::makeApplicationError(application::ErrorCategory::Persistence,
@@ -302,6 +326,47 @@ void removeCreatedTarget(const QString& stagingRoot, const QString& targetRoot, 
     }
 }
 
+// Removes original images recorded by an interrupted import batch that the project does not
+// reference, then drops the batch marker. Runs under the project write ticket during open.
+void cleanupInterruptedImports(const QString& canonicalRoot, const domain::ComicProject& project) {
+    const QString markerPath =
+        canonicalRoot + QLatin1Char('/') + kStagingDirName + QLatin1Char('/') + kPendingBatchFileName;
+    const QFileInfo markerInfo(markerPath);
+    if (!markerInfo.exists()) {
+        return;
+    }
+    QFile markerFile(markerPath);
+    if (!markerFile.open(QIODevice::ReadOnly)) {
+        return;
+    }
+    const QJsonDocument document = QJsonDocument::fromJson(markerFile.readAll());
+    markerFile.close();
+    if (!document.isObject()) {
+        QFile::remove(markerPath);
+        return;
+    }
+    const QJsonArray paths = document.object().value(QStringLiteral("assetPaths")).toArray();
+    QSet<QString> referenced;
+    for (const auto& page : project.pages()) {
+        referenced.insert(QString::fromStdString(page.originalAssetPath()));
+    }
+    for (const QJsonValue& value : paths) {
+        const QString relativePath = value.toString();
+        if (!isSafeRelativeAssetPath(relativePath) ||
+            !relativePath.startsWith(QString(kAssetsOriginal) + QLatin1Char('/'))) {
+            continue;
+        }
+        if (referenced.contains(relativePath)) {
+            continue; // Referenced by the project; keep the asset.
+        }
+        const QString resolved = resolveInsideCanonicalRoot(canonicalRoot, relativePath);
+        if (!resolved.isEmpty()) {
+            QFile::remove(resolved);
+        }
+    }
+    QFile::remove(markerPath);
+}
+
 } // namespace
 
 struct RepositorySession {
@@ -332,6 +397,10 @@ void FileSystemProjectRepository::setSaveAsCommitProbe(SaveAsCommitProbe probe) 
 
 void FileSystemProjectRepository::setSaveTransactionHook(SaveTransactionHook hook) {
     m_saveTransactionHook = std::move(hook);
+}
+
+void FileSystemProjectRepository::setDerivedAssetStore(application::IDerivedAssetStore* store) {
+    m_derivedStore = store;
 }
 
 bool FileSystemProjectRepository::hasDiskSpace(const QString& root, qint64 requiredBytes) const {
@@ -546,6 +615,9 @@ FileSystemProjectRepository::openProject(application::OpenProjectRequest request
                 lock.reset();
                 return std::unexpected(assets.error());
             }
+            // A previous session may have exited before imported assets were acknowledged;
+            // delete originals the project does not reference and clear the batch marker.
+            cleanupInterruptedImports(canonicalRoot, *loaded);
 
             auto session = std::make_shared<RepositorySession>();
             session->descriptor.id = loaded->id();
@@ -737,6 +809,25 @@ FileSystemProjectRepository::saveProject(application::SaveProjectRequest request
             session->descriptor.name = QString::fromStdString(request.project.name());
             session->project = request.project;
             session->project->markClean();
+
+            // After a successful save, reclaim derived layer files no longer referenced by
+            // project.json on a worker thread. Fire-and-forget: the future is intentionally
+            // dropped and the save path never blocks on the prune, which needs the same
+            // project write lock that this save transaction still holds.
+            if (m_derivedStore != nullptr) {
+                const domain::ProjectId savedProjectId = request.project.id();
+                const QString savedRoot = session->canonicalRoot;
+                QSet<QString> referenced = collectReferencedLayerPaths(request.project);
+                QThreadPool::globalInstance()->start(
+                    [store = m_derivedStore, savedProjectId, savedRoot, referenced = std::move(referenced)] {
+                        application::PruneAssetsRequest request;
+                        request.projectId = savedProjectId;
+                        request.projectRoot = savedRoot;
+                        request.referencedRelativePaths = referenced;
+                        (void)store->pruneUnusedAssets(std::move(request), application::OperationContext{});
+                    });
+            }
+
             return application::SaveProjectResult{request.project.revision()};
         });
 }

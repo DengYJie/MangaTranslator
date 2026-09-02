@@ -11,6 +11,10 @@
 #include <memory>
 #include <string>
 
+namespace manga::application {
+class IDerivedAssetStore;
+}
+
 namespace manga::data {
 
 struct RepositorySession;
@@ -37,6 +41,7 @@ public:
     void setDiskSpaceProbe(DiskSpaceProbe probe);
     void setSaveAsCommitProbe(SaveAsCommitProbe probe);
     void setSaveTransactionHook(SaveTransactionHook hook);
+    void setDerivedAssetStore(application::IDerivedAssetStore* store);
 
     [[nodiscard]] QFuture<application::Result<application::ProjectDescriptor>>
     createProject(application::CreateProjectRequest request, application::OperationContext context) override;
@@ -59,6 +64,7 @@ private:
     [[nodiscard]] bool hasDiskSpace(const QString& root, qint64 requiredBytes) const;
 
     ProjectIoCoordinator* m_coordinator;
+    application::IDerivedAssetStore* m_derivedStore{nullptr};
     DiskSpaceProbe m_probe;
     SaveAsCommitProbe m_saveAsCommitProbe;
     SaveTransactionHook m_saveTransactionHook;

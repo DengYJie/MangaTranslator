@@ -6,9 +6,14 @@
 
 #include <QCryptographicHash>
 #include <QDir>
+#include <QDirIterator>
+#include <QFile>
+#include <QFileInfo>
 #include <QImageReader>
+#include <QMutexLocker>
 #include <QSaveFile>
 
+#include <memory>
 #include <utility>
 
 namespace manga::data {
@@ -68,6 +73,14 @@ QString layerRelativePath(const domain::PageId& pageId, const QString& kindDir, 
 
 FileSystemDerivedAssetStore::FileSystemDerivedAssetStore(ProjectIoCoordinator* coordinator)
     : m_coordinator(coordinator) {}
+
+FileSystemDerivedAssetStore::AssetLease FileSystemDerivedAssetStore::createAssetLease() {
+    auto lease = std::make_shared<QSet<QString>>();
+    std::weak_ptr<QSet<QString>> weak(lease);
+    QMutexLocker locker(&m_leasesMutex);
+    m_leases.append(weak);
+    return lease;
+}
 
 QFuture<application::Result<QImage>>
 FileSystemDerivedAssetStore::readDerivedLayer(application::ReadDerivedLayerRequest request,
@@ -189,6 +202,87 @@ FileSystemDerivedAssetStore::commitDerivedLayer(application::CommitDerivedLayerR
             }
             application::CommitDerivedLayerResponse response;
             response.relativePath = relativePath;
+            return response;
+        });
+}
+
+QFuture<application::Result<application::PruneAssetsResponse>>
+FileSystemDerivedAssetStore::pruneUnusedAssets(application::PruneAssetsRequest request,
+                                               application::OperationContext context) {
+    return runDataOperation<application::PruneAssetsResponse>(
+        [this, request = std::move(request), context]() -> application::Result<application::PruneAssetsResponse> {
+            if (context.stopToken.stop_requested()) {
+                return std::unexpected(
+                    application::makeApplicationError(application::ErrorCategory::Cancelled,
+                                                      QStringLiteral("cancelled.user_requested"),
+                                                      QStringLiteral("The asset prune was cancelled")));
+            }
+            const QString canonicalRoot =
+                canonicalDirectoryPath(QDir::cleanPath(QDir::fromNativeSeparators(request.projectRoot.trimmed())));
+            const auto fail = [](const QString& message) {
+                return std::unexpected(makeStorageError(QStringLiteral("clear.layer_prune_failed"), message));
+            };
+            if (canonicalRoot.isEmpty()) {
+                return fail(QStringLiteral("The project root is not available"));
+            }
+            if (!request.projectId.isValid()) {
+                return fail(QStringLiteral("The prune request is invalid"));
+            }
+            auto writeTicket = m_coordinator->beginProjectWrite(request.projectId, canonicalRoot);
+            if (!writeTicket) {
+                return fail(QStringLiteral("The project session is not open"));
+            }
+
+            QSet<QString> marked = request.referencedRelativePaths;
+            {
+                // Live leases pin their paths; expired lease handles are dropped.
+                QMutexLocker locker(&m_leasesMutex);
+                QVector<std::weak_ptr<QSet<QString>>> retained;
+                retained.reserve(m_leases.size());
+                for (std::weak_ptr<QSet<QString>>& lease : m_leases) {
+                    if (std::shared_ptr<QSet<QString>> live = lease.lock()) {
+                        marked.unite(*live);
+                        retained.append(lease);
+                    }
+                }
+                m_leases = std::move(retained);
+            }
+
+            const QString derivedRoot = canonicalRoot + QLatin1Char('/') + kDerivedRoot.toString();
+            if (!QDir(derivedRoot).exists()) {
+                application::PruneAssetsResponse response;
+                return response;
+            }
+
+            application::PruneAssetsResponse response;
+            QSet<QString> touchedLeaves;
+            QDirIterator iterator(derivedRoot, {QStringLiteral("*.png")}, QDir::Files, QDirIterator::Subdirectories);
+            while (iterator.hasNext()) {
+                const QString absolutePath = iterator.next();
+                const QString relativePath =
+                    QDir::cleanPath(QDir::fromNativeSeparators(absolutePath.mid(canonicalRoot.length() + 1)));
+                if (marked.contains(relativePath)) {
+                    continue;
+                }
+                QFileInfo fileInfo(absolutePath);
+                if (QFile::remove(absolutePath)) {
+                    ++response.removedFiles;
+                    response.freedBytes += fileInfo.size();
+                    touchedLeaves.insert(fileInfo.absolutePath());
+                }
+                if (context.stopToken.stop_requested()) {
+                    break;
+                }
+            }
+
+            // Empty directory cleanup is best effort; rmdir only succeeds on empty directories.
+            for (const QString& leaf : touchedLeaves) {
+                QString directory = leaf;
+                while (directory.startsWith(derivedRoot) && directory != derivedRoot) {
+                    QDir().rmdir(directory);
+                    directory = QFileInfo(directory).absolutePath();
+                }
+            }
             return response;
         });
 }

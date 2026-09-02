@@ -75,8 +75,15 @@ public:
         return m_inner->commitDerivedLayer(std::move(request), context);
     }
 
+    [[nodiscard]] QFuture<Result<PruneAssetsResponse>> pruneUnusedAssets(PruneAssetsRequest request,
+                                                                         OperationContext context) override {
+        ++pruneCount;
+        return m_inner->pruneUnusedAssets(std::move(request), context);
+    }
+
     int readCount{0};
     int commitCount{0};
+    int pruneCount{0};
 
 private:
     IDerivedAssetStore* m_inner; // non-owning
