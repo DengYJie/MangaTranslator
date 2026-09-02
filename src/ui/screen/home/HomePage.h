@@ -66,9 +66,6 @@ private:
     fluent::basicinput::Button* m_retryButton{nullptr};
     QString m_currentRetryPath;
     application::RecoveryAction m_currentNoticeAction{application::RecoveryAction::None};
-    QBoxLayout* m_contentLayout{nullptr}; // direction flips with the width breakpoint
-    QWidget* m_mainArea{nullptr};
-    QWidget* m_sideRail{nullptr};
     QStackedLayout* m_stack{nullptr};
     QWidget* m_emptyState{nullptr};
     fluent::collections::GridView* m_gridView{nullptr};

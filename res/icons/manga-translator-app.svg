@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024" role="img" aria-labelledby="title desc">
+  <title id="title">MangaTranslator application icon</title>
+  <desc id="desc">A simple monochrome open manga page with opposing translation arrows.</desc>
+
+  <g fill="none" stroke="#315B8B" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M220 224C220 186 250 160 288 160H512V816L282 766C244 758 220 728 220 690V224Z" stroke-width="24"/>
+    <path d="M804 224C804 186 774 160 736 160H512V816L742 766C780 758 804 728 804 690V224Z" stroke-width="24"/>
+
+    <path d="M306 438H676" stroke-width="52"/>
+    <path d="M626 378L706 438L626 498" stroke-width="52"/>
+    <path d="M718 582H348" stroke-width="52"/>
+    <path d="M398 522L318 582L398 642" stroke-width="52"/>
+  </g>
+</svg>

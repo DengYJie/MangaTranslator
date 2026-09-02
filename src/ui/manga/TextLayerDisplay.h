@@ -15,7 +15,7 @@ struct TextLayerDisplay {
     domain::TextLayout layout;
     bool enabled{true};
     bool visible{true};
-    double logicalDpi{96.0};
+    double logicalDpi{72.0};
     bool operator==(const TextLayerDisplay&) const = default;
 };
 

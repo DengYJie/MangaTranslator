@@ -131,39 +131,6 @@ private Q_SLOTS:
         QVERIFY(commandBar != nullptr);
         auto* translateBtn = commandBar->findChild<fluent::basicinput::Button*>(QStringLiteral("smartTranslateButton"));
         QVERIFY(translateBtn != nullptr);
-        auto* adoptBtn = commandBar->findChild<fluent::basicinput::Button*>(QStringLiteral("adoptButton"));
-        QVERIFY(adoptBtn != nullptr);
-        auto* rejectBtn = commandBar->findChild<fluent::basicinput::Button*>(QStringLiteral("rejectButton"));
-        QVERIFY(rejectBtn != nullptr);
-    }
-
-    void commandBarShowsAdoptRejectOnProposal() {
-        test::FakeThumbnailStore thumbnails;
-        test::FakePageImageLoader images;
-        application::OperationRegistry registry;
-        ui::screen::editor::EditorViewModel viewModel(&thumbnails, &images, &registry);
-        ui::screen::editor::EditorPage page(&viewModel);
-        page.show();
-
-        auto session = makeSession(1);
-        viewModel.openProjectSession(session);
-
-        auto* commandBar = page.findChild<QWidget*>(QStringLiteral("editorCommandBar"));
-        auto* adoptBtn = commandBar->findChild<fluent::basicinput::Button*>(QStringLiteral("adoptButton"));
-        auto* rejectBtn = commandBar->findChild<fluent::basicinput::Button*>(QStringLiteral("rejectButton"));
-
-        QVERIFY(!adoptBtn->isVisible());
-        QVERIFY(!rejectBtn->isVisible());
-
-        // Update processing state to hasProposal = true
-        ui::screen::editor::EditorProcessingState proc;
-        proc.activePageId = pageAt(session, 0);
-        proc.hasProposal = true;
-        proc.status = ui::screen::editor::ProcessingStatus::NeedsReview;
-        viewModel.updateProcessingState(proc);
-
-        QVERIFY(adoptBtn->isVisible());
-        QVERIFY(rejectBtn->isVisible());
     }
 
     void commandBarVisualStylingAndTooltip() {
@@ -220,25 +187,6 @@ private Q_SLOTS:
         viewModel.selectRegion(regionId, ui::screen::editor::RegionSelectionMode::Replace);
         viewModel.deleteRegions({regionId});
         QVERIFY(!ocrButton->isVisibleTo(commandBar));
-    }
-
-    void translationSectionUsesSingleAiRetranslateAction() {
-        test::FakeThumbnailStore thumbnails;
-        test::FakePageImageLoader images;
-        application::OperationRegistry registry;
-        ui::screen::editor::EditorViewModel viewModel(&thumbnails, &images, &registry);
-        ui::screen::editor::EditorPage page(&viewModel);
-
-        auto* ocrBtn = page.findChild<fluent::basicinput::Button*>(QStringLiteral("inspectorSingleOcr"));
-        auto* trBtn = page.findChild<fluent::basicinput::Button*>(QStringLiteral("inspectorSingleTranslate"));
-        auto* clearBtn = page.findChild<fluent::basicinput::Button*>(QStringLiteral("inspectorSingleClear"));
-        auto* layoutBtn = page.findChild<fluent::basicinput::Button*>(QStringLiteral("inspectorSingleLayout"));
-
-        QVERIFY(ocrBtn == nullptr);
-        QVERIFY(trBtn != nullptr);
-        QCOMPARE(trBtn->text(), QStringLiteral("AI 重译"));
-        QVERIFY(clearBtn == nullptr);
-        QVERIFY(layoutBtn == nullptr);
     }
 
     void unavailableOcrDisablesActionWithGuidance() {

@@ -34,6 +34,18 @@ constexpr int kMarginBottomWide = 24;
 constexpr int kMarginTopNarrow = 16;
 constexpr int kMarginBottomNarrow = 16;
 
+void configureInfoBarStyle(fluent::status_info::InfoBar* infoBar) {
+    if (!infoBar) {
+        return;
+    }
+    infoBar->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
+    infoBar->setCornerRadius(8);
+    infoBar->setContentMargins(QMargins(14, 10, 14, 10));
+    infoBar->setIconTextSpacing(12);
+    infoBar->setTitleMessageSpacing(8);
+    infoBar->setSeverityIconSize(20);
+}
+
 class LazySettingsPage final : public QWidget {
 public:
     LazySettingsPage(SettingsViewModel* viewModel, SettingsCategory category, QWidget* parent = nullptr)
@@ -128,6 +140,7 @@ void SettingsPage::buildUi() {
     m_pageInfoBar = new fluent::status_info::InfoBar(m_columnContainer);
     m_pageInfoBar->setIsClosable(false);
     m_pageInfoBar->setIsOpen(false);
+    configureInfoBarStyle(m_pageInfoBar);
     m_columnLayout->addWidget(m_pageInfoBar);
 
     // Each settings route owns one category page so StackContentHost can animate route changes.
@@ -233,12 +246,12 @@ QWidget* SettingsPage::buildOcrView() {
     layout->setContentsMargins(0, 0, 0, 0);
     layout->setSpacing(4);
 
-    auto* group = new widget::SettingsGroup(
-        tr("Baberu OCR 引擎"), tr("配置用于漫画文字识别的 Baberu ONNX 模型与识别语言"), container);
+    auto* group =
+        new widget::SettingsGroup(tr("文字识别 (OCR)"), tr("配置用于漫画台词识别的 OCR 模型与默认识别语言"), container);
     m_allGroups.append(group);
 
     // Model directory row
-    m_ocrModelDirRow = new widget::SettingsRow(tr("模型目录"), tr("Baberu ONNX 模型文件所在文件夹路径"), group);
+    m_ocrModelDirRow = new widget::SettingsRow(tr("模型目录"), tr("OCR 模型文件所在文件夹路径"), group);
     auto* dirEditor = new QWidget(m_ocrModelDirRow);
     auto* dirLayout = new QHBoxLayout(dirEditor);
     dirLayout->setContentsMargins(0, 0, 0, 0);
@@ -256,10 +269,10 @@ QWidget* SettingsPage::buildOcrView() {
 
     m_ocrBrowseButton = new fluent::basicinput::Button(tr("浏览..."), dirEditor);
     m_ocrBrowseButton->setObjectName(QStringLiteral("ocrBrowseButton"));
-    m_ocrBrowseButton->setToolTip(tr("选择 Baberu OCR 模型所在文件夹"));
+    m_ocrBrowseButton->setToolTip(tr("选择 OCR 模型所在文件夹"));
     m_ocrBrowseButton->setAccessibleName(tr("选择 OCR 模型目录"));
     connect(m_ocrBrowseButton, &fluent::basicinput::Button::clicked, this, [this]() {
-        const QString dir = QFileDialog::getExistingDirectory(this, tr("选择 Baberu OCR 模型目录"));
+        const QString dir = QFileDialog::getExistingDirectory(this, tr("选择 OCR 模型目录"));
         if (!dir.isEmpty() && m_viewModel) {
             m_viewModel->setOcrModelDirectory(dir);
         }
@@ -275,6 +288,7 @@ QWidget* SettingsPage::buildOcrView() {
         new widget::SettingsRow(tr("默认识别语言"), tr("OCR 识别使用的默认语言（仅对新建项目生效）"), group);
     m_ocrLanguageCombo = new fluent::basicinput::ComboBox(m_ocrLanguageRow);
     m_ocrLanguageCombo->setObjectName(QStringLiteral("ocrLanguageCombo"));
+    m_ocrLanguageCombo->addItem(tr("自动 (Auto)"), QStringLiteral("auto"));
     m_ocrLanguageCombo->addItem(tr("日语 (Japanese)"), QStringLiteral("ja"));
     m_ocrLanguageCombo->addItem(tr("中文 (Chinese)"), QStringLiteral("zh"));
     m_ocrLanguageCombo->addItem(tr("英语 (English)"), QStringLiteral("en"));
@@ -294,6 +308,7 @@ QWidget* SettingsPage::buildOcrView() {
     m_ocrStatusInfoBar = new fluent::status_info::InfoBar(container);
     m_ocrStatusInfoBar->setIsClosable(false);
     m_ocrStatusInfoBar->setIsOpen(false);
+    configureInfoBarStyle(m_ocrStatusInfoBar);
     layout->addWidget(m_ocrStatusInfoBar);
 
     layout->addSpacing(12);
@@ -332,6 +347,7 @@ QWidget* SettingsPage::buildOcrView() {
     m_detectionStatusInfoBar = new fluent::status_info::InfoBar(container);
     m_detectionStatusInfoBar->setIsClosable(false);
     m_detectionStatusInfoBar->setIsOpen(false);
+    configureInfoBarStyle(m_detectionStatusInfoBar);
     layout->addWidget(m_detectionStatusInfoBar);
 
     layout->addSpacing(12);
@@ -370,6 +386,7 @@ QWidget* SettingsPage::buildOcrView() {
     m_inpaintStatusInfoBar = new fluent::status_info::InfoBar(container);
     m_inpaintStatusInfoBar->setIsClosable(false);
     m_inpaintStatusInfoBar->setIsOpen(false);
+    configureInfoBarStyle(m_inpaintStatusInfoBar);
     layout->addWidget(m_inpaintStatusInfoBar);
 
     layout->addStretch(1);
@@ -715,7 +732,7 @@ void SettingsPage::render(const SettingsState& state) {
             m_ocrStatusInfoBar->setSeverity(fluent::status_info::InfoBar::Error);
             m_ocrStatusInfoBar->setTitle(tr("OCR 模型校验失败"));
             m_ocrStatusInfoBar->setMessage(
-                state.fieldErrors.value(QStringLiteral("ocrModelDirectory"), tr("未找到有效的 Baberu OCR 模型文件")));
+                state.fieldErrors.value(QStringLiteral("ocrModelDirectory"), tr("未找到有效的 OCR 模型文件")));
             m_ocrStatusInfoBar->setIsOpen(true);
         }
     }
@@ -809,8 +826,8 @@ void SettingsPage::updateCategoryHeaders(SettingsCategory category) {
             break;
         case SettingsCategory::Ocr:
             m_categoryTitleLabel->setText(tr("OCR 与本地模型"));
-            m_categorySubtitleLabel->setText(tr(
-                "配置漫画台词识别 (Baberu OCR)、版面与文字检测 (Koharu Layout) 以及图像修复 (Inpaint) 的 ONNX 模型。"));
+            m_categorySubtitleLabel->setText(
+                tr("配置漫画台词文字识别 (OCR)、版面与文字检测 (Koharu Layout) 以及图像修复 (Inpaint) 的 ONNX 模型。"));
             break;
         case SettingsCategory::AiTranslation:
             m_categoryTitleLabel->setText(tr("AI 翻译"));

@@ -121,6 +121,8 @@ public:
     void createPointText(QPointF anchor);
     /// Creates paragraph text using an in-bounds normalized frame.
     void createTextBox(const domain::RectGeometry& geometry);
+    /// Creates a region with custom geometry and optional layout constraints.
+    void createRegion(const domain::RectGeometry& geometry, domain::TextLayout layout = {});
     /// Deletes the given regions from the current page as one undo step.
     void deleteRegions(const QVector<domain::RegionId>& regionIds);
     /// Commits a geometry change for one region. No-op if delta is zero or geometry invalid.

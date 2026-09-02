@@ -17,6 +17,7 @@ public:
     explicit MangaTextItem(domain::RegionId id, QGraphicsItem* parent = nullptr);
 
     void setDisplay(const TextLayerDisplay& display);
+    void setTransientGeometry(const domain::RectGeometry& geometry);
     void setLogicalDpi(double logicalDpi);
 
     [[nodiscard]] const TextLayerDisplay& display() const noexcept {

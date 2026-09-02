@@ -303,12 +303,14 @@ void TitleBar::setContentWidget(QWidget* contentWidget, ContentAlignment alignme
         return;
     if (m_contentWidget && m_contentWidget != contentWidget) {
         Q_EMIT hitTestWidgetChanged(m_contentWidget, false);
+        m_contentWidget->removeEventFilter(this);
         m_contentWidget->setParent(nullptr);
     }
     m_contentWidget = contentWidget;
     m_contentAlignment = alignment;
     if (m_contentWidget) {
         m_contentWidget->setParent(this);
+        m_contentWidget->installEventFilter(this);
         m_contentWidget->show();
         Q_EMIT hitTestWidgetChanged(m_contentWidget, true);
     }
@@ -411,9 +413,9 @@ bool TitleBar::eventFilter(QObject* watched, QEvent* event) {
             btn->setFocusVisual(false);
         }
     } else if (watched == m_minimizeButton || watched == m_maximizeButton || watched == m_closeButton ||
-               watched == m_leftHeaderWidget || watched == m_rightHeaderWidget) {
+               watched == m_leftHeaderWidget || watched == m_rightHeaderWidget || watched == m_contentWidget) {
         if (event->type() == QEvent::Show || event->type() == QEvent::Hide || event->type() == QEvent::ShowToParent ||
-            event->type() == QEvent::HideToParent) {
+            event->type() == QEvent::HideToParent || event->type() == QEvent::Resize) {
             updateLayout();
         }
     }
@@ -445,9 +447,8 @@ void TitleBar::resizeEvent(QResizeEvent* event) {
 }
 
 void TitleBar::updateHeight() {
-    bool requiresTall = (m_contentWidget != nullptr || m_rightHeaderWidget != nullptr);
-    int targetHeight =
-        (m_heightOption == HeightOption::Tall || requiresTall) ? TitleBarTallHeight : TitleBarStandardHeight;
+    bool requiresTall = (m_heightOption == HeightOption::Tall || m_rightHeaderWidget != nullptr);
+    int targetHeight = requiresTall ? TitleBarTallHeight : TitleBarStandardHeight;
     setTitleBarHeight(targetHeight);
 }
 
@@ -519,10 +520,13 @@ void TitleBar::updateLayout() {
     }
 
     int contentLeft = w;
-    if (m_contentWidget) {
+    if (m_contentWidget && m_contentWidget->isVisibleTo(this)) {
         if (m_contentAlignment == ContentAlignment::Center) {
-            int sw = m_contentWidget->width();
-            int sh = m_contentWidget->height();
+            int sw = qMax(m_contentWidget->sizeHint().width(), m_contentWidget->width());
+            int sh = qMax(m_contentWidget->sizeHint().height(), m_contentWidget->height());
+            if (sh > h) {
+                sh = h;
+            }
             contentLeft = (w - sw) / 2;
             m_contentWidget->setGeometry(contentLeft, (h - sh) / 2, sw, sh);
         }

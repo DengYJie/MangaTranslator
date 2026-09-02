@@ -215,6 +215,11 @@ public:
     QWidget* leftHeaderWidget() const;
 
     /**
+     * @brief Recomputes absolute pixel coordinates for each region and updates the drag safe zone.
+     */
+    void updateLayout();
+
+    /**
      * @brief Sets the minimum drag safe-zone width between the right header and the
      * system caption buttons.
      * @param width Width in pixels; defaults to 48px (WinUI 3 standard); 0 means flush
@@ -353,10 +358,6 @@ private:
     // Computes and applies the physical height from the present child widgets and
     // the height mode.
     void updateHeight();
-
-    // Computes absolute pixel coordinates for each region and updates the drag
-    // safe zone.
-    void updateLayout();
 
     // Ensures the caption button backplates fill the title bar height.
     void updateCaptionButtonSizes();

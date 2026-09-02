@@ -5,6 +5,7 @@
 #include "ui/widget/AppStatusTaskStrip.h"
 #include "ui/window/TitleBar.h"
 
+#include <FluentQt/TextFields.h>
 #include <QCloseEvent>
 #include <QGuiApplication>
 #include <QKeySequence>
@@ -31,6 +32,18 @@ MainWindow::MainWindow(application::IAppSettingsStore* settingsStore, QWidget* p
         // The offscreen platform has no compositor; translucent backdrops are meaningless there.
         setBackdropEffect(fluent::windowing::BackdropEffect::Solid);
     }
+
+    m_projectTitleLabel = new fluent::textfields::Label(this);
+    m_projectTitleLabel->setObjectName(QStringLiteral("mainWindowProjectTitleLabel"));
+    m_projectTitleLabel->setFluentTypography(Typography::FontRole::Caption);
+    m_projectTitleLabel->setTextColorRole(fluent::textfields::Label::TextColorRole::Secondary);
+    m_projectTitleLabel->setAlignment(Qt::AlignCenter);
+    m_projectTitleLabel->hide();
+
+    if (titleBar()) {
+        titleBar()->setContentWidget(m_projectTitleLabel, TitleBar::ContentAlignment::Center);
+    }
+
     m_statusStrip = new widget::AppStatusTaskStrip(this);
     layout()->addWidget(m_statusStrip);
 
@@ -120,6 +133,43 @@ void MainWindow::closeEvent(QCloseEvent* event) {
 
     saveWindowGeometry();
     NavigationWindow::closeEvent(event);
+}
+
+void MainWindow::setProjectTitleInfo(const QString& projectName, int currentPage, int totalPages, bool isDirty) {
+    if (!m_projectTitleLabel) {
+        return;
+    }
+    if (projectName.isEmpty()) {
+        clearProjectTitleInfo();
+        return;
+    }
+    QString text;
+    if (totalPages > 0 && currentPage > 0) {
+        text = QStringLiteral("%1%2 · %3 / %4")
+                   .arg(projectName)
+                   .arg(isDirty ? QStringLiteral("*") : QString())
+                   .arg(currentPage)
+                   .arg(totalPages);
+    } else {
+        text = QStringLiteral("%1%2").arg(projectName).arg(isDirty ? QStringLiteral("*") : QString());
+    }
+    m_projectTitleLabel->setText(text);
+    m_projectTitleLabel->adjustSize();
+    m_projectTitleLabel->show();
+    if (titleBar()) {
+        titleBar()->updateLayout();
+    }
+}
+
+void MainWindow::clearProjectTitleInfo() {
+    if (!m_projectTitleLabel) {
+        return;
+    }
+    m_projectTitleLabel->clear();
+    m_projectTitleLabel->hide();
+    if (titleBar()) {
+        titleBar()->updateLayout();
+    }
 }
 
 } // namespace manga::ui::window

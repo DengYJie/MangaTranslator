@@ -43,10 +43,10 @@ private Q_SLOTS:
     void zOrderConstantsAreStrictlyOrdered() {
         static_assert(manga::ui::canvas::kZBackground < manga::ui::canvas::kZPageOriginal);
         static_assert(manga::ui::canvas::kZPageOriginal < manga::ui::canvas::kZCleaningLayer);
-        static_assert(manga::ui::canvas::kZCleaningLayer < manga::ui::canvas::kZTextLayer);
-        static_assert(manga::ui::canvas::kZTextLayer < manga::ui::canvas::kZRegionNormal);
+        static_assert(manga::ui::canvas::kZCleaningLayer < manga::ui::canvas::kZRegionNormal);
         static_assert(manga::ui::canvas::kZRegionNormal < manga::ui::canvas::kZSelectionHandles);
         static_assert(manga::ui::canvas::kZSelectionHandles < manga::ui::canvas::kZToolCreation);
+        static_assert(manga::ui::canvas::kZToolCreation < manga::ui::canvas::kZTextLayer);
         QVERIFY(true);
     }
 

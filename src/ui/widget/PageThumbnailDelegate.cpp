@@ -96,34 +96,6 @@ void PageThumbnailDelegate::paint(QPainter* painter,
     painter->setPen(colors.textPrimary);
     painter->drawText(topRect, Qt::AlignVCenter | Qt::AlignLeft, tr("第 %1 页").arg(orderIndex + 1));
 
-    const auto procStatus =
-        static_cast<screen::editor::ProcessingStatus>(index.data(PageListModel::ProcessingStatusRole).toInt());
-    if (procStatus == screen::editor::ProcessingStatus::Queued) {
-        QFont statusFont = option.font;
-        statusFont.setPixelSize(11);
-        painter->setFont(statusFont);
-        painter->setPen(colors.textSecondary);
-        painter->drawText(topRect, Qt::AlignVCenter | Qt::AlignRight, tr("排队中"));
-    } else if (procStatus == screen::editor::ProcessingStatus::Running) {
-        QFont statusFont = option.font;
-        statusFont.setPixelSize(11);
-        painter->setFont(statusFont);
-        painter->setPen(colors.accentDefault);
-        painter->drawText(topRect, Qt::AlignVCenter | Qt::AlignRight, tr("处理中"));
-    } else if (procStatus == screen::editor::ProcessingStatus::NeedsReview) {
-        QFont statusFont = option.font;
-        statusFont.setPixelSize(11);
-        painter->setFont(statusFont);
-        painter->setPen(colors.systemCaution);
-        painter->drawText(topRect, Qt::AlignVCenter | Qt::AlignRight, tr("待审阅"));
-    } else if (procStatus == screen::editor::ProcessingStatus::Failed) {
-        QFont statusFont = option.font;
-        statusFont.setPixelSize(11);
-        painter->setFont(statusFont);
-        painter->setPen(colors.systemCritical);
-        painter->drawText(topRect, Qt::AlignVCenter | Qt::AlignRight, tr("失败"));
-    }
-
     QString displayName = index.data(PageListModel::DisplayNameRole).toString();
     painter->setFont(option.font);
     painter->setPen(colors.textSecondary);

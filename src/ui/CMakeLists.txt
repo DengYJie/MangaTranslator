@@ -93,6 +93,8 @@ add_library(manga_ui STATIC
     screen/settings/SettingsState.h
     screen/settings/SettingsViewModel.cpp
     screen/settings/SettingsViewModel.h
+    widget/ActivityCenter.cpp
+    widget/ActivityCenter.h
     widget/AppStatusTaskStrip.cpp
     widget/AppStatusTaskStrip.h
     widget/EditorCommandBar.cpp

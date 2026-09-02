@@ -57,7 +57,9 @@ MangaCanvas::MangaCanvas(QWidget* parent) : QGraphicsView(parent) {
     m_scene = new QGraphicsScene(this);
     setScene(m_scene);
     setDragMode(ScrollHandDrag);
-    setRenderHint(QPainter::SmoothPixmapTransform);
+    setRenderHint(QPainter::Antialiasing, true);
+    setRenderHint(QPainter::TextAntialiasing, true);
+    setRenderHint(QPainter::SmoothPixmapTransform, true);
     setFrameShape(QFrame::NoFrame);
     setAlignment(Qt::AlignCenter);
     setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
@@ -575,6 +577,7 @@ void MangaCanvas::cancelGesture() {
             if (it != m_overlays.end()) {
                 it.value()->setTransientGeometry(target.startGeometry);
             }
+            syncTextItemGeometry(target.id, target.startGeometry);
         }
     }
 
@@ -595,23 +598,20 @@ void MangaCanvas::cancelRemoveStroke() {
     viewport()->update();
 }
 
+void MangaCanvas::syncTextItemGeometry(SourceRegionId id, const SourceRectGeometry& geometry) {
+    const auto it = m_textItems.constFind(id);
+    if (it != m_textItems.constEnd() && it.value() != nullptr) {
+        it.value()->setTransientGeometry(geometry);
+    }
+}
+
 void MangaCanvas::updateRemoveCursor() {
     if ((m_tool != canvas::Tool::Remove && m_tool != canvas::Tool::Brush && m_tool != canvas::Tool::Eraser) ||
         m_spaceHeld || !viewport()) {
         viewport()->unsetCursor();
         return;
     }
-    const int radius = std::max(4, qRound(m_removeDiameter * m_zoomFactor / 2.0));
-    const int size = radius * 2 + 4;
-    QPixmap cursorPixmap(size, size);
-    cursorPixmap.fill(Qt::transparent);
-    QPainter painter(&cursorPixmap);
-    painter.setRenderHint(QPainter::Antialiasing);
-    painter.setPen(QPen(Qt::white, 2));
-    painter.drawEllipse(QPointF(size / 2.0, size / 2.0), radius, radius);
-    painter.setPen(QPen(Qt::black, 1));
-    painter.drawEllipse(QPointF(size / 2.0, size / 2.0), radius, radius);
-    viewport()->setCursor(QCursor(cursorPixmap, size / 2, size / 2));
+    viewport()->setCursor(Qt::BlankCursor);
 }
 
 void MangaCanvas::setRemoveDiameter(double diameter) {
@@ -644,19 +644,35 @@ void MangaCanvas::applyThemeColorsToItems() {
 }
 
 void MangaCanvas::wheelEvent(QWheelEvent* event) {
-    if ((event->modifiers() & Qt::AltModifier) &&
-        (m_tool == canvas::Tool::Remove || m_tool == canvas::Tool::Brush || m_tool == canvas::Tool::Eraser) &&
-        !m_spaceHeld) {
-        const int verticalDelta = event->angleDelta().y() != 0 ? event->angleDelta().y() : event->pixelDelta().y();
-        if (verticalDelta != 0) {
-            const double direction = verticalDelta > 0 ? 1.0 : -1.0;
-            setRemoveDiameter(m_removeDiameter + direction * 4.0);
+    const auto modifiers = event->modifiers() | QGuiApplication::keyboardModifiers();
+    const bool isAlt = (modifiers & Qt::AltModifier) != 0;
+    const bool isBrushTool =
+        (m_tool == canvas::Tool::Remove || m_tool == canvas::Tool::Brush || m_tool == canvas::Tool::Eraser);
+
+    if (isAlt && isBrushTool && !m_spaceHeld) {
+        int delta = event->angleDelta().y();
+        if (delta == 0) {
+            delta = event->angleDelta().x();
+        }
+        if (delta == 0) {
+            delta = event->pixelDelta().y();
+        }
+        if (delta == 0) {
+            delta = event->pixelDelta().x();
+        }
+        if (delta != 0) {
+            const double step = (m_removeDiameter < 20.0) ? 2.0 : ((m_removeDiameter < 60.0) ? 4.0 : 8.0);
+            const double direction = delta > 0 ? 1.0 : -1.0;
+            setRemoveDiameter(m_removeDiameter + direction * step);
         }
         event->accept();
         return;
     }
-    if (event->modifiers() & Qt::ControlModifier) {
+    if (modifiers & Qt::ControlModifier) {
         double delta = event->angleDelta().y();
+        if (delta == 0) {
+            delta = event->angleDelta().x();
+        }
         if (delta != 0) {
             setTransformationAnchor(QGraphicsView::AnchorUnderMouse);
             double steps = delta / 120.0;
@@ -787,18 +803,35 @@ void MangaCanvas::keyPressEvent(QKeyEvent* event) {
                         canvas::resizeRegion(it.value()->currentGeometry(), handle, delta, m_pageBounds);
                     if (result.has_value() && !result->approxEquals(it.value()->currentGeometry())) {
                         it.value()->setTransientGeometry(*result);
+                        syncTextItemGeometry(it.key(), *result);
                         Q_EMIT regionGeometryCommitted(it.key(), *result, canvas::EditKind::Resize);
                     }
                 } else {
                     const auto newGeom = canvas::moveRegion(it.value()->currentGeometry(), delta, m_pageBounds);
                     if (!newGeom.approxEquals(it.value()->currentGeometry())) {
                         it.value()->setTransientGeometry(newGeom);
+                        syncTextItemGeometry(it.key(), newGeom);
                         Q_EMIT regionGeometryCommitted(it.key(), newGeom, canvas::EditKind::Move);
                     }
                 }
                 event->accept();
                 return;
             }
+        }
+    }
+
+    if (m_tool == canvas::Tool::Remove || m_tool == canvas::Tool::Brush || m_tool == canvas::Tool::Eraser) {
+        if (event->key() == Qt::Key_BracketLeft) {
+            const double step = (m_removeDiameter <= 20.0) ? 2.0 : ((m_removeDiameter <= 60.0) ? 4.0 : 8.0);
+            setRemoveDiameter(m_removeDiameter - step);
+            event->accept();
+            return;
+        }
+        if (event->key() == Qt::Key_BracketRight) {
+            const double step = (m_removeDiameter < 20.0) ? 2.0 : ((m_removeDiameter < 60.0) ? 4.0 : 8.0);
+            setRemoveDiameter(m_removeDiameter + step);
+            event->accept();
+            return;
         }
     }
 
@@ -968,11 +1001,14 @@ void MangaCanvas::mousePressEvent(QMouseEvent* event) {
 }
 
 void MangaCanvas::mouseMoveEvent(QMouseEvent* event) {
+    m_mouseInsideCanvas = true;
+    m_currentMouseScenePos = mapToScene(event->position().toPoint());
+
     if ((m_tool == canvas::Tool::Remove || m_tool == canvas::Tool::Brush || m_tool == canvas::Tool::Eraser) &&
         m_removeStrokeActive && !m_spaceHeld) {
         const double pageWidth = static_cast<double>(m_pageBounds.width);
         const double pageHeight = static_cast<double>(m_pageBounds.height);
-        const QPointF scenePt = mapToScene(event->position().toPoint());
+        const QPointF scenePt = m_currentMouseScenePos;
         const QPointF clampedPt{
             std::clamp(scenePt.x(), 0.0, std::max(0.0, pageWidth)),
             std::clamp(scenePt.y(), 0.0, std::max(0.0, pageHeight)),
@@ -991,6 +1027,12 @@ void MangaCanvas::mouseMoveEvent(QMouseEvent* event) {
         event->accept();
         return;
     }
+
+    if (!m_removeStrokeActive &&
+        (m_tool == canvas::Tool::Remove || m_tool == canvas::Tool::Brush || m_tool == canvas::Tool::Eraser)) {
+        viewport()->update();
+    }
+
     if (!m_gesture.active) {
         if (m_tool == canvas::Tool::Select) {
             const QPointF scenePt = mapToScene(event->position().toPoint());
@@ -1092,6 +1134,7 @@ void MangaCanvas::mouseMoveEvent(QMouseEvent* event) {
             if (it != m_overlays.end()) {
                 it.value()->setTransientGeometry(*result);
             }
+            syncTextItemGeometry(m_gesture.targets.first().id, *result);
         }
         event->accept();
         return;
@@ -1121,6 +1164,7 @@ void MangaCanvas::mouseMoveEvent(QMouseEvent* event) {
         if (it != m_overlays.end()) {
             it.value()->setTransientGeometry(movedGeom);
         }
+        syncTextItemGeometry(target.id, movedGeom);
     }
     event->accept();
 }
@@ -1242,13 +1286,23 @@ void MangaCanvas::contextMenuEvent(QContextMenuEvent* event) {
     event->accept();
 }
 
+void MangaCanvas::enterEvent(QEnterEvent* event) {
+    m_mouseInsideCanvas = true;
+    m_currentMouseScenePos = mapToScene(event->position().toPoint());
+    if (m_tool == canvas::Tool::Remove || m_tool == canvas::Tool::Brush || m_tool == canvas::Tool::Eraser) {
+        viewport()->update();
+    }
+    QGraphicsView::enterEvent(event);
+}
+
 void MangaCanvas::leaveEvent(QEvent* event) {
     if (auto previous = m_overlays.find(m_hoveredRegionId); previous != m_overlays.end()) {
         previous.value()->setHovered(false);
     }
     m_hoveredRegionId = {};
+    m_mouseInsideCanvas = false;
     if (m_tool == canvas::Tool::Remove || m_tool == canvas::Tool::Brush || m_tool == canvas::Tool::Eraser) {
-        updateRemoveCursor();
+        viewport()->update();
     } else {
         viewport()->setCursor(Qt::ArrowCursor);
     }
@@ -1268,6 +1322,30 @@ void MangaCanvas::resizeEvent(QResizeEvent* event) {
 
 void MangaCanvas::drawForeground(QPainter* painter, const QRectF& rect) {
     QGraphicsView::drawForeground(painter, rect);
+
+    // Draw real-time brush circle cursor on canvas (Koharu canvas overlay style)
+    if (m_mouseInsideCanvas && !m_spaceHeld && !m_removeStrokeActive &&
+        (m_tool == canvas::Tool::Remove || m_tool == canvas::Tool::Brush || m_tool == canvas::Tool::Eraser)) {
+        painter->save();
+        painter->setRenderHint(QPainter::Antialiasing);
+
+        const double radius = m_removeDiameter / 2.0;
+
+        // Outer contrast drop shadow / dark ring
+        QPen shadowPen(QColor(0, 0, 0, 160), 2.5);
+        shadowPen.setCosmetic(true);
+        painter->setPen(shadowPen);
+        painter->setBrush(Qt::NoBrush);
+        painter->drawEllipse(m_currentMouseScenePos, radius, radius);
+
+        // Inner bright white circle
+        QPen circlePen(Qt::white, 1.2);
+        circlePen.setCosmetic(true);
+        painter->setPen(circlePen);
+        painter->drawEllipse(m_currentMouseScenePos, radius, radius);
+
+        painter->restore();
+    }
 
     if (m_removeStrokeActive &&
         (m_tool == canvas::Tool::Remove || m_tool == canvas::Tool::Brush || m_tool == canvas::Tool::Eraser) &&

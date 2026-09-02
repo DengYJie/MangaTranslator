@@ -1,5 +1,6 @@
 #include "ui/widget/InspectorPanel.h"
 
+#include "rendering/FontRegistry.h"
 #include "ui/widget/TransparentScrollView.h"
 
 #include <FluentQt/BasicInput.h>
@@ -142,10 +143,6 @@ void InspectorPanel::setOcrAvailability(bool available, const QString& unavailab
 void InspectorPanel::setTranslationAvailability(bool available, const QString& unavailableReason) {
     m_translationAvailable = available;
     m_translationUnavailableReason = available ? QString() : unavailableReason;
-    if (m_singleTranslateButton != nullptr) {
-        m_singleTranslateButton->setEnabled(available && m_mode == screen::editor::InspectorMode::Single);
-        m_singleTranslateButton->setToolTip(available ? tr("使用当前 AI 服务重新翻译") : tr("请先配置 AI 翻译服务"));
-    }
     updateTranslationInfoBar();
 }
 
@@ -300,8 +297,8 @@ QWidget* InspectorPanel::buildContentHost() {
     sourceField->setLabelText(tr("原文"));
     m_sourceEdit = new TextEdit();
     m_sourceEdit->setObjectName(QStringLiteral("inspectorSourceEdit"));
-    m_sourceEdit->setMinVisibleLines(2);
-    m_sourceEdit->setMaxVisibleLines(5);
+    m_sourceEdit->setMinVisibleLines(1);
+    m_sourceEdit->setMaxVisibleLines(6);
     m_sourceEdit->setAccessibleName(tr("原文"));
     sourceField->setEditor(m_sourceEdit, fluent::WidgetOwnership::Owned);
     translationLayout->addWidget(sourceField);
@@ -311,17 +308,12 @@ QWidget* InspectorPanel::buildContentHost() {
         }
     });
 
-    m_sourceMetaLabel = new Label();
-    m_sourceMetaLabel->setObjectName(QStringLiteral("inspectorSourceMeta"));
-    m_sourceMetaLabel->setTextColorRole(Label::TextColorRole::Secondary);
-    translationLayout->addWidget(m_sourceMetaLabel);
-
     auto* translationField = new Field();
     translationField->setLabelText(tr("译文"));
     m_translationEdit = new TextEdit();
     m_translationEdit->setObjectName(QStringLiteral("inspectorTranslationEdit"));
-    m_translationEdit->setMinVisibleLines(2);
-    m_translationEdit->setMaxVisibleLines(5);
+    m_translationEdit->setMinVisibleLines(1);
+    m_translationEdit->setMaxVisibleLines(6);
     m_translationEdit->setAccessibleName(tr("译文"));
     translationField->setEditor(m_translationEdit, fluent::WidgetOwnership::Owned);
     translationLayout->addWidget(translationField);
@@ -337,11 +329,6 @@ QWidget* InspectorPanel::buildContentHost() {
             inner->installEventFilter(this);
         }
     }
-
-    m_translationMetaLabel = new Label();
-    m_translationMetaLabel->setObjectName(QStringLiteral("inspectorTranslationMeta"));
-    m_translationMetaLabel->setTextColorRole(Label::TextColorRole::Secondary);
-    translationLayout->addWidget(m_translationMetaLabel);
 
     m_candidatesExpander = new Expander();
     m_candidatesExpander->setObjectName(QStringLiteral("inspectorCandidatesExpander"));
@@ -363,25 +350,6 @@ QWidget* InspectorPanel::buildContentHost() {
     candidatesLayout->addWidget(m_adoptCandidateButton);
     m_candidatesExpander->setContentWidget(candidatesContent, fluent::WidgetOwnership::Owned);
     translationLayout->addWidget(m_candidatesExpander);
-
-    auto* singleActionsRow = new QWidget();
-    auto* singleActionsLayout = new QHBoxLayout(singleActionsRow);
-    singleActionsLayout->setContentsMargins(0, 4, 0, 4);
-    singleActionsLayout->setSpacing(8);
-    singleActionsLayout->addStretch(1);
-    m_singleTranslateButton = new Button(tr("AI 重译"));
-    m_singleTranslateButton->setObjectName(QStringLiteral("inspectorSingleTranslate"));
-    m_singleTranslateButton->setFluentStyle(Button::Accent);
-    m_singleTranslateButton->setToolTip(tr("使用当前 AI 服务重新翻译"));
-    m_singleTranslateButton->setAccessibleName(tr("AI 重译"));
-    singleActionsLayout->addWidget(m_singleTranslateButton);
-    translationLayout->addWidget(singleActionsRow);
-
-    connect(m_singleTranslateButton, &Button::clicked, this, [this]() {
-        if (m_currentPageId.isValid() && !m_currentRegionIds.isEmpty()) {
-            Q_EMIT translateRequested(m_currentPageId, m_currentRegionIds);
-        }
-    });
 
     connect(m_candidatesList, &QListWidget::currentRowChanged, this, [this](int row) {
         m_adoptCandidateButton->setEnabled(row >= 0);
@@ -423,12 +391,13 @@ QWidget* InspectorPanel::buildContentHost() {
     m_fontFamilyCombo = new ComboBox(fontFamilyField);
     m_fontFamilyCombo->setObjectName(QStringLiteral("inspectorFontFamily"));
     m_fontFamilyCombo->setEditable(true);
-    m_fontFamilyCombo->addItems({QStringLiteral("Sans-Serif"),
-                                 QStringLiteral("Serif"),
-                                 QStringLiteral("Monospace"),
-                                 QStringLiteral("Microsoft YaHei"),
-                                 QStringLiteral("SimSun"),
-                                 QStringLiteral("KaiTi")});
+
+    const QStringList availableFonts = rendering::FontRegistry::availableFontFamilies();
+    if (!availableFonts.isEmpty()) {
+        m_fontFamilyCombo->addItems(availableFonts);
+    } else {
+        m_fontFamilyCombo->addItem(rendering::FontRegistry::defaultFontFamily());
+    }
     fontFamilyField->setEditor(m_fontFamilyCombo, fluent::WidgetOwnership::Owned);
     row1Layout->addWidget(fontFamilyField, 1);
 
@@ -473,7 +442,7 @@ QWidget* InspectorPanel::buildContentHost() {
     m_fontSizeField->setLabelText(tr("字号"));
     m_fontSizeBox = new NumberBox(m_fontSizeField);
     m_fontSizeBox->setObjectName(QStringLiteral("inspectorFontSize"));
-    m_fontSizeBox->setRange(6.0, 72.0);
+    m_fontSizeBox->setRange(6.0, 256.0);
     m_fontSizeBox->setDisplayPrecision(1);
     m_fontSizeBox->setSpinButtonPlacementMode(NumberBox::SpinButtonPlacementMode::Compact);
     m_fontSizeField->setEditor(m_fontSizeBox, fluent::WidgetOwnership::Owned);
@@ -762,9 +731,7 @@ void InspectorPanel::populateNone() {
 
     // Reset fields to placeholders
     setTextPreservingCursor(m_sourceEdit, QString());
-    m_sourceMetaLabel->clear();
     setTextPreservingCursor(m_translationEdit, QString());
-    m_translationMetaLabel->clear();
     m_candidatesList->clear();
     m_candidatesExpander->setVisible(false);
     m_adoptCandidateButton->setEnabled(false);
@@ -816,9 +783,7 @@ void InspectorPanel::populateMulti(const screen::editor::MultiRegionInspectorSta
 
     // Reset translation fields while hidden
     setTextPreservingCursor(m_sourceEdit, QString());
-    m_sourceMetaLabel->clear();
     setTextPreservingCursor(m_translationEdit, QString());
-    m_translationMetaLabel->clear();
     m_candidatesList->clear();
     m_candidatesExpander->setVisible(false);
     m_adoptCandidateButton->setEnabled(false);
@@ -965,26 +930,7 @@ void InspectorPanel::populateSingle(const screen::editor::SingleRegionInspectorS
     m_currentRegionIds = {state.regionId};
 
     setTextPreservingCursor(m_sourceEdit, state.sourceText);
-    switch (state.sourceType) {
-        case domain::TextSourceType::OcrAuto:
-            m_sourceMetaLabel->setText(tr("OCR 识别 · 置信度 %1").arg(percentText(state.sourceConfidence)));
-            break;
-        case domain::TextSourceType::OcrManualModified:
-            m_sourceMetaLabel->setText(tr("OCR 识别（已人工修改）"));
-            break;
-        case domain::TextSourceType::PureManual:
-            m_sourceMetaLabel->setText(tr("人工输入"));
-            break;
-    }
-
     setTextPreservingCursor(m_translationEdit, state.manualTranslation);
-    if (state.hasManualTranslation) {
-        m_translationMetaLabel->setText(tr("生效译文：人工译文"));
-    } else if (!state.effectiveTranslation.isEmpty()) {
-        m_translationMetaLabel->setText(tr("生效译文：%1").arg(state.effectiveTranslation));
-    } else {
-        m_translationMetaLabel->setText(tr("尚无译文"));
-    }
 
     m_candidatesList->clear();
     for (const auto& candidate : state.candidates) {
@@ -1048,7 +994,6 @@ void InspectorPanel::populateSingle(const screen::editor::SingleRegionInspectorS
 void InspectorPanel::setLockedEditing(bool locked) {
     m_sourceEdit->setReadOnly(locked);
     m_translationEdit->setReadOnly(locked);
-    m_singleTranslateButton->setEnabled(!locked && m_translationAvailable);
     m_candidatesList->setEnabled(!locked);
     m_adoptCandidateButton->setEnabled(!locked && m_candidatesList->currentRow() >= 0);
     m_fontFamilyCombo->setEnabled(!locked);

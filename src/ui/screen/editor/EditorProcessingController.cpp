@@ -521,8 +521,10 @@ void EditorProcessingController::recognizeRegion(const domain::PageId& pageId, c
     request.pageId = pageId;
     request.regionId = regionId;
     request.rect = region->geometry();
-    request.language = domain::languages::Japanese;
     request.image = m_viewModel->currentPageImage();
+    if (project) {
+        request.language = project->sourceLanguage();
+    }
     if (request.image.isNull()) {
         qWarning().noquote() << "[OCR] rejected: current page image unavailable page="
                              << QString::fromStdString(pageId.toString());
@@ -997,7 +999,7 @@ void EditorProcessingController::layoutRegion(const domain::PageId& pageId, cons
         request.text = QStringLiteral("Sample");
     }
     request.bounds = region->geometry();
-    request.logicalDpi = 96.0;
+    request.logicalDpi = 72.0;
 
     application::OperationDescriptor desc;
     desc.projectId = projectId;

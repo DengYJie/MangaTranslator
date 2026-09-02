@@ -2,6 +2,8 @@
 
 #include "ui/window/NavigationWindow.h"
 
+#include <FluentQt/TextFields.h>
+
 namespace manga::application {
 class IAppSettingsStore;
 }
@@ -26,6 +28,10 @@ public:
     [[nodiscard]] widget::AppStatusTaskStrip* statusStrip() const noexcept {
         return m_statusStrip;
     }
+
+    /// Sets or clears current document/project name and page number display in title bar.
+    void setProjectTitleInfo(const QString& projectName, int currentPage, int totalPages, bool isDirty = false);
+    void clearProjectTitleInfo();
 
     /// Wires the controller to the title bar and panel intents. Non-owning.
     void setNavigationController(navigation::NavigationController* controller);
@@ -55,6 +61,7 @@ private:
     application::IAppSettingsStore* m_settingsStore;         // non-owning
     navigation::NavigationController* m_controller{nullptr}; // non-owning
     widget::AppStatusTaskStrip* m_statusStrip{nullptr};
+    fluent::textfields::Label* m_projectTitleLabel{nullptr};
     bool m_forceClose{false};
 };
 

@@ -139,6 +139,12 @@ void ImportPage::setupUi() {
     m_infoBar = new fluent::status_info::InfoBar(this);
     m_infoBar->setIsOpen(false);
     m_infoBar->setIsClosable(true);
+    m_infoBar->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
+    m_infoBar->setCornerRadius(8);
+    m_infoBar->setContentMargins(QMargins(14, 10, 14, 10));
+    m_infoBar->setIconTextSpacing(12);
+    m_infoBar->setTitleMessageSpacing(8);
+    m_infoBar->setSeverityIconSize(20);
     rootLayout->addWidget(m_infoBar);
 
     m_progressBar = new fluent::status_info::ProgressBar(this);

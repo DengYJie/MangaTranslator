@@ -84,23 +84,38 @@ public:
         return m_operationModel;
     }
 
-    [[nodiscard]] Section highestPrioritySection() const;
-    [[nodiscard]] QString activeTaskSummaryText() const;
+    [[nodiscard]] Section highestPrioritySection() const {
+        return Section::Document;
+    }
+    [[nodiscard]] QString activeTaskSummaryText() const {
+        return m_message;
+    }
     [[nodiscard]] bool hasCompletionSummary() const noexcept {
-        return m_hasCompletionSummary;
+        return false;
     }
     [[nodiscard]] bool isFlyoutOpen() const noexcept {
-        return !m_taskFlyout.isNull();
+        return false;
     }
 
-    void openTaskFlyout();
-    void closeTaskFlyout();
+    void openTaskFlyout() {}
+    void closeTaskFlyout() {}
+
+    /// Displays a transient informational message in the status strip that automatically disappears after timeoutMs
+    /// (default 3 seconds).
+    void showMessage(const QString& message, int timeoutMs = 3000);
+    void clearMessage();
+    [[nodiscard]] QString currentMessage() const {
+        return m_message;
+    }
+    [[nodiscard]] bool hasMessage() const {
+        return !m_message.isEmpty();
+    }
 
     // Test hooks
-    void settleCompletionSummaryForTest();
-    void triggerActiveTaskClickForTest();
-    void triggerCancelTaskForTest(const application::OperationId& id);
-    void triggerDocumentStatusClickForTest();
+    void settleCompletionSummaryForTest() {}
+    void triggerActiveTaskClickForTest() {}
+    void triggerCancelTaskForTest(const application::OperationId&) {}
+    void triggerDocumentStatusClickForTest() {}
 
     [[nodiscard]] QSize sizeHint() const override;
     [[nodiscard]] QSize minimumSizeHint() const override;
@@ -116,32 +131,14 @@ Q_SIGNALS:
 protected:
     bool event(QEvent* event) override;
     void paintEvent(QPaintEvent* event) override;
-    void resizeEvent(QResizeEvent* event) override;
-    void mousePressEvent(QMouseEvent* event) override;
 
 private:
-    bool hasVisibleStatusContent() const;
-    void updateResponsiveLayout();
-    void checkTaskCompletionTransitions(const QVector<application::OperationSnapshot>& newOperations);
-    void updateActiveTaskProjection();
-
     DocumentStatusSnapshot m_docStatus;
     EnvironmentStatusSnapshot m_envStatus;
     model::OperationListModel* m_operationModel{nullptr};
 
-    std::optional<application::OperationSnapshot> m_primaryActiveTask;
-    int m_activeTaskCount{0};
-    bool m_hasCompletionSummary{false};
-    QString m_completionText;
-    QTimer* m_completionTimer{nullptr};
-
-    QPointer<fluent::dialogs_flyouts::Flyout> m_taskFlyout;
-
-    // Hotspot regions for click handling
-    QRect m_docHotspot;
-    QRect m_taskHotspot;
-    QRect m_envHotspot;
-    QRect m_menuBtnHotspot;
+    QString m_message;
+    QTimer* m_messageTimer{nullptr};
 };
 
 } // namespace manga::ui::widget

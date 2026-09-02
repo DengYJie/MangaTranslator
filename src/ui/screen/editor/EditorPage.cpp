@@ -5,6 +5,7 @@
 #include "ui/screen/editor/EditorState.h"
 #include "ui/screen/editor/EditorViewModel.h"
 #include "ui/screen/editor/InspectorState.h"
+#include "ui/widget/ActivityCenter.h"
 #include "ui/widget/EditorCommandBar.h"
 #include "ui/widget/InspectorPanel.h"
 #include "ui/widget/PageListModel.h"
@@ -437,7 +438,7 @@ void EditorPage::buildUi() {
                   tr("平移画布 (H)"),
                   CanvasTool::Pan);
     addCanvasTool(QStringLiteral("canvasTextButton"),
-                  Typography::Icons::glyph(QStringLiteral("ic_fluent_scan_text_20_regular")),
+                  Typography::Icons::glyph(QStringLiteral("ic_fluent_text_add_t_20_regular")),
                   tr("文本 (T)"),
                   CanvasTool::Text);
     addCanvasTool(QStringLiteral("canvasBrushButton"),
@@ -445,7 +446,7 @@ void EditorPage::buildUi() {
                   tr("画笔 (B)"),
                   CanvasTool::Brush);
     addCanvasTool(QStringLiteral("canvasEraserButton"),
-                  Typography::Icons::glyph(QStringLiteral("ic_fluent_delete_20_regular")),
+                  Typography::Icons::glyph(QStringLiteral("ic_fluent_eraser_20_regular")),
                   tr("橡皮擦 (E)"),
                   CanvasTool::Eraser);
     addCanvasTool(QStringLiteral("canvasRemoveButton"),
@@ -461,10 +462,10 @@ void EditorPage::buildUi() {
     m_removeBrushSeparator->setVisible(false);
     toolLayout->addWidget(m_removeBrushSeparator);
 
-    m_removeBrushSizeButton = new fluent::basicinput::Button(QStringLiteral("48"), toolRail);
+    m_removeBrushSizeButton = new fluent::basicinput::Button(QStringLiteral("32"), toolRail);
     m_removeBrushSizeButton->setObjectName(QStringLiteral("canvasRemoveBrushSizeButton"));
-    m_removeBrushSizeButton->setAccessibleName(tr("%1 像素").arg(48));
-    m_removeBrushSizeButton->setToolTip(tr("%1 像素").arg(48));
+    m_removeBrushSizeButton->setAccessibleName(tr("%1 像素").arg(32));
+    m_removeBrushSizeButton->setToolTip(tr("%1 像素").arg(32));
     m_removeBrushSizeButton->setFluentStyle(fluent::basicinput::Button::Subtle);
     m_removeBrushSizeButton->setFixedSize(44, 32);
     m_removeBrushSizeButton->setVisible(false);
@@ -540,6 +541,9 @@ void EditorPage::buildUi() {
     });
 
     toolRail->move(12, 12);
+
+    m_activityCenter = new widget::ActivityCenter(this);
+    connect(m_activityCenter, &widget::ActivityCenter::cancelRequested, this, &EditorPage::cancelOperationRequested);
 
     m_canvasStatusBar = new QWidget(canvasPaneCard);
     m_canvasStatusBar->setObjectName(QStringLiteral("editorCanvasStatusBar"));
@@ -855,6 +859,9 @@ void EditorPage::keyPressEvent(QKeyEvent* event) {
 
 void EditorPage::resizeEvent(QResizeEvent* event) {
     base::BasePage::resizeEvent(event);
+    if (m_activityCenter != nullptr) {
+        m_activityCenter->updateParentGeometry(size());
+    }
 }
 
 void EditorPage::render(const EditorState& state) {
@@ -979,7 +986,7 @@ void EditorPage::render(const EditorState& state) {
         display.layout = rp.layout;
         display.enabled = rp.isEnabled;
         display.visible = rp.isTranslationVisible;
-        display.logicalDpi = 96.0;
+        display.logicalDpi = 72.0;
         textLayers.append(display);
     }
     m_canvas->setTextLayers(textLayers);
@@ -1053,6 +1060,12 @@ void EditorPage::handlePlaceholderAction() {
             break;
         default:
             break;
+    }
+}
+
+void EditorPage::setOperations(const QVector<application::OperationSnapshot>& operations) {
+    if (m_activityCenter != nullptr) {
+        m_activityCenter->setOperations(operations);
     }
 }
 

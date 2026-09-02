@@ -179,7 +179,7 @@ struct EditorState {
     CanvasTool activeTool{CanvasTool::Select};
     /// Current brush color and diameter.
     QColor brushColor{17, 17, 17, 255};
-    double brushDiameter{48.0};
+    double brushDiameter{32.0};
     /// Page preview mode.
     PreviewMode previewMode{PreviewMode::Translated};
     /// Inspector mode derived from selection count.

@@ -73,7 +73,7 @@ void EditorCommandBar::buildUi() {
                                    tr("平移工具 (H)"),
                                    QStringLiteral("panButton"));
     m_panButton->setCheckable(true);
-    m_textButton = createIconButton(Typography::Icons::glyph(QStringLiteral("ic_fluent_scan_text_20_regular")),
+    m_textButton = createIconButton(Typography::Icons::glyph(QStringLiteral("ic_fluent_text_add_t_20_regular")),
                                     tr("文本 (T)"),
                                     QStringLiteral("textButton"));
     m_textButton->setCheckable(true);
@@ -96,11 +96,6 @@ void EditorCommandBar::buildUi() {
     m_smartTranslateButton->setFluentStyle(fluent::basicinput::Button::Accent);
     m_smartTranslateButton->setFluentLayout(fluent::basicinput::Button::IconBefore);
     m_smartTranslateButton->setMinimumWidth(112);
-    m_adoptButton = createIconButton(Typography::Icons::CheckMark, tr("采纳建议"), QStringLiteral("adoptButton"));
-    m_adoptButton->setFluentStyle(fluent::basicinput::Button::Accent);
-    m_adoptButton->setVisible(false);
-    m_rejectButton = createIconButton(Typography::Icons::Cancel, tr("拒绝建议"), QStringLiteral("rejectButton"));
-    m_rejectButton->setVisible(false);
     m_pagePaneToggleButton =
         createIconButton(Typography::Icons::glyph(QStringLiteral("ic_fluent_panel_left_text_20_regular")),
                          tr("页面列表"),
@@ -130,8 +125,6 @@ void EditorCommandBar::buildUi() {
     m_fitToPageOverflowAction = addOverflowAction(tr("适应页面"), m_fitToPageButton);
     m_actualSizeOverflowAction = addOverflowAction(tr("实际大小"), m_actualSizeButton);
     m_previewOverflowAction = addOverflowAction(tr("切换原图/译文预览"), m_previewSelectorButton);
-    m_adoptOverflowAction = addOverflowAction(tr("采纳建议"), m_adoptButton);
-    m_rejectOverflowAction = addOverflowAction(tr("拒绝建议"), m_rejectButton);
     connect(m_overflowButton, &fluent::basicinput::Button::clicked, this, [this]() {
         m_overflowMenu->exec(m_overflowButton->mapToGlobal(QPoint(0, m_overflowButton->height())));
     });
@@ -165,7 +158,7 @@ void EditorCommandBar::buildUi() {
     addGroup({m_undoButton, m_redoButton});
     m_previewSelectorButton->hide();
     m_previewOverflowAction->setVisible(false);
-    addGroup({m_ocrButton, m_smartTranslateButton, m_adoptButton, m_rejectButton});
+    addGroup({m_ocrButton, m_smartTranslateButton});
     layout->addStretch();
     addGroup({m_pagePaneToggleButton, m_inspectorPaneToggleButton});
     addGroup({m_overflowButton});
@@ -204,25 +197,13 @@ void EditorCommandBar::buildUi() {
     connect(m_smartTranslateButton, &fluent::basicinput::Button::clicked, this, [this]() {
         if (auto* ctrl = m_viewModel->processingController()) {
             const auto& state = m_viewModel->state();
-            if (state.processing.isRunning) {
-                ctrl->cancelPageOperations(state.currentPageId);
-            } else if (state.currentPageId.isValid()) {
+            if (!state.processing.isRunning && state.currentPageId.isValid()) {
                 if (state.selectedRegionIds.isEmpty()) {
                     ctrl->smartTranslatePage(state.currentPageId);
                 } else {
                     ctrl->smartTranslateRegions(state.currentPageId, state.selectedRegionIds);
                 }
             }
-        }
-    });
-    connect(m_adoptButton, &fluent::basicinput::Button::clicked, this, [this]() {
-        if (auto* ctrl = m_viewModel->processingController()) {
-            ctrl->adoptProposal(m_viewModel->state().currentPageId);
-        }
-    });
-    connect(m_rejectButton, &fluent::basicinput::Button::clicked, this, [this]() {
-        if (auto* ctrl = m_viewModel->processingController()) {
-            ctrl->rejectProposal(m_viewModel->state().currentPageId);
         }
     });
     connect(m_pagePaneToggleButton, &fluent::basicinput::Button::clicked, this, [this]() {
@@ -274,8 +255,6 @@ void EditorCommandBar::updateResponsiveLayout() {
     const bool narrow = width() < 720;
     Q_UNUSED(narrow);
     m_previewSelectorButton->setVisible(false);
-    m_adoptButton->setVisible(m_hasProposal);
-    m_rejectButton->setVisible(m_hasProposal);
     m_overflowButton->setVisible(overflowActive);
 
     m_zoomOutOverflowAction->setVisible(narrow);
@@ -283,8 +262,6 @@ void EditorCommandBar::updateResponsiveLayout() {
     m_fitToPageOverflowAction->setVisible(overflowActive);
     m_actualSizeOverflowAction->setVisible(overflowActive);
     m_previewOverflowAction->setVisible(false);
-    m_adoptOverflowAction->setVisible(overflowActive && m_hasProposal);
-    m_rejectOverflowAction->setVisible(overflowActive && m_hasProposal);
 
     // Zoom and tool controls live on the canvas surfaces, not in this row.
     m_zoomOutButton->hide();
@@ -350,36 +327,38 @@ void EditorCommandBar::render(const EditorState& state) {
                                                  : tr("OCR 模型不可用，请先在设置 > OCR 中配置模型"));
     m_ocrButton->setAccessibleName(state.isOcrAvailable ? tr("重新 OCR") : tr("重新 OCR（不可用）"));
 
+    const QString defaultTranslateText = state.selectedRegionIds.isEmpty() ? tr("运行当前页") : tr("运行所选区域");
+
     if (state.processing.isRunning) {
-        m_smartTranslateButton->setEnabled(true);
-        m_smartTranslateButton->setText(tr("停止"));
-        m_smartTranslateButton->setIconGlyph(Typography::Icons::Cancel, Typography::IconSize::Standard);
-        m_smartTranslateButton->setToolTip(tr("取消处理"));
-        m_smartTranslateButton->setAccessibleName(tr("取消处理"));
+        m_smartTranslateButton->setEnabled(false);
+        m_smartTranslateButton->setText(tr("处理中..."));
+        m_smartTranslateButton->setIconGlyph(Typography::Icons::glyph(QStringLiteral("ic_fluent_translate_20_regular")),
+                                             Typography::IconSize::Standard);
+        m_smartTranslateButton->setToolTip(tr("正在处理中，可在右下角查看进度"));
+        m_smartTranslateButton->setAccessibleName(tr("处理中"));
     } else if (!state.isTranslationAvailable) {
         m_smartTranslateButton->setEnabled(false);
-        m_smartTranslateButton->setText(tr("运行翻译"));
+        m_smartTranslateButton->setText(defaultTranslateText);
         m_smartTranslateButton->setIconGlyph(Typography::Icons::glyph(QStringLiteral("ic_fluent_translate_20_regular")),
                                              Typography::IconSize::Standard);
         m_smartTranslateButton->setToolTip(state.translationUnavailableReason);
         m_smartTranslateButton->setAccessibleName(tr("智能翻译（未配置）"));
     } else if (hasPage && !hasRegions) {
         m_smartTranslateButton->setEnabled(false);
-        m_smartTranslateButton->setText(tr("运行翻译"));
+        m_smartTranslateButton->setText(defaultTranslateText);
         m_smartTranslateButton->setIconGlyph(Typography::Icons::glyph(QStringLiteral("ic_fluent_translate_20_regular")),
                                              Typography::IconSize::Standard);
         m_smartTranslateButton->setToolTip(tr("当前页无文本区域，请先创建或检测区域"));
         m_smartTranslateButton->setAccessibleName(tr("智能翻译 (当前页无文本区域)"));
     } else {
         m_smartTranslateButton->setEnabled(hasPage && hasRegions);
-        m_smartTranslateButton->setText(state.selectedRegionIds.isEmpty() ? tr("运行当前页") : tr("运行所选区域"));
+        m_smartTranslateButton->setText(defaultTranslateText);
         m_smartTranslateButton->setIconGlyph(Typography::Icons::glyph(QStringLiteral("ic_fluent_translate_20_regular")),
                                              Typography::IconSize::Standard);
         m_smartTranslateButton->setToolTip(tr("智能翻译 (Ctrl+T)"));
         m_smartTranslateButton->setAccessibleName(tr("智能翻译"));
     }
 
-    m_hasProposal = state.processing.hasProposal;
     updateResponsiveLayout();
 }
 

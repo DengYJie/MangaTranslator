@@ -180,6 +180,7 @@ protected:
     void mouseReleaseEvent(QMouseEvent* event) override;
     void mouseDoubleClickEvent(QMouseEvent* event) override;
     void contextMenuEvent(QContextMenuEvent* event) override;
+    void enterEvent(QEnterEvent* event) override;
     void leaveEvent(QEvent* event) override;
 
 private:
@@ -199,6 +200,7 @@ private:
     void cancelGesture();
     void cancelRemoveStroke();
     void updateRemoveCursor();
+    void syncTextItemGeometry(SourceRegionId id, const SourceRectGeometry& geometry);
 
     /// Propagates resolved FluentQt semantic colors to overlay items and the creation box.
     void applyThemeColorsToItems();
@@ -248,10 +250,12 @@ private:
     GestureState m_gesture;
     QVector<QPointF> m_removeStroke;
     bool m_removeStrokeActive{false};
-    double m_removeDiameter{48.0};
+    double m_removeDiameter{32.0};
     QColor m_brushColor{17, 17, 17, 255};
     bool m_spaceHeld{false};
     SourceRegionId m_hoveredRegionId{};
+    QPointF m_currentMouseScenePos{};
+    bool m_mouseInsideCanvas{false};
 };
 
 } // namespace manga::ui::manga

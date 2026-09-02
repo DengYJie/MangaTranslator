@@ -1294,6 +1294,10 @@ void EditorViewModel::createTextBox(const domain::RectGeometry& geometry) {
     createTextRegion(geometry, std::move(layout));
 }
 
+void EditorViewModel::createRegion(const domain::RectGeometry& geometry, domain::TextLayout layout) {
+    createTextRegion(geometry, std::move(layout));
+}
+
 void EditorViewModel::createTextRegion(const domain::RectGeometry& geometry, domain::TextLayout layout) {
     if (!m_hasSession || !m_undoStack || !m_commandContext || !m_state.currentPageId.isValid()) {
         return;

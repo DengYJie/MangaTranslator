@@ -101,8 +101,6 @@ private:
     fluent::basicinput::Button* m_previewSelectorButton{nullptr};
     fluent::basicinput::Button* m_ocrButton{nullptr};
     fluent::basicinput::Button* m_smartTranslateButton{nullptr};
-    fluent::basicinput::Button* m_adoptButton{nullptr};
-    fluent::basicinput::Button* m_rejectButton{nullptr};
     fluent::basicinput::Button* m_pagePaneToggleButton{nullptr};
     fluent::basicinput::Button* m_inspectorPaneToggleButton{nullptr};
     fluent::basicinput::Button* m_saveButton{nullptr};
@@ -113,12 +111,9 @@ private:
     QAction* m_fitToPageOverflowAction{nullptr};
     QAction* m_actualSizeOverflowAction{nullptr};
     QAction* m_previewOverflowAction{nullptr};
-    QAction* m_adoptOverflowAction{nullptr};
-    QAction* m_rejectOverflowAction{nullptr};
     QVector<QWidget*> m_commandGroups;
     QVector<QFrame*> m_commandSeparators;
     bool m_overflowActive{false};
-    bool m_hasProposal{false};
     fluent::basicinput::Button* m_exportButton{nullptr};
     QMenu* m_exportMenu{nullptr};
     QAction* m_exportCurrentPageAction{nullptr};

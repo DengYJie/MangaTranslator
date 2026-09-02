@@ -131,7 +131,7 @@ ExportSnapshotBuilder::execute(const Request& request, const application::Operat
 
     const domain::ProjectId projectId = m_project->id();
     const QString projectRoot = request.projectRoot.trimmed();
-    const double logicalDpi = request.logicalDpi > 0.0 ? request.logicalDpi : 96.0;
+    const double logicalDpi = request.logicalDpi > 0.0 ? request.logicalDpi : 72.0;
 
     auto promise = std::make_shared<QPromise<application::Result<QVector<application::ExportPageSnapshot>>>>();
     promise->start();
@@ -140,7 +140,7 @@ ExportSnapshotBuilder::execute(const Request& request, const application::Operat
     struct BuilderState {
         domain::ProjectId projectId;
         QString projectRoot;
-        double logicalDpi{96.0};
+        double logicalDpi{72.0};
         application::OperationContext context;
         application::IPageImageLoader* loader{nullptr};
         application::IDerivedAssetStore* derivedStore{nullptr};

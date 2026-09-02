@@ -138,9 +138,7 @@ private:
     fluent::status_info::InfoBar* m_translationInfoBar{nullptr};
     fluent::basicinput::Button* m_translationSettingsButton{nullptr};
     fluent::textfields::TextEdit* m_sourceEdit{nullptr};
-    fluent::textfields::Label* m_sourceMetaLabel{nullptr};
     fluent::textfields::TextEdit* m_translationEdit{nullptr};
-    fluent::textfields::Label* m_translationMetaLabel{nullptr};
     fluent::layout::Expander* m_candidatesExpander{nullptr};
     QListWidget* m_candidatesList{nullptr};
     fluent::basicinput::Button* m_adoptCandidateButton{nullptr};
@@ -174,8 +172,6 @@ private:
     fluent::textfields::LineEdit* m_strokeColorHexEdit{nullptr};
     fluent::layout::Field* m_strokeWidthField{nullptr};
     fluent::textfields::NumberBox* m_strokeWidthBox{nullptr};
-
-    fluent::basicinput::Button* m_singleTranslateButton{nullptr};
 
     bool m_ocrAvailable{true};
     QString m_ocrUnavailableReason;

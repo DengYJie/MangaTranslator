@@ -38,6 +38,24 @@ void MangaTextItem::setDisplay(const TextLayerDisplay& display) {
     }
 }
 
+void MangaTextItem::setTransientGeometry(const domain::RectGeometry& geometry) {
+    if (m_display.geometry.approxEquals(geometry)) {
+        return;
+    }
+
+    const bool sizeChanged = m_display.geometry.width != geometry.width || m_display.geometry.height != geometry.height;
+    if (sizeChanged) {
+        prepareGeometryChange();
+    }
+
+    m_display.geometry = geometry;
+    setPos(QPointF(geometry.x, geometry.y));
+    if (sizeChanged) {
+        updateLayout();
+    }
+    update();
+}
+
 void MangaTextItem::setLogicalDpi(double logicalDpi) {
     if (m_display.logicalDpi == logicalDpi) {
         return;
@@ -62,6 +80,8 @@ void MangaTextItem::paint(QPainter* painter, const QStyleOptionGraphicsItem* opt
         return;
     }
 
+    painter->setRenderHint(QPainter::Antialiasing, true);
+    painter->setRenderHint(QPainter::TextAntialiasing, true);
     rendering::TextRasterizer::draw(*painter, m_cachedLayout, m_display.logicalDpi);
 }
 

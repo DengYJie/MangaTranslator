@@ -205,9 +205,6 @@ private Q_SLOTS:
         QVERIFY(infoBar->isOpen());
         QCOMPARE(infoBar->severity(), fluent::status_info::InfoBar::Warning);
         QVERIFY(infoBar->message().contains(QStringLiteral("尚未配置")));
-        auto* translate = panel.findChild<fluent::basicinput::Button*>(QStringLiteral("inspectorSingleTranslate"));
-        QVERIFY(translate != nullptr);
-        QVERIFY(!translate->isEnabled());
 
         QSignalSpy settingsSpy(&panel, &InspectorPanel::translationSettingsRequested);
         auto* settings = panel.findChild<fluent::basicinput::Button*>(QStringLiteral("inspectorTranslationSettings"));

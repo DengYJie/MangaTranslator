@@ -220,14 +220,6 @@ private Q_SLOTS:
         ui::screen::editor::EditorPage page(&viewModel);
 
         auto* bar = page.commandBarForTest();
-        auto* adoptBtn = bar->findChild<fluent::basicinput::Button*>(QStringLiteral("adoptButton"));
-        auto* rejectBtn = bar->findChild<fluent::basicinput::Button*>(QStringLiteral("rejectButton"));
-        QVERIFY(adoptBtn != nullptr);
-        QVERIFY(rejectBtn != nullptr);
-
-        // When no proposal, adopt and reject buttons are hidden
-        QVERIFY(!adoptBtn->isVisible());
-        QVERIFY(!rejectBtn->isVisible());
 
         // Only one smart translate button is visible
         auto allSmartTranslateButtons =

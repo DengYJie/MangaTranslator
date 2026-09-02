@@ -16,11 +16,6 @@
 
 namespace manga::ui::screen::home {
 
-namespace {
-constexpr int kSideRailWidth = 320;      // spec §3.2: auxiliary column 300-340 px
-constexpr int kCompactBreakpoint = 1008; // spec §3.3: below this the page flows single-column
-} // namespace
-
 HomePage::HomePage(HomeViewModel* viewModel, QWidget* parent) : base::BasePage(parent), m_viewModel(viewModel) {
     buildUi();
 
@@ -79,6 +74,12 @@ void HomePage::buildUi() {
     m_infoBar = new fluent::status_info::InfoBar(this);
     m_infoBar->setIsOpen(false);
     m_infoBar->setIsClosable(true);
+    m_infoBar->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
+    m_infoBar->setCornerRadius(8);
+    m_infoBar->setContentMargins(QMargins(14, 10, 14, 10));
+    m_infoBar->setIconTextSpacing(12);
+    m_infoBar->setTitleMessageSpacing(8);
+    m_infoBar->setSeverityIconSize(20);
     connect(m_infoBar, &fluent::status_info::InfoBar::closed, this, [this]() { m_viewModel->dismissNotice(); });
     m_retryButton = new fluent::basicinput::Button(tr("重试"), this);
     m_retryButton->setToolTip(tr("重试上一次失败的操作"));
@@ -103,16 +104,12 @@ void HomePage::buildUi() {
     });
     rootLayout->addWidget(m_infoBar);
 
-    // Main area: recent projects section.
-    m_mainArea = new QWidget(this);
-    auto* mainLayout = new QVBoxLayout(m_mainArea);
-    mainLayout->setContentsMargins(0, 0, 0, 0);
-    mainLayout->setSpacing(12);
-    auto* recentHeader = new QLabel(tr("最近项目"), m_mainArea);
+    // Recent projects section (full width).
+    auto* recentHeader = new QLabel(tr("最近项目"), this);
     recentHeader->setFont(themeFont(Typography::FontRole::BodyStrong).toQFont());
-    mainLayout->addWidget(recentHeader);
+    rootLayout->addWidget(recentHeader);
 
-    auto* stackContainer = new QWidget(m_mainArea);
+    auto* stackContainer = new QWidget(this);
     m_stack = new QStackedLayout(stackContainer);
 
     // Empty state (spec §5.1).
@@ -144,34 +141,7 @@ void HomePage::buildUi() {
     };
     connect(m_gridView, &QAbstractItemView::clicked, this, openAt);
     m_stack->addWidget(m_gridView);
-    mainLayout->addWidget(stackContainer, 1);
-
-    // Side rail: quick start (spec §2.3). Import flows land in P5-B; buttons stay inert.
-    m_sideRail = new QWidget(this);
-    auto* railLayout = new QVBoxLayout(m_sideRail);
-    railLayout->setContentsMargins(0, 0, 0, 0);
-    railLayout->setSpacing(8);
-    auto* quickHeader = new QLabel(tr("快速开始"), m_sideRail);
-    quickHeader->setFont(themeFont(Typography::FontRole::BodyStrong).toQFont());
-    railLayout->addWidget(quickHeader);
-    const auto addQuickAction = [this, railLayout](const QString& glyph, const QString& text) {
-        auto* button = new fluent::basicinput::Button(text, m_sideRail);
-        button->setIconGlyph(glyph);
-        button->setEnabled(false);
-        button->setToolTip(tr("导入向导将在后续版本提供"));
-        button->setAccessibleName(text);
-        railLayout->addWidget(button);
-        return button;
-    };
-    addQuickAction(Typography::Icons::Document, tr("从图片创建项目"));
-    addQuickAction(Typography::Icons::Folder, tr("从图片文件夹创建项目"));
-    railLayout->addStretch(1);
-
-    m_contentLayout = new QBoxLayout(QBoxLayout::LeftToRight);
-    m_contentLayout->setSpacing(24);
-    m_contentLayout->addWidget(m_mainArea, 1);
-    m_contentLayout->addWidget(m_sideRail, 0);
-    rootLayout->addLayout(m_contentLayout, 1);
+    rootLayout->addWidget(stackContainer, 1);
 }
 
 void HomePage::render(const HomeState& state) {
@@ -205,19 +175,7 @@ void HomePage::render(const HomeState& state) {
     }
 }
 
-void HomePage::updateResponsiveLayout(int availableWidth) {
-    if (m_contentLayout == nullptr || m_sideRail == nullptr) {
-        return;
-    }
-    const bool compact = availableWidth < kCompactBreakpoint;
-    m_contentLayout->setDirection(compact ? QBoxLayout::TopToBottom : QBoxLayout::LeftToRight);
-    if (compact) {
-        m_sideRail->setMinimumWidth(0);
-        m_sideRail->setMaximumWidth(QWIDGETSIZE_MAX);
-    } else {
-        m_sideRail->setFixedWidth(kSideRailWidth);
-    }
-}
+void HomePage::updateResponsiveLayout(int /*availableWidth*/) {}
 
 void HomePage::showContextMenu(const QPoint& pos) {
     const QModelIndex index = m_gridView->indexAt(pos);

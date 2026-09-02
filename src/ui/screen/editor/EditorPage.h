@@ -1,5 +1,6 @@
 #pragma once
 
+#include "application/operation/OperationSnapshot.h"
 #include "ui/base/BasePage.h"
 #include "ui/manga/MangaCanvas.h"
 
@@ -12,6 +13,7 @@ namespace manga::ui::manga {
 class MangaCanvas;
 }
 namespace manga::ui::widget {
+class ActivityCenter;
 class InspectorPanel;
 class PageThumbnailList;
 class EditorCommandBar;
@@ -79,15 +81,17 @@ public:
     [[nodiscard]] ui::widget::EditorCommandBar* commandBarForTest() const {
         return m_commandBar;
     }
-    [[nodiscard]] BreakpointMode breakpointModeForTest() const noexcept {
-        return m_breakpointMode;
+    [[nodiscard]] ui::widget::ActivityCenter* activityCenter() const noexcept {
+        return m_activityCenter;
     }
+    void setOperations(const QVector<application::OperationSnapshot>& operations);
 
 Q_SIGNALS:
     void openProjectRequested();
     void importPagesRequested();
     void chooseExportPathRequested();
     void settingsRequested(const QString& routeKey);
+    void cancelOperationRequested(const application::OperationId& id);
 
 protected:
     void paintEvent(QPaintEvent* event) override;
@@ -109,6 +113,7 @@ private:
     ui::widget::PageThumbnailList* m_pageList{nullptr};
     ui::manga::MangaCanvas* m_canvas{nullptr};
     QWidget* m_canvasToolRail{nullptr};
+    ui::widget::ActivityCenter* m_activityCenter{nullptr};
     QFrame* m_removeBrushSeparator{nullptr};
     fluent::basicinput::Button* m_removeBrushSizeButton{nullptr};
     QAbstractButton* m_brushColorButton{nullptr};
