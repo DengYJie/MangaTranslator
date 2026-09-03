@@ -730,7 +730,7 @@ void EditorPage::ensureControllerConnections() {
     connect(controller,
             &EditorProcessingController::manualStrokeApplied,
             this,
-            [this](const domain::PageId& pageId, const QString& afterRef, application::OperationId operationId) {
+            [this](const domain::PageId&, const QString& afterRef, application::OperationId operationId) {
                 if (operationId != m_pendingStrokeOperationId) {
                     return; // a different operation; the draft belongs to ours
                 }

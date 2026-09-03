@@ -87,7 +87,9 @@ QFuture<Result<PreparedPageManualOverrideChange>> ManualPaintWorkflow::execute(M
                                                                          : manga::rendering::StrokePaintMode::Erase;
         strokeParams.color = job->request.color;
         strokeParams.diameter = job->request.diameter;
-        manga::rendering::StrokePaintRasterizer::rasterizeStroke(layer, strokeParams, job->request.points);
+        const QRect strokeDirty =
+            manga::rendering::StrokePaintRasterizer::rasterizeStroke(layer, strokeParams, job->request.points);
+        Q_UNUSED(strokeDirty);
 
         CommitDerivedLayerRequest commitReq{job->request.projectId,
                                             job->request.projectRoot,
