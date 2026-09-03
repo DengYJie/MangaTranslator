@@ -4,6 +4,8 @@
 #include "ui/base/BasePage.h"
 #include "ui/manga/MangaCanvas.h"
 
+#include <QVector>
+
 class QPaintEvent;
 class QFrame;
 class QSplitter;
@@ -100,6 +102,13 @@ protected:
     void resizeEvent(QResizeEvent* event) override;
 
 private:
+    /// Canvas tool rail entry: the rail button plus the capability that gates it.
+    struct CanvasToolEntry {
+        manga::CanvasTool tool{manga::CanvasTool::Select};
+        fluent::basicinput::Button* button{nullptr};
+        bool requiresInpaint{false};
+    };
+
     void buildUi();
     void render(const EditorState& state);
     void handlePageImageReady(const PageImageDelivery& delivery);
@@ -113,6 +122,7 @@ private:
     widget::PageThumbnailList* m_pageList{nullptr};
     manga::MangaCanvas* m_canvas{nullptr};
     QWidget* m_canvasToolRail{nullptr};
+    QVector<CanvasToolEntry> m_canvasToolButtons;
     widget::ActivityCenter* m_activityCenter{nullptr};
     QFrame* m_removeBrushSeparator{nullptr};
     fluent::basicinput::Button* m_removeBrushSizeButton{nullptr};

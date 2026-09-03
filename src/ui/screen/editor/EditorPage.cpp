@@ -28,6 +28,7 @@
 #include <QKeyEvent>
 #include <QPaintEvent>
 #include <QPainter>
+#include <QPointer>
 #include <QResizeEvent>
 #include <QShortcut>
 #include <QVBoxLayout>
@@ -97,6 +98,25 @@ private:
     QColor m_color{17, 17, 17, 255};
     QColor m_borderColor{128, 128, 128, 120};
 };
+
+/// Maps the State tool enum onto the canvas tool enum; the two are distinct types.
+[[nodiscard]] ui::manga::CanvasTool toCanvasTool(CanvasTool tool) {
+    switch (tool) {
+        case CanvasTool::Select:
+            return ui::manga::CanvasTool::Select;
+        case CanvasTool::Pan:
+            return ui::manga::CanvasTool::Pan;
+        case CanvasTool::Text:
+            return ui::manga::CanvasTool::Text;
+        case CanvasTool::Brush:
+            return ui::manga::CanvasTool::Brush;
+        case CanvasTool::Eraser:
+            return ui::manga::CanvasTool::Eraser;
+        case CanvasTool::Remove:
+            return ui::manga::CanvasTool::Remove;
+    }
+    return ui::manga::CanvasTool::Select;
+}
 
 } // namespace
 
@@ -413,7 +433,8 @@ void EditorPage::buildUi() {
     const auto addCanvasTool = [this, toolLayout, toolGroup](const QString& objectName,
                                                              const QString& glyph,
                                                              const QString& label,
-                                                             CanvasTool tool) {
+                                                             CanvasTool tool,
+                                                             bool requiresInpaint = false) {
         auto* button = new fluent::basicinput::Button(toolLayout->parentWidget());
         button->setObjectName(objectName);
         button->setIconGlyph(glyph, Typography::IconSize::Standard);
@@ -425,6 +446,7 @@ void EditorPage::buildUi() {
         button->setFixedSize(44, 36);
         toolGroup->addButton(button);
         toolLayout->addWidget(button);
+        m_canvasToolButtons.append({toCanvasTool(tool), button, requiresInpaint});
         connect(
             button, &fluent::basicinput::Button::clicked, this, [this, tool]() { m_viewModel->setActiveTool(tool); });
         return button;
@@ -452,7 +474,8 @@ void EditorPage::buildUi() {
     addCanvasTool(QStringLiteral("canvasRemoveButton"),
                   Typography::Icons::glyph(QStringLiteral("ic_fluent_square_hint_sparkles_16_regular")),
                   tr("移除内容 (J)"),
-                  CanvasTool::Remove);
+                  CanvasTool::Remove,
+                  true);
 
     m_removeBrushSeparator = new QFrame(toolRail);
     m_removeBrushSeparator->setObjectName(QStringLiteral("canvasRemoveBrushSeparator"));
@@ -525,17 +548,26 @@ void EditorPage::buildUi() {
         flyoutLayout->addWidget(title);
         flyoutLayout->addWidget(picker);
 
+        // Dragging the picker only refreshes the canvas preview. Pushing every intermediate color
+        // into State would rerender the whole page on each pointer move.
         connect(picker, &fluent::basicinput::ColorPicker::colorChanged, this, [this](const QColor& color) {
-            if (color.isValid()) {
-                m_canvas->setBrushColor(color);
-                m_viewModel->setBrushColor(color);
-                if (auto* btn = dynamic_cast<ToolRailColorWellButton*>(m_brushColorButton)) {
-                    btn->setColor(color);
-                    const QString hex = color.name(QColor::HexRgb).toUpper();
-                    btn->setAccessibleName(tr("画笔颜色：%1").arg(hex));
-                    btn->setToolTip(tr("画笔颜色：%1").arg(hex));
-                }
+            if (!color.isValid()) {
+                return;
             }
+            m_canvas->setBrushColor(color);
+            if (auto* btn = dynamic_cast<ToolRailColorWellButton*>(m_brushColorButton)) {
+                btn->setColor(color);
+                const QString hex = color.name(QColor::HexRgb).toUpper();
+                btn->setAccessibleName(tr("画笔颜色：%1").arg(hex));
+                btn->setToolTip(tr("画笔颜色：%1").arg(hex));
+            }
+        });
+        auto pickerGuard = QPointer<fluent::basicinput::ColorPicker>(picker);
+        connect(flyout, &fluent::dialogs_flyouts::Flyout::closed, this, [this, pickerGuard]() {
+            if (pickerGuard.isNull()) {
+                return;
+            }
+            m_viewModel->setBrushColor(pickerGuard->color());
         });
         flyout->showAt(m_brushColorButton);
     });
@@ -883,62 +915,25 @@ void EditorPage::render(const EditorState& state) {
     m_inspector->setInspectorState(state.inspector);
 
     // Sync canvas tool and region projections from the authoritative State.
-    ui::manga::CanvasTool canvasTool = ui::manga::CanvasTool::Select;
-    switch (state.activeTool) {
-        case CanvasTool::Select:
-            canvasTool = ui::manga::CanvasTool::Select;
-            break;
-        case CanvasTool::Pan:
-            canvasTool = ui::manga::CanvasTool::Pan;
-            break;
-        case CanvasTool::Text:
-            canvasTool = ui::manga::CanvasTool::Text;
-            break;
-        case CanvasTool::Brush:
-            canvasTool = ui::manga::CanvasTool::Brush;
-            break;
-        case CanvasTool::Eraser:
-            canvasTool = ui::manga::CanvasTool::Eraser;
-            break;
-        case CanvasTool::Remove:
-            canvasTool = ui::manga::CanvasTool::Remove;
-            break;
-    }
+    const auto canvasTool = toCanvasTool(state.activeTool);
+    const bool hasUsablePage = state.currentPageId.isValid() && !state.isPageLoading;
     m_canvas->setTool(canvasTool);
-    m_canvas->setRemoveDiameter(state.brushDiameter);
-    m_canvas->setBrushColor(state.brushColor);
+    // Write back only on real divergence, otherwise a state render would feed its own update.
+    if (!qFuzzyCompare(m_canvas->removeDiameter(), state.brushDiameter)) {
+        m_canvas->setRemoveDiameter(state.brushDiameter);
+    }
+    if (m_canvas->brushColor() != state.brushColor) {
+        m_canvas->setBrushColor(state.brushColor);
+    }
     if (m_canvasToolRail != nullptr) {
-        if (auto* button =
-                m_canvasToolRail->findChild<fluent::basicinput::Button*>(QStringLiteral("canvasSelectButton"))) {
-            button->setChecked(state.activeTool == CanvasTool::Select);
+        for (const auto& entry : m_canvasToolButtons) {
+            entry.button->setChecked(canvasTool == entry.tool);
+            entry.button->setEnabled(hasUsablePage && (!entry.requiresInpaint || state.isInpaintAvailable));
         }
-        if (auto* button =
-                m_canvasToolRail->findChild<fluent::basicinput::Button*>(QStringLiteral("canvasPanButton"))) {
-            button->setChecked(state.activeTool == CanvasTool::Pan);
-        }
-        if (auto* button =
-                m_canvasToolRail->findChild<fluent::basicinput::Button*>(QStringLiteral("canvasTextButton"))) {
-            button->setChecked(state.activeTool == CanvasTool::Text);
-        }
-        if (auto* button =
-                m_canvasToolRail->findChild<fluent::basicinput::Button*>(QStringLiteral("canvasBrushButton"))) {
-            button->setChecked(state.activeTool == CanvasTool::Brush);
-            button->setEnabled(state.currentPageId.isValid());
-        }
-        if (auto* button =
-                m_canvasToolRail->findChild<fluent::basicinput::Button*>(QStringLiteral("canvasEraserButton"))) {
-            button->setChecked(state.activeTool == CanvasTool::Eraser);
-            button->setEnabled(state.currentPageId.isValid());
-        }
-        if (auto* button =
-                m_canvasToolRail->findChild<fluent::basicinput::Button*>(QStringLiteral("canvasRemoveButton"))) {
-            button->setChecked(state.activeTool == CanvasTool::Remove);
-            button->setEnabled(state.isInpaintAvailable && state.currentPageId.isValid());
-        }
-        const bool isBrushMode =
-            (canvasTool == ui::manga::CanvasTool::Remove || canvasTool == ui::manga::CanvasTool::Brush ||
-             canvasTool == ui::manga::CanvasTool::Eraser);
-        const bool showBrushControls = isBrushMode && state.currentPageId.isValid();
+        const bool isBrushMode = canvasTool == ui::manga::CanvasTool::Remove ||
+                                 canvasTool == ui::manga::CanvasTool::Brush ||
+                                 canvasTool == ui::manga::CanvasTool::Eraser;
+        const bool showBrushControls = isBrushMode && hasUsablePage;
         if (m_removeBrushSeparator != nullptr) {
             m_removeBrushSeparator->setVisible(showBrushControls);
         }
