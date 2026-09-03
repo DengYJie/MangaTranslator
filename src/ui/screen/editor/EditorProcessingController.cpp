@@ -1391,28 +1391,28 @@ void EditorProcessingController::inpaintStroke(const domain::PageId& pageId,
     Q_EMIT processingStarted(pageId, opId);
 }
 
-void EditorProcessingController::paintStroke(const domain::PageId& pageId,
-                                             const QVector<QPointF>& points,
-                                             application::ManualStrokeMode mode,
-                                             const QColor& color,
-                                             double diameter) {
+application::OperationId EditorProcessingController::paintStroke(const domain::PageId& pageId,
+                                                                 const QVector<QPointF>& points,
+                                                                 application::ManualStrokeMode mode,
+                                                                 const QColor& color,
+                                                                 double diameter) {
     if (m_viewModel == nullptr || m_assetStore == nullptr || m_registry == nullptr || points.isEmpty() ||
         diameter < 1.0) {
-        return;
+        return {};
     }
     auto* project = m_viewModel->projectAggregate();
     if (project == nullptr || pageId != m_viewModel->state().currentPageId) {
-        return;
+        return {};
     }
     const auto* page = project->findPage(pageId);
     const QImage source = m_viewModel->currentPageImage();
     if (page == nullptr || source.isNull()) {
-        return;
+        return {};
     }
 
     const WatcherKey key{project->id(), pageId, std::nullopt, application::OperationStage::Clear};
     if (m_activeTasks.contains(key)) {
-        return;
+        return {};
     }
     application::OperationDescriptor descriptor;
     descriptor.projectId = project->id();
@@ -1493,6 +1493,8 @@ void EditorProcessingController::paintStroke(const domain::PageId& pageId,
                 error = application::makeApplicationError(application::ErrorCategory::Input,
                                                           QStringLiteral("input.edit_rejected"),
                                                           tr("无法应用手工涂抹结果"));
+            } else {
+                Q_EMIT self->manualStrokeApplied(key.pageId, result->afterRef, opId);
             }
         }
 
@@ -1512,6 +1514,7 @@ void EditorProcessingController::paintStroke(const domain::PageId& pageId,
     watcher->setFuture(future);
     updateProcessingStateForCurrentPage();
     Q_EMIT processingStarted(pageId, opId);
+    return opId;
 }
 
 void EditorProcessingController::clearRegions(const domain::PageId& pageId,
@@ -2177,7 +2180,6 @@ void EditorProcessingController::batchClearPages(const QVector<domain::PageId>& 
 void EditorProcessingController::batchSmartTranslatePages(const QVector<domain::PageId>& pageIds) {
     batchProcessPages(pageIds, application::BatchStageFlag::All);
 }
-
 
 void EditorProcessingController::setOcrEngine(application::IOcrEngine* engine) {
     if (m_ownedOcrUseCase) {

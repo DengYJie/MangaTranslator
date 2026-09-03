@@ -1,6 +1,7 @@
 #pragma once
 
 #include "application/operation/OperationSnapshot.h"
+#include "domain/model/Uuid.h"
 #include "ui/base/BasePage.h"
 #include "ui/manga/MangaCanvas.h"
 
@@ -117,6 +118,9 @@ private:
     void handlePageImageReady(const PageImageDelivery& delivery);
     void handlePlaceholderAction();
     void applySplitterLayout();
+    /// Drops the pending stroke tracking and the canvas draft when the stroke can no longer be
+    /// reconciled: failure, page switch, or session generation change.
+    void abandonPendingStrokeDraft();
 
     EditorViewModel* m_viewModel; // non-owning
     widget::EditorCommandBar* m_commandBar{nullptr};
@@ -136,6 +140,13 @@ private:
     QWidget* m_inspectorCard{nullptr};
     widget::InspectorPanel* m_inspector{nullptr};
     manga::MangaCanvas::ContentState m_lastPlaceholder{manga::MangaCanvas::ContentState::NoProject};
+
+    /// The stroke whose commit is in flight; the canvas draft settles once the delivered override
+    /// layer carries the applied ref.
+    application::OperationId m_pendingStrokeOperationId;
+    QString m_pendingStrokeAfterRef;
+    domain::PageId m_pendingStrokePageId;
+    quint64 m_pendingStrokeSessionGeneration{0};
 
     BreakpointMode m_breakpointMode{BreakpointMode::Wide};
     bool m_pageDrawerOpen{false};

@@ -192,7 +192,17 @@ EditorPage::EditorPage(EditorViewModel* viewModel, QWidget* parent) : base::Base
                 if (auto* controller = m_viewModel->processingController()) {
                     const auto mode = (tool == ui::manga::CanvasTool::Eraser) ? application::ManualStrokeMode::Erase
                                                                               : application::ManualStrokeMode::Paint;
-                    controller->paintStroke(state.currentPageId, points, mode, color, diameter);
+                    const auto operationId =
+                        controller->paintStroke(state.currentPageId, points, mode, color, diameter);
+                    if (operationId.isValid()) {
+                        m_pendingStrokeOperationId = operationId;
+                        m_pendingStrokePageId = state.currentPageId;
+                        m_pendingStrokeSessionGeneration = state.projectSessionGeneration;
+                        m_pendingStrokeAfterRef.clear();
+                    } else {
+                        // The stroke was rejected up front, so no delivery will ever arrive.
+                        m_canvas->settleStrokeDraft();
+                    }
                 }
             });
 
@@ -271,12 +281,41 @@ EditorPage::EditorPage(EditorViewModel* viewModel, QWidget* parent) : base::Base
                 }
             });
 
+    if (auto* controller = m_viewModel->processingController()) {
+        connect(controller,
+                &EditorProcessingController::manualStrokeApplied,
+                this,
+                [this](const domain::PageId& pageId, const QString& afterRef, application::OperationId operationId) {
+                    if (operationId != m_pendingStrokeOperationId) {
+                        return; // a different operation; the draft belongs to ours
+                    }
+                    m_pendingStrokeAfterRef = afterRef;
+                });
+        connect(controller,
+                &EditorProcessingController::processingFinished,
+                this,
+                [this](const domain::PageId& pageId, bool success) {
+                    if (!success && m_pendingStrokeOperationId.isValid() && pageId == m_pendingStrokePageId) {
+                        abandonPendingStrokeDraft();
+                    }
+                });
+    }
+
     connect(m_viewModel, &EditorViewModel::pageImageReady, this, &EditorPage::handlePageImageReady);
     connect(m_viewModel, &EditorViewModel::clearImageReady, this, [this](const PageImageDelivery& delivery) {
         m_canvas->setClearImage(delivery.image);
     });
     connect(m_viewModel, &EditorViewModel::manualOverrideReady, this, [this](const ManualOverrideDelivery& delivery) {
         m_canvas->setManualOverrideImage(delivery.image, delivery.ref);
+        // The draft settles only when the delivered layer is the one this stroke produced; a
+        // no-change stroke re-delivers its starting ref and still settles, while deliveries for
+        // another page or another stroke are ignored.
+        if (m_pendingStrokeOperationId.isValid() && delivery.pageId == m_pendingStrokePageId &&
+            !m_pendingStrokeAfterRef.isEmpty() && delivery.ref == m_pendingStrokeAfterRef) {
+            m_pendingStrokeOperationId = {};
+            m_pendingStrokeAfterRef.clear();
+            m_canvas->settleStrokeDraft();
+        }
     });
     connect(m_viewModel, &EditorViewModel::previewImageReady, this, [this](const PageImageDelivery& delivery) {
         m_canvas->setTranslatedPreview(delivery.image);
@@ -679,6 +718,14 @@ void EditorPage::updateResponsiveLayout(int availableWidth) {
     applySplitterLayout();
 }
 
+void EditorPage::abandonPendingStrokeDraft() {
+    m_pendingStrokeOperationId = {};
+    m_pendingStrokeAfterRef.clear();
+    m_pendingStrokePageId = {};
+    m_pendingStrokeSessionGeneration = 0;
+    m_canvas->settleStrokeDraft();
+}
+
 void EditorPage::applySplitterLayout() {
     if (!m_splitter || !m_pagePaneCard || !m_inspectorCard) {
         return;
@@ -921,6 +968,11 @@ void EditorPage::resizeEvent(QResizeEvent* event) {
 }
 
 void EditorPage::render(const EditorState& state) {
+    if (m_pendingStrokeOperationId.isValid() && (state.currentPageId != m_pendingStrokePageId ||
+                                                 state.projectSessionGeneration != m_pendingStrokeSessionGeneration)) {
+        abandonPendingStrokeDraft();
+    }
+
     QVector<widget::PageListEntry> entries;
     entries.reserve(state.pages.size());
     for (const auto& p : state.pages) {

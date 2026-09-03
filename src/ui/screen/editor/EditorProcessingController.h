@@ -92,11 +92,12 @@ public:
     void clearRegions(const domain::PageId& pageId, const QVector<domain::RegionId>& regionIds);
     void clearRegion(const domain::PageId& pageId, const domain::RegionId& regionId);
     void inpaintStroke(const domain::PageId& pageId, const QVector<QPointF>& points, double diameter);
-    void paintStroke(const domain::PageId& pageId,
-                     const QVector<QPointF>& points,
-                     application::ManualStrokeMode mode,
-                     const QColor& color,
-                     double diameter);
+    /// Returns the started operation, or an invalid id when the request was rejected up front.
+    application::OperationId paintStroke(const domain::PageId& pageId,
+                                         const QVector<QPointF>& points,
+                                         application::ManualStrokeMode mode,
+                                         const QColor& color,
+                                         double diameter);
     void layoutSelectedRegions();
     void layoutRegion(const domain::PageId& pageId, const domain::RegionId& regionId);
 
@@ -146,6 +147,10 @@ public:
 Q_SIGNALS:
     void processingStarted(const domain::PageId& pageId, application::OperationId operationId);
     void processingFinished(const domain::PageId& pageId, bool success);
+    /// Emitted after a manual stroke passed the layer-ref guard and was adopted. `afterRef` is the
+    /// content hash the canvas must see before it may drop its draft.
+    void
+    manualStrokeApplied(const domain::PageId& pageId, const QString& afterRef, application::OperationId operationId);
     void proposalReady(const domain::PageId& pageId);
     void proposalAdopted(const domain::PageId& pageId);
     void proposalRejected(const domain::PageId& pageId);
