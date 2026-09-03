@@ -60,8 +60,6 @@ WinUI 3 参考控件：`GridView`、`ListView`、`Button`、`MenuFlyout`、`Prog
 
 - 从图片创建项目。
 - 从图片文件夹创建项目。
-- 从 CBZ/ZIP 创建项目；V0.2 起显示。
-- 从 PDF 创建项目；V0.2 起显示。
 - 恢复中断任务；仅存在可恢复任务时显示。
 
 每个动作同时显示图标和文字。按钮的整个 Surface 可点击；图标不单独成为 Tab Stop。

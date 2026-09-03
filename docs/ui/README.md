@@ -30,7 +30,7 @@
 | 页面 | 文件 | 核心任务 |
 | --- | --- | --- |
 | 首页 / 项目中心 | [pages/home.md](pages/home.md) | 创建、打开和恢复项目 |
-| 新建项目 / 导入 | [pages/import.md](pages/import.md) | 导入当前版本支持的来源并建立项目（支持图片、文件夹、CBZ、PDF） |
+| 新建项目 / 导入 | [pages/import.md](pages/import.md) | 导入当前版本支持的来源并建立项目（支持图片、图片文件夹） |
 | 漫画编辑器 | [pages/editor.md](pages/editor.md) | 文本选区（矩形/多边形）、OCR、翻译、清除、排版、人工校对与标题栏轻量批量处理菜单 |
 | 术语库 | [pages/glossary.md](pages/glossary.md) | 管理全局、当前项目及最终有效术语 |
 | 设置 | [pages/settings.md](pages/settings.md) | 配置引擎、模型、网络、排版、外观、性能和隐私 |
