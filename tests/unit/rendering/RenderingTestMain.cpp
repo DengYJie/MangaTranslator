@@ -1,3 +1,4 @@
+#include "StrokePaintRasterizerTest.h"
 #include "TextLayoutEngineTest.h"
 #include "TextRasterizerTest.h"
 
@@ -20,6 +21,10 @@ int main(int argc, char* argv[]) {
         }
     };
 
+    {
+        StrokePaintRasterizerTest suite;
+        runSuite("StrokePaintRasterizerTest", &suite);
+    }
     {
         TextLayoutEngineTest suite;
         runSuite("TextLayoutEngineTest", &suite);

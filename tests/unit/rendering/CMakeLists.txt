@@ -2,6 +2,8 @@ manga_add_test(
     NAME manga_tests_rendering
     SOURCES
         RenderingTestMain.cpp
+        StrokePaintRasterizerTest.h
+        StrokePaintRasterizerTest.cpp
         TextLayoutEngineTest.h
         TextLayoutEngineTest.cpp
         TextRasterizerTest.h
