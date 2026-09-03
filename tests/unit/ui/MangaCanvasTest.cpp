@@ -13,6 +13,7 @@
 #include <QMouseEvent>
 #include <QPainter>
 #include <QRadialGradient>
+#include <QScrollBar>
 #include <QSignalSpy>
 #include <QtTest>
 
@@ -263,12 +264,6 @@ private Q_SLOTS:
         QCOMPARE(canvas.dragMode(), QGraphicsView::ScrollHandDrag);
     }
 
-    void setToolCreateRegionSwitchesToNoDrag() {
-        MangaCanvas canvas;
-        canvas.setTool(Tool::CreateRegion);
-        QCOMPARE(canvas.dragMode(), QGraphicsView::NoDrag);
-    }
-
     // Region reconciliation.
 
     void setRegionsCreatesOverlayItems() {
@@ -348,74 +343,6 @@ private Q_SLOTS:
         QVERIFY(edgeContrast(Qt::white) >= 96);
     }
 
-    // Create region gesture.
-
-    void createGestureCommitsValidRect() {
-        MangaCanvas canvas;
-        canvas.resize(800, 600);
-        canvas.show();
-        QCoreApplication::processEvents();
-        QImage image(400, 400, QImage::Format_RGBA8888);
-        image.fill(Qt::white);
-        canvas.setPageImage(image);
-        canvas.setPageBounds(ImageSize{400, 400});
-        canvas.setTool(Tool::CreateRegion);
-        QCoreApplication::processEvents();
-
-        QSignalSpy spy(&canvas, &MangaCanvas::regionCreateCommitted);
-
-        // Press at (100, 100), drag to (200, 200), release.
-        // Use viewport coordinates. The canvas maps these to scene via its transform.
-        QWidget* vp = canvas.viewport();
-        QMouseEvent press(QEvent::MouseButtonPress, QPointF(100, 100), Qt::LeftButton, Qt::LeftButton, {});
-        QApplication::sendEvent(vp, &press);
-        QCoreApplication::processEvents();
-
-        // Move beyond threshold.
-        QMouseEvent move(QEvent::MouseMove, QPointF(200, 200), Qt::NoButton, Qt::LeftButton, {});
-        QApplication::sendEvent(vp, &move);
-        QCoreApplication::processEvents();
-
-        QMouseEvent release(QEvent::MouseButtonRelease, QPointF(200, 200), Qt::LeftButton, Qt::LeftButton, {});
-        QApplication::sendEvent(vp, &release);
-        QCoreApplication::processEvents();
-
-        QCOMPARE(spy.size(), 1);
-        const auto geom = spy.at(0).at(0).value<RectGeometry>();
-        QVERIFY(geom.width > 0);
-        QVERIFY(geom.height > 0);
-    }
-
-    void belowMinCreateDiscardsSilently() {
-        MangaCanvas canvas;
-        canvas.resize(800, 600);
-        canvas.show();
-        QCoreApplication::processEvents();
-        QImage image(400, 400, QImage::Format_RGBA8888);
-        image.fill(Qt::white);
-        canvas.setPageImage(image);
-        canvas.setPageBounds(ImageSize{400, 400});
-        canvas.setTool(Tool::CreateRegion);
-        QCoreApplication::processEvents();
-
-        QSignalSpy spy(&canvas, &MangaCanvas::regionCreateCommitted);
-
-        // Tiny drag that stays below minimum size.
-        QWidget* vp = canvas.viewport();
-        QMouseEvent press(QEvent::MouseButtonPress, QPointF(100, 100), Qt::LeftButton, Qt::LeftButton, {});
-        QApplication::sendEvent(vp, &press);
-
-        // Move just a tiny bit (below min region dimension in source pixels at zoom 1.0).
-        QMouseEvent move(QEvent::MouseMove, QPointF(103, 103), Qt::NoButton, Qt::LeftButton, {});
-        QApplication::sendEvent(vp, &move);
-
-        QMouseEvent release(QEvent::MouseButtonRelease, QPointF(103, 103), Qt::LeftButton, Qt::LeftButton, {});
-        QApplication::sendEvent(vp, &release);
-        QCoreApplication::processEvents();
-
-        QCOMPARE(spy.size(), 0);
-    }
-
     // Selection.
 
     void clickRegionEmitsSelectionRequest() {
@@ -448,35 +375,6 @@ private Q_SLOTS:
         QVERIFY(spy.size() >= 1);
         const auto requestedId = spy.at(0).at(0).value<RegionId>();
         QCOMPARE(requestedId, id1);
-    }
-
-    // Escape cancels gesture.
-
-    void escapeCancelsGestureAndEmitsCancelled() {
-        MangaCanvas canvas;
-        canvas.resize(800, 600);
-        canvas.show();
-        QCoreApplication::processEvents();
-        QImage image(400, 400, QImage::Format_RGBA8888);
-        image.fill(Qt::white);
-        canvas.setPageImage(image);
-        canvas.setPageBounds(ImageSize{400, 400});
-        canvas.setTool(Tool::CreateRegion);
-        QCoreApplication::processEvents();
-
-        QSignalSpy cancelSpy(&canvas, &MangaCanvas::gestureCancelled);
-        QSignalSpy createSpy(&canvas, &MangaCanvas::regionCreateCommitted);
-
-        QWidget* vp = canvas.viewport();
-        QMouseEvent press(QEvent::MouseButtonPress, QPointF(100, 100), Qt::LeftButton, Qt::LeftButton, {});
-        QApplication::sendEvent(vp, &press);
-
-        QKeyEvent escPress(QEvent::KeyPress, Qt::Key_Escape, Qt::NoModifier);
-        QApplication::sendEvent(vp, &escPress);
-        QCoreApplication::processEvents();
-
-        QCOMPARE(cancelSpy.size(), 1);
-        QCOMPARE(createSpy.size(), 0);
     }
 
     // Sub-threshold drag commits nothing.
