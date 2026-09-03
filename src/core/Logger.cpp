@@ -1,5 +1,7 @@
 #include "Logger.h"
 
+#include "core/DebugOutputSink.h"
+
 #include <QDateTime>
 #include <QDir>
 #include <QFile>
@@ -16,6 +18,7 @@ namespace manga::core {
 namespace {
 
 QFile* g_logFile = nullptr;
+DebugSink g_debugSink = nullptr;
 QMutex g_logMutex;
 QtMessageHandler g_originalHandler = nullptr;
 
@@ -63,6 +66,10 @@ void customMessageHandler(QtMsgType type, const QMessageLogContext& context, con
         g_logFile->flush();
     }
 
+    if (g_debugSink) {
+        g_debugSink(formattedMsg);
+    }
+
     if (type == QtFatalMsg) {
         abort();
     }
@@ -70,7 +77,7 @@ void customMessageHandler(QtMsgType type, const QMessageLogContext& context, con
 
 } // namespace
 
-void initLogger(const QString& logDirPath) {
+void initLogger(const QString& logDirPath, DebugSink debugSink) {
     QMutexLocker locker(&g_logMutex);
     if (g_logFile) {
         return;
@@ -83,6 +90,7 @@ void initLogger(const QString& logDirPath) {
 
     g_logFile = new QFile(logFilePath);
     if (g_logFile->open(QIODevice::WriteOnly | QIODevice::Append | QIODevice::Text)) {
+        g_debugSink = debugSink;
         g_originalHandler = qInstallMessageHandler(customMessageHandler);
     } else {
         delete g_logFile;
@@ -95,6 +103,7 @@ void shutdownLogger() {
     if (g_logFile) {
         qInstallMessageHandler(g_originalHandler);
         g_originalHandler = nullptr;
+        g_debugSink = nullptr;
 
         g_logFile->close();
         delete g_logFile;

@@ -23,9 +23,12 @@ target_link_libraries(manga_app
         FluentQt::FluentQt
 )
 
-qt_add_executable(MangaTranslatorApp WIN32
+qt_add_executable(MangaTranslatorApp
     main.cpp
 )
+# Debug links against the console subsystem so the log stream reaches CLion's Run window, Visual
+# Studio's integrated terminal and a plain shell. Other configurations stay a GUI subsystem.
+set_target_properties(MangaTranslatorApp PROPERTIES WIN32_EXECUTABLE "$<NOT:$<CONFIG:Debug>>")
 manga_apply_project_options(MangaTranslatorApp)
 
 target_link_libraries(MangaTranslatorApp
