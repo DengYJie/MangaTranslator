@@ -218,6 +218,7 @@ void MangaCanvas::setPreviewMode(int mode) {
 }
 
 void MangaCanvas::clearPageImage() {
+    m_hasLastWindowPos = false;
     if (m_gesture.active) {
         cancelGesture();
     }
@@ -318,14 +319,14 @@ QRectF MangaCanvas::contentSceneRect() const {
     return content;
 }
 
-void MangaCanvas::updateNavigationSceneRect() {
+void MangaCanvas::updateNavigationSceneRect(const QPointF& anchorScenePoint, const QPointF& targetViewportPos) {
     const QRectF content = contentSceneRect();
     if (content.isEmpty() || viewport() == nullptr) {
         m_scene->setSceneRect(content);
         return;
     }
 
-    const QPointF preservedCenter = viewCenterOnPage();
+    const QPointF preservedCenter = anchorScenePoint.isNull() ? viewCenterOnPage() : anchorScenePoint;
     const double viewportSceneWidth = static_cast<double>(viewport()->width()) / m_zoomFactor;
     const double viewportSceneHeight = static_cast<double>(viewport()->height()) / m_zoomFactor;
     const double minVisibleSceneWidth = std::min(content.width(), kMinVisibleContentViewportPx / m_zoomFactor);
@@ -338,7 +339,11 @@ void MangaCanvas::updateNavigationSceneRect() {
         return;
     }
     m_scene->setSceneRect(navigationRect);
-    centerScenePointOnViewport(preservedCenter);
+    if (!targetViewportPos.isNull()) {
+        anchorScenePointOnViewport(preservedCenter, targetViewportPos);
+    } else {
+        centerScenePointOnViewport(preservedCenter);
+    }
 }
 
 void MangaCanvas::zoomIn() {
@@ -387,15 +392,14 @@ QPointF MangaCanvas::viewCenterOnPage() const {
     return mapToScene(viewport()->rect().center());
 }
 
-void MangaCanvas::centerScenePointOnViewport(const QPointF& scenePoint) {
-    // viewCenterOnPage measures through the integer QRect::center. QGraphicsView::centerOn
-    // instead anchors to qreal half extents, so alternating measure/centerOn shifts the scroll
-    // bars by one pixel each resize. Centering here uses the same integer metric as the
-    // read-back, making save-center/restore-center round trips exact.
+void MangaCanvas::anchorScenePointOnViewport(const QPointF& scenePoint, const QPointF& targetViewportPos) {
     const QPointF viewPoint = transform().map(scenePoint);
-    const QPointF target = viewport()->rect().center();
-    horizontalScrollBar()->setValue(qRound(viewPoint.x() - target.x()));
-    verticalScrollBar()->setValue(qRound(viewPoint.y() - target.y()));
+    horizontalScrollBar()->setValue(qRound(viewPoint.x() - targetViewportPos.x()));
+    verticalScrollBar()->setValue(qRound(viewPoint.y() - targetViewportPos.y()));
+}
+
+void MangaCanvas::centerScenePointOnViewport(const QPointF& scenePoint) {
+    anchorScenePointOnViewport(scenePoint, viewport()->rect().center());
 }
 
 void MangaCanvas::centerOnPage(const QPointF& scenePos) {
@@ -1370,13 +1374,33 @@ void MangaCanvas::leaveEvent(QEvent* event) {
 }
 
 void MangaCanvas::resizeEvent(QResizeEvent* event) {
+    const QPoint currentWinPos = (window() != nullptr) ? mapTo(window(), QPoint(0, 0)) : mapToGlobal(QPoint(0, 0));
+    const QPointF oldViewportCenter = viewport()->rect().center();
     const QPointF oldCenter = (m_contentState == ContentState::Image) ? viewCenterOnPage() : QPointF();
+
     QGraphicsView::resizeEvent(event);
     layoutPlaceholderButton();
+
     if (m_contentState == ContentState::Image) {
-        updateNavigationSceneRect();
-        centerScenePointOnViewport(oldCenter);
+        if (m_hasLastWindowPos && isVisible() && event->oldSize().isValid()) {
+            const int deltaX = currentWinPos.x() - m_lastWindowPos.x();
+            const int deltaY = currentWinPos.y() - m_lastWindowPos.y();
+            const QPointF target(oldViewportCenter.x() - deltaX, oldViewportCenter.y() - deltaY);
+
+            updateNavigationSceneRect(oldCenter, target);
+            anchorScenePointOnViewport(oldCenter, target);
+        } else {
+            updateNavigationSceneRect();
+            centerScenePointOnViewport(oldCenter);
+        }
         emitViewTransform();
+    }
+
+    if (isVisible()) {
+        m_lastWindowPos = currentWinPos;
+        m_hasLastWindowPos = true;
+    } else {
+        m_hasLastWindowPos = false;
     }
 }
 

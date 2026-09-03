@@ -95,6 +95,8 @@ public:
     /// Centers scenePoint using the same integer viewport metric as viewCenterOnPage, so a
     /// save-center/restore-center round trip does not shift the scroll bars.
     void centerScenePointOnViewport(const QPointF& scenePoint);
+    /// Anchors scenePoint to a specific target point in viewport coordinates.
+    void anchorScenePointOnViewport(const QPointF& scenePoint, const QPointF& targetViewportPos);
 
     /// Sets the active canvas tool. Pan keeps ScrollHandDrag; Select switches to
     /// NoDrag for item interaction; Text enables text creation gesture.
@@ -189,7 +191,8 @@ protected:
 private:
     void applyZoom(double factor);
     [[nodiscard]] QRectF contentSceneRect() const;
-    void updateNavigationSceneRect();
+    void updateNavigationSceneRect(const QPointF& anchorScenePoint = QPointF(),
+                                   const QPointF& targetViewportPos = QPointF());
     void emitViewTransform();
     void layoutPlaceholderButton();
     void updateAccessibleDescription();
@@ -259,6 +262,8 @@ private:
     SourceRegionId m_hoveredRegionId{};
     QPointF m_currentMouseScenePos{};
     bool m_mouseInsideCanvas{false};
+    QPoint m_lastWindowPos{0, 0};
+    bool m_hasLastWindowPos{false};
 };
 
 } // namespace manga::ui::manga

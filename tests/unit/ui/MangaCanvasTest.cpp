@@ -648,6 +648,27 @@ private Q_SLOTS:
         const auto geom2 = spy.at(1).at(1).value<RectGeometry>();
         QCOMPARE(geom2.height, 101.0);
     }
+
+    void anchorScenePointOnViewportMatchesCenteringWhenTargetIsCenter() {
+        MangaCanvas canvas;
+        canvas.resize(800, 600);
+        canvas.show();
+        QImage image(1200, 1800, QImage::Format_RGBA8888);
+        image.fill(Qt::white);
+        canvas.setPageImage(image);
+
+        const QPointF scenePoint(600.0, 900.0);
+        canvas.centerScenePointOnViewport(scenePoint);
+        const int hCenter = canvas.horizontalScrollBar()->value();
+        const int vCenter = canvas.verticalScrollBar()->value();
+
+        canvas.anchorScenePointOnViewport(scenePoint, canvas.viewport()->rect().center());
+        QCOMPARE(canvas.horizontalScrollBar()->value(), hCenter);
+        QCOMPARE(canvas.verticalScrollBar()->value(), vCenter);
+
+        canvas.anchorScenePointOnViewport(scenePoint, canvas.viewport()->rect().center() + QPointF(50.0, 0.0));
+        QCOMPARE(canvas.horizontalScrollBar()->value(), hCenter - 50);
+    }
 };
 
 QTEST_MAIN(MangaCanvasTest)
