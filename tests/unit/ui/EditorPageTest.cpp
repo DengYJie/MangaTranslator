@@ -228,7 +228,7 @@ private Q_SLOTS:
                  5);
     }
 
-    void appliedStrokeSettlesDraftOnMatchingDelivery() {
+    void appliedStrokeAdoptsDraftImmediately() {
         test::FakeThumbnailStore thumbnails;
         test::FakePageImageLoader images;
         application::OperationRegistry registry;
@@ -271,21 +271,23 @@ private Q_SLOTS:
             &viewModel, "manualOverrideReady", Q_ARG(ui::screen::editor::ManualOverrideDelivery, staleDelivery));
         QVERIFY(canvas->hasStrokeDraftForTest());
 
+        // The apply event adopts the draft immediately; no delivery is required.
         QMetaObject::invokeMethod(&controller,
                                   "manualStrokeApplied",
                                   Q_ARG(domain::PageId, pageId),
                                   Q_ARG(QString, QStringLiteral("hash-b")),
                                   Q_ARG(application::OperationId, opId));
-        QVERIFY(canvas->hasStrokeDraftForTest()); // the apply event alone does not settle
+        QVERIFY(!canvas->hasStrokeDraftForTest());
+        QCOMPARE(canvas->authoritativeOverrideForTest().pixelColor(16, 16), QColor(255, 0, 0, 255));
 
-        QImage appliedImage(64, 64, QImage::Format_RGBA8888);
-        appliedImage.fill(QColor(10, 200, 40, 255));
-        const ui::screen::editor::ManualOverrideDelivery appliedDelivery{
-            pageId, appliedImage, QStringLiteral("hash-b")};
+        // The rebuild's later delivery carries the same ref and is skipped as identical, so a
+        // mismatched image with the adopted ref must not replace the adopted pixels.
+        QImage wrongImage(64, 64, QImage::Format_RGBA8888);
+        wrongImage.fill(QColor(10, 200, 40, 255));
+        const ui::screen::editor::ManualOverrideDelivery appliedDelivery{pageId, wrongImage, QStringLiteral("hash-b")};
         QMetaObject::invokeMethod(
             &viewModel, "manualOverrideReady", Q_ARG(ui::screen::editor::ManualOverrideDelivery, appliedDelivery));
-        QVERIFY(!canvas->hasStrokeDraftForTest());
-        QCOMPARE(canvas->authoritativeOverrideForTest(), appliedImage);
+        QCOMPARE(canvas->authoritativeOverrideForTest().pixelColor(16, 16), QColor(255, 0, 0, 255));
     }
 
     void noOpStrokeStillSettlesDraft() {
@@ -325,15 +327,12 @@ private Q_SLOTS:
         page.trackPendingStrokeForTest(pageId, opId, 0);
 
         // The stroke changed nothing, so afterRef equals the starting ref; the draft must still
-        // settle, which is the case a ref-diff rule would hang on.
+        // settle on the apply event alone, which is the case a ref-diff rule would hang on.
         QMetaObject::invokeMethod(&controller,
                                   "manualStrokeApplied",
                                   Q_ARG(domain::PageId, pageId),
                                   Q_ARG(QString, QStringLiteral("hash-a")),
                                   Q_ARG(application::OperationId, opId));
-        const ui::screen::editor::ManualOverrideDelivery redelivered{pageId, overrideImage, QStringLiteral("hash-a")};
-        QMetaObject::invokeMethod(
-            &viewModel, "manualOverrideReady", Q_ARG(ui::screen::editor::ManualOverrideDelivery, redelivered));
         QVERIFY(!canvas->hasStrokeDraftForTest());
     }
 

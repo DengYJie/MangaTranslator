@@ -143,6 +143,10 @@ public:
     void finishStrokeDraft();
     /// Drops the draft and shows the authoritative override layer again.
     void settleStrokeDraft();
+    /// Adopts the active draft as the authoritative layer under `ref`. The draft is bit-identical
+    /// to the committed layer, so the canvas does not wait for the decoded delivery; that delivery
+    /// arrives with the same ref and is skipped.
+    void adoptStrokeDraft(const QString& ref);
 
     /// Test-only observation hooks.
     [[nodiscard]] QWidget* placeholderActionButtonForTest() const;

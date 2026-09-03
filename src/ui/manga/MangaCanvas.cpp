@@ -435,6 +435,11 @@ void MangaCanvas::setClearImage(const QImage& image) {
 }
 
 void MangaCanvas::setManualOverrideImage(const QImage& image, const QString& ref) {
+    if (!m_strokeDraftActive && !ref.isEmpty() && ref == m_overrideRef) {
+        // The ref is a content hash, so equality means the pixels are identical. This skips the
+        // preview rebuild's delivery after a locally adopted draft.
+        return;
+    }
     m_overrideImage = image;
     m_overrideRef = ref;
     if (m_strokeDraftActive) {
@@ -514,6 +519,23 @@ void MangaCanvas::settleStrokeDraft() {
     if (!m_strokeDraftActive) {
         return;
     }
+    m_strokeDraftActive = false;
+    m_strokeDraft = QImage();
+    m_strokeDirtyRect = QRect();
+    m_strokeLastPoint = QPointF();
+    m_strokeDraftBaseRef.clear();
+    syncOverrideItem();
+}
+
+void MangaCanvas::adoptStrokeDraft(const QString& ref) {
+    if (!m_strokeDraftActive) {
+        return;
+    }
+    // The draft is bit-identical to the committed layer: both run the shared rasterizer over the
+    // same baseline, and the committed PNG round trip is lossless. Adopting the buffer costs one
+    // implicit share instead of a full-page decode and delivery.
+    m_overrideImage = m_strokeDraft;
+    m_overrideRef = ref;
     m_strokeDraftActive = false;
     m_strokeDraft = QImage();
     m_strokeDirtyRect = QRect();

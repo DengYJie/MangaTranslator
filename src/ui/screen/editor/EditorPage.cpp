@@ -198,7 +198,6 @@ EditorPage::EditorPage(EditorViewModel* viewModel, QWidget* parent) : base::Base
                         m_pendingStrokeOperationId = operationId;
                         m_pendingStrokePageId = state.currentPageId;
                         m_pendingStrokeSessionGeneration = state.projectSessionGeneration;
-                        m_pendingStrokeAfterRef.clear();
                     } else {
                         // The stroke was rejected up front, so no delivery will ever arrive.
                         m_canvas->settleStrokeDraft();
@@ -287,15 +286,6 @@ EditorPage::EditorPage(EditorViewModel* viewModel, QWidget* parent) : base::Base
     });
     connect(m_viewModel, &EditorViewModel::manualOverrideReady, this, [this](const ManualOverrideDelivery& delivery) {
         m_canvas->setManualOverrideImage(delivery.image, delivery.ref);
-        // The draft settles only when the delivered layer is the one this stroke produced; a
-        // no-change stroke re-delivers its starting ref and still settles, while deliveries for
-        // another page or another stroke are ignored.
-        if (m_pendingStrokeOperationId.isValid() && delivery.pageId == m_pendingStrokePageId &&
-            !m_pendingStrokeAfterRef.isEmpty() && delivery.ref == m_pendingStrokeAfterRef) {
-            m_pendingStrokeOperationId = {};
-            m_pendingStrokeAfterRef.clear();
-            m_canvas->settleStrokeDraft();
-        }
     });
     connect(m_viewModel, &EditorViewModel::previewImageReady, this, [this](const PageImageDelivery& delivery) {
         m_canvas->setTranslatedPreview(delivery.image);
@@ -704,12 +694,10 @@ void EditorPage::trackPendingStrokeForTest(const domain::PageId& pageId,
     m_pendingStrokeOperationId = operationId;
     m_pendingStrokePageId = pageId;
     m_pendingStrokeSessionGeneration = sessionGeneration;
-    m_pendingStrokeAfterRef.clear();
 }
 
 void EditorPage::abandonPendingStrokeDraft() {
     m_pendingStrokeOperationId = {};
-    m_pendingStrokeAfterRef.clear();
     m_pendingStrokePageId = {};
     m_pendingStrokeSessionGeneration = 0;
     m_canvas->settleStrokeDraft();
@@ -734,7 +722,11 @@ void EditorPage::ensureControllerConnections() {
                 if (operationId != m_pendingStrokeOperationId) {
                     return; // a different operation; the draft belongs to ours
                 }
-                m_pendingStrokeAfterRef = afterRef;
+                // The draft is bit-identical to the committed layer, so adopt it now instead of
+                // waiting for the PNG round trip and the full preview rebuild. The rebuild's
+                // later delivery carries the same ref and is skipped as identical.
+                m_canvas->adoptStrokeDraft(afterRef);
+                m_pendingStrokeOperationId = {};
             });
     connect(controller,
             &EditorProcessingController::processingFinished,

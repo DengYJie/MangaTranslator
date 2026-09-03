@@ -150,10 +150,9 @@ private:
     widget::InspectorPanel* m_inspector{nullptr};
     manga::MangaCanvas::ContentState m_lastPlaceholder{manga::MangaCanvas::ContentState::NoProject};
 
-    /// The stroke whose commit is in flight; the canvas draft settles once the delivered override
-    /// layer carries the applied ref.
+    /// The stroke whose commit is in flight; the canvas draft is adopted as the authoritative
+    /// layer as soon as the stroke passes the layer-ref guard and is applied.
     application::OperationId m_pendingStrokeOperationId;
-    QString m_pendingStrokeAfterRef;
     domain::PageId m_pendingStrokePageId;
     quint64 m_pendingStrokeSessionGeneration{0};
     QPointer<EditorProcessingController> m_connectedController;

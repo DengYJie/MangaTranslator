@@ -774,6 +774,36 @@ private Q_SLOTS:
         canvas.setPageImage(nextPage);
         QVERIFY(!canvas.hasStrokeDraftForTest());
     }
+
+    void adoptStrokeDraftBecomesAuthoritativeLayer() {
+        MangaCanvas canvas;
+        canvas.setPageBounds(ImageSize{64, 64});
+        QImage overrideImage(64, 64, QImage::Format_RGBA8888);
+        overrideImage.fill(QColor(0, 0, 255, 200));
+        canvas.setManualOverrideImage(overrideImage, QStringLiteral("hash-a"));
+
+        canvas.beginStrokeDraft(manga::rendering::StrokePaintMode::Paint, QColor(255, 0, 0, 255), 8.0);
+        canvas.extendStrokeDraft(QPointF(16.5, 16.5));
+        const uchar* draftBits = canvas.strokeDraftBitsForTest();
+        QVERIFY(draftBits != nullptr);
+
+        canvas.adoptStrokeDraft(QStringLiteral("hash-b"));
+        QVERIFY(!canvas.hasStrokeDraftForTest());
+        const QImage adopted = canvas.authoritativeOverrideForTest();
+        QCOMPARE(adopted.pixelColor(16, 16), QColor(255, 0, 0, 255));
+        // The adopted layer shares the draft buffer instead of copying it.
+        QCOMPARE(adopted.constBits(), draftBits);
+
+        // A delivery carrying the adopted ref is skipped, even with different pixels.
+        QImage otherImage(64, 64, QImage::Format_RGBA8888);
+        otherImage.fill(QColor(10, 200, 40, 255));
+        canvas.setManualOverrideImage(otherImage, QStringLiteral("hash-b"));
+        QCOMPARE(canvas.authoritativeOverrideForTest().pixelColor(16, 16), QColor(255, 0, 0, 255));
+
+        // A newer ref applies normally.
+        canvas.setManualOverrideImage(otherImage, QStringLiteral("hash-c"));
+        QCOMPARE(canvas.authoritativeOverrideForTest().pixelColor(16, 16), QColor(10, 200, 40, 255));
+    }
 };
 
 QTEST_MAIN(MangaCanvasTest)
