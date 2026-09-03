@@ -69,7 +69,10 @@ public:
 
     /// Replaces the page image and switches to the Image state. GUI thread only.
     void setPageImage(const QImage& image);
-    void setCleaningImage(const QImage& image);
+    void setClearImage(const QImage& image);
+    /// Installs the authoritative override layer. Ignored while a draft owns the layer, because the
+    /// draft is what the user is watching; `settleStrokeDraft` ends that period.
+    void setManualOverrideImage(const QImage& image, const QString& ref);
     void setTranslatedPreview(const QImage& image);
     void setPreviewMode(int mode);
     void clearPageImage();
@@ -220,7 +223,8 @@ private:
 
     QGraphicsScene* m_scene{nullptr};                // owned via QGraphicsView::setScene
     QGraphicsPixmapItem* m_pageItem{nullptr};        // scene-owned
-    QGraphicsPixmapItem* m_cleaningItem{nullptr};    // scene-owned
+    QGraphicsPixmapItem* m_clearItem{nullptr};       // scene-owned
+    QGraphicsPixmapItem* m_overrideItem{nullptr};    // scene-owned
     QGraphicsPixmapItem* m_translationItem{nullptr}; // scene-owned
     fluent::layout::Card* m_placeholderCard{nullptr};
     fluent::textfields::Label* m_placeholderIcon{nullptr};
@@ -228,7 +232,9 @@ private:
     fluent::textfields::Label* m_placeholderDescription{nullptr};
     fluent::basicinput::Button* m_placeholderAction{nullptr};
     QPixmap m_pagePixmap;
-    QPixmap m_cleaningPixmap;
+    QPixmap m_clearPixmap;
+    QPixmap m_overridePixmap;
+    QString m_overrideRef;
     QPixmap m_translationPixmap;
     int m_previewMode{1};
     ContentState m_contentState{ContentState::NoProject};

@@ -27,7 +27,7 @@ ExportSnapshotBuilder::ExportSnapshotBuilder(domain::ComicProject* project,
 QFuture<application::Result<ExportSnapshotBuilder::PreviewResult>>
 ExportSnapshotBuilder::executePreview(const Request& request, const application::OperationContext& context) {
     return execute(request, context)
-        .then([](application::Result<QVector<application::ExportPageSnapshot>> result)
+        .then([this](application::Result<QVector<application::ExportPageSnapshot>> result)
                   -> application::Result<ExportSnapshotBuilder::PreviewResult> {
             if (!result.has_value()) {
                 return std::unexpected(result.error());
@@ -40,23 +40,9 @@ ExportSnapshotBuilder::executePreview(const Request& request, const application:
 
             const auto& page = result.value().first();
 
-            // 1. Build cleaning layer (clear + manualOverride)
-            QImage cleaningImg(page.sourceImage.size(), QImage::Format_RGBA8888_Premultiplied);
-            cleaningImg.setColorSpace(QColorSpace(QColorSpace::SRgb));
-            cleaningImg.fill(Qt::transparent);
-            if (!page.clearLayer.isNull() || !page.manualOverrideLayer.isNull()) {
-                QPainter cp(&cleaningImg);
-                cp.setCompositionMode(QPainter::CompositionMode_SourceOver);
-                if (!page.clearLayer.isNull()) {
-                    cp.drawImage(0, 0, page.clearLayer);
-                }
-                if (!page.manualOverrideLayer.isNull()) {
-                    cp.drawImage(0, 0, page.manualOverrideLayer);
-                }
-                cp.end();
-            }
-
-            // 2. Build full composite (source + clear + translation + manualOverride)
+            // Build full composite (source + clear + translation + manualOverride). The canvas
+            // receives the clear and override layers separately, so the eraser can subtract brush
+            // paint without punching a hole through the inpainted result.
             QImage composite(page.sourceImage.size(), QImage::Format_RGBA8888_Premultiplied);
             composite.setColorSpace(QColorSpace(QColorSpace::SRgb));
             composite.fill(Qt::transparent);
@@ -76,7 +62,12 @@ ExportSnapshotBuilder::executePreview(const Request& request, const application:
 
             PreviewResult preview;
             preview.compositeImage = composite.convertToFormat(QImage::Format_RGBA8888);
-            preview.cleaningImage = cleaningImg.convertToFormat(QImage::Format_RGBA8888);
+            preview.clearImage = page.clearLayer;
+            preview.manualOverrideImage = page.manualOverrideLayer;
+            if (const auto* domainPage = m_project->findPage(page.pageId);
+                domainPage != nullptr && domainPage->manualOverrideLayerAsset().has_value()) {
+                preview.manualOverrideRef = QString::fromStdString(*domainPage->manualOverrideLayerAsset());
+            }
             return preview;
         });
 }

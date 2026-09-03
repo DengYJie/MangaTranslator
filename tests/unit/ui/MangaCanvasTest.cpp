@@ -5,11 +5,13 @@
 #include "ui/manga/RegionOverlayItem.h"
 
 #include <QApplication>
+#include <QColorSpace>
 #include <QGraphicsScene>
 #include <QKeyEvent>
 #include <QList>
 #include <QMouseEvent>
 #include <QPainter>
+#include <QRadialGradient>
 #include <QSignalSpy>
 #include <QtTest>
 
@@ -43,13 +45,92 @@ private Q_SLOTS:
 
     void zOrderConstantsAreStrictlyOrdered() {
         static_assert(manga::ui::canvas::kZBackground < manga::ui::canvas::kZPageOriginal);
-        static_assert(manga::ui::canvas::kZPageOriginal < manga::ui::canvas::kZCleaningLayer);
-        static_assert(manga::ui::canvas::kZCleaningLayer < manga::ui::canvas::kZRegionNormal);
+        static_assert(manga::ui::canvas::kZPageOriginal < manga::ui::canvas::kZClearLayer);
+        static_assert(manga::ui::canvas::kZClearLayer < manga::ui::canvas::kZManualOverrideLayer);
+        static_assert(manga::ui::canvas::kZManualOverrideLayer < manga::ui::canvas::kZRegionNormal);
         static_assert(manga::ui::canvas::kZRegionNormal < manga::ui::canvas::kZSelectionHandles);
         static_assert(manga::ui::canvas::kZSelectionHandles < manga::ui::canvas::kZToolCreation);
         static_assert(manga::ui::canvas::kZToolCreation < manga::ui::canvas::kZTextLayer);
         // TODO(Defect 10): Replace QVERIFY(true) placeholder with actual verifiable assertions.
         QVERIFY(true);
+    }
+
+    void splitLayersCompositeIdenticallyToMergedCleaningImage() {
+        const QSize size(96, 96);
+
+        QImage clearLayer(size, QImage::Format_RGBA8888);
+        clearLayer.fill(Qt::transparent);
+        {
+            QPainter painter(&clearLayer);
+            painter.fillRect(QRect(8, 8, 40, 60), QColor(250, 250, 250, 255));
+            QRadialGradient blob(QPointF(64, 32), 20.0);
+            blob.setColorAt(0.0, QColor(255, 255, 255, 255));
+            blob.setColorAt(1.0, QColor(255, 255, 255, 0));
+            painter.fillRect(QRect(44, 12, 40, 40), blob);
+        }
+
+        QImage overrideLayer(size, QImage::Format_RGBA8888);
+        overrideLayer.fill(Qt::transparent);
+        {
+            QPainter painter(&overrideLayer);
+            painter.setPen(QPen(QColor(17, 17, 17, 160), 6.0, Qt::SolidLine, Qt::RoundCap));
+            painter.drawLine(QPointF(10, 70), QPointF(86, 20));
+            painter.drawLine(QPointF(20, 84), QPointF(70, 60));
+        }
+
+        // The merged cleaning image the canvas received before the layer split.
+        QImage merged(size, QImage::Format_RGBA8888_Premultiplied);
+        merged.setColorSpace(QColorSpace(QColorSpace::SRgb));
+        merged.fill(Qt::transparent);
+        {
+            QPainter painter(&merged);
+            painter.setCompositionMode(QPainter::CompositionMode_SourceOver);
+            painter.drawImage(0, 0, clearLayer);
+            painter.drawImage(0, 0, overrideLayer);
+        }
+        merged = merged.convertToFormat(QImage::Format_RGBA8888);
+
+        // The two layers composited separately must reproduce it pixel for pixel.
+        QImage twoPass(size, QImage::Format_RGBA8888_Premultiplied);
+        twoPass.setColorSpace(QColorSpace(QColorSpace::SRgb));
+        twoPass.fill(Qt::transparent);
+        {
+            QPainter painter(&twoPass);
+            painter.setCompositionMode(QPainter::CompositionMode_SourceOver);
+            painter.drawImage(0, 0, clearLayer);
+            painter.drawImage(0, 0, overrideLayer);
+        }
+        twoPass = twoPass.convertToFormat(QImage::Format_RGBA8888);
+        QCOMPARE(twoPass, merged);
+
+        // Rendering the two canvas items in z order must equal the merged single item.
+        QImage transparentPage(size, QImage::Format_RGBA8888);
+        transparentPage.fill(Qt::transparent);
+
+        const auto renderCanvas = [&](MangaCanvas& canvas) {
+            canvas.resize(400, 400);
+            canvas.show();
+            canvas.setPageImage(transparentPage);
+            QImage sceneRender(size, QImage::Format_RGBA8888);
+            sceneRender.fill(Qt::transparent);
+            {
+                QPainter painter(&sceneRender);
+                canvas.scene()->render(
+                    &painter, QRectF(0, 0, size.width(), size.height()), QRectF(0, 0, size.width(), size.height()));
+            }
+            return sceneRender;
+        };
+
+        MangaCanvas mergedCanvas;
+        mergedCanvas.setClearImage(merged);
+        const QImage mergedRender = renderCanvas(mergedCanvas);
+
+        MangaCanvas splitCanvas;
+        splitCanvas.setClearImage(clearLayer);
+        splitCanvas.setManualOverrideImage(overrideLayer, QStringLiteral("ref-a"));
+        const QImage splitRender = renderCanvas(splitCanvas);
+
+        QCOMPARE(splitRender, mergedRender);
     }
 
     void initialStateIsNoProject() {

@@ -263,7 +263,8 @@ public:
 Q_SIGNALS:
     void stateChanged(const EditorState& state);
     void pageImageReady(const PageImageDelivery& delivery);
-    void cleaningImageReady(const PageImageDelivery& delivery);
+    void clearImageReady(const PageImageDelivery& delivery);
+    void manualOverrideReady(const ManualOverrideDelivery& delivery);
     void previewImageReady(const PageImageDelivery& delivery);
     void thumbnailReady(const domain::PageId& pageId, const QImage& image);
     void thumbnailFailed(const domain::PageId& pageId, const QString& safeMessage);
@@ -390,7 +391,8 @@ private:
     domain::PageId m_previewPageId;
     application::OperationId m_previewOperation{};
     QImage m_cachedPreviewImage;
-    QImage m_cachedCleaningImage;
+    QImage m_cachedClearImage;
+    QImage m_cachedManualOverrideImage;
 
     QHash<QString, ThumbnailTicket> m_thumbnailInFlight; // key: PageId string
     QQueue<domain::PageId> m_thumbnailQueue;

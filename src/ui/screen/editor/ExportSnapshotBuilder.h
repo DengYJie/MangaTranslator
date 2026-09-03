@@ -34,8 +34,10 @@ public:
     };
 
     struct PreviewResult {
-        QImage compositeImage;
-        QImage cleaningImage;
+        QImage compositeImage;      // original + clear + translation + override
+        QImage clearImage;          // clearLayer only
+        QImage manualOverrideImage; // manualOverrideLayer only
+        QString manualOverrideRef;  // layer asset ref, empty when the page has no override layer
     };
 
     [[nodiscard]] QFuture<application::Result<QVector<application::ExportPageSnapshot>>>

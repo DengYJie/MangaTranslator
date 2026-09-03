@@ -723,7 +723,8 @@ void EditorViewModel::requestPreview(const domain::PageId& pageId) {
     m_previewSessionGeneration = sessionGeneration;
     m_previewContentRevision = contentRevision;
     m_cachedPreviewImage = QImage{};
-    m_cachedCleaningImage = QImage{};
+    m_cachedClearImage = QImage{};
+    m_cachedManualOverrideImage = QImage{};
     Q_EMIT previewImageReady(PageImageDelivery{pageId, QImage{}});
 
     ExportSnapshotBuilder builder(&m_openedSession->project, m_pageImageLoader, m_derivedAssetStore);
@@ -743,7 +744,8 @@ void EditorViewModel::invalidatePreviewAndRequestCurrentPage() {
     m_previewSessionGeneration = 0;
     m_previewContentRevision = 0;
     m_cachedPreviewImage = QImage{};
-    m_cachedCleaningImage = QImage{};
+    m_cachedClearImage = QImage{};
+    m_cachedManualOverrideImage = QImage{};
     if (m_hasSession && m_state.currentPageId.isValid()) {
         requestPreview(m_state.currentPageId);
     }
@@ -779,9 +781,12 @@ void EditorViewModel::handlePreviewFinished() {
         return;
     }
     m_cachedPreviewImage = result.value().compositeImage;
-    m_cachedCleaningImage = result.value().cleaningImage;
+    m_cachedClearImage = result.value().clearImage;
+    m_cachedManualOverrideImage = result.value().manualOverrideImage;
     Q_EMIT previewImageReady(PageImageDelivery{m_previewPageId, m_cachedPreviewImage});
-    Q_EMIT cleaningImageReady(PageImageDelivery{m_previewPageId, m_cachedCleaningImage});
+    Q_EMIT clearImageReady(PageImageDelivery{m_previewPageId, m_cachedClearImage});
+    Q_EMIT manualOverrideReady(
+        ManualOverrideDelivery{m_previewPageId, m_cachedManualOverrideImage, result.value().manualOverrideRef});
 }
 
 bool EditorViewModel::removeRegionForTest(const domain::RegionId& regionId) {

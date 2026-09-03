@@ -370,8 +370,11 @@ void MangaCanvas::setPageImage(const QImage& image) {
     m_pageItem->setVisible(true);
 
     m_pageItem->setPos(0, 0);
-    if (m_cleaningItem) {
-        m_cleaningItem->setPos(0, 0);
+    if (m_clearItem) {
+        m_clearItem->setPos(0, 0);
+    }
+    if (m_overrideItem) {
+        m_overrideItem->setPos(0, 0);
     }
     if (m_translationItem && m_previewMode == 2) {
         m_translationItem->setPos(m_pagePixmap.width() + 32.0, 0);
@@ -380,16 +383,32 @@ void MangaCanvas::setPageImage(const QImage& image) {
     setContentStateInternal(ContentState::Image, QString(), QString(), false);
 }
 
-void MangaCanvas::setCleaningImage(const QImage& image) {
-    m_cleaningPixmap = image.isNull() ? QPixmap() : QPixmap::fromImage(image);
-    if (!m_cleaningItem) {
-        m_cleaningItem = new QGraphicsPixmapItem();
-        m_cleaningItem->setZValue(canvas::kZCleaningLayer);
-        m_scene->addItem(m_cleaningItem);
+void MangaCanvas::setClearImage(const QImage& image) {
+    m_clearPixmap = image.isNull() ? QPixmap() : QPixmap::fromImage(image);
+    if (!m_clearItem) {
+        m_clearItem = new QGraphicsPixmapItem();
+        m_clearItem->setZValue(canvas::kZClearLayer);
+        m_scene->addItem(m_clearItem);
     }
-    m_cleaningItem->setPixmap(m_cleaningPixmap);
-    m_cleaningItem->setPos(0, 0);
-    m_cleaningItem->setVisible(!m_cleaningPixmap.isNull());
+    m_clearItem->setPixmap(m_clearPixmap);
+    m_clearItem->setPos(0, 0);
+    m_clearItem->setVisible(!m_clearPixmap.isNull());
+    if (viewport()) {
+        viewport()->update();
+    }
+}
+
+void MangaCanvas::setManualOverrideImage(const QImage& image, const QString& ref) {
+    m_overridePixmap = image.isNull() ? QPixmap() : QPixmap::fromImage(image);
+    m_overrideRef = ref;
+    if (!m_overrideItem) {
+        m_overrideItem = new QGraphicsPixmapItem();
+        m_overrideItem->setZValue(canvas::kZManualOverrideLayer);
+        m_scene->addItem(m_overrideItem);
+    }
+    m_overrideItem->setPixmap(m_overridePixmap);
+    m_overrideItem->setPos(0, 0);
+    m_overrideItem->setVisible(!m_overridePixmap.isNull() && !m_overrideRef.isEmpty());
     if (viewport()) {
         viewport()->update();
     }
@@ -441,15 +460,21 @@ void MangaCanvas::clearPageImage() {
     }
     cancelRemoveStroke();
     m_pagePixmap = QPixmap();
-    m_cleaningPixmap = QPixmap();
+    m_clearPixmap = QPixmap();
+    m_overridePixmap = QPixmap();
+    m_overrideRef.clear();
     m_translationPixmap = QPixmap();
     if (m_pageItem) {
         m_pageItem->setPixmap(m_pagePixmap);
         m_pageItem->setVisible(false);
     }
-    if (m_cleaningItem) {
-        m_cleaningItem->setPixmap(QPixmap());
-        m_cleaningItem->setVisible(false);
+    if (m_clearItem) {
+        m_clearItem->setPixmap(QPixmap());
+        m_clearItem->setVisible(false);
+    }
+    if (m_overrideItem) {
+        m_overrideItem->setPixmap(QPixmap());
+        m_overrideItem->setVisible(false);
     }
     if (m_translationItem) {
         m_translationItem->setPixmap(QPixmap());
@@ -860,16 +885,17 @@ void MangaCanvas::updateRemoveCursor() {
 
 QColor MangaCanvas::sampleContentColor(const QPointF& scenePos) const {
     // Sample the visible pixmap layers from bottom to top and alpha-composite them so the
-    // returned color matches what the user sees. The cleaning and compare preview pixmaps
-    // are sparse alpha overlays over the original page, so a transparent pixel must reveal
-    // the layer beneath it instead of being reported as the sampled color.
+    // returned color matches what the user sees. The clear, override, and compare preview
+    // pixmaps are sparse alpha overlays over the original page, so a transparent pixel must
+    // reveal the layer beneath it instead of being reported as the sampled color.
     struct Layer {
         const QGraphicsPixmapItem* item;
         const QPixmap* pixmap;
     };
     const Layer layers[] = {
         {m_pageItem, &m_pagePixmap},
-        {m_cleaningItem, &m_cleaningPixmap},
+        {m_clearItem, &m_clearPixmap},
+        {m_overrideItem, &m_overridePixmap},
         {m_translationItem, &m_translationPixmap},
     };
     auto layerPixel = [&scenePos](const Layer& layer, QColor& outColor) {

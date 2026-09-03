@@ -221,6 +221,15 @@ struct PageImageDelivery {
     bool hasSavedTransform{false};
 };
 
+/// One-shot delivery of the manual override layer to the canvas. `ref` is the content hash of the
+/// layer asset, empty when the page has no override layer. Never stored in State.
+struct ManualOverrideDelivery {
+    domain::PageId pageId;
+    QImage image;
+    QString ref;
+};
+
 } // namespace manga::ui::screen::editor
 
 Q_DECLARE_METATYPE(manga::ui::screen::editor::PageImageDelivery)
+Q_DECLARE_METATYPE(manga::ui::screen::editor::ManualOverrideDelivery)

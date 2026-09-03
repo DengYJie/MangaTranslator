@@ -272,8 +272,11 @@ EditorPage::EditorPage(EditorViewModel* viewModel, QWidget* parent) : base::Base
             });
 
     connect(m_viewModel, &EditorViewModel::pageImageReady, this, &EditorPage::handlePageImageReady);
-    connect(m_viewModel, &EditorViewModel::cleaningImageReady, this, [this](const PageImageDelivery& delivery) {
-        m_canvas->setCleaningImage(delivery.image);
+    connect(m_viewModel, &EditorViewModel::clearImageReady, this, [this](const PageImageDelivery& delivery) {
+        m_canvas->setClearImage(delivery.image);
+    });
+    connect(m_viewModel, &EditorViewModel::manualOverrideReady, this, [this](const ManualOverrideDelivery& delivery) {
+        m_canvas->setManualOverrideImage(delivery.image, delivery.ref);
     });
     connect(m_viewModel, &EditorViewModel::previewImageReady, this, [this](const PageImageDelivery& delivery) {
         m_canvas->setTranslatedPreview(delivery.image);
