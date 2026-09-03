@@ -4,35 +4,13 @@ MangaTranslator 采用轻量且解耦的 **ONNX Runtime + Manifest 校验** 架�
 
 ---
 
-## 1. 模型目录结构
+## 1. OCR 模型清单格式 (`manifest.json`)
 
-所有模型统一保存在项目根目录的 `models/` 下：
+每个模型目录下必须提供 `manifest.json`，按类别分别由 `src/services/ocr/BaberuManifest.cpp`（文字识别）、`src/services/detection/KoharuLayoutManifest.cpp`（版面检测）、`src/services/inpaint/InpaintManifest.cpp`（文字消除）解析。三者公共字段为 `manifestVersion`、`id`、`version`、`source`、`runtime`、`graphs`、`input`，文字识别另需 `tokenizer`、`normalization`、`generation`、`postprocess`。
 
-```text
-models/
-├── detection/
-│   └── comic-text-detector/
-│       └── 1.0.0/
-│           ├── model.onnx
-│           └── manifest.json
-└── ocr/
-    ├── genshiai-baberu-ocr-onnx/
-    │   └── 1.0.0/
-    │       ├── onnx/
-    │       ├── tokenizer.json
-    │       └── manifest.json
-    └── paddleocr-vl-1.6-onnx/
-        └── 1.0.0/
-            ├── onnx/
-            ├── tokenizer.json
-            └── manifest.json
-```
+注意 `sha256` 字段：校验器只确认它是 64 位小写十六进制字符串，不会读取模型文件求哈希再比对。清单因此能挡住字段缺失或写错格式，挡不住权重被替换或损坏；要核对完整性，自己用 `Get-FileHash -Algorithm SHA256` 算一遍再与清单比对。
 
----
-
-## 2. OCR 模型清单格式 (`manifest.json`)
-
-每个模型目录下必须提供 `manifest.json`，由 [`BaberuManifest`](file:///F:/source/MangaTranslator/src/services/ocr/BaberuManifest.h) 进行严格的模式与 SHA-256 校验：
+完整的文字识别清单形状如下（`graphs[].role` 固定为 `vision`、`decoder-prefill`、`decoder-step`）：
 
 ```json
 {
@@ -103,13 +81,4 @@ models/
   },
   "postprocess": "paddleocr-v1"
 }
-```
-
----
-
-## 3. 计算 SHA-256 校验和
-
-在 Windows PowerShell 中可直接使用 `Get-FileHash` 计算：
-```powershell
-(Get-FileHash -Algorithm SHA256 "onnx/vision_encoder.onnx").Hash.ToLower()
 ```

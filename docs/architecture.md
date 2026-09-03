@@ -72,7 +72,7 @@ Domain 层不感知 QWidget、网络、数据库或 ONNX Runtime，仅维护领�
 所有外部能力均抽象为纯虚接口，异步方法返回 `QFuture<Result<T>>`（其中 `Result<T> = std::expected<T, ApplicationError>`），取消操作通过 `OperationContext` 传递 `std::stop_token`：
 - `IComicImporter` / `IPageImageLoader`：漫画导入与图像流式加载；
 - `IProjectRepository`：项目元数据持久化、事务保存与备份恢复；
-- `ITextDetector`：漫画文本气泡检测（ONNX Comic Text Detector / Koharu）；
+- `ITextDetector`：漫画文本气泡检测（Koharu RF-DETR 分割模型，ONNX）；
 - `IOcrEngine`：文字识别引擎（Baberu / PaddleOCR-VL-1.6 ONNX）；
 - `ITranslator`：AI 翻译适配器（ChatCompletions 协议）；
 - `IInpainter`：图像修补引擎（LaMa ONNX / 纯色填充）；
@@ -83,15 +83,15 @@ Domain 层不感知 QWidget、网络、数据库或 ONNX Runtime，仅维护领�
 `BatchPagesProcessingWorkflow` 协调全项目/多页跨页的整章自动处理：
 - 采用**逐页流式内存管理**：依次执行「检测 → OCR → 翻译 → 修补 → 排版」；
 - 单页处理完成后立即通过事务原子提交至项目，避免整章数据积压在内存或崩溃丢失已完成进度；
-- 具备全局 Stop Token 支持，随时响应用户取消或暂停。
+- 全局 `std::stop_token` 只支持取消，没有暂停；`BatchProcessingRequest` 的 `stages` 决定跑哪几段，`scope` 可限定全部、选中、未处理或仅失败页面，因此重跑只补前面没成功的页。
 
 ---
 
 ## 5. 本地服务与网络适配器 (Services & Network)
 
 ### 5.1 文本检测与 OCR
-- **Comic Text Detector**：基于 ONNX Runtime，结合 DBNet 后处理生成文本框与多边形掩膜；
-- **OCR 引擎**：支持 Baberu ONNX 与 PaddleOCR-VL-1.6 ONNX，包含 BPE 分词器、贪心搜索生成与模型清单校验机制（`manifest.json` 与 SHA-256 完整性校验）。
+- **Koharu RF-DETR**：固定 `1152 x 1152` 输入，`dets` / `labels` / `masks` 三路输出由 `KoharuLayoutPostprocessor` 解码为文本框与实例多边形掩膜；
+- **OCR 引擎**：支持 Baberu ONNX 与 PaddleOCR-VL-1.6 ONNX，包含 BPE 分词器、贪心搜索生成与清单校验。校验按类别分三个解析器，`sha256` 字段只验证是否为 64 位十六进制，不比对模型文件的实际哈希。
 
 ### 5.2 图像修补 (Inpainting)
 - **LaMa ONNX**：高分辨率图像切块规划（`LamaTilePlanner`）、动态掩膜生成（`LamaMaskBuilder`）与 CPU 推理；
@@ -111,7 +111,7 @@ Domain 层不感知 QWidget、网络、数据库或 ONNX Runtime，仅维护领�
 `manga_rendering` 模块独立于 UI 与 Widget：
 - `TextLayoutEngine`：根据可用区域、阅读方向、字体和字距行距计算字形排布与自动换行，采用二分法精确计算最佳字号；
 - `TextRasterizer`：在源图像像素坐标下进行高精度文字光栅化，支持平滑描边、外发光与阴影；
-- 画布实时预览与最终文件导出均共享此渲染核心，保证两者所见即所得、100% 像素一致。
+- 画布实时预览与最终文件导出共享此渲染核心，导出侧另需 JPEG 的白底压平与 sRGB 转换。
 
 ---
 
@@ -158,5 +158,6 @@ View::render(State)
   ```
 - **原子保存与恢复机制**：
   - 保存时先写入同盘临时文件，校验完整后原子替换目标文件；
-  - 自动保留 `.bak` 备份文件，异常退出时提示并支持一键恢复；
+  - 每次成功保存留下一份单代 `project.json.bak`；打开项目时若 `project.json` 校验失败则自动读回该备份并报出恢复来源；
+  - 导入批次未确认完成时留下 `pending-batch.json` 崩溃标记，打开项目据此回收已落盘的原图；
   - API Key 等敏感信息使用操作系统凭据库（Windows Credential Manager）加密存储，严禁写入项目文件或日志。

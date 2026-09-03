@@ -16,14 +16,14 @@ MangaTranslator 是一款高性能桌面应用，旨在为漫画翻译与本地�
 
 ## 功能特性
 
-- **多格式导入**：原生支持 CBZ 压缩包、多页 PDF 以及松散图片目录的无缝解析与页面索引。
+- **图片目录导入**：原生支持松散图片目录与图片文件的无缝解析与页面索引。
 - **智能文本检测**：基于 Koharu RF-DETR 模型，自动提取文本区域及异形气泡的 BoundingBox 与多边形 Mask。
 - **漫画专用 OCR**：集成 Baberu Manga OCR 引擎，高精度提取中日韩（CJK）横排与竖排文本。
 - **上下文感知翻译**：通过 OpenAI 兼容接口连接 LLM 服务，注入页面级上下文与项目专属术语库（Glossary），确保译文精准地道。
-- **非破坏性图像修复**：双引擎驱动（LaMa 大掩码修复模型 + 纯色填充）实现原台词的无痕擦除，同时叠加透明度画笔/橡皮擦图层供人工微调。
+- **非破坏性图像修复**：双引擎驱动（LaMa 大掩码修复模型 + 纯色填充）实现原台词的无痕擦除，同时叠加可调直径与颜色的画笔/橡皮擦图层供人工微调。
 - **自动化智能排版**：纯 C++ 确定性渲染引擎，原生支持中文纵书直排（竖排）、字号自适应收缩、多行对齐与文字描边合成。
-- **交互式画布编辑器**：提供 8 向缩放手柄、旋转工具、翻译成品侧向对比预览视图，并自带完整的 Undo/Redo 历史栈。
-- **批处理状态机**：支持以整章为单位，全自动流水线执行“检测 → OCR → 翻译 → 修复”任务，并提供全局活动中心进行进度监控与断点恢复。
+- **交互式画布编辑器**：提供 8 向缩放手柄、旋转工具、原图与译文预览切换视图，并自带完整的 Undo/Redo 历史栈。
+- **批处理状态机**：支持以整章为单位，全自动流水线执行“检测 → OCR → 翻译 → 修复”任务，并提供全局活动中心进行进度监控与任务取消，重跑范围可只选未处理或失败页面。
 
 ## 架构设计
 
@@ -35,21 +35,21 @@ MangaTranslator 严格遵循 **六边形架构 (Hexagonal Architecture / Ports a
 - `domain`：核心业务实体（Project、Page、TextRegion）与业务不变量。
 - `application`：业务用例（UseCases）、批处理工作流与外部能力端口（Ports）定义。
 - `rendering`：纯文本测算与光栅化渲染引擎，不依赖任何 GUI 框架状态。
-- `services` / `network` / `data`：端口的适配器实现（包括 ONNX Runtime 推理、LLM HTTP 客户端、SQLite 持久化）。
+- `services` / `network` / `data`：端口的适配器实现（包括 ONNX Runtime 推理、LLM HTTP 客户端、项目目录与资产持久化）。
 - `ui`：遵循 Fluent Design 的交互界面、图形场景（Graphics Scene）与视图模型（ViewModels）。
 
 ## 环境要求
 
 在本地构建 MangaTranslator 前，请确保已安装以下依赖：
 
-- 支持 **C++23** 的现代编译器（MSVC 19.34+, GCC 13+, 或 Clang 17+）
+- 支持 **C++23** 的现代编译器（项目按 MSVC 工具链构建与验证，需 Visual Studio 2022/2025）
 - **Qt 6.11** 或更高版本（需包含 Widgets 模块）
 - **CMake 3.28** 或更高版本
 - **Ninja** 构建系统（推荐，用于并行加速）
 - **vcpkg** 包管理器
 
 > [!IMPORTANT]
-> 应用程序的检测、OCR 及图像修复能力依赖特定的 ONNX 权重文件。在运行前，必须将对应模型放置在 `res/models/` 目录下。模型下载链接与规格说明请查阅 `res/AGENTS.md`。
+> 应用程序的检测、OCR 及图像修复能力依赖特定的 ONNX 权重文件。权重不入库，运行时从「设置」里填写的模型目录读取。目录结构与 `manifest.json` 规格说明请查阅 [docs/models.md](docs/models.md)。
 
 ## 快速开始
 
@@ -59,24 +59,24 @@ MangaTranslator 严格遵循 **六边形架构 (Hexagonal Architecture / Ports a
 
 1. 应用开发配置：
    ```powershell
-   cmake --preset dev
+   cmake --preset windows-msvc-test
    ```
 
 2. 编译可执行程序：
    ```powershell
-   cmake --build build/dev --parallel
+   cmake --build build/windows-msvc-test --parallel
    ```
 
 ### 运行测试
 
-项目包含覆盖整个处理管线的完备单元测试与集成测试矩阵（E01-E05 场景）。
+项目包含覆盖整个处理管线的完备单元测试与集成测试矩阵（离线人工流程、OCR、翻译、批处理、页面导出、持久化、会话与恢复场景）。
 
 ```powershell
 # 运行全部测试并输出失败日志
-ctest --test-dir build/dev --output-on-failure
+ctest --test-dir build/windows-msvc-test --output-on-failure
 
 # 运行特定测试模块
-ctest --test-dir build/dev -R "DomainTests"
+ctest --test-dir build/windows-msvc-test -R "manga_tests_domain"
 ```
 
 ## 开发规范
