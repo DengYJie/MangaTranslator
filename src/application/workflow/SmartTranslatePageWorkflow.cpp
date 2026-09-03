@@ -103,10 +103,6 @@ private:
     }
 
     void finish(Result<PageProcessingProposal> result) {
-        if (m_rootContext.stopToken.stop_requested()) {
-            result = std::unexpected(makeApplicationError(
-                ErrorCategory::Cancelled, QStringLiteral("cancelled.user_requested"), QObject::tr("智能翻译已取消")));
-        }
         std::optional<ApplicationError> error;
         if (!result) {
             error = result.error();
