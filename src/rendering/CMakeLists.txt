@@ -6,6 +6,8 @@ target_sources(manga_rendering
         FontRegistry.h
         inpaint/StrokeMaskRasterizer.cpp
         inpaint/StrokeMaskRasterizer.h
+        paint/StrokePaintRasterizer.cpp
+        paint/StrokePaintRasterizer.h
         TextLayoutEngine.cpp
         TextRasterizer.cpp
 )

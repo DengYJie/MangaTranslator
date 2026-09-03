@@ -40,7 +40,8 @@ void StrokePaintRasterizerTest::invalidInputLeavesImageUntouched() {
     QCOMPARE(image, before);
 
     QImage nullImage;
-    StrokePaintRasterizer::rasterizeStroke(nullImage, params, {QPointF(4.0, 4.0)});
+    const QRect nullDirty = StrokePaintRasterizer::rasterizeStroke(nullImage, params, {QPointF(4.0, 4.0)});
+    QVERIFY(nullDirty.isEmpty());
     QVERIFY(nullImage.isNull());
 }
 
@@ -63,7 +64,8 @@ void StrokePaintRasterizerTest::paintCompositesStraightAlphaOverDestination() {
     image.fill(QColor(0, 0, 255, 200));
     const StrokePaintParams params{StrokePaintMode::Paint, QColor(255, 0, 0, 128), 8.0};
 
-    StrokePaintRasterizer::rasterizeStroke(image, params, {QPointF(16.5, 16.5)});
+    const QRect dirty = StrokePaintRasterizer::rasterizeStroke(image, params, {QPointF(16.5, 16.5)});
+    QVERIFY(dirty.contains(QPoint(16, 16)));
 
     // srcA = 128/255 at the centre; outA = srcA + dstA*(1-srcA) with dstA = 200/255.
     // centre -> srcA 0.50196, dstA 0.78431 -> outA 0.89362 -> alpha 228
@@ -79,7 +81,8 @@ void StrokePaintRasterizerTest::eraseScalesDestinationAlpha() {
     image.fill(QColor(0, 0, 255, 200));
     const StrokePaintParams params{StrokePaintMode::Erase, QColor(0, 0, 0, 255), 8.0};
 
-    StrokePaintRasterizer::rasterizeStroke(image, params, {QPointF(16.5, 16.5)});
+    const QRect dirty = StrokePaintRasterizer::rasterizeStroke(image, params, {QPointF(16.5, 16.5)});
+    QVERIFY(dirty.contains(QPoint(16, 16)));
 
     QCOMPARE(alphaAt(image, 16, 16), 0);   // coverage 1 -> alpha * 0
     QCOMPARE(alphaAt(image, 20, 16), 100); // coverage 0.5 -> alpha * 0.5
@@ -107,7 +110,8 @@ void StrokePaintRasterizerTest::incrementalSegmentsMatchWholeStrokeExactly() {
     for (const auto& params : {paint, erase}) {
         QImage whole(QSize(200, 200), QImage::Format_RGBA8888);
         whole.fill(QColor(90, 40, 10, 220));
-        StrokePaintRasterizer::rasterizeStroke(whole, params, points);
+        const QRect wholeDirty = StrokePaintRasterizer::rasterizeStroke(whole, params, points);
+        QVERIFY(!wholeDirty.isEmpty());
 
         QImage incremental = whole;
         // Rebuild from the same baseline, feeding one segment per pointer move.
