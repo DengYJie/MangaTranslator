@@ -497,6 +497,7 @@ void EditorCommandBar::setupShortcuts() {
     makeGlobal(QStringLiteral("T"), [this]() { m_viewModel->setActiveTool(CanvasTool::Text); });
     makeGlobal(QStringLiteral("B"), [this]() { m_viewModel->setActiveTool(CanvasTool::Brush); });
     makeGlobal(QStringLiteral("E"), [this]() { m_viewModel->setActiveTool(CanvasTool::Eraser); });
+    makeGlobal(QStringLiteral("I"), [this]() { m_viewModel->setActiveTool(CanvasTool::Eyedropper); });
     makeGlobal(QStringLiteral("J"), [this]() { m_viewModel->setActiveTool(CanvasTool::Remove); });
 
     makeGlobal(QStringLiteral("+"), [this]() { Q_EMIT zoomInRequested(); });

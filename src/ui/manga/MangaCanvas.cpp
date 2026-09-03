@@ -10,6 +10,7 @@
 #include <QAction>
 #include <QContextMenuEvent>
 #include <QCoreApplication>
+#include <QCursor>
 #include <QFocusEvent>
 #include <QGraphicsPixmapItem>
 #include <QGraphicsRectItem>
@@ -51,6 +52,222 @@ canvas::HandlePosition arrowToPrimaryHandle(int key) noexcept {
         default:
             return canvas::HandlePosition::East;
     }
+}
+
+constexpr int kColorPickerSupersample = 4;
+constexpr int kColorPickerGlyphPixels = 28;
+constexpr double kColorPickerOutlinePixels = 0.5;
+constexpr int kColorPickerMarginPixels = 2;
+constexpr int kColorPickerInkThreshold = 24;
+constexpr int kColorPickerFillRgb = 26;
+
+/// Rasterizes the eyedropper glyph into a QCursor whose hotspot sits exactly on
+/// the pen tip, the point a sample is taken from. The mask is sampled a few
+/// times per physical screen pixel and the pixmap carries the screen's device
+/// pixel ratio, so the platform shows the cursor without resampling it.
+QCursor buildColorPickerCursor(qreal devicePixelRatio) {
+    const QString glyphText = Typography::Icons::glyph(QStringLiteral("ic_fluent_eyedropper_20_regular"));
+    if (glyphText.isEmpty()) {
+        return QCursor(Qt::CrossCursor);
+    }
+
+    const qreal deviceScale = std::max(1.0, static_cast<double>(devicePixelRatio));
+    const int supersample = kColorPickerSupersample;
+    const double maskPixelsPerDip = supersample * deviceScale;
+    const int fontPixels = qRound(kColorPickerGlyphPixels * maskPixelsPerDip);
+    const int canvasPx = fontPixels * 2;
+
+    // Draw the glyph at its crisp optical size; the font is rasterized directly
+    // at the mask resolution so the final downscale keeps thin strokes sharp.
+    QImage glyphMask(canvasPx, canvasPx, QImage::Format_ARGB32_Premultiplied);
+    glyphMask.fill(Qt::transparent);
+    {
+        const QColor fillColor(kColorPickerFillRgb, kColorPickerFillRgb, kColorPickerFillRgb, 255);
+        QFont glyphFont = Typography::Icons::font(kColorPickerGlyphPixels);
+        glyphFont.setPixelSize(fontPixels);
+        QPainter maskPainter(&glyphMask);
+        maskPainter.setRenderHint(QPainter::Antialiasing, true);
+        maskPainter.setRenderHint(QPainter::TextAntialiasing, true);
+        maskPainter.setFont(glyphFont);
+        maskPainter.setPen(fillColor);
+        maskPainter.setBrush(Qt::NoBrush);
+        maskPainter.drawText(QRect(0, 0, canvasPx, canvasPx), Qt::AlignCenter, glyphText);
+    }
+
+    const QImage glyphAlpha = glyphMask.convertToFormat(QImage::Format_Alpha8);
+    if (glyphAlpha.isNull()) {
+        return QCursor(Qt::CrossCursor);
+    }
+
+    int inkMinX = canvasPx;
+    int inkMinY = canvasPx;
+    int inkMaxX = -1;
+    int inkMaxY = -1;
+    for (int y = 0; y < canvasPx; ++y) {
+        const uchar* row = glyphAlpha.constScanLine(y);
+        for (int x = 0; x < canvasPx; ++x) {
+            if (row[x] >= kColorPickerInkThreshold) {
+                inkMinX = std::min(inkMinX, x);
+                inkMinY = std::min(inkMinY, y);
+                inkMaxX = std::max(inkMaxX, x);
+                inkMaxY = std::max(inkMaxY, y);
+            }
+        }
+    }
+    if (inkMaxX < 0) {
+        return QCursor(Qt::CrossCursor);
+    }
+
+    // Dilate the ink so the white rim around the dark glyph stays visible over
+    // both light and dark page content.
+    const int radius = qMax(1, qRound(kColorPickerOutlinePixels * maskPixelsPerDip));
+    const int minY = std::max(0, inkMinY - radius);
+    const int maxY = std::min(canvasPx - 1, inkMaxY + radius);
+    const int minX = std::max(0, inkMinX - radius);
+    const int maxX = std::min(canvasPx - 1, inkMaxX + radius);
+    QImage outlineMask(canvasPx, canvasPx, QImage::Format_Alpha8);
+    outlineMask.fill(0);
+    for (int y = minY; y <= maxY; ++y) {
+        const int windowTop = std::max(0, y - radius);
+        const int windowBottom = std::min(canvasPx - 1, y + radius);
+        uchar* outRow = outlineMask.scanLine(y);
+        for (int x = minX; x <= maxX; ++x) {
+            const int windowLeft = std::max(0, x - radius);
+            const int windowRight = std::min(canvasPx - 1, x + radius);
+            uchar best = 0;
+            for (int wy = windowTop; wy <= windowBottom; ++wy) {
+                const uchar* row = glyphAlpha.constScanLine(wy);
+                for (int wx = windowLeft; wx <= windowRight; ++wx) {
+                    best = std::max(best, row[wx]);
+                }
+            }
+            outRow[x] = best;
+        }
+    }
+
+    // The rim bbox also defines the final image size.
+    int rimMinX = canvasPx;
+    int rimMinY = canvasPx;
+    int rimMaxX = -1;
+    int rimMaxY = -1;
+    int tipX = 0;
+    int tipY = 0;
+    int bestProjection = std::numeric_limits<int>::min();
+    for (int y = minY; y <= maxY; ++y) {
+        const uchar* row = outlineMask.constScanLine(y);
+        for (int x = minX; x <= maxX; ++x) {
+            if (row[x] == 0) {
+                continue;
+            }
+            rimMinX = std::min(rimMinX, x);
+            rimMinY = std::min(rimMinY, y);
+            rimMaxX = std::max(rimMaxX, x);
+            rimMaxY = std::max(rimMaxY, y);
+            // The pen tip is the rim pixel furthest toward the southwest, where
+            // the sampling point of the cursor must coincide.
+            const int projection = y - x;
+            if (projection > bestProjection) {
+                bestProjection = projection;
+                tipX = x;
+                tipY = y;
+            }
+        }
+    }
+    if (rimMaxX < 0) {
+        return QCursor(Qt::CrossCursor);
+    }
+
+    const int marginPx = qMax(1, qRound(kColorPickerMarginPixels * maskPixelsPerDip));
+    const int outLeft = std::max(0, rimMinX - marginPx);
+    const int outTop = std::max(0, rimMinY - marginPx);
+    const int outRight = std::min(canvasPx - 1, rimMaxX + marginPx);
+    const int outBottom = std::min(canvasPx - 1, rimMaxY + marginPx);
+    const int finalWidth = (outRight - outLeft + supersample) / supersample;
+    const int finalHeight = (outBottom - outTop + supersample) / supersample;
+    if (finalWidth <= 0 || finalHeight <= 0) {
+        return QCursor(Qt::CrossCursor);
+    }
+
+    // Average the mask composite into one output pixel per physical screen
+    // pixel, then tag the image with the screen's device pixel ratio.
+    const double fillR = kColorPickerFillRgb / 255.0;
+    const double fillG = kColorPickerFillRgb / 255.0;
+    const double fillB = kColorPickerFillRgb / 255.0;
+    QImage cursorImage(finalWidth, finalHeight, QImage::Format_RGBA8888);
+    cursorImage.fill(0);
+    for (int cellY = 0; cellY < finalHeight; ++cellY) {
+        const int rowBegin = outTop + cellY * supersample;
+        const int rowEnd = std::min(outBottom, rowBegin + supersample - 1);
+        uchar* outRow = cursorImage.scanLine(cellY);
+        for (int cellX = 0; cellX < finalWidth; ++cellX) {
+            const int colBegin = outLeft + cellX * supersample;
+            const int colEnd = std::min(outRight, colBegin + supersample - 1);
+            double sumR = 0.0;
+            double sumG = 0.0;
+            double sumB = 0.0;
+            double sumA = 0.0;
+            int sampleCount = 0;
+            for (int y = rowBegin; y <= rowEnd; ++y) {
+                const uchar* alphaRow = glyphAlpha.constScanLine(y);
+                const uchar* outlineRow = outlineMask.constScanLine(y);
+                for (int x = colBegin; x <= colEnd; ++x) {
+                    double premulR = 0.0;
+                    double premulG = 0.0;
+                    double premulB = 0.0;
+                    double alpha = 0.0;
+                    if (outlineRow[x] > 0) {
+                        premulR = 1.0;
+                        premulG = 1.0;
+                        premulB = 1.0;
+                        alpha = 1.0;
+                    }
+                    const double glyphAlphaValue = alphaRow[x] / 255.0;
+                    if (glyphAlphaValue > 0.0) {
+                        premulR = fillR * glyphAlphaValue + premulR * (1.0 - glyphAlphaValue);
+                        premulG = fillG * glyphAlphaValue + premulG * (1.0 - glyphAlphaValue);
+                        premulB = fillB * glyphAlphaValue + premulB * (1.0 - glyphAlphaValue);
+                        alpha = glyphAlphaValue + alpha * (1.0 - glyphAlphaValue);
+                    }
+                    sumR += premulR;
+                    sumG += premulG;
+                    sumB += premulB;
+                    sumA += alpha;
+                    ++sampleCount;
+                }
+            }
+            if (sampleCount == 0 || sumA <= 0.0) {
+                continue;
+            }
+            const double inverseAlpha = 1.0 / sumA;
+            uchar* pixel = outRow + cellX * 4;
+            pixel[0] = static_cast<uchar>(std::lround(sumR * inverseAlpha * 255.0));
+            pixel[1] = static_cast<uchar>(std::lround(sumG * inverseAlpha * 255.0));
+            pixel[2] = static_cast<uchar>(std::lround(sumB * inverseAlpha * 255.0));
+            pixel[3] = static_cast<uchar>(std::lround(sumA / sampleCount * 255.0));
+        }
+    }
+
+    cursorImage.setDevicePixelRatio(deviceScale);
+    const QPixmap cursorPixmap = QPixmap::fromImage(cursorImage);
+    const int logicalWidth = qMax(1, qCeil(finalWidth / deviceScale));
+    const int logicalHeight = qMax(1, qCeil(finalHeight / deviceScale));
+    int hotX = qRound((tipX - outLeft) / maskPixelsPerDip);
+    int hotY = qRound((tipY - outTop) / maskPixelsPerDip);
+    hotX = qBound(0, hotX, logicalWidth - 1);
+    hotY = qBound(0, hotY, logicalHeight - 1);
+    return QCursor(cursorPixmap, hotX, hotY);
+}
+
+/// Returns the shared eyedropper cursor, rebuilt only when the device pixel
+/// ratio of the screen the canvas lives on changes.
+QCursor colorPickerCursor(qreal devicePixelRatio) {
+    static QCursor s_cursor;
+    static qreal s_devicePixelRatio = -1.0;
+    if (qAbs(s_devicePixelRatio - devicePixelRatio) > 0.001) {
+        s_cursor = buildColorPickerCursor(devicePixelRatio);
+        s_devicePixelRatio = devicePixelRatio;
+    }
+    return s_cursor;
 }
 } // namespace
 
@@ -432,6 +649,7 @@ void MangaCanvas::setTool(canvas::Tool tool) {
         case canvas::Tool::Remove:
         case canvas::Tool::Brush:
         case canvas::Tool::Eraser:
+        case canvas::Tool::Eyedropper:
             setDragMode(NoDrag);
             updateRemoveCursor();
             break;
@@ -622,12 +840,86 @@ void MangaCanvas::syncTextItemGeometry(SourceRegionId id, const SourceRectGeomet
 }
 
 void MangaCanvas::updateRemoveCursor() {
-    if ((m_tool != canvas::Tool::Remove && m_tool != canvas::Tool::Brush && m_tool != canvas::Tool::Eraser) ||
-        m_spaceHeld || !viewport()) {
+    if (!viewport()) {
+        return;
+    }
+    if (m_spaceHeld) {
+        viewport()->unsetCursor();
+        return;
+    }
+    if (m_tool == canvas::Tool::Eyedropper) {
+        viewport()->setCursor(colorPickerCursor(viewport()->devicePixelRatioF()));
+        return;
+    }
+    if (m_tool != canvas::Tool::Remove && m_tool != canvas::Tool::Brush && m_tool != canvas::Tool::Eraser) {
         viewport()->unsetCursor();
         return;
     }
     viewport()->setCursor(Qt::BlankCursor);
+}
+
+QColor MangaCanvas::sampleContentColor(const QPointF& scenePos) const {
+    // Sample the visible pixmap layers from bottom to top and alpha-composite them so the
+    // returned color matches what the user sees. The cleaning and compare preview pixmaps
+    // are sparse alpha overlays over the original page, so a transparent pixel must reveal
+    // the layer beneath it instead of being reported as the sampled color.
+    struct Layer {
+        const QGraphicsPixmapItem* item;
+        const QPixmap* pixmap;
+    };
+    const Layer layers[] = {
+        {m_pageItem, &m_pagePixmap},
+        {m_cleaningItem, &m_cleaningPixmap},
+        {m_translationItem, &m_translationPixmap},
+    };
+    auto layerPixel = [&scenePos](const Layer& layer, QColor& outColor) {
+        if (layer.item == nullptr || !layer.item->isVisible() || layer.pixmap == nullptr || layer.pixmap->isNull()) {
+            return false;
+        }
+        const QPointF local = scenePos - layer.item->pos();
+        const QPoint pixel(static_cast<int>(std::floor(local.x())), static_cast<int>(std::floor(local.y())));
+        if (pixel.x() < 0 || pixel.y() < 0 || pixel.x() >= layer.pixmap->width() ||
+            pixel.y() >= layer.pixmap->height()) {
+            return false;
+        }
+        outColor = layer.pixmap->toImage().pixelColor(pixel);
+        return true;
+    };
+
+    QColor accumulated;
+    for (const auto& layer : layers) {
+        QColor top;
+        if (!layerPixel(layer, top)) {
+            continue;
+        }
+        const double topAlpha = top.alphaF();
+        if (topAlpha <= 0.0) {
+            continue;
+        }
+        if (!accumulated.isValid()) {
+            accumulated = top;
+            continue;
+        }
+        if (topAlpha >= 1.0) {
+            accumulated = top;
+            continue;
+        }
+        const double bottomAlpha = accumulated.alphaF();
+        const double outAlpha = topAlpha + bottomAlpha * (1.0 - topAlpha);
+        if (outAlpha <= 0.0) {
+            continue;
+        }
+        QColor blended;
+        blended.setRgbF((top.redF() * topAlpha + accumulated.redF() * bottomAlpha * (1.0 - topAlpha)) / outAlpha,
+                        (top.greenF() * topAlpha + accumulated.greenF() * bottomAlpha * (1.0 - topAlpha)) / outAlpha,
+                        (top.blueF() * topAlpha + accumulated.blueF() * bottomAlpha * (1.0 - topAlpha)) / outAlpha,
+                        outAlpha);
+        accumulated = blended;
+    }
+    if (accumulated.isValid()) {
+        accumulated.setAlpha(255);
+    }
+    return accumulated;
 }
 
 void MangaCanvas::setRemoveDiameter(double diameter) {
@@ -919,6 +1211,15 @@ void MangaCanvas::mousePressEvent(QMouseEvent* event) {
 
     const QPointF devicePt = event->position();
     const QPointF scenePt = mapToScene(event->position().toPoint());
+
+    if (m_tool == canvas::Tool::Eyedropper) {
+        const QColor color = sampleContentColor(scenePt);
+        if (color.isValid()) {
+            Q_EMIT colorPicked(color);
+        }
+        event->accept();
+        return;
+    }
 
     if (m_tool == canvas::Tool::Remove || m_tool == canvas::Tool::Brush || m_tool == canvas::Tool::Eraser) {
         const double pageWidth = static_cast<double>(m_pageBounds.width);
@@ -1349,6 +1650,8 @@ void MangaCanvas::enterEvent(QEnterEvent* event) {
                                 (radius + margin) * 2.0,
                                 (radius + margin) * 2.0);
         viewport()->update(mapFromScene(cursorRect).boundingRect());
+    } else if (m_tool == canvas::Tool::Eyedropper) {
+        viewport()->setCursor(colorPickerCursor(viewport()->devicePixelRatioF()));
     }
     QGraphicsView::enterEvent(event);
 }

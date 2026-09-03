@@ -18,7 +18,8 @@ enum class Tool {
     Text,
     Remove,
     Brush,
-    Eraser
+    Eraser,
+    Eyedropper
 };
 
 /// Selection behavior when clicking a region.

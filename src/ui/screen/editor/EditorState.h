@@ -50,7 +50,8 @@ enum class CanvasTool {
     Text,
     Remove,
     Brush,
-    Eraser
+    Eraser,
+    Eyedropper
 };
 
 /// Page preview mode for comparing original and translated content.

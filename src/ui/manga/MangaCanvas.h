@@ -171,6 +171,9 @@ Q_SIGNALS:
     void manualStrokeCommitted(QVector<QPointF> points, CanvasTool tool, QColor color, double diameter);
     void brushColorChanged(QColor color);
 
+    /// Emitted when the eyedropper samples a color from the visible content.
+    void colorPicked(QColor color);
+
 protected:
     void wheelEvent(QWheelEvent* event) override;
     void keyPressEvent(QKeyEvent* event) override;
@@ -207,6 +210,9 @@ private:
     void cancelRemoveStroke();
     void updateRemoveCursor();
     void syncTextItemGeometry(SourceRegionId id, const SourceRectGeometry& geometry);
+
+    /// Returns the topmost visible content pixel color under scenePos, or an invalid color.
+    [[nodiscard]] QColor sampleContentColor(const QPointF& scenePos) const;
 
     /// Propagates resolved FluentQt semantic colors to overlay items and the creation box.
     void applyThemeColorsToItems();

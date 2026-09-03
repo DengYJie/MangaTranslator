@@ -114,6 +114,8 @@ private:
             return ui::manga::CanvasTool::Eraser;
         case CanvasTool::Remove:
             return ui::manga::CanvasTool::Remove;
+        case CanvasTool::Eyedropper:
+            return ui::manga::CanvasTool::Eyedropper;
     }
     return ui::manga::CanvasTool::Select;
 }
@@ -193,6 +195,12 @@ EditorPage::EditorPage(EditorViewModel* viewModel, QWidget* parent) : base::Base
                     controller->paintStroke(state.currentPageId, points, mode, color, diameter);
                 }
             });
+
+    connect(m_canvas, &ui::manga::MangaCanvas::colorPicked, this, [this](const QColor& color) {
+        // The eyedropper hands control back to the brush once a color has been sampled.
+        m_viewModel->setBrushColor(color);
+        m_viewModel->setActiveTool(CanvasTool::Brush);
+    });
 
     connect(m_canvas, &ui::manga::MangaCanvas::pointTextCreateCommitted, m_viewModel, [this](const QPointF& anchor) {
         m_viewModel->createPointText(anchor);
@@ -467,6 +475,10 @@ void EditorPage::buildUi() {
                   Typography::Icons::glyph(QStringLiteral("ic_fluent_paint_brush_20_regular")),
                   tr("画笔 (B)"),
                   CanvasTool::Brush);
+    addCanvasTool(QStringLiteral("canvasEyedropperButton"),
+                  Typography::Icons::glyph(QStringLiteral("ic_fluent_eyedropper_20_regular")),
+                  tr("吸管 (I)"),
+                  CanvasTool::Eyedropper);
     addCanvasTool(QStringLiteral("canvasEraserButton"),
                   Typography::Icons::glyph(QStringLiteral("ic_fluent_eraser_20_regular")),
                   tr("橡皮擦 (E)"),
@@ -874,6 +886,10 @@ void EditorPage::keyPressEvent(QKeyEvent* event) {
             return;
         } else if (event->key() == Qt::Key_B) {
             m_viewModel->setActiveTool(CanvasTool::Brush);
+            event->accept();
+            return;
+        } else if (event->key() == Qt::Key_I) {
+            m_viewModel->setActiveTool(CanvasTool::Eyedropper);
             event->accept();
             return;
         } else if (event->key() == Qt::Key_E) {
