@@ -944,7 +944,7 @@ QImage MangaCanvas::authoritativeOverrideForTest() const {
 }
 
 QImage MangaCanvas::clearImageForTest() const {
-    return m_clearPixmap.toImage();
+    return m_clearPixmap.toImage().convertToFormat(QImage::Format_RGBA8888);
 }
 
 RegionOverlayItem* MangaCanvas::overlayItemAtScenePos(const QPointF& scenePos) const {

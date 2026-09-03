@@ -132,7 +132,24 @@ private Q_SLOTS:
         splitCanvas.setManualOverrideImage(overrideLayer, QStringLiteral("ref-a"));
         const QImage splitRender = renderCanvas(splitCanvas);
 
-        QCOMPARE(splitRender, mergedRender);
+        QCOMPARE(splitRender.size(), mergedRender.size());
+        // The merged reference passes through one extra straight/premultiplied round trip, so
+        // semi-transparent pixels may differ by quantization. Alpha must match exactly, and the
+        // color channels may only drift within that conversion error.
+        int maxChannelDiff = 0;
+        int maxAlphaDiff = 0;
+        for (int y = 0; y < splitRender.height(); ++y) {
+            for (int x = 0; x < splitRender.width(); ++x) {
+                const QColor a = splitRender.pixelColor(x, y);
+                const QColor b = mergedRender.pixelColor(x, y);
+                maxChannelDiff =
+                    qMax(maxChannelDiff,
+                         qMax(qAbs(a.red() - b.red()), qMax(qAbs(a.green() - b.green()), qAbs(a.blue() - b.blue()))));
+                maxAlphaDiff = qMax(maxAlphaDiff, qAbs(a.alpha() - b.alpha()));
+            }
+        }
+        QCOMPARE(maxAlphaDiff, 0);
+        QVERIFY(maxChannelDiff <= 2);
     }
 
     void initialStateIsNoProject() {

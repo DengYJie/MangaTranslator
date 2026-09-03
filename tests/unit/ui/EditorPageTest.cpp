@@ -234,8 +234,20 @@ private Q_SLOTS:
         application::OperationRegistry registry;
         ui::screen::editor::EditorViewModel viewModel(&thumbnails, &images, &registry);
         ui::screen::editor::EditorPage page(&viewModel);
-        ui::screen::editor::EditorProcessingController controller(
-            &viewModel, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, &registry);
+        application::RecognizeRegionUseCase* ocrUseCase = nullptr;
+        application::TranslatePageUseCase* translateUseCase = nullptr;
+        application::ClearRegionUseCase* clearUseCase = nullptr;
+        application::LayoutRegionUseCase* layoutUseCase = nullptr;
+        application::SmartTranslatePageWorkflow* smartWorkflow = nullptr;
+        application::PrepareProcessingAdoptionUseCase* prepareAdoptionUseCase = nullptr;
+        ui::screen::editor::EditorProcessingController controller(&viewModel,
+                                                                  ocrUseCase,
+                                                                  translateUseCase,
+                                                                  clearUseCase,
+                                                                  layoutUseCase,
+                                                                  smartWorkflow,
+                                                                  prepareAdoptionUseCase,
+                                                                  &registry);
         ui::screen::editor::EditorProcessingState processing;
         processing.isRunning = true;
         viewModel.updateProcessingState(processing); // wires the controller connections via render
@@ -254,11 +266,9 @@ private Q_SLOTS:
         page.trackPendingStrokeForTest(pageId, opId, 0);
 
         // A delivery that predates the applied stroke must not settle the draft.
+        const ui::screen::editor::ManualOverrideDelivery staleDelivery{pageId, overrideImage, QStringLiteral("hash-a")};
         QMetaObject::invokeMethod(
-            &viewModel,
-            "manualOverrideReady",
-            Q_ARG(ui::screen::editor::ManualOverrideDelivery,
-                  ui::screen::editor::ManualOverrideDelivery{pageId, overrideImage, QStringLiteral("hash-a")}));
+            &viewModel, "manualOverrideReady", Q_ARG(ui::screen::editor::ManualOverrideDelivery, staleDelivery));
         QVERIFY(canvas->hasStrokeDraftForTest());
 
         QMetaObject::invokeMethod(&controller,
@@ -270,11 +280,10 @@ private Q_SLOTS:
 
         QImage appliedImage(64, 64, QImage::Format_RGBA8888);
         appliedImage.fill(QColor(10, 200, 40, 255));
+        const ui::screen::editor::ManualOverrideDelivery appliedDelivery{
+            pageId, appliedImage, QStringLiteral("hash-b")};
         QMetaObject::invokeMethod(
-            &viewModel,
-            "manualOverrideReady",
-            Q_ARG(ui::screen::editor::ManualOverrideDelivery,
-                  ui::screen::editor::ManualOverrideDelivery{pageId, appliedImage, QStringLiteral("hash-b")}));
+            &viewModel, "manualOverrideReady", Q_ARG(ui::screen::editor::ManualOverrideDelivery, appliedDelivery));
         QVERIFY(!canvas->hasStrokeDraftForTest());
         QCOMPARE(canvas->authoritativeOverrideForTest(), appliedImage);
     }
@@ -285,8 +294,20 @@ private Q_SLOTS:
         application::OperationRegistry registry;
         ui::screen::editor::EditorViewModel viewModel(&thumbnails, &images, &registry);
         ui::screen::editor::EditorPage page(&viewModel);
-        ui::screen::editor::EditorProcessingController controller(
-            &viewModel, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, &registry);
+        application::RecognizeRegionUseCase* ocrUseCase = nullptr;
+        application::TranslatePageUseCase* translateUseCase = nullptr;
+        application::ClearRegionUseCase* clearUseCase = nullptr;
+        application::LayoutRegionUseCase* layoutUseCase = nullptr;
+        application::SmartTranslatePageWorkflow* smartWorkflow = nullptr;
+        application::PrepareProcessingAdoptionUseCase* prepareAdoptionUseCase = nullptr;
+        ui::screen::editor::EditorProcessingController controller(&viewModel,
+                                                                  ocrUseCase,
+                                                                  translateUseCase,
+                                                                  clearUseCase,
+                                                                  layoutUseCase,
+                                                                  smartWorkflow,
+                                                                  prepareAdoptionUseCase,
+                                                                  &registry);
         ui::screen::editor::EditorProcessingState processing;
         processing.isRunning = true;
         viewModel.updateProcessingState(processing);
@@ -310,11 +331,9 @@ private Q_SLOTS:
                                   Q_ARG(domain::PageId, pageId),
                                   Q_ARG(QString, QStringLiteral("hash-a")),
                                   Q_ARG(application::OperationId, opId));
+        const ui::screen::editor::ManualOverrideDelivery redelivered{pageId, overrideImage, QStringLiteral("hash-a")};
         QMetaObject::invokeMethod(
-            &viewModel,
-            "manualOverrideReady",
-            Q_ARG(ui::screen::editor::ManualOverrideDelivery,
-                  ui::screen::editor::ManualOverrideDelivery{pageId, overrideImage, QStringLiteral("hash-a")}));
+            &viewModel, "manualOverrideReady", Q_ARG(ui::screen::editor::ManualOverrideDelivery, redelivered));
         QVERIFY(!canvas->hasStrokeDraftForTest());
     }
 
@@ -324,8 +343,20 @@ private Q_SLOTS:
         application::OperationRegistry registry;
         ui::screen::editor::EditorViewModel viewModel(&thumbnails, &images, &registry);
         ui::screen::editor::EditorPage page(&viewModel);
-        ui::screen::editor::EditorProcessingController controller(
-            &viewModel, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, &registry);
+        application::RecognizeRegionUseCase* ocrUseCase = nullptr;
+        application::TranslatePageUseCase* translateUseCase = nullptr;
+        application::ClearRegionUseCase* clearUseCase = nullptr;
+        application::LayoutRegionUseCase* layoutUseCase = nullptr;
+        application::SmartTranslatePageWorkflow* smartWorkflow = nullptr;
+        application::PrepareProcessingAdoptionUseCase* prepareAdoptionUseCase = nullptr;
+        ui::screen::editor::EditorProcessingController controller(&viewModel,
+                                                                  ocrUseCase,
+                                                                  translateUseCase,
+                                                                  clearUseCase,
+                                                                  layoutUseCase,
+                                                                  smartWorkflow,
+                                                                  prepareAdoptionUseCase,
+                                                                  &registry);
         ui::screen::editor::EditorProcessingState processing;
         processing.isRunning = true;
         viewModel.updateProcessingState(processing);
@@ -354,8 +385,20 @@ private Q_SLOTS:
         application::OperationRegistry registry;
         ui::screen::editor::EditorViewModel viewModel(&thumbnails, &images, &registry);
         ui::screen::editor::EditorPage page(&viewModel);
-        ui::screen::editor::EditorProcessingController controller(
-            &viewModel, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, &registry);
+        application::RecognizeRegionUseCase* ocrUseCase = nullptr;
+        application::TranslatePageUseCase* translateUseCase = nullptr;
+        application::ClearRegionUseCase* clearUseCase = nullptr;
+        application::LayoutRegionUseCase* layoutUseCase = nullptr;
+        application::SmartTranslatePageWorkflow* smartWorkflow = nullptr;
+        application::PrepareProcessingAdoptionUseCase* prepareAdoptionUseCase = nullptr;
+        ui::screen::editor::EditorProcessingController controller(&viewModel,
+                                                                  ocrUseCase,
+                                                                  translateUseCase,
+                                                                  clearUseCase,
+                                                                  layoutUseCase,
+                                                                  smartWorkflow,
+                                                                  prepareAdoptionUseCase,
+                                                                  &registry);
         ui::screen::editor::EditorProcessingState processing;
         processing.isRunning = true;
         viewModel.updateProcessingState(processing);
@@ -379,11 +422,10 @@ private Q_SLOTS:
                                   Q_ARG(QString, QStringLiteral("hash-b")),
                                   Q_ARG(application::OperationId, application::OperationId::generate()));
         // A delivery for another page is not ours either.
-        QMetaObject::invokeMethod(&viewModel,
-                                  "manualOverrideReady",
-                                  Q_ARG(ui::screen::editor::ManualOverrideDelivery,
-                                        ui::screen::editor::ManualOverrideDelivery{
-                                            domain::PageId::generate(), overrideImage, QStringLiteral("hash-b")}));
+        const ui::screen::editor::ManualOverrideDelivery otherPageDelivery{
+            domain::PageId::generate(), overrideImage, QStringLiteral("hash-b")};
+        QMetaObject::invokeMethod(
+            &viewModel, "manualOverrideReady", Q_ARG(ui::screen::editor::ManualOverrideDelivery, otherPageDelivery));
         QVERIFY(canvas->hasStrokeDraftForTest());
     }
 };
