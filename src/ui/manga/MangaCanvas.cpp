@@ -12,6 +12,7 @@
 #include <QCoreApplication>
 #include <QCursor>
 #include <QFocusEvent>
+#include <QGraphicsItem>
 #include <QGraphicsPixmapItem>
 #include <QGraphicsRectItem>
 #include <QGraphicsScene>
@@ -22,6 +23,7 @@
 #include <QScrollBar>
 #include <QSet>
 #include <QShowEvent>
+#include <QStyleOptionGraphicsItem>
 #include <QWheelEvent>
 
 #include <algorithm>
@@ -33,6 +35,40 @@ namespace manga::ui::manga {
 using ::manga::domain::ImageSize;
 using ::manga::domain::RectGeometry;
 using ::manga::domain::RegionId;
+
+/// Paints the manual override layer straight from a canvas-owned QImage. The item references the
+/// buffer and never copies it: during a stroke draft the rasterizer writes into that same buffer,
+/// so a frame update costs the dirty rect instead of a full-page pixmap rebuild.
+class OverrideLayerItem : public QGraphicsItem {
+public:
+    void setSource(const QImage* source) {
+        if (m_source == source) {
+            return;
+        }
+        prepareGeometryChange();
+        m_source = source;
+        update();
+    }
+
+    [[nodiscard]] const QImage* source() const noexcept {
+        return m_source;
+    }
+
+    [[nodiscard]] QRectF boundingRect() const override {
+        return (m_source != nullptr && !m_source->isNull()) ? QRectF(m_source->rect()) : QRectF();
+    }
+
+    void paint(QPainter* painter, const QStyleOptionGraphicsItem* option, QWidget* widget) override {
+        Q_UNUSED(option);
+        Q_UNUSED(widget);
+        if (m_source != nullptr && !m_source->isNull()) {
+            painter->drawImage(0, 0, *m_source);
+        }
+    }
+
+private:
+    const QImage* m_source{nullptr}; // non-owning, canvas-owned buffer
+};
 
 namespace {
 constexpr double kZoomLevels[] = {0.05, 0.10, 0.25, 0.50, 0.75, 1.0, 1.5, 2.0, 4.0, 8.0, 16.0};
@@ -399,19 +435,91 @@ void MangaCanvas::setClearImage(const QImage& image) {
 }
 
 void MangaCanvas::setManualOverrideImage(const QImage& image, const QString& ref) {
-    m_overridePixmap = image.isNull() ? QPixmap() : QPixmap::fromImage(image);
+    m_overrideImage = image;
     m_overrideRef = ref;
+    if (m_strokeDraftActive) {
+        // The draft stays on screen; settleStrokeDraft reveals this layer.
+        return;
+    }
+    syncOverrideItem();
+}
+
+void MangaCanvas::syncOverrideItem() {
     if (!m_overrideItem) {
-        m_overrideItem = new QGraphicsPixmapItem();
+        m_overrideItem = new OverrideLayerItem();
         m_overrideItem->setZValue(canvas::kZManualOverrideLayer);
         m_scene->addItem(m_overrideItem);
     }
-    m_overrideItem->setPixmap(m_overridePixmap);
+    const QImage* source = m_strokeDraftActive ? &m_strokeDraft : &m_overrideImage;
+    m_overrideItem->setSource(source);
     m_overrideItem->setPos(0, 0);
-    m_overrideItem->setVisible(!m_overridePixmap.isNull() && !m_overrideRef.isEmpty());
+    const bool visible =
+        m_strokeDraftActive ? !m_strokeDraft.isNull() : (!m_overrideImage.isNull() && !m_overrideRef.isEmpty());
+    m_overrideItem->setVisible(visible);
     if (viewport()) {
         viewport()->update();
     }
+}
+
+void MangaCanvas::beginStrokeDraft(rendering::StrokePaintMode mode, const QColor& color, double diameter) {
+    if (m_pageBounds.width <= 0 || m_pageBounds.height <= 0 || diameter <= 0.0) {
+        return;
+    }
+    if (m_overrideImage.isNull()) {
+        m_strokeDraft = QImage(m_pageBounds.width, m_pageBounds.height, QImage::Format_RGBA8888);
+        m_strokeDraft.fill(Qt::transparent);
+    } else {
+        m_strokeDraft = m_overrideImage.convertToFormat(QImage::Format_RGBA8888);
+        // Force the scratch copy to own its buffer now, so the first segment write does not
+        // detach mid-gesture and the buffer address stays stable for the whole draft.
+        m_strokeDraft.detach();
+    }
+    m_strokeDraftParams = rendering::StrokePaintParams{mode, color, diameter};
+    m_strokeDraftBaseRef = m_overrideRef;
+    m_strokeDirtyRect = QRect();
+    m_strokeLastPoint = QPointF();
+    m_strokeDraftActive = true;
+    syncOverrideItem();
+}
+
+void MangaCanvas::extendStrokeDraft(const QPointF& point) {
+    if (!m_strokeDraftActive || m_strokeDraft.isNull()) {
+        return;
+    }
+    const QPointF from = m_strokeLastPoint.isNull() ? point : m_strokeLastPoint;
+    const QRect bounds = rendering::StrokePaintRasterizer::segmentBounds(
+        m_strokeDraft.size(), from, point, m_strokeDraftParams.diameter);
+    rendering::StrokePaintRasterizer::rasterizeSegment(m_strokeDraft, m_strokeDraftParams, from, point);
+    m_strokeLastPoint = point;
+    if (!bounds.isEmpty()) {
+        m_strokeDirtyRect = m_strokeDirtyRect.isEmpty() ? bounds : m_strokeDirtyRect.united(bounds);
+        if (m_overrideItem) {
+            m_overrideItem->update(bounds);
+        }
+    }
+}
+
+void MangaCanvas::finishStrokeDraft() {
+    if (!m_strokeDraftActive || m_strokeDraft.isNull() || m_strokeLastPoint.isNull()) {
+        return;
+    }
+    rendering::StrokePaintRasterizer::rasterizeCap(m_strokeDraft, m_strokeDraftParams, m_strokeLastPoint);
+    if (m_overrideItem) {
+        m_overrideItem->update(rendering::StrokePaintRasterizer::segmentBounds(
+            m_strokeDraft.size(), m_strokeLastPoint, m_strokeLastPoint, m_strokeDraftParams.diameter));
+    }
+}
+
+void MangaCanvas::settleStrokeDraft() {
+    if (!m_strokeDraftActive) {
+        return;
+    }
+    m_strokeDraftActive = false;
+    m_strokeDraft = QImage();
+    m_strokeDirtyRect = QRect();
+    m_strokeLastPoint = QPointF();
+    m_strokeDraftBaseRef.clear();
+    syncOverrideItem();
 }
 
 void MangaCanvas::setTranslatedPreview(const QImage& image) {
@@ -461,7 +569,7 @@ void MangaCanvas::clearPageImage() {
     cancelRemoveStroke();
     m_pagePixmap = QPixmap();
     m_clearPixmap = QPixmap();
-    m_overridePixmap = QPixmap();
+    m_overrideImage = QImage();
     m_overrideRef.clear();
     m_translationPixmap = QPixmap();
     if (m_pageItem) {
@@ -473,7 +581,7 @@ void MangaCanvas::clearPageImage() {
         m_clearItem->setVisible(false);
     }
     if (m_overrideItem) {
-        m_overrideItem->setPixmap(QPixmap());
+        m_overrideItem->setSource(nullptr);
         m_overrideItem->setVisible(false);
     }
     if (m_translationItem) {
@@ -815,6 +923,22 @@ int MangaCanvas::regionOverlayCountForTest() const {
     return m_overlays.size();
 }
 
+bool MangaCanvas::hasStrokeDraftForTest() const noexcept {
+    return m_strokeDraftActive;
+}
+
+const uchar* MangaCanvas::strokeDraftBitsForTest() const noexcept {
+    return m_strokeDraft.isNull() ? nullptr : m_strokeDraft.constBits();
+}
+
+QString MangaCanvas::strokeDraftBaseRefForTest() const {
+    return m_strokeDraftBaseRef;
+}
+
+QImage MangaCanvas::authoritativeOverrideForTest() const {
+    return m_overrideImage;
+}
+
 RegionOverlayItem* MangaCanvas::overlayItemAtScenePos(const QPointF& scenePos) const {
     const QList<QGraphicsItem*> items = m_scene->items(scenePos);
     for (auto* item : items) {
@@ -889,26 +1013,37 @@ QColor MangaCanvas::sampleContentColor(const QPointF& scenePos) const {
     // pixmaps are sparse alpha overlays over the original page, so a transparent pixel must
     // reveal the layer beneath it instead of being reported as the sampled color.
     struct Layer {
-        const QGraphicsPixmapItem* item;
-        const QPixmap* pixmap;
+        const QGraphicsItem* item;
+        const QPixmap* pixmap{nullptr};
+        const QImage* image{nullptr};
     };
     const Layer layers[] = {
-        {m_pageItem, &m_pagePixmap},
-        {m_clearItem, &m_clearPixmap},
-        {m_overrideItem, &m_overridePixmap},
-        {m_translationItem, &m_translationPixmap},
+        {m_pageItem, &m_pagePixmap, nullptr},
+        {m_clearItem, &m_clearPixmap, nullptr},
+        {m_overrideItem, nullptr, m_overrideItem ? m_overrideItem->source() : nullptr},
+        {m_translationItem, &m_translationPixmap, nullptr},
     };
     auto layerPixel = [&scenePos](const Layer& layer, QColor& outColor) {
-        if (layer.item == nullptr || !layer.item->isVisible() || layer.pixmap == nullptr || layer.pixmap->isNull()) {
+        if (layer.item == nullptr || !layer.item->isVisible()) {
+            return false;
+        }
+        int width = 0;
+        int height = 0;
+        if (layer.pixmap != nullptr && !layer.pixmap->isNull()) {
+            width = layer.pixmap->width();
+            height = layer.pixmap->height();
+        } else if (layer.image != nullptr && !layer.image->isNull()) {
+            width = layer.image->width();
+            height = layer.image->height();
+        } else {
             return false;
         }
         const QPointF local = scenePos - layer.item->pos();
         const QPoint pixel(static_cast<int>(std::floor(local.x())), static_cast<int>(std::floor(local.y())));
-        if (pixel.x() < 0 || pixel.y() < 0 || pixel.x() >= layer.pixmap->width() ||
-            pixel.y() >= layer.pixmap->height()) {
+        if (pixel.x() < 0 || pixel.y() < 0 || pixel.x() >= width || pixel.y() >= height) {
             return false;
         }
-        outColor = layer.pixmap->toImage().pixelColor(pixel);
+        outColor = layer.image != nullptr ? layer.image->pixelColor(pixel) : layer.pixmap->toImage().pixelColor(pixel);
         return true;
     };
 

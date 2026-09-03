@@ -1,5 +1,6 @@
 #pragma once
 
+#include "rendering/paint/StrokePaintRasterizer.h"
 #include "ui/base/DomainMetaTypes.h"
 #include "ui/manga/CanvasZOrder.h"
 #include "ui/manga/RegionInteraction.h"
@@ -32,6 +33,7 @@ class Label;
 
 namespace manga::ui::manga {
 
+class OverrideLayerItem;
 class RegionOverlayItem;
 class MangaTextItem;
 
@@ -70,8 +72,9 @@ public:
     /// Replaces the page image and switches to the Image state. GUI thread only.
     void setPageImage(const QImage& image);
     void setClearImage(const QImage& image);
-    /// Installs the authoritative override layer. Ignored while a draft owns the layer, because the
-    /// draft is what the user is watching; `settleStrokeDraft` ends that period.
+    /// Installs the authoritative override layer. While a draft owns the layer the store is updated
+    /// but the draft stays on screen, because the draft is what the user is watching;
+    /// `settleStrokeDraft` ends that period.
     void setManualOverrideImage(const QImage& image, const QString& ref);
     void setTranslatedPreview(const QImage& image);
     void setPreviewMode(int mode);
@@ -130,10 +133,26 @@ public:
         m_pageBounds = bounds;
     }
 
+    /// Starts an optimistic draft over the manual override layer. The draft is a copy of the current
+    /// layer, so erasing scales down existing brush alpha exactly like the committed path does.
+    void beginStrokeDraft(rendering::StrokePaintMode mode, const QColor& color, double diameter);
+    /// Rasterizes the segment from the previous accepted point to `point`. Points closer than the
+    /// sub-pixel threshold are ignored.
+    void extendStrokeDraft(const QPointF& point);
+    /// Adds the closing cap and leaves the draft visible; the committed layer replaces it on settle.
+    void finishStrokeDraft();
+    /// Drops the draft and shows the authoritative override layer again.
+    void settleStrokeDraft();
+
     /// Test-only observation hooks.
     [[nodiscard]] QWidget* placeholderActionButtonForTest() const;
     [[nodiscard]] bool hasPageImageForTest() const;
     [[nodiscard]] int regionOverlayCountForTest() const;
+    [[nodiscard]] bool hasStrokeDraftForTest() const noexcept;
+    /// Raw draft buffer address; a change means the buffer detached and every frame became a copy.
+    [[nodiscard]] const uchar* strokeDraftBitsForTest() const noexcept;
+    [[nodiscard]] QString strokeDraftBaseRefForTest() const;
+    [[nodiscard]] QImage authoritativeOverrideForTest() const;
 
 Q_SIGNALS:
     void zoomChanged(double factor);
@@ -221,10 +240,15 @@ private:
     void applyThemeColorsToItems();
     void syncTextItemVisibility();
 
+    /// Points the override item at the draft while one is active, otherwise at the authoritative
+    /// layer, and refreshes its visibility. The item references the canvas-owned buffer and never
+    /// copies it, so per-segment rasterization never detaches a shared QImage.
+    void syncOverrideItem();
+
     QGraphicsScene* m_scene{nullptr};                // owned via QGraphicsView::setScene
     QGraphicsPixmapItem* m_pageItem{nullptr};        // scene-owned
     QGraphicsPixmapItem* m_clearItem{nullptr};       // scene-owned
-    QGraphicsPixmapItem* m_overrideItem{nullptr};    // scene-owned
+    OverrideLayerItem* m_overrideItem{nullptr};      // scene-owned
     QGraphicsPixmapItem* m_translationItem{nullptr}; // scene-owned
     fluent::layout::Card* m_placeholderCard{nullptr};
     fluent::textfields::Label* m_placeholderIcon{nullptr};
@@ -233,7 +257,7 @@ private:
     fluent::basicinput::Button* m_placeholderAction{nullptr};
     QPixmap m_pagePixmap;
     QPixmap m_clearPixmap;
-    QPixmap m_overridePixmap;
+    QImage m_overrideImage;
     QString m_overrideRef;
     QPixmap m_translationPixmap;
     int m_previewMode{1};
@@ -268,6 +292,16 @@ private:
     GestureState m_gesture;
     QVector<QPointF> m_removeStroke;
     bool m_removeStrokeActive{false};
+
+    /// Gesture-scoped optimistic draft over the manual override layer. Never persisted; discarding
+    /// it is the rollback for a rejected or cancelled stroke.
+    QImage m_strokeDraft;
+    QRect m_strokeDirtyRect;
+    QPointF m_strokeLastPoint;
+    QString m_strokeDraftBaseRef;
+    rendering::StrokePaintParams m_strokeDraftParams;
+    bool m_strokeDraftActive{false};
+
     double m_removeDiameter{32.0};
     QColor m_brushColor{17, 17, 17, 255};
     bool m_spaceHeld{false};
