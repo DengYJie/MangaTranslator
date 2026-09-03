@@ -151,8 +151,11 @@ public:
     [[nodiscard]] bool hasStrokeDraftForTest() const noexcept;
     /// Raw draft buffer address; a change means the buffer detached and every frame became a copy.
     [[nodiscard]] const uchar* strokeDraftBitsForTest() const noexcept;
+    /// Size of the draft buffer in device-independent source pixels; null when no draft exists.
+    [[nodiscard]] QSize strokeDraftSizeForTest() const noexcept;
     [[nodiscard]] QString strokeDraftBaseRefForTest() const;
     [[nodiscard]] QImage authoritativeOverrideForTest() const;
+    [[nodiscard]] QImage clearImageForTest() const;
 
 Q_SIGNALS:
     void zoomChanged(double factor);

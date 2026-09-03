@@ -931,12 +931,20 @@ const uchar* MangaCanvas::strokeDraftBitsForTest() const noexcept {
     return m_strokeDraft.isNull() ? nullptr : m_strokeDraft.constBits();
 }
 
+QSize MangaCanvas::strokeDraftSizeForTest() const noexcept {
+    return m_strokeDraft.size();
+}
+
 QString MangaCanvas::strokeDraftBaseRefForTest() const {
     return m_strokeDraftBaseRef;
 }
 
 QImage MangaCanvas::authoritativeOverrideForTest() const {
     return m_overrideImage;
+}
+
+QImage MangaCanvas::clearImageForTest() const {
+    return m_clearPixmap.toImage();
 }
 
 RegionOverlayItem* MangaCanvas::overlayItemAtScenePos(const QPointF& scenePos) const {

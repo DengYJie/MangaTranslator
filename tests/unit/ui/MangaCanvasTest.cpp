@@ -1,5 +1,6 @@
 #include "ui/manga/MangaCanvas.h"
 
+#include "rendering/paint/StrokePaintRasterizer.h"
 #include "ui/manga/CanvasZOrder.h"
 #include "ui/manga/RegionInteraction.h"
 #include "ui/manga/RegionOverlayItem.h"
@@ -749,6 +750,114 @@ private Q_SLOTS:
 
         canvas.anchorScenePointOnViewport(scenePoint, canvas.viewport()->rect().center() + QPointF(50.0, 0.0));
         QCOMPARE(canvas.horizontalScrollBar()->value(), hCenter - 50);
+    }
+
+    void draftDoesNotTouchTheClearLayer() {
+        MangaCanvas canvas;
+        canvas.setPageBounds(ImageSize{64, 64});
+
+        QImage clearImage(64, 64, QImage::Format_RGBA8888);
+        clearImage.fill(QColor(255, 255, 255, 255));
+        {
+            QPainter painter(&clearImage);
+            painter.fillRect(QRect(8, 8, 32, 48), QColor(220, 30, 30, 255));
+        }
+        canvas.setClearImage(clearImage);
+
+        QImage overrideImage(64, 64, QImage::Format_RGBA8888);
+        overrideImage.fill(Qt::transparent);
+        const QRect strokeDirty = manga::rendering::StrokePaintRasterizer::rasterizeStroke(
+            overrideImage,
+            {manga::rendering::StrokePaintMode::Paint, QColor(20, 40, 220, 255), 8.0},
+            {QPointF(16.5, 32.5), QPointF(48.5, 32.5)});
+        QVERIFY(!strokeDirty.isEmpty());
+        canvas.setManualOverrideImage(overrideImage, QStringLiteral("ref-a"));
+
+        canvas.beginStrokeDraft(manga::rendering::StrokePaintMode::Erase, QColor(0, 0, 0, 255), 16.0);
+        canvas.extendStrokeDraft(QPointF(32.5, 32.5));
+
+        // The eraser only subtracts brush paint: the clear item is untouched.
+        QCOMPARE(canvas.clearImageForTest(), clearImage);
+        // The authoritative override layer is untouched mid-gesture.
+        QCOMPARE(canvas.authoritativeOverrideForTest(), overrideImage);
+
+        const uchar* bits = canvas.strokeDraftBitsForTest();
+        QVERIFY(bits != nullptr);
+        QCOMPARE(canvas.strokeDraftSizeForTest(), QSize(64, 64));
+        const auto draftAlpha = [bits](int x, int y) { return bits[(y * 64 + x) * 4 + 3]; };
+        QCOMPARE(draftAlpha(32, 32), 0);   // inside the erased band
+        QCOMPARE(draftAlpha(16, 32), 255); // brush paint outside the eraser survives
+    }
+
+    void eraseScalesExistingBrushAlpha() {
+        MangaCanvas canvas;
+        canvas.setPageBounds(ImageSize{64, 64});
+        QImage overrideImage(64, 64, QImage::Format_RGBA8888);
+        overrideImage.fill(QColor(0, 0, 255, 200));
+        canvas.setManualOverrideImage(overrideImage, QStringLiteral("ref-a"));
+
+        canvas.beginStrokeDraft(manga::rendering::StrokePaintMode::Erase, QColor(0, 0, 0, 255), 8.0);
+        canvas.extendStrokeDraft(QPointF(16.5, 16.5));
+
+        const uchar* bits = canvas.strokeDraftBitsForTest();
+        QVERIFY(bits != nullptr);
+        const auto draftAlpha = [bits](int x, int y) { return bits[(y * 64 + x) * 4 + 3]; };
+        QCOMPARE(draftAlpha(16, 16), 0);   // full coverage removes the stroke alpha
+        QCOMPARE(draftAlpha(20, 16), 100); // half coverage scales it by one half
+        QCOMPARE(draftAlpha(21, 16), 200); // outside the radius the layer is untouched
+    }
+
+    void draftBufferIsNotCopiedPerSegment() {
+        MangaCanvas canvas;
+        canvas.setPageBounds(ImageSize{64, 64});
+        canvas.beginStrokeDraft(manga::rendering::StrokePaintMode::Paint, QColor(17, 17, 17, 255), 8.0);
+        canvas.extendStrokeDraft(QPointF(8.5, 8.5));
+        const uchar* first = canvas.strokeDraftBitsForTest();
+        canvas.extendStrokeDraft(QPointF(24.5, 24.5));
+        const uchar* second = canvas.strokeDraftBitsForTest();
+        QVERIFY(first != nullptr);
+        QCOMPARE(second, first);
+    }
+
+    void settleRestoresAuthoritativeLayer() {
+        MangaCanvas canvas;
+        canvas.setPageBounds(ImageSize{64, 64});
+        QImage overrideImage(64, 64, QImage::Format_RGBA8888);
+        overrideImage.fill(QColor(0, 0, 255, 200));
+        canvas.setManualOverrideImage(overrideImage, QStringLiteral("ref-a"));
+
+        canvas.beginStrokeDraft(manga::rendering::StrokePaintMode::Erase, QColor(0, 0, 0, 255), 8.0);
+        canvas.extendStrokeDraft(QPointF(16.5, 16.5));
+        QVERIFY(canvas.hasStrokeDraftForTest());
+
+        canvas.settleStrokeDraft();
+        QVERIFY(!canvas.hasStrokeDraftForTest());
+        QCOMPARE(canvas.authoritativeOverrideForTest(), overrideImage);
+    }
+
+    void finishKeepsDraftVisible() {
+        MangaCanvas canvas;
+        canvas.setPageBounds(ImageSize{64, 64});
+        canvas.beginStrokeDraft(manga::rendering::StrokePaintMode::Paint, QColor(255, 0, 0, 255), 8.0);
+        canvas.extendStrokeDraft(QPointF(16.5, 16.5));
+        canvas.finishStrokeDraft();
+        QVERIFY(canvas.hasStrokeDraftForTest());
+        const uchar* bits = canvas.strokeDraftBitsForTest();
+        QVERIFY(bits != nullptr);
+        QCOMPARE(static_cast<int>(bits[(16 * 64 + 16) * 4 + 3]), 255);
+    }
+
+    void pageSwitchSettlesDraft() {
+        MangaCanvas canvas;
+        canvas.setPageBounds(ImageSize{64, 64});
+        canvas.beginStrokeDraft(manga::rendering::StrokePaintMode::Paint, QColor(255, 0, 0, 255), 8.0);
+        canvas.extendStrokeDraft(QPointF(16.5, 16.5));
+        QVERIFY(canvas.hasStrokeDraftForTest());
+
+        QImage nextPage(64, 64, QImage::Format_RGBA8888);
+        nextPage.fill(Qt::white);
+        canvas.setPageImage(nextPage);
+        QVERIFY(!canvas.hasStrokeDraftForTest());
     }
 };
 
