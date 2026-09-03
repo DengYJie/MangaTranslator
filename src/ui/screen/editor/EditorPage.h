@@ -5,6 +5,7 @@
 #include "ui/base/BasePage.h"
 #include "ui/manga/MangaCanvas.h"
 
+#include <QPointer>
 #include <QVector>
 
 class QPaintEvent;
@@ -31,6 +32,7 @@ class Button;
 
 namespace manga::ui::screen::editor {
 
+class EditorProcessingController;
 class EditorViewModel;
 struct EditorState;
 struct PageImageDelivery;
@@ -121,6 +123,9 @@ private:
     /// Drops the pending stroke tracking and the canvas draft when the stroke can no longer be
     /// reconciled: failure, page switch, or session generation change.
     void abandonPendingStrokeDraft();
+    /// Connects to the processing controller once it exists. The controller is constructed after
+    /// this page, so the signals cannot be wired in buildUi.
+    void ensureControllerConnections();
 
     EditorViewModel* m_viewModel; // non-owning
     widget::EditorCommandBar* m_commandBar{nullptr};
@@ -147,6 +152,7 @@ private:
     QString m_pendingStrokeAfterRef;
     domain::PageId m_pendingStrokePageId;
     quint64 m_pendingStrokeSessionGeneration{0};
+    QPointer<EditorProcessingController> m_connectedController;
 
     BreakpointMode m_breakpointMode{BreakpointMode::Wide};
     bool m_pageDrawerOpen{false};

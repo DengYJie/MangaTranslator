@@ -281,26 +281,6 @@ EditorPage::EditorPage(EditorViewModel* viewModel, QWidget* parent) : base::Base
                 }
             });
 
-    if (auto* controller = m_viewModel->processingController()) {
-        connect(controller,
-                &EditorProcessingController::manualStrokeApplied,
-                this,
-                [this](const domain::PageId& pageId, const QString& afterRef, application::OperationId operationId) {
-                    if (operationId != m_pendingStrokeOperationId) {
-                        return; // a different operation; the draft belongs to ours
-                    }
-                    m_pendingStrokeAfterRef = afterRef;
-                });
-        connect(controller,
-                &EditorProcessingController::processingFinished,
-                this,
-                [this](const domain::PageId& pageId, bool success) {
-                    if (!success && m_pendingStrokeOperationId.isValid() && pageId == m_pendingStrokePageId) {
-                        abandonPendingStrokeDraft();
-                    }
-                });
-    }
-
     connect(m_viewModel, &EditorViewModel::pageImageReady, this, &EditorPage::handlePageImageReady);
     connect(m_viewModel, &EditorViewModel::clearImageReady, this, [this](const PageImageDelivery& delivery) {
         m_canvas->setClearImage(delivery.image);
@@ -726,6 +706,37 @@ void EditorPage::abandonPendingStrokeDraft() {
     m_canvas->settleStrokeDraft();
 }
 
+void EditorPage::ensureControllerConnections() {
+    auto* controller = m_viewModel->processingController();
+    if (controller == m_connectedController) {
+        return;
+    }
+    if (m_connectedController) {
+        disconnect(m_connectedController, nullptr, this, nullptr);
+    }
+    m_connectedController = controller;
+    if (controller == nullptr) {
+        return;
+    }
+    connect(controller,
+            &EditorProcessingController::manualStrokeApplied,
+            this,
+            [this](const domain::PageId& pageId, const QString& afterRef, application::OperationId operationId) {
+                if (operationId != m_pendingStrokeOperationId) {
+                    return; // a different operation; the draft belongs to ours
+                }
+                m_pendingStrokeAfterRef = afterRef;
+            });
+    connect(controller,
+            &EditorProcessingController::processingFinished,
+            this,
+            [this](const domain::PageId& pageId, bool success) {
+                if (!success && m_pendingStrokeOperationId.isValid() && pageId == m_pendingStrokePageId) {
+                    abandonPendingStrokeDraft();
+                }
+            });
+}
+
 void EditorPage::applySplitterLayout() {
     if (!m_splitter || !m_pagePaneCard || !m_inspectorCard) {
         return;
@@ -968,6 +979,7 @@ void EditorPage::resizeEvent(QResizeEvent* event) {
 }
 
 void EditorPage::render(const EditorState& state) {
+    ensureControllerConnections();
     if (m_pendingStrokeOperationId.isValid() && (state.currentPageId != m_pendingStrokePageId ||
                                                  state.projectSessionGeneration != m_pendingStrokeSessionGeneration)) {
         abandonPendingStrokeDraft();
