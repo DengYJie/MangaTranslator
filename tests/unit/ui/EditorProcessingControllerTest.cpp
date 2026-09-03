@@ -318,6 +318,7 @@ private Q_SLOTS:
         // Can undo
         QVERIFY(m_viewModel->state().canUndo);
         m_viewModel->undo();
+        QCoreApplication::processEvents();
         QCOMPARE(m_viewModel->undoStackCountForTest(), initialUndoCount + 1);
     }
 

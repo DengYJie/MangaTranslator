@@ -181,8 +181,10 @@ private Q_SLOTS:
         QCOMPARE(singleInspector(viewModel).manualTranslation, QStringLiteral("AB"));
 
         viewModel.undo();
+        QCoreApplication::processEvents();
         QCOMPARE(singleInspector(viewModel).manualTranslation, QString());
         viewModel.redo();
+        QCoreApplication::processEvents();
         QCOMPARE(singleInspector(viewModel).manualTranslation, QStringLiteral("AB"));
     }
 
@@ -202,6 +204,7 @@ private Q_SLOTS:
 
         QCOMPARE(viewModel.undoStackCountForTest(), 2);
         viewModel.undo();
+        QCoreApplication::processEvents();
         QCOMPARE(singleInspector(viewModel).manualTranslation, QStringLiteral("A"));
     }
 
@@ -303,6 +306,7 @@ private Q_SLOTS:
         QCOMPARE(viewModel.undoStackCountForTest(), 1);
 
         viewModel.undo();
+        QCoreApplication::processEvents();
         QCOMPARE(singleInspector(viewModel).manualTranslation, QString());
 
         // Typing again must not merge into the undone command.
@@ -331,6 +335,7 @@ private Q_SLOTS:
         QCOMPARE(edited.sourceConfidence, 0.9);
 
         viewModel.undo();
+        QCoreApplication::processEvents();
         const auto restored = singleInspector(viewModel);
         QCOMPARE(restored.sourceText, QStringLiteral("recognized"));
         QCOMPARE(restored.sourceType, domain::TextSourceType::OcrAuto);
@@ -358,6 +363,7 @@ private Q_SLOTS:
         QCOMPARE(adopted.effectiveTranslation, QStringLiteral("A")); // manual text still wins
 
         viewModel.undo();
+        QCoreApplication::processEvents();
         const auto reverted = singleInspector(viewModel);
         QVERIFY(!reverted.candidates.at(0).isSelected);
         QCOMPARE(reverted.manualTranslation, QStringLiteral("A"));
@@ -396,6 +402,7 @@ private Q_SLOTS:
         QCOMPARE(singleInspector(viewModel).fontSizePt, 20.0);
 
         viewModel.undo();
+        QCoreApplication::processEvents();
         // TODO: default fontSizePt updated from 14.0 to 24.0
         QCOMPARE(singleInspector(viewModel).fontSizePt, 24.0);
     }

@@ -126,6 +126,9 @@ EditorViewModel::EditorViewModel(application::IThumbnailStore* thumbnailStore,
         m_pageLoadUseCase = std::make_unique<application::LoadPageImageUseCase>(m_pageImageLoader);
     }
 
+    m_undoRedoTimer.setSingleShot(true);
+    connect(&m_undoRedoTimer, &QTimer::timeout, this, &EditorViewModel::processPendingUndoRedo);
+
     connect(&m_pageLoadWatcher,
             &QFutureWatcher<application::Result<QImage>>::finished,
             this,
@@ -1943,31 +1946,9 @@ void EditorViewModel::undo() {
     if (!m_undoStack->canUndo()) {
         return;
     }
-
-    sealActiveTextSession();
-    const bool clearLayerChanged =
-        dynamic_cast<const command::PageClearLayerCommand*>(m_undoStack->command(m_undoStack->index())) != nullptr;
-    m_undoStack->undo();
-
-    // The just-undone command sits at the stack index after undo.
-    const auto* affected = dynamic_cast<const command::RegionCommand*>(m_undoStack->command(m_undoStack->index()));
-    const auto* affectedAdoption =
-        dynamic_cast<const command::ProcessingAdoptionCommand*>(m_undoStack->command(m_undoStack->index()));
-    if (affected != nullptr && affected->hasFaulted()) {
-        m_undoHistoryFaulted = true;
-    } else if (affected != nullptr && affected->pageId().isValid() && affected->pageId() != m_state.currentPageId) {
-        selectPage(affected->pageId());
-    } else if (affectedAdoption != nullptr && affectedAdoption->hasFaulted()) {
-        m_undoHistoryFaulted = true;
-    } else if (affectedAdoption != nullptr && affectedAdoption->pageId().isValid() &&
-               affectedAdoption->pageId() != m_state.currentPageId) {
-        selectPage(affectedAdoption->pageId());
-    }
-
-    rebuildCurrentPageProjection();
-    refreshUndoState();
-    if (clearLayerChanged) {
-        invalidatePreviewAndRequestCurrentPage();
+    m_pendingUndoCount++;
+    if (!m_undoRedoTimer.isActive()) {
+        m_undoRedoTimer.start(0);
     }
 }
 
@@ -1978,38 +1959,92 @@ void EditorViewModel::redo() {
     if (!m_undoStack->canRedo()) {
         return;
     }
+    m_pendingRedoCount++;
+    if (!m_undoRedoTimer.isActive()) {
+        m_undoRedoTimer.start(0);
+    }
+}
+
+void EditorViewModel::processPendingUndoRedo() {
+    if (m_pendingUndoCount == 0 && m_pendingRedoCount == 0) {
+        return;
+    }
+    if (!m_hasSession || !m_undoStack || m_undoHistoryFaulted) {
+        m_pendingUndoCount = 0;
+        m_pendingRedoCount = 0;
+        return;
+    }
 
     sealActiveTextSession();
 
-    // Peek at the command that will be redone to get its page target.
-    const auto* pendingCmd = dynamic_cast<const command::RegionCommand*>(m_undoStack->command(m_undoStack->index()));
-    const auto* pendingAdoption =
-        dynamic_cast<const command::ProcessingAdoptionCommand*>(m_undoStack->command(m_undoStack->index()));
-    const bool clearLayerChanged =
-        dynamic_cast<const command::PageClearLayerCommand*>(m_undoStack->command(m_undoStack->index())) != nullptr;
-    domain::PageId targetPage;
-    if (pendingCmd != nullptr) {
-        targetPage = pendingCmd->pageId();
-    } else if (pendingAdoption != nullptr) {
-        targetPage = pendingAdoption->pageId();
+    bool anyClearLayerChanged = false;
+    domain::PageId targetPage = m_state.currentPageId;
+
+    while (m_pendingUndoCount > 0 && m_undoStack->canUndo()) {
+        const bool clearLayerChanged =
+            dynamic_cast<const command::PageClearLayerCommand*>(m_undoStack->command(m_undoStack->index())) != nullptr;
+        anyClearLayerChanged |= clearLayerChanged;
+
+        m_undoStack->undo();
+
+        const auto* affected = dynamic_cast<const command::RegionCommand*>(m_undoStack->command(m_undoStack->index()));
+        const auto* affectedAdoption =
+            dynamic_cast<const command::ProcessingAdoptionCommand*>(m_undoStack->command(m_undoStack->index()));
+
+        if (affected != nullptr && affected->hasFaulted()) {
+            m_undoHistoryFaulted = true;
+        } else if (affected != nullptr && affected->pageId().isValid()) {
+            targetPage = affected->pageId();
+        } else if (affectedAdoption != nullptr && affectedAdoption->hasFaulted()) {
+            m_undoHistoryFaulted = true;
+        } else if (affectedAdoption != nullptr && affectedAdoption->pageId().isValid()) {
+            targetPage = affectedAdoption->pageId();
+        }
+
+        m_pendingUndoCount--;
     }
 
-    m_undoStack->redo();
+    while (m_pendingRedoCount > 0 && m_undoStack->canRedo()) {
+        const auto* pendingCmd =
+            dynamic_cast<const command::RegionCommand*>(m_undoStack->command(m_undoStack->index()));
+        const auto* pendingAdoption =
+            dynamic_cast<const command::ProcessingAdoptionCommand*>(m_undoStack->command(m_undoStack->index()));
+        const bool clearLayerChanged =
+            dynamic_cast<const command::PageClearLayerCommand*>(m_undoStack->command(m_undoStack->index())) != nullptr;
 
-    const auto* done = dynamic_cast<const command::RegionCommand*>(m_undoStack->command(m_undoStack->index() - 1));
-    const auto* doneAdoption =
-        dynamic_cast<const command::ProcessingAdoptionCommand*>(m_undoStack->command(m_undoStack->index() - 1));
-    if (done != nullptr && done->hasFaulted()) {
-        m_undoHistoryFaulted = true;
-    } else if (doneAdoption != nullptr && doneAdoption->hasFaulted()) {
-        m_undoHistoryFaulted = true;
-    } else if (targetPage.isValid() && targetPage != m_state.currentPageId) {
+        anyClearLayerChanged |= clearLayerChanged;
+
+        if (pendingCmd != nullptr) {
+            targetPage = pendingCmd->pageId();
+        } else if (pendingAdoption != nullptr) {
+            targetPage = pendingAdoption->pageId();
+        }
+
+        m_undoStack->redo();
+
+        const auto* done = dynamic_cast<const command::RegionCommand*>(m_undoStack->command(m_undoStack->index() - 1));
+        const auto* doneAdoption =
+            dynamic_cast<const command::ProcessingAdoptionCommand*>(m_undoStack->command(m_undoStack->index() - 1));
+
+        if (done != nullptr && done->hasFaulted()) {
+            m_undoHistoryFaulted = true;
+        } else if (doneAdoption != nullptr && doneAdoption->hasFaulted()) {
+            m_undoHistoryFaulted = true;
+        }
+
+        m_pendingRedoCount--;
+    }
+
+    m_pendingUndoCount = 0;
+    m_pendingRedoCount = 0;
+
+    if (targetPage.isValid() && targetPage != m_state.currentPageId) {
         selectPage(targetPage);
     }
 
     rebuildCurrentPageProjection();
     refreshUndoState();
-    if (clearLayerChanged) {
+    if (anyClearLayerChanged) {
         invalidatePreviewAndRequestCurrentPage();
     }
 }

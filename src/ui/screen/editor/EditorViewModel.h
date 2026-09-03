@@ -26,6 +26,7 @@
 #include <QPointer>
 #include <QQueue>
 #include <QSet>
+#include <QTimer>
 #include <QUndoStack>
 #include <QVariant>
 
@@ -368,6 +369,10 @@ private:
     std::unique_ptr<QUndoStack> m_undoStack;
     std::unique_ptr<command::EditorCommandContext> m_commandContext;
     bool m_undoHistoryFaulted{false};
+    int m_pendingUndoCount{0};
+    int m_pendingRedoCount{0};
+    QTimer m_undoRedoTimer;
+    void processPendingUndoRedo();
 
     /// Merge-aware text edit session; lives for the ViewModel lifetime and is reset
     /// on session open/close.

@@ -618,12 +618,14 @@ private Q_SLOTS:
         QCOMPARE(viewModel.state().regions.size(), 1);
 
         viewModel.undo();
+        QCoreApplication::processEvents();
         QVERIFY(!viewModel.state().canUndo);
         QVERIFY(viewModel.state().canRedo);
         QCOMPARE(viewModel.state().regions.size(), 0);
         QCOMPARE(viewModel.state().saveState.redoText, QStringLiteral("Create Region"));
 
         viewModel.redo();
+        QCoreApplication::processEvents();
         QVERIFY(viewModel.state().canUndo);
         QVERIFY(!viewModel.state().canRedo);
         QCOMPARE(viewModel.state().regions.size(), 1);
@@ -647,6 +649,7 @@ private Q_SLOTS:
         QCOMPARE(viewModel.state().saveState.undoText, QStringLiteral("Delete Regions"));
 
         viewModel.undo();
+        QCoreApplication::processEvents();
         QCOMPARE(viewModel.state().regions.size(), 3);
     }
 
@@ -667,6 +670,7 @@ private Q_SLOTS:
         QCOMPARE(viewModel.state().regions.first().geometry, newGeom);
 
         viewModel.undo();
+        QCoreApplication::processEvents();
         QCOMPARE(viewModel.state().regions.first().geometry, oldGeom);
     }
 
@@ -736,6 +740,7 @@ private Q_SLOTS:
 
         // Undo should navigate back to first page.
         viewModel.undo();
+        QCoreApplication::processEvents();
         QCOMPARE(viewModel.state().currentPageId, firstPage);
         QCOMPARE(viewModel.state().regions.size(), 0);
     }
@@ -769,10 +774,12 @@ private Q_SLOTS:
 
         // Undo with nothing to undo should not emit.
         viewModel.undo();
+        QCoreApplication::processEvents();
         QCOMPARE(spy.size(), countBefore);
 
         // Redo with nothing to redo should not emit.
         viewModel.redo();
+        QCoreApplication::processEvents();
         QCOMPARE(spy.size(), countBefore);
     }
 
@@ -797,13 +804,16 @@ private Q_SLOTS:
 
         // Undo should detect the fault.
         viewModel.undo();
+        QCoreApplication::processEvents();
         QVERIFY(viewModel.state().undoHistoryFaulted);
 
         // Subsequent undo/redo are no-ops while faulted.
         const int regionCountAfterFault = viewModel.state().regions.size();
         viewModel.undo();
+        QCoreApplication::processEvents();
         QCOMPARE(viewModel.state().regions.size(), regionCountAfterFault);
         viewModel.redo();
+        QCoreApplication::processEvents();
         QCOMPARE(viewModel.state().regions.size(), regionCountAfterFault);
     }
 
@@ -818,10 +828,12 @@ private Q_SLOTS:
         const auto regionId = viewModel.state().regions.first().id;
 
         QVERIFY(viewModel.removeRegionForTest(regionId));
-        viewModel.undo(); // Create replay removes a region that no longer exists.
+        viewModel.undo();
+        QCoreApplication::processEvents(); // Create replay removes a region that no longer exists.
         QVERIFY(viewModel.state().undoHistoryFaulted);
 
-        viewModel.redo(); // No-op while faulted.
+        viewModel.redo();
+        QCoreApplication::processEvents(); // No-op while faulted.
         QVERIFY(viewModel.state().undoHistoryFaulted);
         QVERIFY(viewModel.state().regions.isEmpty());
     }
@@ -864,10 +876,12 @@ private Q_SLOTS:
         QCOMPARE(viewModel.state().currentPageId, page1);
 
         viewModel.undo();
+        QCoreApplication::processEvents();
         QCOMPARE(viewModel.state().currentPageId, page2);
 
         viewModel.selectPage(page1);
         viewModel.redo();
+        QCoreApplication::processEvents();
         QCOMPARE(viewModel.state().currentPageId, page2);
 
         viewModel.rejectProcessingProposal({});
