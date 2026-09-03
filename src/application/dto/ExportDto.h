@@ -23,6 +23,8 @@ struct ExportPageSnapshot {
     QImage clearLayer;
     QImage translationLayer;
     QImage manualOverrideLayer;
+    /// Content hash of the manual override layer asset, empty when the page has none.
+    QString manualOverrideLayerRef;
 };
 
 struct ExportRequest {

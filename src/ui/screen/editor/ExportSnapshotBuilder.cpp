@@ -27,7 +27,7 @@ ExportSnapshotBuilder::ExportSnapshotBuilder(domain::ComicProject* project,
 QFuture<application::Result<ExportSnapshotBuilder::PreviewResult>>
 ExportSnapshotBuilder::executePreview(const Request& request, const application::OperationContext& context) {
     return execute(request, context)
-        .then([this](application::Result<QVector<application::ExportPageSnapshot>> result)
+        .then([](application::Result<QVector<application::ExportPageSnapshot>> result)
                   -> application::Result<ExportSnapshotBuilder::PreviewResult> {
             if (!result.has_value()) {
                 return std::unexpected(result.error());
@@ -64,10 +64,7 @@ ExportSnapshotBuilder::executePreview(const Request& request, const application:
             preview.compositeImage = composite.convertToFormat(QImage::Format_RGBA8888);
             preview.clearImage = page.clearLayer;
             preview.manualOverrideImage = page.manualOverrideLayer;
-            if (const auto* domainPage = m_project->findPage(page.pageId);
-                domainPage != nullptr && domainPage->manualOverrideLayerAsset().has_value()) {
-                preview.manualOverrideRef = QString::fromStdString(*domainPage->manualOverrideLayerAsset());
-            }
+            preview.manualOverrideRef = page.manualOverrideLayerRef;
             return preview;
         });
 }
@@ -261,6 +258,9 @@ ExportSnapshotBuilder::execute(const Request& request, const application::Operat
                     snapshot.clearLayer = clearLayer;
                     snapshot.translationLayer = translationLayer;
                     snapshot.manualOverrideLayer = manualOverrideLayer;
+                    snapshot.manualOverrideLayerRef = page.manualOverrideLayerAsset().has_value()
+                                                          ? QString::fromStdString(*page.manualOverrideLayerAsset())
+                                                          : QString();
 
                     state->snapshots.append(snapshot);
                     state->currentIndex++;
