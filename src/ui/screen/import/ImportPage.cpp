@@ -334,8 +334,10 @@ void ImportPage::bindViewModel() {
         }
     });
     connect(m_viewModel, &ImportViewModel::browseLocationRequested, this, [this]() {
-        QString dir = QFileDialog::getExistingDirectory(
-            this, tr("选择保存位置"), QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation));
+        const QString startDir = m_viewModel->state().saveLocation.trimmed().isEmpty()
+                                     ? QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation)
+                                     : m_viewModel->state().saveLocation;
+        QString dir = QFileDialog::getExistingDirectory(this, tr("选择保存位置"), startDir);
         if (!dir.isEmpty()) {
             m_viewModel->setSaveLocation(dir);
         }

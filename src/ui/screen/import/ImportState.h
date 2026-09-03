@@ -3,12 +3,19 @@
 #include "application/error/ApplicationError.h"
 #include "domain/model/ReadingDirection.h"
 
+#include <QStandardPaths>
 #include <QString>
 #include <QVector>
 
 #include <optional>
 
 namespace manga::ui::screen::import_ {
+
+/// Returns the default project save directory: Documents/MangaTranslator.
+/// The directory is not created here; the importer creates it on first use.
+inline QString defaultSaveLocation() {
+    return QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation) + QStringLiteral("/MangaTranslator");
+}
 
 /// One top-level source row: an image file or an image folder.
 struct ImportSourceEntry {
@@ -36,7 +43,7 @@ struct ImportNotice {
 struct ImportState {
     QVector<ImportSourceEntry> sources;
     QString projectName;
-    QString saveLocation;
+    QString saveLocation{defaultSaveLocation()};
     domain::ReadingDirection readingDirection{domain::ReadingDirection::RightToLeft};
     QString sourceLanguageCode{QStringLiteral("ja")};
     QString targetLanguageCode{QStringLiteral("zh-Hans")};
