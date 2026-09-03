@@ -599,7 +599,7 @@ private:
         }
 
         if (targetIndex == 0) {
-            updateProgress(4, QObject::tr("清除背景"));
+            updateProgress(4, QObject::tr("清除文字"));
         }
 
         if (targetIndex >= m_currentPageTargets.size()) {

@@ -34,7 +34,7 @@ QString processingUnavailableReason(const EditorState& state, application::Opera
                 return {};
             }
             reason = state.inpaintUnavailableReason;
-            guidance = QCoreApplication::translate("EditorState", "背景消除模型不可用，请前往设置配置模型。");
+            guidance = QCoreApplication::translate("EditorState", "文字消除模型不可用，请前往设置配置模型。");
             break;
         default:
             return {};

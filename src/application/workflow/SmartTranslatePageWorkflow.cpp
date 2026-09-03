@@ -344,7 +344,7 @@ private:
         if (m_rootContext.progressReporter) {
             m_rootContext.progressReporter->setValue(m_targets.size() + 1 + index);
             m_rootContext.progressReporter->setStatusText(
-                QObject::tr("正在清除背景 (%1/%2)").arg(index + 1).arg(m_targets.size()));
+                QObject::tr("正在清除文字 (%1/%2)").arg(index + 1).arg(m_targets.size()));
         }
 
         ClearRequest req;

@@ -1341,7 +1341,7 @@ void EditorProcessingController::inpaintStroke(const domain::PageId& pageId,
         if (operation.stopToken.stop_requested()) {
             error = application::makeApplicationError(application::ErrorCategory::Cancelled,
                                                       QStringLiteral("cancelled.user_requested"),
-                                                      tr("背景擦除已取消"));
+                                                      tr("文字消除已取消"));
         } else if (!ownsTask || !currentSession) {
             error = application::makeApplicationError(application::ErrorCategory::Cancelled,
                                                       QStringLiteral("cancelled.stale_generation"),
@@ -1368,7 +1368,7 @@ void EditorProcessingController::inpaintStroke(const domain::PageId& pageId,
             } else if (!vm->applyPageInpaintChange(*result)) {
                 error = application::makeApplicationError(application::ErrorCategory::Input,
                                                           QStringLiteral("input.edit_rejected"),
-                                                          tr("无法应用背景擦除结果"));
+                                                          tr("无法应用文字消除结果"));
             }
         }
 
@@ -1575,7 +1575,7 @@ void EditorProcessingController::clearRegions(const domain::PageId& pageId,
     rootDesc.projectId = projectId;
     rootDesc.pageId = pageId;
     rootDesc.regionId = (validRegionIds.size() == 1 ? std::make_optional(validRegionIds.front()) : std::nullopt);
-    rootDesc.displayTarget = (validRegionIds.size() == 1 ? tr("当前区域") : tr("全页背景清除"));
+    rootDesc.displayTarget = (validRegionIds.size() == 1 ? tr("当前区域") : tr("全页文字消除"));
     rootDesc.cancellable = true;
 
     auto rootContext = m_registry ? m_registry->createOperation(std::move(rootDesc),
@@ -2087,7 +2087,7 @@ void EditorProcessingController::batchProcessPages(const QVector<domain::PageId>
         targetText = tr("批量 AI 翻译 (共 %1 页)").arg(pageIds.size());
     } else if (stages == application::BatchStageFlag::Clear) {
         stage = application::OperationStage::Clear;
-        targetText = tr("批量背景清除 (共 %1 页)").arg(pageIds.size());
+        targetText = tr("批量文字消除 (共 %1 页)").arg(pageIds.size());
     } else if (stages == application::BatchStageFlag::Layout) {
         stage = application::OperationStage::Layout;
         targetText = tr("批量文字排版 (共 %1 页)").arg(pageIds.size());

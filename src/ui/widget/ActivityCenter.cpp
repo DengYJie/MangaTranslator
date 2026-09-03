@@ -34,7 +34,7 @@ QString stageName(application::OperationStage stage) {
         case application::OperationStage::Translate:
             return QObject::tr("AI 翻译");
         case application::OperationStage::Clear:
-            return QObject::tr("背景清除");
+            return QObject::tr("文字消除");
         case application::OperationStage::Layout:
             return QObject::tr("文字排版");
         case application::OperationStage::Detect:

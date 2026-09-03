@@ -432,7 +432,7 @@ void EditorCommandBar::render(const EditorState& state) {
     } else if (!hasRegions) {
         m_inpaintButton->setToolTip(tr("当前页面没有文字区域"));
     } else {
-        m_inpaintButton->setToolTip(tr("消除整页文字背景 (Inpaint)"));
+        m_inpaintButton->setToolTip(tr("消除整页文字 (Inpaint)"));
     }
     m_inpaintButton->setAccessibleName(tr("文字消除 (整页)"));
 
