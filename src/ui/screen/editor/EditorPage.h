@@ -107,6 +107,9 @@ private:
         manga::CanvasTool tool{manga::CanvasTool::Select};
         fluent::basicinput::Button* button{nullptr};
         bool requiresInpaint{false};
+        /// True when the tool must stay disabled while any operation runs, so a second stroke
+        /// cannot start on top of a draft whose commit is still in flight.
+        bool requiresIdle{false};
     };
 
     void buildUi();

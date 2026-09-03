@@ -973,6 +973,8 @@ void MangaCanvas::cancelGesture() {
 }
 
 void MangaCanvas::cancelRemoveStroke() {
+    // A cancelled gesture also drops any stroke draft; discarding the draft is the rollback.
+    settleStrokeDraft();
     if (!m_removeStrokeActive && m_removeStroke.isEmpty()) {
         return;
     }
@@ -1392,6 +1394,17 @@ void MangaCanvas::mousePressEvent(QMouseEvent* event) {
         m_removeStroke.clear();
         m_removeStroke.append(clampedPt);
         m_removeStrokeActive = true;
+        if (m_tool == canvas::Tool::Brush || m_tool == canvas::Tool::Eraser) {
+            beginStrokeDraft(m_tool == canvas::Tool::Eraser ? rendering::StrokePaintMode::Erase
+                                                            : rendering::StrokePaintMode::Paint,
+                             m_brushColor,
+                             m_removeDiameter);
+            // Seed the segment chain at the press point. No cap is rasterized here: the first
+            // segment already covers the press point with its round cap, and the whole-stroke
+            // commit path adds a cap only at the stroke end, so an extra cap would double-cover
+            // the start and break pixel identity with the committed layer.
+            m_strokeLastPoint = clampedPt;
+        }
         const double radius = m_removeDiameter * 0.5;
         const double margin = 4.0 / std::max(0.01, m_zoomFactor);
         const QRectF dotRect(clampedPt.x() - radius - margin,
@@ -1516,6 +1529,9 @@ void MangaCanvas::mouseMoveEvent(QMouseEvent* event) {
                 return;
             }
             m_removeStroke.append(clampedPt);
+            if (m_tool == canvas::Tool::Brush || m_tool == canvas::Tool::Eraser) {
+                extendStrokeDraft(clampedPt);
+            }
             const double radius = m_removeDiameter * 0.5;
             const double margin = 4.0 / std::max(0.01, m_zoomFactor);
             const QRectF segmentRect =
@@ -1687,14 +1703,22 @@ void MangaCanvas::mouseReleaseEvent(QMouseEvent* event) {
     if (event->button() == Qt::LeftButton &&
         (m_tool == canvas::Tool::Remove || m_tool == canvas::Tool::Brush || m_tool == canvas::Tool::Eraser) &&
         m_removeStrokeActive) {
-        if (!m_spaceHeld && !m_removeStroke.isEmpty()) {
-            if (m_tool == canvas::Tool::Remove) {
-                Q_EMIT removeStrokeCommitted(m_removeStroke, m_removeDiameter);
-            } else {
-                Q_EMIT manualStrokeCommitted(m_removeStroke, m_tool, m_brushColor, m_removeDiameter);
-            }
+        const bool manualTool = m_tool == canvas::Tool::Brush || m_tool == canvas::Tool::Eraser;
+        const bool commit = !m_spaceHeld && !m_removeStroke.isEmpty();
+        if (commit && m_tool == canvas::Tool::Remove) {
+            Q_EMIT removeStrokeCommitted(m_removeStroke, m_removeDiameter);
+        } else if (commit) {
+            finishStrokeDraft();
+            Q_EMIT manualStrokeCommitted(m_removeStroke, m_tool, m_brushColor, m_removeDiameter);
         }
-        cancelRemoveStroke();
+        if (manualTool && commit) {
+            // The draft stays visible after release; the committed layer replaces it on settle.
+            m_removeStroke.clear();
+            m_removeStrokeActive = false;
+            viewport()->update();
+        } else {
+            cancelRemoveStroke();
+        }
         event->accept();
         return;
     }
@@ -1895,21 +1919,13 @@ void MangaCanvas::drawForeground(QPainter* painter, const QRectF& rect) {
         painter->restore();
     }
 
-    if (m_removeStrokeActive &&
-        (m_tool == canvas::Tool::Remove || m_tool == canvas::Tool::Brush || m_tool == canvas::Tool::Eraser) &&
-        !m_removeStroke.isEmpty()) {
+    // Placeholder polyline for the Remove tool only. Brush and Eraser paint real pixels through
+    // the stroke draft, so they need no placeholder.
+    if (m_removeStrokeActive && m_tool == canvas::Tool::Remove && !m_removeStroke.isEmpty()) {
         painter->save();
         painter->setRenderHint(QPainter::Antialiasing);
-        QColor strokeColor;
-        if (m_tool == canvas::Tool::Remove) {
-            strokeColor = themeColorsRef().accentDefault;
-            strokeColor.setAlpha(100);
-        } else if (m_tool == canvas::Tool::Brush) {
-            strokeColor = m_brushColor;
-            strokeColor.setAlpha(180);
-        } else if (m_tool == canvas::Tool::Eraser) {
-            strokeColor = QColor(255, 100, 100, 120);
-        }
+        QColor strokeColor = themeColorsRef().accentDefault;
+        strokeColor.setAlpha(100);
         painter->setPen(QPen(strokeColor, m_removeDiameter, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
         if (m_removeStroke.size() == 1) {
             painter->setBrush(strokeColor);

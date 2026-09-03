@@ -445,7 +445,8 @@ void EditorPage::buildUi() {
                                                              const QString& glyph,
                                                              const QString& label,
                                                              CanvasTool tool,
-                                                             bool requiresInpaint = false) {
+                                                             bool requiresInpaint = false,
+                                                             bool requiresIdle = false) {
         auto* button = new fluent::basicinput::Button(toolLayout->parentWidget());
         button->setObjectName(objectName);
         button->setIconGlyph(glyph, Typography::IconSize::Standard);
@@ -457,7 +458,7 @@ void EditorPage::buildUi() {
         button->setFixedSize(44, 36);
         toolGroup->addButton(button);
         toolLayout->addWidget(button);
-        m_canvasToolButtons.append({toCanvasTool(tool), button, requiresInpaint});
+        m_canvasToolButtons.append({toCanvasTool(tool), button, requiresInpaint, requiresIdle});
         connect(
             button, &fluent::basicinput::Button::clicked, this, [this, tool]() { m_viewModel->setActiveTool(tool); });
         return button;
@@ -477,7 +478,9 @@ void EditorPage::buildUi() {
     addCanvasTool(QStringLiteral("canvasBrushButton"),
                   Typography::Icons::glyph(QStringLiteral("ic_fluent_paint_brush_20_regular")),
                   tr("画笔 (B)"),
-                  CanvasTool::Brush);
+                  CanvasTool::Brush,
+                  false,
+                  true);
     addCanvasTool(QStringLiteral("canvasEyedropperButton"),
                   Typography::Icons::glyph(QStringLiteral("ic_fluent_eyedropper_20_regular")),
                   tr("吸管 (I)"),
@@ -485,7 +488,9 @@ void EditorPage::buildUi() {
     addCanvasTool(QStringLiteral("canvasEraserButton"),
                   Typography::Icons::glyph(QStringLiteral("ic_fluent_eraser_20_regular")),
                   tr("橡皮擦 (E)"),
-                  CanvasTool::Eraser);
+                  CanvasTool::Eraser,
+                  false,
+                  true);
     addCanvasTool(QStringLiteral("canvasRemoveButton"),
                   Typography::Icons::glyph(QStringLiteral("ic_fluent_square_hint_sparkles_16_regular")),
                   tr("移除内容 (J)"),
@@ -945,9 +950,11 @@ void EditorPage::render(const EditorState& state) {
         m_canvas->setBrushColor(state.brushColor);
     }
     if (m_canvasToolRail != nullptr) {
+        const bool idle = !state.processing.isRunning;
         for (const auto& entry : m_canvasToolButtons) {
             entry.button->setChecked(canvasTool == entry.tool);
-            entry.button->setEnabled(hasUsablePage && (!entry.requiresInpaint || state.isInpaintAvailable));
+            entry.button->setEnabled(hasUsablePage && (!entry.requiresInpaint || state.isInpaintAvailable) &&
+                                     (!entry.requiresIdle || idle));
         }
         const bool isBrushMode = canvasTool == ui::manga::CanvasTool::Remove ||
                                  canvasTool == ui::manga::CanvasTool::Brush ||
