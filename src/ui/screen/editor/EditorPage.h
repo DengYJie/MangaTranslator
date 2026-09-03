@@ -90,6 +90,10 @@ public:
         return m_activityCenter;
     }
     void setOperations(const QVector<application::OperationSnapshot>& operations);
+    /// Test-only: seeds the pending stroke tracking exactly as a committed stroke would.
+    void trackPendingStrokeForTest(const domain::PageId& pageId,
+                                   application::OperationId operationId,
+                                   quint64 sessionGeneration);
 
 Q_SIGNALS:
     void openProjectRequested();

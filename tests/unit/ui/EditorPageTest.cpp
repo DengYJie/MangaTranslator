@@ -2,7 +2,9 @@
 
 #include "application/workflow/OperationRegistry.h"
 #include "fakes/FakeImagePorts.h"
+#include "rendering/paint/StrokePaintRasterizer.h"
 #include "ui/manga/MangaCanvas.h"
+#include "ui/screen/editor/EditorProcessingController.h"
 #include "ui/screen/editor/EditorViewModel.h"
 #include "ui/widget/EditorCommandBar.h"
 #include "ui/widget/PageListModel.h"
@@ -44,7 +46,9 @@ class EditorPageTest : public QObject {
 private Q_SLOTS:
     void initTestCase() {
         qRegisterMetaType<domain::PageId>();
+        qRegisterMetaType<application::OperationId>();
         qRegisterMetaType<ui::screen::editor::PageImageDelivery>();
+        qRegisterMetaType<ui::screen::editor::ManualOverrideDelivery>();
     }
 
     void noProjectShowsOpenPlaceholder() {
@@ -222,6 +226,165 @@ private Q_SLOTS:
                                separators.cend(),
                                [](const auto* separator) { return separator->isVisible(); }),
                  5);
+    }
+
+    void appliedStrokeSettlesDraftOnMatchingDelivery() {
+        test::FakeThumbnailStore thumbnails;
+        test::FakePageImageLoader images;
+        application::OperationRegistry registry;
+        ui::screen::editor::EditorViewModel viewModel(&thumbnails, &images, &registry);
+        ui::screen::editor::EditorPage page(&viewModel);
+        ui::screen::editor::EditorProcessingController controller(
+            &viewModel, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, &registry);
+        ui::screen::editor::EditorProcessingState processing;
+        processing.isRunning = true;
+        viewModel.updateProcessingState(processing); // wires the controller connections via render
+
+        auto* canvas = page.canvasForTest();
+        canvas->setPageBounds(domain::ImageSize{64, 64});
+        QImage overrideImage(64, 64, QImage::Format_RGBA8888);
+        overrideImage.fill(QColor(0, 0, 255, 200));
+        canvas->setManualOverrideImage(overrideImage, QStringLiteral("hash-a"));
+        canvas->beginStrokeDraft(manga::rendering::StrokePaintMode::Paint, QColor(255, 0, 0, 255), 8.0);
+        canvas->extendStrokeDraft(QPointF(16.5, 16.5));
+        QVERIFY(canvas->hasStrokeDraftForTest());
+
+        const auto pageId = domain::PageId::generate();
+        const auto opId = application::OperationId::generate();
+        page.trackPendingStrokeForTest(pageId, opId, 0);
+
+        // A delivery that predates the applied stroke must not settle the draft.
+        QMetaObject::invokeMethod(
+            &viewModel,
+            "manualOverrideReady",
+            Q_ARG(ui::screen::editor::ManualOverrideDelivery,
+                  ui::screen::editor::ManualOverrideDelivery{pageId, overrideImage, QStringLiteral("hash-a")}));
+        QVERIFY(canvas->hasStrokeDraftForTest());
+
+        QMetaObject::invokeMethod(&controller,
+                                  "manualStrokeApplied",
+                                  Q_ARG(domain::PageId, pageId),
+                                  Q_ARG(QString, QStringLiteral("hash-b")),
+                                  Q_ARG(application::OperationId, opId));
+        QVERIFY(canvas->hasStrokeDraftForTest()); // the apply event alone does not settle
+
+        QImage appliedImage(64, 64, QImage::Format_RGBA8888);
+        appliedImage.fill(QColor(10, 200, 40, 255));
+        QMetaObject::invokeMethod(
+            &viewModel,
+            "manualOverrideReady",
+            Q_ARG(ui::screen::editor::ManualOverrideDelivery,
+                  ui::screen::editor::ManualOverrideDelivery{pageId, appliedImage, QStringLiteral("hash-b")}));
+        QVERIFY(!canvas->hasStrokeDraftForTest());
+        QCOMPARE(canvas->authoritativeOverrideForTest(), appliedImage);
+    }
+
+    void noOpStrokeStillSettlesDraft() {
+        test::FakeThumbnailStore thumbnails;
+        test::FakePageImageLoader images;
+        application::OperationRegistry registry;
+        ui::screen::editor::EditorViewModel viewModel(&thumbnails, &images, &registry);
+        ui::screen::editor::EditorPage page(&viewModel);
+        ui::screen::editor::EditorProcessingController controller(
+            &viewModel, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, &registry);
+        ui::screen::editor::EditorProcessingState processing;
+        processing.isRunning = true;
+        viewModel.updateProcessingState(processing);
+
+        auto* canvas = page.canvasForTest();
+        canvas->setPageBounds(domain::ImageSize{64, 64});
+        QImage overrideImage(64, 64, QImage::Format_RGBA8888);
+        overrideImage.fill(QColor(0, 0, 255, 200));
+        canvas->setManualOverrideImage(overrideImage, QStringLiteral("hash-a"));
+        canvas->beginStrokeDraft(manga::rendering::StrokePaintMode::Paint, QColor(255, 0, 0, 255), 8.0);
+        canvas->extendStrokeDraft(QPointF(16.5, 16.5));
+
+        const auto pageId = domain::PageId::generate();
+        const auto opId = application::OperationId::generate();
+        page.trackPendingStrokeForTest(pageId, opId, 0);
+
+        // The stroke changed nothing, so afterRef equals the starting ref; the draft must still
+        // settle, which is the case a ref-diff rule would hang on.
+        QMetaObject::invokeMethod(&controller,
+                                  "manualStrokeApplied",
+                                  Q_ARG(domain::PageId, pageId),
+                                  Q_ARG(QString, QStringLiteral("hash-a")),
+                                  Q_ARG(application::OperationId, opId));
+        QMetaObject::invokeMethod(
+            &viewModel,
+            "manualOverrideReady",
+            Q_ARG(ui::screen::editor::ManualOverrideDelivery,
+                  ui::screen::editor::ManualOverrideDelivery{pageId, overrideImage, QStringLiteral("hash-a")}));
+        QVERIFY(!canvas->hasStrokeDraftForTest());
+    }
+
+    void failedStrokeSettlesDraftAndKeepsAuthoritativeLayer() {
+        test::FakeThumbnailStore thumbnails;
+        test::FakePageImageLoader images;
+        application::OperationRegistry registry;
+        ui::screen::editor::EditorViewModel viewModel(&thumbnails, &images, &registry);
+        ui::screen::editor::EditorPage page(&viewModel);
+        ui::screen::editor::EditorProcessingController controller(
+            &viewModel, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, &registry);
+        ui::screen::editor::EditorProcessingState processing;
+        processing.isRunning = true;
+        viewModel.updateProcessingState(processing);
+
+        auto* canvas = page.canvasForTest();
+        canvas->setPageBounds(domain::ImageSize{64, 64});
+        QImage overrideImage(64, 64, QImage::Format_RGBA8888);
+        overrideImage.fill(QColor(0, 0, 255, 200));
+        canvas->setManualOverrideImage(overrideImage, QStringLiteral("hash-a"));
+        canvas->beginStrokeDraft(manga::rendering::StrokePaintMode::Erase, QColor(0, 0, 0, 255), 8.0);
+        canvas->extendStrokeDraft(QPointF(16.5, 16.5));
+
+        const auto pageId = domain::PageId::generate();
+        const auto opId = application::OperationId::generate();
+        page.trackPendingStrokeForTest(pageId, opId, 0);
+
+        QMetaObject::invokeMethod(&controller, "processingFinished", Q_ARG(domain::PageId, pageId), Q_ARG(bool, false));
+
+        QVERIFY(!canvas->hasStrokeDraftForTest());
+        QCOMPARE(canvas->authoritativeOverrideForTest(), overrideImage);
+    }
+
+    void staleArrivalsDoNotSettleDraft() {
+        test::FakeThumbnailStore thumbnails;
+        test::FakePageImageLoader images;
+        application::OperationRegistry registry;
+        ui::screen::editor::EditorViewModel viewModel(&thumbnails, &images, &registry);
+        ui::screen::editor::EditorPage page(&viewModel);
+        ui::screen::editor::EditorProcessingController controller(
+            &viewModel, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, &registry);
+        ui::screen::editor::EditorProcessingState processing;
+        processing.isRunning = true;
+        viewModel.updateProcessingState(processing);
+
+        auto* canvas = page.canvasForTest();
+        canvas->setPageBounds(domain::ImageSize{64, 64});
+        QImage overrideImage(64, 64, QImage::Format_RGBA8888);
+        overrideImage.fill(QColor(0, 0, 255, 200));
+        canvas->setManualOverrideImage(overrideImage, QStringLiteral("hash-a"));
+        canvas->beginStrokeDraft(manga::rendering::StrokePaintMode::Paint, QColor(255, 0, 0, 255), 8.0);
+        canvas->extendStrokeDraft(QPointF(16.5, 16.5));
+
+        const auto pageId = domain::PageId::generate();
+        const auto opId = application::OperationId::generate();
+        page.trackPendingStrokeForTest(pageId, opId, 0);
+
+        // An apply event for a different operation is not ours.
+        QMetaObject::invokeMethod(&controller,
+                                  "manualStrokeApplied",
+                                  Q_ARG(domain::PageId, pageId),
+                                  Q_ARG(QString, QStringLiteral("hash-b")),
+                                  Q_ARG(application::OperationId, application::OperationId::generate()));
+        // A delivery for another page is not ours either.
+        QMetaObject::invokeMethod(&viewModel,
+                                  "manualOverrideReady",
+                                  Q_ARG(ui::screen::editor::ManualOverrideDelivery,
+                                        ui::screen::editor::ManualOverrideDelivery{
+                                            domain::PageId::generate(), overrideImage, QStringLiteral("hash-b")}));
+        QVERIFY(canvas->hasStrokeDraftForTest());
     }
 };
 

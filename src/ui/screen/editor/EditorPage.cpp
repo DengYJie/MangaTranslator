@@ -698,6 +698,15 @@ void EditorPage::updateResponsiveLayout(int availableWidth) {
     applySplitterLayout();
 }
 
+void EditorPage::trackPendingStrokeForTest(const domain::PageId& pageId,
+                                           application::OperationId operationId,
+                                           quint64 sessionGeneration) {
+    m_pendingStrokeOperationId = operationId;
+    m_pendingStrokePageId = pageId;
+    m_pendingStrokeSessionGeneration = sessionGeneration;
+    m_pendingStrokeAfterRef.clear();
+}
+
 void EditorPage::abandonPendingStrokeDraft() {
     m_pendingStrokeOperationId = {};
     m_pendingStrokeAfterRef.clear();
