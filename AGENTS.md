@@ -26,6 +26,7 @@ Dependencies point inward:
 
 ```text
 ui -> application + rendering
+application -> rendering
 services -> application ports + rendering + domain
 data/network -> application ports + domain
 rendering -> domain
@@ -36,7 +37,7 @@ domain -> standard library
 
 - `domain` contains business concepts and invariants.
 - `application/ports` defines external capabilities; `application/usecase` coordinates them.
-- `rendering` contains deterministic Qt Core/Gui text measurement and rasterization shared by UI preview, layout adapters, and export. It has no Widgets, FluentQt, I/O, Port, or application dependencies.
+- `rendering` contains deterministic Qt Core/Gui text measurement and rasterization shared by UI preview, the manual paint UseCase, layout adapters, and export. It has no Widgets, FluentQt, I/O, Port, or application dependencies.
 - `services`, `data`, and `network` implement ports.
 - `ui` renders state and reports user intent.
 - `app/ApplicationContext` is the only composition root.

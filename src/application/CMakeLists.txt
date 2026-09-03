@@ -36,6 +36,7 @@ target_include_directories(manga_application
 target_link_libraries(manga_application
     PUBLIC
         manga_domain
+        manga_rendering
         Qt6::Core
         Qt6::Gui
 )
