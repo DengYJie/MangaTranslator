@@ -10,8 +10,6 @@
 #include <QBoxLayout>
 #include <QDesktopServices>
 #include <QFileDialog>
-#include <QLabel>
-#include <QStackedLayout>
 #include <QUrl>
 
 namespace manga::ui::screen::home {
@@ -44,11 +42,12 @@ void HomePage::buildUi() {
     // Page header keeps the title block left and the commands right, per docs/ui/pages/home.md.
     auto* headerRow = new QHBoxLayout;
     auto* titleBlock = new QVBoxLayout;
-    m_titleLabel = new QLabel(tr("欢迎回来"), this);
-    m_titleLabel->setFont(themeFont(Typography::FontRole::Title).toQFont());
+    m_titleLabel = new fluent::textfields::Label(tr("欢迎回来"), this);
+    m_titleLabel->setFluentTypography(Typography::FontRole::Title);
     titleBlock->addWidget(m_titleLabel);
-    m_subtitleLabel = new QLabel(tr("继续漫画翻译项目，或开始新的工作。"), this);
-    m_subtitleLabel->setFont(themeFont(Typography::FontRole::Body).toQFont());
+    m_subtitleLabel = new fluent::textfields::Label(tr("继续漫画翻译项目，或开始新的工作。"), this);
+    m_subtitleLabel->setFluentTypography(Typography::FontRole::Body);
+    m_subtitleLabel->setTextColorRole(fluent::textfields::Label::TextColorRole::Secondary);
     titleBlock->addWidget(m_subtitleLabel);
     headerRow->addLayout(titleBlock);
     headerRow->addStretch(1);
@@ -105,8 +104,8 @@ void HomePage::buildUi() {
     rootLayout->addWidget(m_infoBar);
 
     // Recent projects section (full width).
-    auto* recentHeader = new QLabel(tr("最近项目"), this);
-    recentHeader->setFont(themeFont(Typography::FontRole::BodyStrong).toQFont());
+    auto* recentHeader = new fluent::textfields::Label(tr("最近项目"), this);
+    recentHeader->setFluentTypography(Typography::FontRole::BodyStrong);
     rootLayout->addWidget(recentHeader);
 
     // Recent projects card grid, homogeneous single-select cards per docs/ui/pages/home.md.
@@ -201,16 +200,6 @@ fluent::basicinput::Button* HomePage::importButtonForTest() const {
 
 void HomePage::onThemeUpdated() {
     BasePage::onThemeUpdated();
-    const auto& tokens = themeColorsRef();
-    if (m_titleLabel) {
-        m_titleLabel->setFont(themeFont(Typography::FontRole::Title).toQFont());
-    }
-    if (m_subtitleLabel) {
-        m_subtitleLabel->setFont(themeFont(Typography::FontRole::Body).toQFont());
-        QPalette palette = m_subtitleLabel->palette();
-        palette.setColor(QPalette::WindowText, tokens.textSecondary);
-        m_subtitleLabel->setPalette(palette);
-    }
     if (m_gridView) {
         m_gridView->viewport()->update(); // delegate reads tokens at paint time
     }

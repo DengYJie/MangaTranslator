@@ -15,7 +15,6 @@
 #include <FluentQt/TextFields.h>
 #include <QFileDialog>
 #include <QHBoxLayout>
-#include <QLabel>
 #include <QScrollBar>
 #include <QShowEvent>
 #include <QVBoxLayout>
@@ -690,7 +689,10 @@ void SettingsPage::showCredentialRemovalDialog() {
     auto* dialog = new fluent::dialogs_flyouts::ContentDialog(window());
     dialog->setAttribute(Qt::WA_DeleteOnClose);
     dialog->setTitle(tr("确认移除 API 密钥？"));
-    dialog->setContent(new QLabel(tr("移除密钥后，该服务商的 AI 翻译功能将无法使用，直到重新配置新的密钥。")));
+    auto* contentLabel =
+        new fluent::textfields::Label(tr("移除密钥后，该服务商的 AI 翻译功能将无法使用，直到重新配置新的密钥。"));
+    contentLabel->setFluentTypography(Typography::FontRole::Body);
+    dialog->setContent(contentLabel);
     dialog->setPrimaryButtonText(tr("移除"));
     dialog->setCloseButtonText(tr("取消"));
     dialog->setDefaultButton(fluent::dialogs_flyouts::ContentDialog::Close);

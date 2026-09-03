@@ -4,8 +4,6 @@
 #include "ui/base/BasePage.h"
 
 class QBoxLayout;
-class QLabel;
-class QStackedLayout;
 
 namespace fluent::basicinput {
 class Button;
@@ -15,6 +13,9 @@ class GridView;
 }
 namespace fluent::status_info {
 class InfoBar;
+}
+namespace fluent::textfields {
+class Label;
 }
 
 namespace manga::ui::screen::home {
@@ -55,8 +56,8 @@ private:
     HomeViewModel* m_viewModel; // non-owning
     RecentProjectsModel* m_model{nullptr};
     RecentProjectCardDelegate* m_delegate{nullptr};
-    QLabel* m_titleLabel{nullptr};
-    QLabel* m_subtitleLabel{nullptr};
+    fluent::textfields::Label* m_titleLabel{nullptr};
+    fluent::textfields::Label* m_subtitleLabel{nullptr};
     fluent::basicinput::Button* m_openButton{nullptr};
     fluent::basicinput::Button* m_importButton{nullptr};
     fluent::basicinput::Button* m_newProjectButton{nullptr};
