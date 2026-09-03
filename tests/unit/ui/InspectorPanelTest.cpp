@@ -328,7 +328,14 @@ private Q_SLOTS:
 
         QCOMPARE(panel.modeForTest(), InspectorMode::None);
         QVERIFY(panel.contentHostForTest() != nullptr);
-        QVERIFY(!panel.contentHostForTest()->isEnabled());
+        QVERIFY(panel.contentHostForTest()->isEnabled());
+
+        auto* typesettingExpander =
+            panel.findChild<fluent::layout::Expander*>(QStringLiteral("inspectorTypesettingExpander"));
+        QVERIFY(typesettingExpander != nullptr);
+        QVERIFY(typesettingExpander->isEnabled());
+        QVERIFY(typesettingExpander->contentWidget() != nullptr);
+        QVERIFY(!typesettingExpander->contentWidget()->isEnabled());
 
         auto* title = panel.findChild<fluent::textfields::Label*>(QStringLiteral("inspectorHeaderTitle"));
         QVERIFY(title != nullptr);
@@ -337,6 +344,11 @@ private Q_SLOTS:
         auto* subtitle = panel.findChild<fluent::textfields::Label*>(QStringLiteral("inspectorHeaderSubtitle"));
         QVERIFY(subtitle != nullptr);
         QCOMPARE(subtitle->text(), QStringLiteral("未选中文字框"));
+
+        auto* translationExpander =
+            panel.findChild<fluent::layout::Expander*>(QStringLiteral("inspectorTranslationExpander"));
+        QVERIFY(translationExpander != nullptr);
+        QVERIFY(!translationExpander->isVisible());
     }
 
     void singleStatePopulatesAllFields() {
@@ -347,6 +359,11 @@ private Q_SLOTS:
 
         QCOMPARE(panel.modeForTest(), InspectorMode::Single);
         QVERIFY(panel.contentHostForTest()->isEnabled());
+
+        auto* translationExpander =
+            panel.findChild<fluent::layout::Expander*>(QStringLiteral("inspectorTranslationExpander"));
+        QVERIFY(translationExpander != nullptr);
+        QVERIFY(translationExpander->isVisible());
 
         auto* title = panel.findChild<fluent::textfields::Label*>(QStringLiteral("inspectorHeaderTitle"));
         QVERIFY(title != nullptr);
@@ -437,7 +454,14 @@ private Q_SLOTS:
 
         panel.setInspectorState(std::monostate{});
         QCOMPARE(panel.modeForTest(), InspectorMode::None);
-        QVERIFY(!panel.contentHostForTest()->isEnabled());
+        QVERIFY(panel.contentHostForTest()->isEnabled());
+
+        auto* typesettingExpander =
+            panel.findChild<fluent::layout::Expander*>(QStringLiteral("inspectorTypesettingExpander"));
+        QVERIFY(typesettingExpander != nullptr);
+        QVERIFY(typesettingExpander->isEnabled());
+        QVERIFY(typesettingExpander->contentWidget() != nullptr);
+        QVERIFY(!typesettingExpander->contentWidget()->isEnabled());
 
         auto* sourceEdit = panel.findChild<fluent::textfields::TextEdit*>(QStringLiteral("inspectorSourceEdit"));
         QVERIFY(sourceEdit != nullptr);

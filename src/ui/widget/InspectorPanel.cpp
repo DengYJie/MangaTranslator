@@ -171,24 +171,28 @@ void InspectorPanel::buildUi() {
     using fluent::textfields::Label;
 
     setMinimumWidth(kPanelMinimumWidth);
-    setFocusPolicy(Qt::StrongFocus);
+    setFocusPolicy(Qt::NoFocus);
 
     auto* root = new QVBoxLayout(this);
-    // Layout metrics use the panel defaults in src/ui/AGENTS.md and the spacing scale in
-    // docs/ui/foundations.md.
-    root->setContentsMargins(12, 12, 12, 12);
-    root->setSpacing(4);
+    // Section expanders span full width without outer horizontal padding. Header retains standard insets.
+    root->setContentsMargins(0, 12, 0, 0);
+    root->setSpacing(8);
+
+    auto* headerLayout = new QVBoxLayout;
+    headerLayout->setContentsMargins(16, 0, 16, 0);
+    headerLayout->setSpacing(4);
 
     m_headerTitle = new Label(this);
     m_headerTitle->setObjectName(QStringLiteral("inspectorHeaderTitle"));
     m_headerTitle->setFluentTypography(Typography::FontRole::Subtitle);
-    root->addWidget(m_headerTitle);
+    headerLayout->addWidget(m_headerTitle);
 
     m_headerSubtitle = new Label(this);
     m_headerSubtitle->setObjectName(QStringLiteral("inspectorHeaderSubtitle"));
     m_headerSubtitle->setTextColorRole(Label::TextColorRole::Secondary);
     m_headerSubtitle->setTextElideMode(Qt::ElideMiddle);
-    root->addWidget(m_headerSubtitle);
+    headerLayout->addWidget(m_headerSubtitle);
+    root->addLayout(headerLayout);
 
     m_scrollView = new TransparentScrollView(this);
     m_scrollView->setWidgetResizable(true);
@@ -200,6 +204,7 @@ void InspectorPanel::buildUi() {
     m_contentHost->setMinimumWidth(0);
     m_contentHost->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
     m_scrollView->setContentWidget(m_contentHost, fluent::WidgetOwnership::Owned);
+    populateNone();
 }
 
 namespace {
@@ -223,6 +228,55 @@ void clearFieldError(fluent::layout::Field* field) {
     field->setValidationMessage(QString());
 }
 
+/// Full-width expander for the inspector panel that draws straight borders without rounded corners.
+class InspectorExpander : public fluent::layout::Expander {
+public:
+    using fluent::layout::Expander::Expander;
+
+protected:
+    void paintEvent(QPaintEvent* event) override {
+        Q_UNUSED(event);
+        const auto& colors = themeColorsRef();
+        QColor fill = colors.bgLayer;
+        switch (appearance()) {
+            case Canvas:
+                fill = colors.bgCanvas;
+                break;
+            case LayerAlt:
+                fill = colors.bgLayerAlt;
+                break;
+            case Layer:
+            default:
+                fill = colors.bgLayer;
+                break;
+        }
+
+        QPainter painter(this);
+        painter.fillRect(rect(), fill);
+        if (isBorderVisible()) {
+            painter.setPen(QPen(colors.strokeCard, 1));
+            const QRectF r = QRectF(rect()).adjusted(0.5, 0.5, -0.5, -0.5);
+            painter.drawLine(QPointF(r.left(), r.top()), QPointF(r.left(), r.bottom()));
+            painter.drawLine(QPointF(r.right(), r.top()), QPointF(r.right(), r.bottom()));
+            painter.drawLine(QPointF(r.left(), r.bottom()), QPointF(r.right(), r.bottom()));
+        }
+    }
+};
+
+void configureExpanderHeader(fluent::layout::Expander* expander) {
+    if (!expander) {
+        return;
+    }
+    if (auto* btn = expander->findChild<fluent::basicinput::Button*>(QStringLiteral("fluentExpanderHeader"))) {
+        btn->setFocusPolicy(Qt::NoFocus);
+        btn->setFocusVisual(false);
+        btn->setCornerRadii(QMargins(0, 0, 0, 0));
+        if (btn->layout()) {
+            btn->layout()->setContentsMargins(16, 0, 16, 0);
+        }
+    }
+}
+
 } // namespace
 
 QWidget* InspectorPanel::buildContentHost() {
@@ -238,118 +292,18 @@ QWidget* InspectorPanel::buildContentHost() {
 
     auto* host = new QWidget();
     auto* layout = new QVBoxLayout(host);
-    // Section insets and gaps come from the spacing scale in docs/ui/foundations.md.
-    layout->setContentsMargins(0, 8, 0, 8);
-    layout->setSpacing(12);
+    // Expanders span full width of the inspector panel with no inter-card gap.
+    layout->setContentsMargins(0, 0, 0, 0);
+    layout->setSpacing(0);
 
-    // Translation section (expanded by default).
-    m_translationExpander = new Expander(host);
-    m_translationExpander->setHeaderText(tr("翻译"));
-    auto* translationContent = new QWidget();
-    auto* translationLayout = new QVBoxLayout(translationContent);
-    translationLayout->setContentsMargins(12, 8, 12, 12);
-    translationLayout->setSpacing(8);
-
-    auto* sourceField = new Field();
-    sourceField->setLabelText(tr("原文"));
-    m_sourceEdit = new TextEdit();
-    m_sourceEdit->setObjectName(QStringLiteral("inspectorSourceEdit"));
-    m_sourceEdit->setMinVisibleLines(1);
-    m_sourceEdit->setMaxVisibleLines(6);
-    m_sourceEdit->setAccessibleName(tr("原文"));
-    sourceField->setEditor(m_sourceEdit, fluent::WidgetOwnership::Owned);
-    translationLayout->addWidget(sourceField);
-    connect(m_sourceEdit, &TextEdit::textChanged, this, [this]() {
-        if (!m_updating && !m_inImePreedit) {
-            emitFieldEdit(InspectorField::SourceText, m_sourceEdit->toPlainText());
-        }
-        refreshExpanderLayout(m_translationExpander);
-    });
-
-    auto* translationField = new Field();
-    translationField->setLabelText(tr("译文"));
-    m_translationEdit = new TextEdit();
-    m_translationEdit->setObjectName(QStringLiteral("inspectorTranslationEdit"));
-    m_translationEdit->setMinVisibleLines(1);
-    m_translationEdit->setMaxVisibleLines(6);
-    m_translationEdit->setAccessibleName(tr("译文"));
-    translationField->setEditor(m_translationEdit, fluent::WidgetOwnership::Owned);
-    translationLayout->addWidget(translationField);
-    connect(m_translationEdit, &TextEdit::textChanged, this, [this]() {
-        if (!m_updating && !m_inImePreedit) {
-            emitFieldEdit(InspectorField::ManualTranslation, m_translationEdit->toPlainText());
-        }
-        refreshExpanderLayout(m_translationExpander);
-    });
-
-    for (auto* edit : {m_sourceEdit, m_translationEdit}) {
-        if (auto* inner = edit->findChild<QTextEdit*>()) {
-            inner->setUndoRedoEnabled(false);
-            inner->installEventFilter(this);
-        }
-    }
-
-    m_candidatesExpander = new Expander();
-    m_candidatesExpander->setObjectName(QStringLiteral("inspectorCandidatesExpander"));
-    m_candidatesExpander->setHeaderText(tr("候选译文"));
-    auto* candidatesContent = new QWidget();
-    auto* candidatesLayout = new QVBoxLayout(candidatesContent);
-    candidatesLayout->setContentsMargins(12, 8, 12, 12);
-    candidatesLayout->setSpacing(8);
-    m_candidatesList = new QListWidget();
-    m_candidatesList->setObjectName(QStringLiteral("inspectorCandidatesList"));
-    m_candidatesList->setAccessibleName(tr("候选译文列表"));
-    m_candidatesList->setMaximumHeight(160);
-    candidatesLayout->addWidget(m_candidatesList);
-    m_adoptCandidateButton = new Button(tr("采用候选"));
-    m_adoptCandidateButton->setObjectName(QStringLiteral("inspectorAdoptCandidate"));
-    m_adoptCandidateButton->setToolTip(tr("采用选中的候选译文"));
-    m_adoptCandidateButton->setAccessibleName(tr("采用候选译文"));
-    m_adoptCandidateButton->setEnabled(false);
-    candidatesLayout->addWidget(m_adoptCandidateButton);
-    m_candidatesExpander->setContentWidget(candidatesContent, fluent::WidgetOwnership::Owned);
-    translationLayout->addWidget(m_candidatesExpander);
-
-    connect(m_candidatesExpander, &Expander::layoutHeightChanged, this, [this]() {
-        refreshExpanderLayout(m_translationExpander);
-    });
-    connect(m_candidatesExpander, &Expander::expandedChanged, this, [this]() {
-        refreshExpanderLayout(m_translationExpander);
-    });
-    connect(m_candidatesExpander, &Expander::expansionTransitionFinished, this, [this]() {
-        refreshExpanderLayout(m_translationExpander);
-    });
-
-    translationContent->installEventFilter(this);
-    candidatesContent->installEventFilter(this);
-
-    connect(m_candidatesList, &QListWidget::currentRowChanged, this, [this](int row) {
-        m_adoptCandidateButton->setEnabled(row >= 0);
-    });
-    connect(m_adoptCandidateButton, &Button::clicked, this, [this]() {
-        auto* item = m_candidatesList->currentItem();
-        if (item != nullptr && !m_currentRegionIds.isEmpty()) {
-            Q_EMIT candidateAdoptionRequested(
-                m_currentPageId, m_currentRegionIds.first(), item->data(Qt::UserRole).toString());
-        }
-    });
-    connect(m_candidatesList, &QListWidget::itemDoubleClicked, this, [this](QListWidgetItem* item) {
-        if (item != nullptr && !m_currentRegionIds.isEmpty()) {
-            Q_EMIT candidateAdoptionRequested(
-                m_currentPageId, m_currentRegionIds.first(), item->data(Qt::UserRole).toString());
-        }
-    });
-
-    m_translationExpander->setContentWidget(translationContent, fluent::WidgetOwnership::Owned);
-    m_translationExpander->setExpanded(true);
-    layout->addWidget(m_translationExpander);
-
-    // Typesetting section (expanded by default).
-    m_typesettingExpander = new Expander(host);
+    // Typesetting section (expanded by default, shown first).
+    m_typesettingExpander = new InspectorExpander(host);
+    m_typesettingExpander->setObjectName(QStringLiteral("inspectorTypesettingExpander"));
     m_typesettingExpander->setHeaderText(tr("排版"));
+    configureExpanderHeader(m_typesettingExpander);
     auto* typesetContent = new QWidget();
     auto* typesetLayout = new QVBoxLayout(typesetContent);
-    typesetLayout->setContentsMargins(12, 6, 12, 8);
+    typesetLayout->setContentsMargins(16, 8, 16, 12);
     typesetLayout->setSpacing(6);
 
     auto* row1 = new QWidget(typesetContent);
@@ -670,6 +624,112 @@ QWidget* InspectorPanel::buildContentHost() {
     m_typesettingExpander->setExpanded(true);
     layout->addWidget(m_typesettingExpander);
 
+    // Translation section (expanded by default, only visible when a text box is selected).
+    m_translationExpander = new InspectorExpander(host);
+    m_translationExpander->setObjectName(QStringLiteral("inspectorTranslationExpander"));
+    m_translationExpander->setHeaderText(tr("翻译"));
+    configureExpanderHeader(m_translationExpander);
+    auto* translationContent = new QWidget();
+    auto* translationLayout = new QVBoxLayout(translationContent);
+    translationLayout->setContentsMargins(16, 8, 16, 12);
+    translationLayout->setSpacing(8);
+
+    auto* sourceField = new Field();
+    sourceField->setLabelText(tr("原文"));
+    m_sourceEdit = new TextEdit();
+    m_sourceEdit->setObjectName(QStringLiteral("inspectorSourceEdit"));
+    m_sourceEdit->setMinVisibleLines(1);
+    m_sourceEdit->setMaxVisibleLines(6);
+    m_sourceEdit->setAccessibleName(tr("原文"));
+    sourceField->setEditor(m_sourceEdit, fluent::WidgetOwnership::Owned);
+    translationLayout->addWidget(sourceField);
+    connect(m_sourceEdit, &TextEdit::textChanged, this, [this]() {
+        if (!m_updating && !m_inImePreedit) {
+            emitFieldEdit(InspectorField::SourceText, m_sourceEdit->toPlainText());
+        }
+        refreshExpanderLayout(m_translationExpander);
+    });
+
+    auto* translationField = new Field();
+    translationField->setLabelText(tr("译文"));
+    m_translationEdit = new TextEdit();
+    m_translationEdit->setObjectName(QStringLiteral("inspectorTranslationEdit"));
+    m_translationEdit->setMinVisibleLines(1);
+    m_translationEdit->setMaxVisibleLines(6);
+    m_translationEdit->setAccessibleName(tr("译文"));
+    translationField->setEditor(m_translationEdit, fluent::WidgetOwnership::Owned);
+    translationLayout->addWidget(translationField);
+    connect(m_translationEdit, &TextEdit::textChanged, this, [this]() {
+        if (!m_updating && !m_inImePreedit) {
+            emitFieldEdit(InspectorField::ManualTranslation, m_translationEdit->toPlainText());
+        }
+        refreshExpanderLayout(m_translationExpander);
+    });
+
+    for (auto* edit : {m_sourceEdit, m_translationEdit}) {
+        if (auto* inner = edit->findChild<QTextEdit*>()) {
+            inner->setUndoRedoEnabled(false);
+            inner->installEventFilter(this);
+        }
+    }
+
+    m_candidatesExpander = new Expander();
+    m_candidatesExpander->setObjectName(QStringLiteral("inspectorCandidatesExpander"));
+    m_candidatesExpander->setHeaderText(tr("候选译文"));
+    configureExpanderHeader(m_candidatesExpander);
+    auto* candidatesContent = new QWidget();
+    auto* candidatesLayout = new QVBoxLayout(candidatesContent);
+    candidatesLayout->setContentsMargins(16, 8, 16, 12);
+    candidatesLayout->setSpacing(8);
+    m_candidatesList = new QListWidget();
+    m_candidatesList->setObjectName(QStringLiteral("inspectorCandidatesList"));
+    m_candidatesList->setAccessibleName(tr("候选译文列表"));
+    m_candidatesList->setMaximumHeight(160);
+    candidatesLayout->addWidget(m_candidatesList);
+    m_adoptCandidateButton = new Button(tr("采用候选"));
+    m_adoptCandidateButton->setObjectName(QStringLiteral("inspectorAdoptCandidate"));
+    m_adoptCandidateButton->setToolTip(tr("采用选中的候选译文"));
+    m_adoptCandidateButton->setAccessibleName(tr("采用候选译文"));
+    m_adoptCandidateButton->setEnabled(false);
+    candidatesLayout->addWidget(m_adoptCandidateButton);
+    m_candidatesExpander->setContentWidget(candidatesContent, fluent::WidgetOwnership::Owned);
+    translationLayout->addWidget(m_candidatesExpander);
+
+    connect(m_candidatesExpander, &Expander::layoutHeightChanged, this, [this]() {
+        refreshExpanderLayout(m_translationExpander);
+    });
+    connect(m_candidatesExpander, &Expander::expandedChanged, this, [this]() {
+        refreshExpanderLayout(m_translationExpander);
+    });
+    connect(m_candidatesExpander, &Expander::expansionTransitionFinished, this, [this]() {
+        refreshExpanderLayout(m_translationExpander);
+    });
+
+    translationContent->installEventFilter(this);
+    candidatesContent->installEventFilter(this);
+
+    connect(m_candidatesList, &QListWidget::currentRowChanged, this, [this](int row) {
+        m_adoptCandidateButton->setEnabled(row >= 0);
+    });
+    connect(m_adoptCandidateButton, &Button::clicked, this, [this]() {
+        auto* item = m_candidatesList->currentItem();
+        if (item != nullptr && !m_currentRegionIds.isEmpty()) {
+            Q_EMIT candidateAdoptionRequested(
+                m_currentPageId, m_currentRegionIds.first(), item->data(Qt::UserRole).toString());
+        }
+    });
+    connect(m_candidatesList, &QListWidget::itemDoubleClicked, this, [this](QListWidgetItem* item) {
+        if (item != nullptr && !m_currentRegionIds.isEmpty()) {
+            Q_EMIT candidateAdoptionRequested(
+                m_currentPageId, m_currentRegionIds.first(), item->data(Qt::UserRole).toString());
+        }
+    });
+
+    m_translationExpander->setContentWidget(translationContent, fluent::WidgetOwnership::Owned);
+    m_translationExpander->setExpanded(true);
+    m_translationExpander->setVisible(false);
+    layout->addWidget(m_translationExpander);
+
     layout->addStretch(1);
     return host;
 }
@@ -695,7 +755,8 @@ void InspectorPanel::setInspectorState(const screen::editor::InspectorState& sta
         populateMulti(std::get<screen::editor::MultiRegionInspectorState>(state));
     } else {
         m_mode = screen::editor::InspectorMode::None;
-        m_translationExpander->setVisible(true);
+        m_contentHost->setEnabled(true);
+        m_translationExpander->setVisible(false);
         populateNone();
     }
 
@@ -712,7 +773,14 @@ void InspectorPanel::populateNone() {
     m_headerSubtitle->setText(tr("未选中文字框"));
     m_headerSubtitle->setToolTip(QString());
 
-    m_contentHost->setEnabled(false);
+    m_contentHost->setEnabled(true);
+    if (m_typesettingExpander != nullptr && m_typesettingExpander->contentWidget() != nullptr) {
+        m_typesettingExpander->contentWidget()->setEnabled(false);
+    }
+    if (m_translationExpander != nullptr && m_translationExpander->contentWidget() != nullptr) {
+        m_translationExpander->contentWidget()->setEnabled(false);
+    }
+    m_translationExpander->setVisible(false);
 
     // Reset fields to placeholders
     setTextPreservingCursor(m_sourceEdit, QString());
@@ -759,6 +827,10 @@ void InspectorPanel::populateNone() {
 }
 
 void InspectorPanel::populateMulti(const screen::editor::MultiRegionInspectorState& state) {
+    if (m_typesettingExpander != nullptr && m_typesettingExpander->contentWidget() != nullptr) {
+        m_typesettingExpander->contentWidget()->setEnabled(true);
+    }
+
     m_headerTitle->setText(tr("文字框属性"));
     m_headerSubtitle->setText(tr("已选中 %1 个文字框").arg(state.regionCount));
     m_headerSubtitle->setToolTip(QString());
@@ -903,6 +975,13 @@ void InspectorPanel::populateMulti(const screen::editor::MultiRegionInspectorSta
 }
 
 void InspectorPanel::populateSingle(const screen::editor::SingleRegionInspectorState& state) {
+    if (m_typesettingExpander != nullptr && m_typesettingExpander->contentWidget() != nullptr) {
+        m_typesettingExpander->contentWidget()->setEnabled(true);
+    }
+    if (m_translationExpander != nullptr && m_translationExpander->contentWidget() != nullptr) {
+        m_translationExpander->contentWidget()->setEnabled(true);
+    }
+
     m_headerTitle->setText(tr("文字框属性"));
     const QString subtitle = tr("序号 #%1 · %2 × %3")
                                  .arg(state.orderIndex + 1)
